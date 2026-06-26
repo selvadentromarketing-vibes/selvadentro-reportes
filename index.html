@@ -1,0 +1,1404 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Selvadentro — Sistema de Reportes</title>
+<!--
+Selvadentro — Sistema de Reportes (Multicanal)
+Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o conversiones opcionales
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cardo:ital,wght@0,400;0,700;1,400&family=Lexend:wght@300;400;500;600;700&family=Yellowtail&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --verde-prof:#465241; --olivo:#65713F; --cobre:#CF8543; --arena:#D9B37E;
+    --crema:#FAF8F3; --crema-2:#F1ECE1; --linea:#E3DBCC; --texto:#2E332B; --gris-input:#ECECEC;
+    --verde-ok-bg:#CBDDC0; --verde-ok-tx:#3C5A2E; --rojo-no-bg:#F2CFC9; --rojo-no-tx:#9B3B2E; --neutro:#6F7468; --logo:#EFE7D6;
+    --serif:"Cardo",Georgia,serif; --sans:"Lexend",system-ui,-apple-system,"Segoe UI",sans-serif; --script:"Yellowtail",cursive;
+  }
+  *{ box-sizing:border-box; } body{ margin:0; }
+  #app{ font-family:var(--sans); color:var(--texto); background:var(--crema); min-height:100vh; font-size:14px; line-height:1.45; }
+  .topbar{ background:var(--verde-prof); color:var(--crema); padding:14px 28px; display:flex; align-items:center; justify-content:space-between; border-bottom:3px solid var(--cobre); }
+  .brand{ display:flex; flex-direction:column; align-items:flex-start; line-height:1; cursor:pointer; }
+  #brand-logo{ height:54px; display:none; }
+  .brand .name{ font-family:var(--serif); font-style:italic; font-weight:400; font-size:38px; color:var(--logo); line-height:.95; padding-right:6px; }
+  .brand .sub{ font-family:var(--serif); font-size:12px; letter-spacing:6px; text-transform:lowercase; color:var(--logo); margin-top:2px; padding-left:6px; opacity:.92; }
+  .app-title{ text-align:right; }
+  .app-title .t1{ font-family:var(--serif); font-size:18px; }
+  .app-title .t2{ font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--arena); }
+
+  .tabs{ display:flex; align-items:center; background:var(--crema-2); padding:0 28px; border-bottom:1px solid var(--linea); }  .tab{ padding:14px 22px; cursor:pointer; font-weight:500; font-size:13px; letter-spacing:.4px; color:var(--neutro); border-bottom:3px solid transparent; user-select:none; transition:.15s; }
+  .tab:hover{ color:var(--verde-prof); }
+  .tab.active{ color:var(--verde-prof); border-bottom-color:var(--cobre); background:var(--crema); }
+  .canal-wrap{ margin-left:auto; display:flex; align-items:center; gap:9px; }
+  .canal-wrap .lbl{ font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--neutro); font-weight:700; }
+  #canal-select{ font-family:var(--sans); font-weight:600; font-size:12.5px; letter-spacing:.4px; color:#fff; background:var(--olivo); border:none; border-radius:20px; padding:8px 16px; cursor:pointer; }
+  #canal-select option{ color:var(--texto); background:#fff; }
+
+  .wrap{ max-width:1180px; margin:0 auto; padding:26px 28px 60px; }
+
+  /* layout con barra lateral */
+  .shell{ display:flex; align-items:stretch; min-height:calc(100vh - 90px); }
+  .main{ flex:1; min-width:0; }
+  .sidebar{ flex:0 0 70px; background:var(--verde-prof); display:flex; flex-direction:column; align-items:center; gap:6px; padding:16px 7px; border-right:1px solid rgba(0,0,0,.1); }
+  .side-btn{ width:56px; height:56px; border:none; background:transparent; color:var(--logo); border-radius:11px; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-family:var(--sans); font-size:8.5px; font-weight:600; letter-spacing:.2px; text-transform:uppercase; opacity:.78; transition:.15s; }
+  .side-btn svg{ width:21px; height:21px; }
+  .side-btn:hover{ background:rgba(255,255,255,.09); opacity:1; }
+  .side-btn.active{ background:var(--cobre); opacity:1; color:#fff; }
+  .view{ display:none; } .view.active{ display:block; }
+
+  .placeholder-card{ background:#fff; border:1px dashed var(--arena); border-radius:14px; padding:46px 30px; text-align:center; max-width:560px; margin:34px auto; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .placeholder-card h3{ font-family:var(--serif); font-size:23px; color:var(--verde-prof); margin:0 0 12px; }
+  .placeholder-card p{ color:var(--neutro); margin:7px 0; font-size:14px; }
+
+  .periodo{ background:#fff; border:1px solid var(--linea); border-radius:12px; padding:16px 20px; display:flex; flex-wrap:wrap; gap:22px; align-items:flex-end; margin-bottom:8px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  #ing-dims, #rep-dims{ display:contents; }
+  .periodo .grp{ display:flex; flex-direction:column; gap:5px; }
+  .periodo label{ font-size:11px; text-transform:uppercase; letter-spacing:.8px; color:var(--neutro); font-weight:600; }
+  .periodo input[type=date], .periodo select{ font-family:var(--sans); font-size:13px; padding:8px 10px; border:1px solid var(--linea); border-radius:8px; background:var(--crema); color:var(--texto); }
+  .periodo input[readonly]{ background:var(--crema-2); color:var(--neutro); }
+  .semana-badge{ font-family:var(--sans); font-size:13px; color:var(--texto); background:var(--crema); padding:8px 10px; border-radius:8px; border:1px solid var(--linea); min-width:110px; }
+  .periodo .spacer{ flex:1; }
+  .hint{ font-size:11.5px; color:var(--neutro); margin:0 0 22px 4px; font-style:italic; }
+  .btn{ font-family:var(--sans); font-weight:600; font-size:13px; letter-spacing:.4px; cursor:pointer; border:none; border-radius:9px; padding:11px 22px; transition:.15s; }
+  .btn-primary{ background:var(--cobre); color:#fff; } .btn-primary:hover{ background:#bb7536; }
+  .btn-ghost{ background:transparent; color:var(--neutro); border:1px solid var(--linea); } .btn-ghost:hover{ background:var(--crema-2); color:var(--verde-prof); }
+  .btn-olive{ background:var(--olivo); color:#fff; } .btn-olive:hover{ background:#566034; }
+
+  .section{ background:#fff; border:1px solid var(--linea); border-radius:12px; margin-bottom:20px; overflow:hidden; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .section h3{ margin:0; padding:13px 20px; background:var(--olivo); color:#fff; font-family:var(--serif); font-size:16px; font-weight:700; display:flex; align-items:center; gap:9px; }
+  .section h3 .dot{ width:8px; height:8px; border-radius:50%; background:var(--arena); }
+  .fields{ padding:8px 20px 16px; }
+  .frow{ display:flex; align-items:center; padding:7px 0; border-bottom:1px dashed var(--crema-2); }
+  .frow:last-child{ border-bottom:none; }
+  .frow label{ flex:1; font-size:13.5px; padding-right:14px; }
+  .frow input{ width:150px; font-family:var(--sans); font-size:14px; text-align:right; padding:8px 11px; border:1px solid var(--linea); border-radius:8px; background:var(--gris-input); }
+  .frow input:focus{ outline:none; border-color:var(--cobre); background:#fff; }
+  .textareas .frow{ align-items:flex-start; flex-direction:column; gap:6px; }
+  .textareas label{ font-weight:600; color:var(--olivo); }
+  .textareas textarea{ width:100%; min-height:64px; resize:vertical; font-family:var(--sans); font-size:13px; padding:10px 12px; border:1px solid var(--linea); border-radius:8px; background:var(--crema); }
+  .actions{ display:flex; gap:12px; justify-content:flex-end; margin-top:8px; }
+  .saved-weeks{ margin-top:18px; }
+  .saved-weeks .lbl{ font-size:11px; text-transform:uppercase; letter-spacing:.8px; color:var(--neutro); font-weight:600; margin-bottom:8px; }
+  .chips{ display:flex; flex-wrap:wrap; gap:8px; }
+  .chip{ background:var(--crema-2); border:1px solid var(--linea); border-radius:20px; padding:5px 13px; font-size:12px; color:var(--verde-prof); font-weight:500; cursor:pointer; }
+  .chip:hover{ border-color:var(--cobre); }
+  .chip.empty{ color:var(--neutro); font-style:italic; cursor:default; background:transparent; border-style:dashed; }
+
+  .rep-head{ text-align:center; margin-bottom:6px; }
+  .rep-head .ttl{ font-family:var(--serif); font-size:26px; color:var(--verde-prof); }
+  .rep-head .meta-line{ font-size:13px; color:var(--neutro); margin-top:4px; }
+  .rep-section{ background:#fff; border:1px solid var(--linea); border-radius:12px; margin-bottom:18px; overflow:hidden; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .rep-section .layout{ display:flex; flex-wrap:wrap; }
+  .rep-section .metrics{ flex:1 1 520px; }
+  .rep-section h3{ margin:0; padding:11px 18px; background:var(--olivo); color:#fff; font-family:var(--serif); font-size:15px; }
+  table.rep{ width:100%; border-collapse:collapse; }
+  table.rep th{ font-size:9.5px; text-transform:uppercase; letter-spacing:.6px; color:var(--neutro); font-weight:600; padding:9px 10px; text-align:right; border-bottom:1px solid var(--linea); background:var(--crema); }
+  table.rep th.lft{ text-align:left; }
+  table.rep td{ padding:7px 10px; font-size:13px; border-bottom:1px solid var(--crema-2); text-align:right; }
+  table.rep td.lft{ text-align:left; } table.rep td.val{ font-weight:600; color:var(--verde-prof); }
+  table.rep tr:last-child td{ border-bottom:none; }
+  .cump{ display:inline-block; min-width:62px; padding:3px 8px; border-radius:6px; font-weight:600; font-size:12px; }
+  .cump.ok{ background:var(--verde-ok-bg); color:var(--verde-ok-tx); } .cump.no{ background:var(--rojo-no-bg); color:var(--rojo-no-tx); }
+  .conv{ flex:0 0 300px; border-left:1px solid var(--linea); padding:12px 16px; background:var(--crema); }
+  .conv .citem{ margin-bottom:11px; } .conv .citem:last-child{ margin-bottom:0; }
+  .conv .clabel{ font-size:12px; display:flex; justify-content:space-between; gap:8px; }
+  .conv .ctarget{ color:var(--neutro); font-size:11px; white-space:nowrap; } .conv .cval{ margin-top:4px; }
+  .conclusion{ background:linear-gradient(180deg,#fff,var(--crema)); border:1px solid var(--arena); }
+  .conclusion .body{ padding:18px 22px; font-size:14px; line-height:1.6; color:var(--texto); }
+  .empty-rep{ text-align:center; color:var(--neutro); padding:50px 20px; font-style:italic; }
+  .toast{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(80px); background:var(--verde-prof); color:#fff; padding:12px 24px; border-radius:30px; font-size:13px; box-shadow:0 6px 20px rgba(0,0,0,.2); opacity:0; transition:.3s; z-index:50; border:1px solid var(--cobre); }
+  .toast.show{ transform:translateX(-50%) translateY(0); opacity:1; }
+  @media (max-width:680px){ .conv{ flex-basis:100%; border-left:none; border-top:1px solid var(--linea); } .frow input{ width:110px; } }
+
+  /* ---- Reportes de dirección (consolidados) ---- */
+  .canal-chips{ display:flex; align-items:center; flex-wrap:wrap; gap:6px 16px; background:#fff; border:1px solid var(--linea); border-radius:12px; padding:12px 16px; margin:8px 0; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .canal-chips .cc-lbl{ font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--neutro); font-weight:700; margin-right:4px; }
+  .canal-chips > div{ display:flex; flex-wrap:wrap; gap:6px 16px; }
+  .chk{ display:inline-flex; align-items:center; gap:7px; font-size:12.5px; cursor:pointer; line-height:1.25; }
+  .chk input{ accent-color:var(--olivo); cursor:pointer; flex:0 0 auto; }
+  .chk:hover{ color:var(--verde-prof); }
+  .dir-content{ min-width:0; }
+  .funnel-box{ display:flex; flex-wrap:wrap; gap:30px; background:#fff; border:1px solid var(--linea); border-radius:12px; padding:18px 22px; margin-bottom:18px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .funnel-col{ flex:1 1 320px; }
+  table.fnl{ width:100%; border-collapse:separate; border-spacing:0 7px; }
+  table.fnl td{ padding:7px 10px; font-size:13px; }
+  table.fnl td.lbl{ text-align:right; color:var(--texto); font-weight:600; width:42%; }
+  table.fnl td.v{ background:var(--crema-2); border-radius:8px; font-weight:600; color:var(--verde-prof); min-width:90px; }
+  table.fnl td.m{ text-align:left; color:var(--neutro); font-size:11px; padding-left:10px; }
+  .conv-row{ display:flex; justify-content:space-between; align-items:center; gap:10px; padding:7px 0; font-size:13px; border-bottom:1px dashed var(--crema-2); }
+  .conv-row:last-child{ border-bottom:none; }
+  .conv-row .ct{ color:var(--neutro); font-size:11px; margin-left:auto; margin-right:8px; white-space:nowrap; }
+  .table-scroll{ overflow-x:auto; background:#fff; border:1px solid var(--linea); border-radius:12px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  table.cons{ width:100%; border-collapse:collapse; white-space:nowrap; }
+  table.cons th{ font-size:9px; text-transform:uppercase; letter-spacing:.4px; color:var(--neutro); font-weight:700; padding:9px 8px; border-bottom:2px solid var(--linea); background:var(--crema); text-align:right; }
+  table.cons th.lft, table.cons td.lft{ text-align:left; }
+  table.cons td{ padding:7px 8px; font-size:12px; border-bottom:1px solid var(--crema-2); text-align:right; }
+  table.cons td.name{ text-align:left; font-weight:600; color:var(--verde-prof); }
+  table.cons td.pct{ color:var(--neutro); font-size:11px; }
+  table.cons tr.total td{ border-top:2px solid var(--linea); border-bottom:none; font-weight:700; background:var(--crema); }
+  .estado-dot{ display:inline-block; width:11px; height:11px; border-radius:50%; }
+  .estado-dot.g{ background:#5BA85B; } .estado-dot.y{ background:#E0A93B; } .estado-dot.r{ background:#C7553F; } .estado-dot.n{ background:#C9C3D6; }
+
+  /* ---- Asesores ---- */
+  .adv-card{ background:#fff; border:1px solid var(--linea); border-radius:12px; padding:22px 24px; max-width:680px; margin:6px auto; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .adv-card h3{ font-family:var(--serif); font-size:22px; color:var(--verde-prof); margin:0 0 8px; }
+  table.adv-table{ width:100%; border-collapse:collapse; }
+  table.adv-table th{ font-size:10px; text-transform:uppercase; letter-spacing:.6px; color:var(--neutro); font-weight:700; padding:9px 8px; border-bottom:1px solid var(--linea); background:var(--crema); text-align:left; }
+  table.adv-table td{ padding:8px; border-bottom:1px solid var(--crema-2); vertical-align:middle; }
+  table.adv-table td.center{ text-align:center; } table.adv-table td.right{ text-align:right; }
+  .adv-name{ width:100%; font-family:var(--sans); font-size:14px; padding:8px 10px; border:1px solid var(--linea); border-radius:8px; background:var(--crema); }
+  .adv-name:focus{ outline:none; border-color:var(--cobre); background:#fff; }
+  .adv-toggle{ display:inline-flex; align-items:center; gap:7px; font-size:13px; cursor:pointer; }
+  .adv-toggle input{ accent-color:var(--olivo); cursor:pointer; }
+  .adv-pill{ display:inline-block; padding:2px 10px; border-radius:20px; font-size:11px; font-weight:600; }
+  .adv-pill.on{ background:var(--verde-ok-bg); color:var(--verde-ok-tx); } .adv-pill.off{ background:var(--crema-2); color:var(--neutro); }
+  .adv-del{ font-family:var(--sans); font-size:12px; color:var(--rojo-no-tx); background:transparent; border:1px solid var(--linea); border-radius:7px; padding:6px 12px; cursor:pointer; }
+  .adv-del:hover{ background:var(--rojo-no-bg); border-color:var(--rojo-no-bg); }
+  .adv-add{ display:flex; gap:10px; margin-top:18px; }
+  .adv-add input{ flex:1; font-family:var(--sans); font-size:14px; padding:10px 12px; border:1px solid var(--linea); border-radius:8px; background:var(--crema); }
+  .adv-add input:focus{ outline:none; border-color:var(--cobre); background:#fff; }
+  .adv-footer{ display:flex; align-items:center; justify-content:flex-end; gap:14px; margin-top:16px; padding-top:14px; border-top:1px solid var(--linea); }
+  .adv-status{ font-size:12.5px; color:var(--cobre); font-style:italic; margin-right:auto; }
+  #adv-save:disabled{ cursor:default; }
+
+  /* ---- Base de datos ---- */
+  .db-load{ font-family:var(--sans); font-size:11px; color:var(--olivo); background:transparent; border:1px solid var(--linea); border-radius:6px; padding:4px 9px; cursor:pointer; }
+  .db-load:hover{ background:var(--crema-2); }
+  .db-del{ font-family:var(--sans); font-size:12px; color:var(--rojo-no-tx); background:transparent; border:1px solid var(--linea); border-radius:6px; padding:4px 9px; cursor:pointer; margin-left:4px; }
+  .db-del:hover{ background:var(--rojo-no-bg); border-color:var(--rojo-no-bg); }
+  #db-table td.note{ max-width:220px; overflow:hidden; text-overflow:ellipsis; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div class="topbar">
+    <div class="brand" id="brand" title="Clic para cambiar el logo">
+      <img id="brand-logo" alt="Selvadentro · tierra de cenotes">
+      <span class="name" id="brand-text-name">Selvadentro</span>
+      <span class="sub" id="brand-text-sub">tierra de cenotes</span>
+      <input type="file" id="logo-file" accept="image/*" style="display:none">
+    </div>
+    <div class="app-title">
+      <div class="t1">Sistema de Reportes</div>
+      <div class="t2">Multicanal</div>
+    </div>
+  </div>
+
+  <div class="shell">
+    <div class="sidebar">
+      <button class="side-btn" data-tab="metas" title="Metas">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>
+        <span>Metas</span>
+      </button>
+      <button class="side-btn" data-tab="asesores" title="Asesores">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M16 6.6a3 3 0 0 1 0 5.4"/><path d="M17 14.2c2.4.5 3.8 2.3 3.8 4.8"/></svg>
+        <span>Asesores</span>
+      </button>
+      <button class="side-btn" data-tab="db" title="Base de datos">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5.5" rx="7" ry="2.8"/><path d="M5 5.5v6c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-6"/><path d="M5 11.5v6c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-6"/></svg>
+        <span>Base&nbsp;datos</span>
+      </button>
+    </div>
+    <div class="main">
+  <div class="tabs">
+    <div class="tab active" data-tab="resultados">Dirección General</div>
+    <div class="tab" data-tab="dircom">Dirección Comercial</div>
+    <div class="tab" data-tab="reporte">Reporte</div>
+    <div class="tab" data-tab="ingreso">Ingreso de datos</div>
+    <div class="canal-wrap">
+      <span class="lbl">Canal</span>
+      <select id="canal-select"></select>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <!-- ============ INGRESO ============ -->
+    <div class="view" id="view-ingreso">
+      <div id="ing-placeholder" style="display:none"></div>
+      <div id="ing-body">
+        <div class="periodo">
+          <div class="grp"><label>Inicio (lunes)</label><input type="date" id="ing-inicio"></div>
+          <div class="grp"><label>Fin (domingo)</label><input type="date" id="ing-fin" readonly></div>
+          <div class="grp"><label>Semana ISO</label><div class="semana-badge" id="ing-semana">—</div></div>
+          <div id="ing-dims"></div>
+          <div class="spacer"></div>
+          <button class="btn btn-ghost" id="btn-limpiar">Limpiar</button>
+          <button class="btn btn-primary" id="btn-guardar">Guardar</button>
+        </div>
+        <p class="hint">El rango se ajusta automáticamente a semanas completas de lunes a domingo (estándar ISO).</p>
+
+        <div id="ing-sections"></div>
+
+        <div class="section textareas">
+          <h3><span class="dot"></span>Notas y aprendizajes</h3>
+          <div class="fields">
+            <div class="frow"><label>Notas</label><textarea id="txt-notas"></textarea></div>
+            <div class="frow"><label>3 aprendizajes</label><textarea id="txt-aprendizajes"></textarea></div>
+            <div class="frow"><label>3 cambios</label><textarea id="txt-cambios"></textarea></div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn-ghost" id="btn-limpiar2">Limpiar</button>
+          <button class="btn btn-primary" id="btn-guardar2">Guardar semana</button>
+        </div>
+
+        <div class="saved-weeks">
+          <div class="lbl">Registros guardados (clic para cargar)</div>
+          <div class="chips" id="chips"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ REPORTE ============ -->
+    <div class="view" id="view-reporte">
+      <div id="rep-placeholder" style="display:none"></div>
+      <div id="rep-body">
+        <div class="periodo">
+          <div class="grp"><label>Semana inicio</label><select id="rep-semana-ini"></select></div>
+          <div class="grp"><label>Semana fin</label><select id="rep-semana-fin"></select></div>
+          <div id="rep-dims"></div>
+          <div class="grp"><label>Semanas evaluadas</label><div class="semana-badge" id="rep-semanas">—</div></div>
+          <div class="spacer"></div>
+          <button class="btn btn-olive" id="btn-generar">Generar reporte</button>
+        </div>
+        <p class="hint">Elige la semana inicial y final del periodo a evaluar.</p>
+        <div id="rep-output"><div class="empty-rep">Selecciona un rango de semanas y genera el reporte.</div></div>
+      </div>
+    </div>
+
+    <!-- ============ RESULTADOS (DIRECCIÓN GENERAL) ============ -->
+    <div class="view active" id="view-resultados">
+      <div class="periodo">
+        <div class="grp"><label>Semana inicio</label><select id="res-sem-ini"></select></div>
+        <div class="grp"><label>Semana fin</label><select id="res-sem-fin"></select></div>
+        <div class="grp"><label>Semanas evaluadas</label><div class="semana-badge" id="res-semanas-eval">—</div></div>
+        <div class="spacer"></div>
+        <button class="btn btn-olive" id="res-generar">Generar reporte</button>
+      </div>
+      <div class="canal-chips"><span class="cc-lbl">Canales</span><div id="res-canales"></div></div>
+      <p class="hint">Elige el rango de semanas; los canales marcados alimentan el embudo de arriba (la tabla siempre muestra los 7).</p>
+      <div class="dir-content" id="res-content"><div class="empty-rep">Genera el reporte para ver los resultados.</div></div>
+    </div>
+
+    <!-- ============ DIRECCIÓN COMERCIAL ============ -->
+    <div class="view" id="view-dircom">
+      <div class="periodo">
+        <div class="grp"><label>Semana inicio</label><select id="dc-sem-ini"></select></div>
+        <div class="grp"><label>Semana fin</label><select id="dc-sem-fin"></select></div>
+        <div class="grp"><label>Semanas evaluadas</label><div class="semana-badge" id="dc-semanas-eval">—</div></div>
+        <div class="spacer"></div>
+        <button class="btn btn-olive" id="dc-generar">Generar reporte</button>
+      </div>
+      <div class="canal-chips"><span class="cc-lbl">Canales</span><div id="dc-canales"></div></div>
+      <p class="hint">Elige el rango de semanas; los canales marcados alimentan el embudo de arriba (la tabla siempre muestra los 7).</p>
+      <div class="dir-content" id="dc-content"><div class="empty-rep">Genera el reporte para ver los resultados.</div></div>
+    </div>
+
+    <!-- ============ ASESORES ============ -->
+    <div class="view" id="view-asesores">
+      <div class="adv-card">
+        <h3>Asesores</h3>
+        <p class="hint">Administra el equipo. Los <b>activos</b> aparecen en el formulario de captura; los reportes muestran a todos (activos e inactivos) para no perder el histórico. Marca como <b>Inactivo</b> en vez de eliminar para conservar sus datos pasados.</p>
+        <div class="table-scroll"><table class="adv-table" id="adv-table"></table></div>
+        <div class="adv-add">
+          <input type="text" id="adv-new" placeholder="Nombre del nuevo asesor">
+          <button class="btn btn-olive" id="adv-add-btn">Agregar asesor</button>
+        </div>
+        <div class="adv-footer">
+          <span class="adv-status" id="adv-status"></span>
+          <button class="btn btn-primary" id="adv-save" disabled>Guardar cambios</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ METAS ============ -->
+    <div class="view" id="view-metas">
+      <div class="periodo">
+        <div class="grp"><label>Canal</label><select id="metas-canal"></select></div>
+        <div class="spacer"></div>
+      </div>
+      <p class="hint">Define la <b>meta mensual</b> de cada KPI. Se guarda automáticamente y el reporte del canal la usa, ajustada al periodo (meta mensual ÷ 4 × semanas evaluadas). Deja en blanco para no fijar meta.</p>
+      <div id="metas-body"></div>
+    </div>
+
+    <!-- ============ BASE DE DATOS ============ -->
+    <div class="view" id="view-db">
+      <div class="periodo">
+        <div class="grp"><label>Canal</label><select id="db-canal"></select></div>
+        <button class="btn btn-olive" id="db-get">Buscar</button>
+        <div class="grp"><label>Registros</label><div class="semana-badge" id="db-count">—</div></div>
+        <div class="spacer"></div>
+      </div>
+      <p class="hint">Registros guardados de cada canal. <b>Cargar</b> lleva el registro al formulario de Ingreso para editarlo; <b>✕</b> lo elimina (no se puede deshacer). El CSV exporta el canal actual; el backup JSON incluye todos los canales más asesores y metas.</p>
+      <div class="table-scroll"><table class="cons" id="db-table"></table></div>
+    </div>
+  </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+/* ============================================================
+   CANALES (datos). Cada canal:
+   - sections: KPIs por sección (meta o null) + conv opcional
+   - advisors / cities: dimensiones de captura y filtro (opcionales)
+   - seed: histórico (v = valores en el orden de las fields)
+   ============================================================ */
+const BROKERS_SECTIONS = [
+  { title:"Captación de brokers", fields:[
+    {k:"brokers_contactados", l:"Brokers nuevos contactados", meta:40},
+    {k:"brokers_presentados",  l:"Brokers nuevos presentados", meta:12},
+    {k:"brokers_firmados",     l:"Brokers nuevos firmados", meta:4},
+    {k:"total_brokers",        l:"Total brokers", meta:null},
+  ]},
+  { title:"Actividad comercial", fields:[
+    {k:"zooms_realizados",      l:"Zooms realizados", meta:null},
+    {k:"presentaciones_fisicas",l:"Presentaciones físicas realizadas", meta:8},
+    {k:"recorridos",            l:"Recorridos", meta:null},
+    {k:"tours_grupales",        l:"Tours grupales", meta:1},
+    {k:"presentaciones_totales",l:"Presentaciones totales", meta:12},
+  ]},
+  { title:"Eventos", fields:[
+    {k:"eventos_asistidos",  l:"Eventos asistidos", meta:4},
+    {k:"eventos_realizados", l:"Eventos realizados", meta:1},
+  ]},
+  { title:"Grupos", fields:[
+    {k:"publicaciones_grupos",     l:"Publicaciones en grupos", meta:4},
+    {k:"brokers_grupos_mes_pasado",l:"Brokers en grupos mes pasado", meta:null},
+    {k:"brokers_nuevos_grupos",    l:"Brokers nuevos grupos", meta:30},
+    {k:"total_brokers_grupo",      l:"Total brokers en grupo", meta:null},
+    {k:"brokers_interactuan",      l:"Brokers que interactúan", meta:null},
+  ], conv:[
+    {l:"Crecimiento mensual grupo", target:0.10, num:"brokers_nuevos_grupos", den:"brokers_grupos_mes_pasado"},
+    {l:"Brokers activos en grupos", target:0.25, num:"brokers_interactuan",   den:"total_brokers_grupo"},
+  ]},
+  { title:"Activación", fields:[
+    {k:"brokers_activos",  l:"Brokers activos", meta:25},
+    {k:"brokers_3leads",   l:"Brokers que enviaron ≥3 leads/mes", meta:10},
+    {k:"reuniones_1a1",    l:"Reuniones 1:1 brokers clave", meta:12},
+  ], conv:[
+    {l:"Brokers activos comercialmente", target:0.25, num:"brokers_activos", den:"total_brokers"},
+  ]},
+  { title:"Pipeline e ingresos", fields:[
+    {k:"leads_registrados", l:"Leads registrados por brokers", meta:30},
+    {k:"zooms_clientes",    l:"Zooms con clientes", meta:8},
+    {k:"tours_clientes",    l:"Tours con clientes", meta:8},
+    {k:"opp_brokers",       l:"OPP por brokers", meta:13},
+    {k:"opp_zooms",         l:"OPP de zooms", meta:null},
+    {k:"opp_tours",         l:"OPP de tours", meta:null},
+    {k:"opp_14dias",        l:"OPP >14 días por brokers", meta:null},
+    {k:"apartados_brokers", l:"Apartados por brokers", meta:null},
+    {k:"won_brokers",       l:"WON por brokers", meta:4},
+    {k:"ingresos",          l:"Ingresos", meta:null, money:true},
+  ], conv:[
+    {l:"Presentaciones realizadas → OPP", target:0.15, num:"opp_brokers", den:"presentaciones_totales"},
+    {l:"OPP → WON", target:0.30, num:"won_brokers", den:"opp_brokers"},
+  ]},
+];
+const BROKERS_SEED = [
+  {w:"2026-W23", ini:"2026-06-01", fin:"2026-06-07", v:[31,8,1,0,1,4,1,1,4,0,1,10,0,5,109,1,20,0,3,2,1,0,2,1,0,3,0,0,0],
+    n:"Semana enfocada en avanzar con las oportunidades en curso y expansión principalmente en agencias de PCD y un evento con asesores en Selvadentro para generar contenido y pautarlo.",
+    a:"1. Ser más selectivo y enfocar el esfuerzo en los asesores que realmente producen. 2. Ser lo más concreto posible en la presentación y enfocarme principalmente en la emoción para dar tiempo a escuchar lo más posible al cliente. 3. Elaborar una presentación de acuerdo a cada perfil u objeción del cliente.",
+    c:"1. Ya implementado el agendamiento desde un link por zoom y/o presencial. 2. Implementando la propuesta a los asesores para el grupo de WhatsApp en cada OPP (seguimiento directo con el cliente). 3. Enfoque principal en agencias especializadas en venta de terrenos."},
+  {w:"2026-W22", ini:"2026-05-25", fin:"2026-05-31", v:[29,3,1,0,1,2,3,0,5,2,0,12,0,4,104,1,25,0,5,2,0,2,1,0,1,4,0,0,0],
+    n:"Semana enfocada en avanzar con las oportunidades en curso y expansión de red para sembrar las OPP que tendremos en junio.",
+    a:"1. Importancia de aprovechar el avance de obra del libramiento (contenido oficial). 2. Un recorrido más ameno para que los Brokers realmente se identifiquen con la esencia de inmersión en la jungla. 3. Importancia de asistir mensualmente a eventos de alto impacto para ampliar la red.",
+    c:"1. Protocolos para ingreso automático al grupo de WhatsApp Selvadentro Community. 2. Protocolo para creación de grupo de WhatsApp por oportunidad. 3. Automatizar el agendado de visita y registro de cliente para bajar cancelaciones."},
+  {w:"2026-W21", ini:"2026-05-18", fin:"2026-05-24", v:[18,4,3,0,1,2,2,2,3,1,0,8,0,2,100,3,19,0,3,2,0,0,1,0,0,4,0,0,0],
+    n:"Semana enfocada en avanzar con las oportunidades en curso.",
+    a:"1. Importancia de aprovechar el avance de obra del libramiento. 2. Un recorrido más ameno para que los Brokers se identifiquen con la esencia de inmersión en la jungla.",
+    c:"1. Insistir con el Due Diligence de Casa Cruz, Top Investments y Arano. 2. Aprobar presupuesto para detalle a Brokers clave. 3. Preparación de evento mensual para el 6 de junio."},
+  {w:"2026-W20", ini:"2026-05-11", fin:"2026-05-17", v:[14,3,2,0,0,2,2,1,3,2,0,15,0,3,96,9,16,0,4,2,0,1,1,0,1,4,0,0,0],
+    n:"5 recorridos agendados, un zoom con cliente y una oferta: la semana más productiva desde el inicio. Se llevaron a cabo 2 recorridos y el resto se reagendó.",
+    a:"1. Buena respuesta del grupo de WhatsApp con la encuesta. 2. Pasividad de un broker con operación abierta (riesgo del canal). 3. Atención a los Brokers RRPP con reunión semanal e integración (coffee break y comida).",
+    c:"1. Estrategia para no ser obstaculizado por un asesor con cliente. 2. Invitación al grupo Selvadentro desde grupos externos. 3. Reunión con Brokers RRPP para seguir el plan como con Sulmy."},
+  {w:"2026-W19", ini:"2026-05-04", fin:"2026-05-10", v:[28,6,2,0,1,1,2,1,3,0,1,18,0,0,94,3,14,0,2,2,1,0,1,1,0,10,0,0,0],
+    n:"Buen aprendizaje con el evento, con ajustes para optimizar recursos y resultados.",
+    a:"1. El evento mensual no es atractivo para todo público y depende de agendas externas. 2. Relevancia de presentaciones que impactan en lo emocional. 3. Importancia de la certificación y matrícula de los asesores.",
+    c:"1. El evento mensual será para agencias específicas. 2. Ajuste de presentación para brokers y clientes (15 de mayo). 3. Visitas a agencias en PDC y Tulum."},
+  {w:"2026-W18", ini:"2026-04-27", fin:"2026-05-03", v:[15,4,3,0,1,1,1,1,2,2,0.25,10,0,0,94,1,16,0,2,0,1,0,0,0,0,9,0,0,0],
+    n:"Semana enfocada en reactivar el contacto 1 a 1 con Brokers clave y agencias.",
+    a:"Continuamos con incentivos: creación de contenido, capacitación en ventas y activaciones en sitio (soundhealing).",
+    c:"Activación de comunidad en grupos de WhatsApp (10 grupos) / Activación soundhealing / Contenido para brokers y workshop."},
+  {w:"2026-W17", ini:"2026-04-20", fin:"2026-04-26", v:[22,2,2,764,1,1,1,0,3,3,0.25,1,0,1,95,0,25,0,3,3,0,0,2,0,0,7,0,0,0],
+    n:"Semana enfocada en usar el evento de NASCAR como capital para contacto con Top Brokers, avanzar pipeline rezagado y fidelizar activos.",
+    a:"Dar valor a los Brokers activos con incentivos funcionó bien (NASCAR, workshop de contenido, evento de soundhealing).",
+    c:"Buscar mejores citas con Top Producers / Más incentivos para Brokers independientes / Difundir la narrativa de Privada Suspiro."},
+  {w:"2026-W16", ini:"2026-04-13", fin:"2026-04-19", v:[16,2,1,0,1,2,1,0,3,1,0.25,2,0,2,95,0,20,0,1,4,1,0,3,0,0,2,0,0,0],
+    n:"Semana mayormente enfocada en el evento de Houston.",
+    a:"Enfoque 80/20: los Top Producers requieren contacto personalizado y la asistencia a eventos es clave (ej. Korn Ferry Tour en Tulum Country Club, 10+ contactos nuevos).",
+    c:"Buscar citas con Top Producers / Contactar agencias top / Calendario editorial para automatizar interacción en grupos."},
+  {w:"2026-W15", ini:"2026-04-06", fin:"2026-04-12", v:[16,3,1,0,1,4,3,0,5,2,0.25,2,0,2,95,2,17,0,2,4,0,1,1,0,0,2,0,0,0],
+    n:"Comienza a notarse el esfuerzo con el registro y presentación de clientes.",
+    a:"Administración del tiempo: priorizar la fase que más lo requiera según la semana y no decir que sí a todo.",
+    c:"Lunes para juntas y administración / Tres días fijos para presentaciones y recorridos / Priorizar agencias como Sur Selecto."},
+  {w:"2026-W14", ini:"2026-03-30", fin:"2026-04-05", v:[12,4,5,0,1,1,3,1,3,0,0.25,3,0,2,0,4,10,0,3,1,0,0,0,0,0,0,0,0,0],
+    n:"Narrativa para Brokers en Selvadentro Community.",
+    a:"Ritmos entre activación y expansión; importancia de Brokers RRPP y VIP's; la producción es resultado de ejecutar bien las fases previas.",
+    c:"Más volumen no es más calidad; mayor enfoque en cabezas de agencia y equilibrio entre lo gerencial y lo operativo."},
+  {w:"2026-W13", ini:"2026-03-23", fin:"2026-03-29", v:[20,5,0,0,0,1,1,1,1,1,0.25,4,0,6,97,3,10,0,2,4,0,0,2,0,0,0,0,0,0],
+    n:"Definir con mayor anticipación las juntas.",
+    a:"Los eventos presenciales son lo más efectivo para conectar; el workshop de IA aporta valor; el grupo de WhatsApp está muerto y necesita más dinámicas.",
+    c:"Atacar más la base en frío, presentar en distintos formatos y enfocarme en lo más cercano al cierre."},
+];
+
+const ADVISORS_SEED = ["Mariano Molina","Alejandro López","Daniela Arana","Diana Jiménez","Tony Trejo","Marco Martínez"];
+let ADVISOR_LIST = ADVISORS_SEED.map(n=>({name:n, active:true}));
+function advisorNames(){ return ADVISOR_LIST.map(a=>a.name); }            // todos (para reportes/histórico)
+function activeAdvisorNames(){ return ADVISOR_LIST.filter(a=>a.active).map(a=>a.name); } // solo activos (para captura)
+async function loadAdvisors(){ const saved=await sGet("selvadentro:asesores"); if(saved && Array.isArray(saved) && saved.length){ ADVISOR_LIST=saved.map(a=>({name:a.name, active:a.active!==false})); } else { await sSet("selvadentro:asesores", ADVISOR_LIST); } }
+async function saveAdvisors(){ await sSet("selvadentro:asesores", ADVISOR_LIST); }
+
+const PAID_SECTIONS = [
+  { title:"Leads", fields:[
+    {k:"leads",          l:"Leads recibidos", meta:null},
+    {k:"leads_contacto", l:"Leads con contacto establecido", meta:null},
+  ]},
+  { title:"Calificación por temperatura", fields:[
+    {k:"leads_frios",     l:"Leads fríos", meta:null},
+    {k:"leads_templados", l:"Leads templados", meta:null},
+    {k:"leads_calientes", l:"Leads calientes", meta:null},
+  ]},
+  { title:"Webinars", fields:[
+    {k:"web_registrados",   l:"Webinars registrados", meta:null},
+    {k:"web_confirmados",   l:"Webinars confirmados", meta:null},
+    {k:"web_asistidos",     l:"Webinars asistidos", meta:null},
+    {k:"seg_post_webinar",  l:"Seguimientos post webinar", meta:null},
+  ], conv:[
+    {l:"Webinars registrados → asistidos", target:0.75, num:"web_asistidos", den:"web_registrados"},
+    {l:"Webinars confirmados → seguimiento", target:1.00, num:"seg_post_webinar", den:"web_confirmados"},
+  ]},
+  { title:"Agendas", fields:[
+    {k:"zooms_agendados",  l:"Zooms agendados", meta:null},
+    {k:"zooms_realizados", l:"Zooms realizados", meta:null},
+    {k:"tours_agendados",  l:"Tours agendados", meta:null},
+    {k:"tours_realizados", l:"Tours realizados", meta:null},
+  ], conv:[
+    {l:"Lead → Zoom/Tour agendado", target:0.10, num:["zooms_agendados","tours_agendados"], den:"leads"},
+    {l:"Zooms agendados → realizados", target:0.75, num:"zooms_realizados", den:"zooms_agendados"},
+    {l:"Tours agendados → realizados", target:0.75, num:"tours_realizados", den:"tours_agendados"},
+  ]},
+  { title:"Pipeline / OPP", fields:[
+    {k:"opp_total",     l:"OPP (total)", meta:null},
+    {k:"opp_zooms",     l:"OPP de zooms", meta:null},
+    {k:"opp_tours",     l:"OPP de tours", meta:null},
+    {k:"opp_next_step", l:"OPP con next step + fecha", meta:null},
+    {k:"opp_14dias",    l:"OPP >14 días", meta:null},
+  ], conv:[
+    {l:"Zoom → OPP", target:0.15, num:"opp_zooms", den:"zooms_realizados"},
+    {l:"Tour → OPP", target:0.20, num:"opp_tours", den:"tours_realizados"},
+    {l:"Zoom/Tour → OPP", target:0.40, num:"opp_total", den:["zooms_realizados","tours_realizados"]},
+  ]},
+  { title:"Cierre", fields:[
+    {k:"apartados", l:"Apartados", meta:null},
+    {k:"won",       l:"WON", meta:null},
+    {k:"ingresos",  l:"Ingresos", meta:null, money:true},
+  ], conv:[
+    {l:"OPP → Apartado", target:0.30, num:"apartados", den:"opp_total"},
+    {l:"Apartado → WON", target:0.80, num:"won", den:"apartados"},
+  ]},
+];
+const PAID_SEED = [
+  {w:"2026-W23",ini:"2026-06-01",fin:"2026-06-07",asesor:"Diana Jiménez", v:[3,1,2,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
+  {w:"2026-W23",ini:"2026-06-01",fin:"2026-06-07",asesor:"Mariano Molina", v:[8,4,8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0,0]},
+  {w:"2026-W23",ini:"2026-06-01",fin:"2026-06-07",asesor:"Alejandro López", v:[4,1,3,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
+  {w:"2026-W22",ini:"2026-05-25",fin:"2026-05-31",asesor:"Alejandro López", v:[6,1,5,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
+  {w:"2026-W22",ini:"2026-05-25",fin:"2026-05-31",asesor:"Mariano Molina", v:[7,1,6,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
+  {w:"2026-W21",ini:"2026-05-18",fin:"2026-05-24",asesor:"Mariano Molina", v:[4,2,3,1,0,0,0,0,0,1,1,0,0,1,1,0,1,0,0,0,0]},
+  {w:"2026-W21",ini:"2026-05-18",fin:"2026-05-24",asesor:"Alejandro López", v:[4,0,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
+  {w:"2026-W20",ini:"2026-05-11",fin:"2026-05-17",asesor:"Mariano Molina", v:[2,2,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
+  {w:"2026-W20",ini:"2026-05-11",fin:"2026-05-17",asesor:"Alejandro López", v:[5,4,3,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
+  {w:"2026-W19",ini:"2026-05-04",fin:"2026-05-10",asesor:"Alejandro López", v:[4,1,4,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0]},
+  {w:"2026-W19",ini:"2026-05-04",fin:"2026-05-10",asesor:"Mariano Molina", v:[4,0,4,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,1316445.97]},
+  {w:"2026-W18",ini:"2026-04-27",fin:"2026-05-03",asesor:"Mariano Molina", v:[14,2,12,2,0,0,0,0,0,6,4,0,0,0,0,0,0,1,0,0,0], n:"La cotización que se envió es para un recorrido en el verano."},
+  {w:"2026-W18",ini:"2026-04-27",fin:"2026-05-03",asesor:"Alejandro López", v:[11,0,11,0,0,0,0,0,0,3,1,1,0,0,0,0,0,0,0,0,0], n:"El zoom agendado y realizado fue continuación de un zoom de la semana anterior."},
+  {w:"2026-W17",ini:"2026-04-20",fin:"2026-04-26",asesor:"Alejandro López", v:[14,0,14,0,0,0,0,0,0,2,2,0,0,0,0,0,0,0,0,0,0], n:"Uno de los zooms realizados fue auto agendado: lead de Alejandro pero el link le llegó a Mariano (no calificado). El otro se presentó pero tuvo problemas de señal y reagendó."},
+  {w:"2026-W17",ini:"2026-04-20",fin:"2026-04-26",asesor:"Mariano Molina", v:[9,3,6,2,1,0,0,0,0,3,2,0,0,1,1,0,1,0,0,0,0]},
+  {w:"2026-W16",ini:"2026-04-13",fin:"2026-04-19",asesor:"Alejandro López", v:[60,11,56,4,0,0,0,0,0,4,0,0,0,0,0,0,0,0,0,0,0]},
+  {w:"2026-W16",ini:"2026-04-13",fin:"2026-04-19",asesor:"Mariano Molina", v:[7,5,6,1,0,0,0,0,0,1,0,1,1,0,0,0,0,0,1,0,0], n:"1 no calificado. Esta semana Mariano solo recibió leads de campañas: Google e In Tulum."},
+  {w:"2026-W15",ini:"2026-04-06",fin:"2026-04-12",asesor:"Mariano Molina", v:[17,8,16,1,0,0,0,0,0,5,2,4,3,3,1,2,0,0,0,1,2511784], n:"Uno se fue a corretaje y hay 4 no calificados. ¿Deberíamos verlos reflejados en el reporte?"},
+  {w:"2026-W14",ini:"2026-03-30",fin:"2026-04-05",asesor:"Mariano Molina", v:[18,13,9,3,1,0,0,0,0,4,3,1,0,1,0,0,1,0,0,0,0], n:"Mejor interacción esta semana, más oportunidad de comunicación."},
+  {w:"2026-W13",ini:"2026-03-23",fin:"2026-03-29",asesor:"Mariano Molina", v:[9,3,7,2,0,0,0,0,0,5,1,2,2,1,0,0,1,0,0,0,0], n:"Apartado con fecha máxima de cierre: 11 de abril.", c:"Mariano se compromete a tener 2 zooms y 1 recorrido."},
+  {w:"2026-W13",ini:"2026-03-23",fin:"2026-03-29",asesor:"Marco Martínez", v:[11,4,10,1,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0], n:"Marco se comprometió a estar al pendiente de sus leads, siempre mejorando."},
+  {w:"2026-W12",ini:"2026-03-16",fin:"2026-03-22",asesor:"Mariano Molina", v:[13,5,8,5,0,2,0,0,0,3,2,1,0,0,0,0,0,0,0,0,0]},
+  {w:"2026-W12",ini:"2026-03-16",fin:"2026-03-22",asesor:"Marco Martínez", v:[8,4,6,2,0,0,0,0,0,0,0,1,1,1,0,0,1,0,0,0,0]},
+];
+
+const REFERIDOS_SECTIONS = [
+  { title:"Programa de referidos", fields:[
+    {k:"pitch_tras_firma",        l:"Pitch tras firma", meta:null},
+    {k:"capacitacion_completada", l:"Capacitación completada", meta:null},
+    {k:"referidores_inscritos",   l:"Referidores inscritos", meta:null},
+  ], conv:[
+    {l:"Pitch → Capacitación completada", target:1.00, num:"capacitacion_completada", den:"pitch_tras_firma"},
+    {l:"Capacitación → Referidores inscritos", target:0.90, num:"referidores_inscritos", den:"capacitacion_completada"},
+  ]},
+  { title:"Leads", fields:[
+    {k:"leads",          l:"Leads por referidos", meta:null},
+    {k:"leads_contacto", l:"Leads con contacto", meta:null},
+  ]},
+  { title:"Calificación por temperatura", fields:[
+    {k:"leads_frios",     l:"Leads fríos", meta:null},
+    {k:"leads_templados", l:"Leads templados", meta:null},
+    {k:"leads_calientes", l:"Leads calientes", meta:null},
+  ]},
+  { title:"Agendas", fields:[
+    {k:"zooms_agendados",  l:"Zooms agendados", meta:null},
+    {k:"zooms_realizados", l:"Zooms realizados", meta:null},
+    {k:"tours_agendados",  l:"Tours agendados", meta:null},
+    {k:"tours_realizados", l:"Tours realizados", meta:null},
+  ], conv:[
+    {l:"Lead → Zoom", target:0.70, num:"zooms_agendados", den:"leads"},
+    {l:"Zooms agendados → realizados", target:0.75, num:"zooms_realizados", den:"zooms_agendados"},
+  ]},
+  { title:"Pipeline / OPP", fields:[
+    {k:"opp_total",     l:"OPP (total)", meta:null},
+    {k:"opp_zooms",     l:"OPP de zooms", meta:null},
+    {k:"opp_tours",     l:"OPP de tours", meta:null},
+    {k:"opp_next_step", l:"OPP con next step + fecha", meta:null},
+    {k:"opp_14dias",    l:"OPP >14 días", meta:null},
+  ], conv:[
+    {l:"Zooms → OPP", target:0.40, num:"opp_total", den:"zooms_realizados"},
+  ]},
+  { title:"Cierre", fields:[
+    {k:"apartados", l:"Apartados", meta:null},
+    {k:"won",       l:"WON", meta:null},
+    {k:"ingresos",  l:"Ingresos", meta:null, money:true},
+  ]},
+];
+
+const PD_LEADS_SECTIONS = [
+  { title:"Leads", fields:[
+    {k:"leads",          l:"Leads", meta:null},
+    {k:"leads_contacto", l:"Leads contactados", meta:null},
+  ]},
+  { title:"Calificación por temperatura", fields:[
+    {k:"leads_frios",     l:"Leads fríos", meta:null},
+    {k:"leads_templados", l:"Leads templados", meta:null},
+    {k:"leads_calientes", l:"Leads calientes", meta:null},
+  ]},
+  { title:"Agendas", fields:[
+    {k:"zooms_agendados",  l:"Zooms agendados", meta:null},
+    {k:"zooms_realizados", l:"Zooms realizados", meta:null},
+    {k:"tours_agendados",  l:"Tours agendados", meta:null},
+    {k:"tours_realizados", l:"Tours realizados", meta:null},
+  ]},
+  { title:"Prospección en frío", fields:[
+    {k:"conversaciones_iniciadas", l:"Contacto en frío", meta:null},
+    {k:"networking",               l:"Networking", meta:null},
+    {k:"publicaciones_marca",      l:"Publicaciones marca personal", meta:null},
+  ]},
+  { title:"Pipeline / OPP", fields:[
+    {k:"opp_total",     l:"OPP (total)", meta:null},
+    {k:"opp_zooms",     l:"OPP de zooms", meta:null},
+    {k:"opp_tours",     l:"OPP de tours", meta:null},
+    {k:"opp_next_step", l:"OPP con next step + fecha", meta:null},
+    {k:"opp_14dias",    l:"OPP >14 días", meta:null},
+  ], conv:[
+    {l:"Zooms → OPP", target:0.20, num:"opp_zooms", den:"zooms_realizados"},
+    {l:"Tour → OPP", target:0.40, num:"opp_tours", den:"tours_realizados"},
+  ]},
+  { title:"Cierre", fields:[
+    {k:"apartados", l:"Apartados", meta:null},
+    {k:"won",       l:"WON", meta:null},
+    {k:"ingresos",  l:"Ingresos", meta:null, money:true},
+  ], conv:[
+    {l:"OPP → WON", target:0.25, num:"won", den:"opp_total"},
+  ]},
+];
+const PD_LEADS_SEED = [
+  /* Orden (20): leads, leads_contacto, leads_frios, leads_templados, leads_calientes,
+     zooms_agendados, zooms_realizados, tours_agendados, tours_realizados,
+     conversaciones_iniciadas, networking, publicaciones_marca,
+     opp_total, opp_zooms, opp_tours, opp_next_step, opp_14dias, apartados, won, ingresos */
+  {w:"2026-W13",ini:"2026-03-23",fin:"2026-03-29",asesor:"Mariano Molina", v:[1,1,0,1,0,0,0,0,0,0,0,4,0,0,0,0,0,0,0,0], n:"Este lead lo consiguió Mariano a través de otro lead que ama el proyecto pero ahora no puede invertir; Mariano la invitó a pasarnos leads y generar comisiones. Es el primer referido que nos envía."},
+];
+
+const PD_BROKERS_SECTIONS = [
+  { title:"Actividad con brokers", fields:[
+    {k:"eventos_asistidos", l:"Eventos asistidos", meta:null},
+    {k:"brokers_firmados",  l:"Brokers firmados", meta:null},
+    {k:"brokers_activos",   l:"Brokers activos", meta:null},
+    {k:"leads_brokers",     l:"Leads por brokers", meta:null},
+  ]},
+  { title:"Presentaciones", fields:[
+    {k:"pres_broker_agendadas",  l:"Presentaciones con broker agendadas", meta:null},
+    {k:"pres_broker_realizadas", l:"Presentaciones con broker realizadas", meta:null},
+    {k:"pres_cliente_agendadas", l:"Presentaciones con cliente agendadas", meta:null},
+    {k:"pres_cliente_realizadas",l:"Presentaciones con cliente realizadas", meta:null},
+  ], conv:[
+    {l:"Presentaciones con broker → firmados", target:0.90, num:"brokers_firmados", den:"pres_broker_realizadas"},
+    {l:"Presentaciones con cliente → OPP", target:0.40, num:"opp_total", den:"pres_cliente_realizadas"},
+  ]},
+  { title:"Agendas", fields:[
+    {k:"zooms_agendados",  l:"Zooms agendados", meta:null},
+    {k:"zooms_realizados", l:"Zooms realizados", meta:null},
+    {k:"tours_agendados",  l:"Tours agendados", meta:null},
+    {k:"tours_realizados", l:"Tours realizados", meta:null},
+  ]},
+  { title:"Pipeline / OPP", fields:[
+    {k:"opp_total",     l:"OPP (total)", meta:null},
+    {k:"opp_zooms",     l:"OPP de zooms", meta:null},
+    {k:"opp_tours",     l:"OPP de tours", meta:null},
+    {k:"opp_next_step", l:"OPP con next step + fecha", meta:null},
+    {k:"opp_14dias",    l:"OPP >14 días", meta:null},
+  ]},
+  { title:"Cierre", fields:[
+    {k:"apartados", l:"Apartados", meta:null},
+    {k:"won",       l:"WON", meta:null},
+    {k:"ingresos",  l:"Ingresos", meta:null, money:true},
+  ], conv:[
+    {l:"OPP → WON", target:0.30, num:"won", den:"opp_total"},
+  ]},
+];
+const PD_BROKERS_SEED = [
+  /* Orden (20): eventos_asistidos, brokers_firmados, brokers_activos, leads_brokers,
+     pres_broker_agendadas, pres_broker_realizadas, pres_cliente_agendadas, pres_cliente_realizadas,
+     zooms_agendados, zooms_realizados, tours_agendados, tours_realizados,
+     opp_total, opp_zooms, opp_tours, opp_next_step, opp_14dias, apartados, won, ingresos */
+  {w:"2026-W23",ini:"2026-06-01",fin:"2026-06-07",asesor:"Daniela Arana", v:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
+  {w:"2026-W17",ini:"2026-04-20",fin:"2026-04-26",asesor:"Alejandro López", v:[0,0,0,0,0,0,0,0,1,1,0,0,1,0,0,0,0,0,0,0], n:"Se presentó con broker y cliente, se envió cotización de C-66. Con oferta de pagar apartado con bitcoin."},
+];
+
+const SEMINARIOS_SECTIONS = [
+  { title:"Leads", fields:[
+    {k:"leads",          l:"Leads", meta:null},
+    {k:"leads_contacto", l:"Leads con contacto", meta:null},
+  ]},
+  { title:"Calificación por temperatura", fields:[
+    {k:"leads_frios",     l:"Leads fríos", meta:null},
+    {k:"leads_templados", l:"Leads templados", meta:null},
+    {k:"leads_calientes", l:"Leads calientes", meta:null},
+  ]},
+  { title:"Seminario", fields:[
+    {k:"sem_registrados",   l:"Seminario registrados", meta:null},
+    {k:"sem_confirmados",   l:"Seminario confirmados", meta:null},
+    {k:"sem_asistidos",     l:"Seminario asistidos", meta:null},
+    {k:"seg_post_seminario",l:"Seguimientos post seminario", meta:null},
+  ]},
+  { title:"Agendas", fields:[
+    {k:"zooms_agendados",  l:"Zooms agendados (a distancia)", meta:null},
+    {k:"zooms_realizados", l:"Zooms realizados (a distancia)", meta:null},
+    {k:"tours_agendados",  l:"Tours agendados", meta:null},
+    {k:"tours_realizados", l:"Tours realizados", meta:null},
+  ], conv:[
+    {l:"Zooms agendados → realizados", target:0.75, num:"zooms_realizados", den:"zooms_agendados"},
+    {l:"Tours agendados → realizados", target:0.75, num:"tours_realizados", den:"tours_agendados"},
+  ]},
+  { title:"1:1 y formularios", fields:[
+    {k:"formularios_interes", l:"Formularios de interés", meta:null},
+    {k:"uno_agendados",       l:"1:1 agendados", meta:null},
+    {k:"uno_realizados",      l:"1:1 realizados", meta:null},
+    {k:"uno_externos",        l:"1:1 externos", meta:null},
+  ]},
+  { title:"Pipeline / OPP", fields:[
+    {k:"opp_total",     l:"OPP (total)", meta:null},
+    {k:"opp_zooms",     l:"OPP de zooms", meta:null},
+    {k:"opp_tours",     l:"OPP de tours", meta:null},
+    {k:"opp_1a1",       l:"OPP de 1:1", meta:null},
+    {k:"opp_externas",  l:"OPP externas", meta:null},
+    {k:"opp_next_step", l:"OPP con next step + fecha", meta:null},
+    {k:"opp_14dias",    l:"OPP >14 días", meta:null},
+  ]},
+  { title:"Cierre", fields:[
+    {k:"apartados", l:"Apartados", meta:null},
+    {k:"won",       l:"WON", meta:null},
+    {k:"ingresos",  l:"Ingresos", meta:null, money:true},
+  ]},
+  { title:"Ventas", fields:[
+    {k:"ventas_30", l:"Ventas 30 días", meta:null},
+    {k:"ventas_60", l:"Ventas 60 días", meta:null},
+    {k:"ventas_90", l:"Ventas 90 días", meta:null},
+  ]},
+];
+const SEMINARIOS_CITIES = ["Madrid","Houston","General"];
+/* Orden de campos (30): leads, leads_contacto, leads_frios, leads_templados, leads_calientes,
+   sem_registrados, sem_confirmados, sem_asistidos, seg_post_seminario,
+   zooms_agendados, zooms_realizados, tours_agendados, tours_realizados,
+   formularios_interes, uno_agendados, uno_realizados, uno_externos,
+   opp_total, opp_zooms, opp_tours, opp_1a1, opp_externas, opp_next_step, opp_14dias,
+   apartados, won, ingresos, ventas_30, ventas_60, ventas_90 */
+const SEMINARIOS_SEED = [
+  /* ---- Madrid (embudo de seminario) ---- */
+  {w:"2026-W22",ini:"2026-05-25",fin:"2026-05-31",asesor:"Alejandro López",ciudad:"Madrid", v:[15,0,15,0,0,15,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
+  {w:"2026-W22",ini:"2026-05-25",fin:"2026-05-31",asesor:"Alejandro López",ciudad:"Madrid", v:[18,2,17,1,0,17,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], n:"El lead templado es Susana, rescatada por IG. Uno de estos leads tiene mal el número de celular. Uno respondió que ya no está interesado."},
+  {w:"2026-W21",ini:"2026-05-18",fin:"2026-05-24",asesor:"Alejandro López",ciudad:"Madrid", v:[1,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], n:"No tenemos dato de Mariano; no sabemos si alguno de sus confirmados asistió. Dejaron de responderle y no hay confirmación de la lista aún."},
+  {w:"2026-W21",ini:"2026-05-18",fin:"2026-05-24",asesor:"Alejandro López",ciudad:"Madrid", v:[3,1,2,1,0,3,2,2,4,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0], n:"Marisa fue el shot más cercano con Alejandro. Aún no está perdido y lo consideramos OPP, pero no es OPP con next step."},
+  {w:"2026-W20",ini:"2026-05-11",fin:"2026-05-17",asesor:"Mariano Molina",ciudad:"Madrid", v:[13,10,10,3,0,13,6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
+  {w:"2026-W20",ini:"2026-05-11",fin:"2026-05-17",asesor:"Alejandro López",ciudad:"Madrid", v:[16,4,8,1,0,16,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
+  {w:"2026-W19",ini:"2026-05-04",fin:"2026-05-10",asesor:"Alejandro López",ciudad:"Madrid", v:[29,2,25,2,0,29,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
+  {w:"2026-W19",ini:"2026-05-04",fin:"2026-05-10",asesor:"Mariano Molina",ciudad:"Madrid", v:[28,8,20,8,0,28,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
+  /* ---- General (embudo genérico: leads → zoom/tour → OPP → cierre) ---- */
+  {w:"2026-W18",ini:"2026-04-27",fin:"2026-05-03",asesor:"Alejandro López",ciudad:"General", v:[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
+  {w:"2026-W18",ini:"2026-04-27",fin:"2026-05-03",asesor:"Mariano Molina",ciudad:"General", v:[2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
+  {w:"2026-W17",ini:"2026-04-20",fin:"2026-04-26",asesor:"Mariano Molina",ciudad:"General", v:[0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], n:"Se agendó un zoom con lead de seminario pero re agendó la cita para esta semana."},
+  {w:"2026-W16",ini:"2026-04-13",fin:"2026-04-19",asesor:"Tony Trejo",ciudad:"General", v:[8,4,4,1,0,0,0,0,0,0,0,1,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0]},
+  {w:"2026-W16",ini:"2026-04-13",fin:"2026-04-19",asesor:"Mariano Molina",ciudad:"General", v:[19,15,6,12,1,0,0,0,0,0,0,1,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0]},
+  {w:"2026-W15",ini:"2026-04-06",fin:"2026-04-12",asesor:"Tony Trejo",ciudad:"General", v:[13,3,12,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
+  {w:"2026-W15",ini:"2026-04-06",fin:"2026-04-12",asesor:"Mariano Molina",ciudad:"General", v:[23,9,15,8,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
+  {w:"2026-W14",ini:"2026-03-30",fin:"2026-04-05",asesor:"Mariano Molina",ciudad:"General", v:[14,4,10,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], n:"Los leads están muy drásticos. Los que contestan confirman, los otros ni contestan."},
+  {w:"2026-W13",ini:"2026-03-23",fin:"2026-03-29",asesor:"Marco Martínez",ciudad:"General", v:[8,5,7,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], n:"Marco va a ser más flexible para lograr más confirmaciones."},
+  {w:"2026-W13",ini:"2026-03-23",fin:"2026-03-29",asesor:"Mariano Molina",ciudad:"General", v:[29,10,22,7,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], n:"Mariano se comprometió a confirmar 5 más."},
+];
+
+const RP_VIP_SECTIONS = [
+  { title:"Embajadores y programa", fields:[
+    {k:"prospectos_identificados", l:"Prospectos identificados", meta:null},
+    {k:"reuniones_realizadas",     l:"Reuniones realizadas", meta:null},
+    {k:"embajadores_incorporados", l:"Embajadores incorporados", meta:null},
+    {k:"embajadores_capacitados",  l:"Embajadores capacitados", meta:null},
+    {k:"embajadores_activos",      l:"Embajadores activos (60 días)", meta:null},
+    {k:"leads_embajadores",        l:"Leads por embajadores", meta:null},
+  ]},
+  { title:"Calificación por temperatura", fields:[
+    {k:"leads_frios",     l:"Leads fríos", meta:null},
+    {k:"leads_templados", l:"Leads templados", meta:null},
+    {k:"leads_calientes", l:"Leads calientes", meta:null},
+  ]},
+  { title:"Agendas", fields:[
+    {k:"zooms_agendados",  l:"Zooms agendados", meta:null},
+    {k:"zooms_realizados", l:"Zooms realizados", meta:null},
+    {k:"tours_agendados",  l:"Tours agendados", meta:null},
+    {k:"tours_realizados", l:"Tours realizados", meta:null},
+  ]},
+  { title:"Pipeline / OPP", fields:[
+    {k:"opp_total",     l:"OPP (total)", meta:null},
+    {k:"opp_zooms",     l:"OPP de zooms", meta:null},
+    {k:"opp_tours",     l:"OPP de tours", meta:null},
+    {k:"opp_next_step", l:"OPP con next step + fecha", meta:null},
+    {k:"opp_14dias",    l:"OPP >14 días", meta:null},
+  ]},
+  { title:"Cierre", fields:[
+    {k:"apartados", l:"Apartados", meta:null},
+    {k:"won",       l:"WON", meta:null},
+    {k:"ingresos",  l:"Ingresos", meta:null, money:true},
+  ]},
+];
+const RP_VIP_SEED = [
+  {w:"2026-W23",ini:"2026-06-01",fin:"2026-06-07", v:[3,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    n:"Guillermo Martínez (Radical): reunión y posiblemente diga que sí. Homero Herrera (HH Luxury Real Estate): siento que no cumplen con el rol. Nico Morini (Sur Selecto): muy interesado, el viernes nos visita.",
+    a:"Es cuestión de filtrar bien; sí es atractiva la estrategia."},
+  {w:"2026-W22",ini:"2026-05-25",fin:"2026-05-31", v:[6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    n:"Karla Torres, Guillermo Martínez (Radical), Homero Herrera (HH Luxury Real Estate), Manuel Jasso, Nico Morini (Sur Selecto), Andrés Pérez (Sastre Inmobiliario).",
+    a:"Por alguna razón no se animan a entrarle aún; ven que hay una salida y es un programa muy interesante para ellos."},
+  {w:"2026-W18",ini:"2026-04-27",fin:"2026-05-03", v:[2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    a:"Tengo que ser muy selecto con la gente que invite: que esté enamorada de Selvadentro y crea en el proyecto."},
+  {w:"2026-W17",ini:"2026-04-20",fin:"2026-04-26", v:[3,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    n:"Ya contacté a Miguel Magaña, Fernando Córdova y Willy.",
+    a:"A 2 de 2 les pareció sumamente interesante; es una estrategia con mucho poder y beneficios."},
+];
+
+const CHANNELS = {
+  brokers:       { name:"Brokers",                     sections:BROKERS_SECTIONS, seed:BROKERS_SEED },
+  paid_organico: { name:"Paid Orgánico",               sections:PAID_SECTIONS, advisors:true, seed:PAID_SEED },
+  seminarios:    { name:"Seminarios de inversión",     sections:SEMINARIOS_SECTIONS, advisors:true, cities:SEMINARIOS_CITIES, seed:SEMINARIOS_SEED },
+  referidos:     { name:"Programa de referidos",       sections:REFERIDOS_SECTIONS, advisors:true, seed:[] },
+  pd_leads:      { name:"Prospección directa leads",   sections:PD_LEADS_SECTIONS, advisors:true, seed:PD_LEADS_SEED },
+  pd_brokers:    { name:"Prospección directa brokers", sections:PD_BROKERS_SECTIONS, advisors:true, seed:PD_BROKERS_SEED },
+  rp_vip:        { name:"RP VIP",                       sections:RP_VIP_SECTIONS, seed:RP_VIP_SEED },
+};
+let CH = "brokers";
+const sections  = () => CHANNELS[CH].sections;
+const allFields = () => (sections()||[]).flatMap(s=>s.fields);
+const isConfigured = () => !!sections();
+function dimsList(chKey){ const c=CHANNELS[chKey]; const d=[]; if(c.advisors) d.push({id:"asesor",label:"Asesor",values:advisorNames()}); if(c.cities) d.push({id:"ciudad",label:"Ciudad",values:c.cities}); return d; }
+const dimsOf=()=>dimsList(CH);
+const hasDims=()=>dimsOf().length>0;
+const recKey=(w,dimVals)=> hasDims()? `${CH}:rec:${w}__${(dimVals||[]).join("__")}` : `${CH}:week:${w}`;
+const recPrefix=()=> hasDims()? `${CH}:rec:` : `${CH}:week:`;
+function parseRecKey(k){ if(hasDims()){ const r=k.slice((CH+":rec:").length); const p=r.split("__"); return {w:p[0],dimVals:p.slice(1)}; } return {w:k.slice((CH+":week:").length),dimVals:[]}; }
+
+/* ===================== CONFIG: BACKEND COMPARTIDO (Supabase) ===================== */
+const SUPABASE = {
+  url: "https://vsnggxcuznleuvoyoenn.supabase.co",
+  anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZzbmdneGN1em5sZXV2b3lvZW5uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0Mjk0NjQsImV4cCI6MjA5ODAwNTQ2NH0.gTKuAL7yqiLofNjyKwKsngtW8FYBmQ9zxtPtE0T_DR0"
+};
+
+/* ===================== STORAGE ===================== */
+const mem={};
+const supaOn = !!(SUPABASE.url && SUPABASE.anonKey);
+const supaHeaders = ()=>({ "apikey":SUPABASE.anonKey, "Authorization":"Bearer "+SUPABASE.anonKey, "Content-Type":"application/json" });
+const supaStore = {
+  async get(k){ const r=await fetch(`${SUPABASE.url}/rest/v1/kv?k=eq.${encodeURIComponent(k)}&select=v`,{headers:supaHeaders()}); if(!r.ok) throw new Error("supa get "+r.status); const a=await r.json(); return (a&&a.length)?{value:a[0].v}:null; },
+  async set(k,valStr){ const r=await fetch(`${SUPABASE.url}/rest/v1/kv`,{method:"POST",headers:{...supaHeaders(),"Prefer":"resolution=merge-duplicates,return=minimal"},body:JSON.stringify({k,v:valStr})}); if(!r.ok) throw new Error("supa set "+r.status); return true; },
+  async list(p){ const r=await fetch(`${SUPABASE.url}/rest/v1/kv?k=like.${encodeURIComponent(p+"*")}&select=k`,{headers:supaHeaders()}); if(!r.ok) throw new Error("supa list "+r.status); const a=await r.json(); return {keys:a.map(x=>x.k)}; },
+  async delete(k){ const r=await fetch(`${SUPABASE.url}/rest/v1/kv?k=eq.${encodeURIComponent(k)}`,{method:"DELETE",headers:supaHeaders()}); if(!r.ok) throw new Error("supa del "+r.status); return true; }
+};
+const STORE = supaOn ? supaStore : ((typeof window!=='undefined'&&window.storage&&typeof window.storage.set==='function') ? window.storage : null);
+const hasStore = !!STORE;
+async function sSet(k,v){ try{ if(hasStore) return await STORE.set(k,JSON.stringify(v)); }catch(e){} mem[k]=v; }
+async function sGet(k){ try{ if(hasStore){ const r=await STORE.get(k); return r?JSON.parse(r.value):null; } }catch(e){ return mem[k]??null; } return mem[k]??null; }
+async function sList(p){ try{ if(hasStore){ const r=await STORE.list(p); return r?r.keys:[]; } }catch(e){} return Object.keys(mem).filter(k=>k.startsWith(p)); }
+async function sDel(k){ try{ if(hasStore) return await STORE.delete(k); }catch(e){} delete mem[k]; }
+
+/* ----- Caché de registros en memoria (evita lecturas masivas y rate-limit) ----- */
+const RECCACHE = {};                                  // { recKey: record }
+function recGet(k){ return (k in RECCACHE)? RECCACHE[k] : null; }   // síncrono
+function recList(p){ return Object.keys(RECCACHE).filter(k=>k.startsWith(p)); } // síncrono
+function recSet(k,v){ RECCACHE[k]=v; }
+function recDel(k){ delete RECCACHE[k]; }
+async function sGetRetry(k, tries=4){
+  for(let t=0;t<tries;t++){
+    try{ if(hasStore){ const r=await STORE.get(k); return r?JSON.parse(r.value):null; } return (k in mem)?mem[k]:null; }
+    catch(e){ if(t<tries-1) await new Promise(r=>setTimeout(r, 90*(t+1))); }
+  }
+  return null;
+}
+// Lee muchas claves (que SÍ existen) con concurrencia limitada y reintentos
+async function getMany(keys, concurrency=4){
+  const out={}; let i=0;
+  async function worker(){ while(i<keys.length){ const k=keys[i++]; out[k]=await sGetRetry(k); } }
+  await Promise.all(Array.from({length:Math.min(concurrency, keys.length||1)}, worker));
+  return out;
+}
+const STORED_KEYS = new Set();
+// Carga TODOS los registros guardados al caché (autoridad sobre la semilla)
+async function primeCache(){
+  for(const chKey of Object.keys(CHANNELS)){
+    const p=chPrefix(chKey); const keys=await sList(p);
+    if(!keys.length) continue;
+    const map=await getMany(keys, 4);
+    for(const k of keys){ if(map[k]){ RECCACHE[k]=map[k]; STORED_KEYS.add(k); } }
+  }
+}
+
+/* ===================== FECHAS / ISO ===================== */
+function parseD(s){ if(!s) return null; const [y,m,d]=s.split("-").map(Number); return new Date(Date.UTC(y,m-1,d)); }
+function toISO(d){ return d.toISOString().slice(0,10); }
+function mondayOf(d){ const x=new Date(d.getTime()); const dn=(x.getUTCDay()+6)%7; x.setUTCDate(x.getUTCDate()-dn); return x; }
+function sundayOf(d){ const m=mondayOf(d); m.setUTCDate(m.getUTCDate()+6); return m; }
+function isoWeekId(d){ const date=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate())); const dn=(date.getUTCDay()+6)%7; date.setUTCDate(date.getUTCDate()-dn+3); const ft=new Date(Date.UTC(date.getUTCFullYear(),0,4)); const wk=1+Math.round(((date-ft)/86400000-3+((ft.getUTCDay()+6)%7))/7); return date.getUTCFullYear()+"-W"+String(wk).padStart(2,"0"); }
+function dateOfIsoWeek(y,w){ const simple=new Date(Date.UTC(y,0,1+(w-1)*7)); const dow=simple.getUTCDay(); const s=new Date(simple); if(dow<=4) s.setUTCDate(simple.getUTCDate()-simple.getUTCDay()+1); else s.setUTCDate(simple.getUTCDate()+8-simple.getUTCDay()); return s; }
+function weeksInRange(a,b){ const set=new Set(); if(!a||!b||b<a) return set; const cur=new Date(a.getTime()); while(cur<=b){ set.add(isoWeekId(cur)); cur.setUTCDate(cur.getUTCDate()+1); } return set; }
+function fmtDate(d){ if(!d) return "—"; const dd=String(d.getUTCDate()).padStart(2,"0"),mm=String(d.getUTCMonth()+1).padStart(2,"0"); return `${dd}/${mm}/${d.getUTCFullYear()}`; }
+function fmtMoney(n){ return "$"+(Number(n)||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmtPct(x){ return (x*100).toFixed(2)+"%"; }
+function weekLabel(w){ const m=w&&w.match(/^(\d{4})-W(\d+)$/); if(!m) return w; const a=dateOfIsoWeek(+m[1],+m[2]); const b=sundayOf(a); return `${w} · ${fmtDate(a)} → ${fmtDate(b)}`; }
+
+/* ===================== INGRESO FORM ===================== */
+function renderIngresoForm(){
+  document.getElementById("ing-sections").innerHTML = sections().map(s=>`
+    <div class="section"><h3><span class="dot"></span>${s.title}</h3><div class="fields">
+      ${s.fields.map(f=>`<div class="frow"><label>${f.l}</label>
+        <input type="number" step="${f.money?'0.01':'1'}" id="in_${f.k}" placeholder="0"></div>`).join("")}
+    </div></div>`).join("");
+}
+function currentWeekId(){ const d=parseD(document.getElementById("ing-inicio").value); return d?isoWeekId(d):null; }
+function updateSemanaBadge(){ document.getElementById("ing-semana").textContent=currentWeekId()||"—"; }
+function curDimVals(){ return dimsOf().map((d,i)=>document.getElementById("ing-dim-"+i).value); }
+function gatherForm(){
+  const data={}; allFields().forEach(f=>{ const el=document.getElementById("in_"+f.k); data[f.k]= el&&el.value!=="" ? Number(el.value):0; });
+  return { inicio:document.getElementById("ing-inicio").value, fin:document.getElementById("ing-fin").value, semana:currentWeekId(),
+    dimVals:curDimVals(), valores:data, notas:document.getElementById("txt-notas").value, aprendizajes:document.getElementById("txt-aprendizajes").value, cambios:document.getElementById("txt-cambios").value };
+}
+function fillForm(rec){
+  document.getElementById("ing-inicio").value=rec.inicio||""; document.getElementById("ing-fin").value=rec.fin||"";
+  dimsOf().forEach((d,i)=>{ const el=document.getElementById("ing-dim-"+i); if(el&&rec.dimVals&&rec.dimVals[i]!=null){ const val=rec.dimVals[i]; if(![...el.options].some(o=>o.value===val)){ const o=document.createElement("option"); o.value=val; o.textContent=val; el.appendChild(o); } el.value=val; } });
+  allFields().forEach(f=>{ const el=document.getElementById("in_"+f.k); if(el) el.value=(rec.valores&&rec.valores[f.k]!=null)?rec.valores[f.k]:""; });
+  document.getElementById("txt-notas").value=rec.notas||""; document.getElementById("txt-aprendizajes").value=rec.aprendizajes||""; document.getElementById("txt-cambios").value=rec.cambios||"";
+  updateSemanaBadge();
+}
+function clearForm(){ allFields().forEach(f=>{ const el=document.getElementById("in_"+f.k); if(el) el.value=""; }); document.getElementById("txt-notas").value=""; document.getElementById("txt-aprendizajes").value=""; document.getElementById("txt-cambios").value=""; }
+async function saveWeek(){
+  const w=currentWeekId(); if(!w){ toast("Selecciona la fecha de inicio primero"); return; }
+  const dv=curDimVals(); const k=recKey(w,dv); const form=gatherForm();
+  recSet(k, form); await sSet(k, form);
+  toast("Guardado ✓ "+w+(dv.length?(" · "+dv.join(" · ")):"")); renderChips();
+}
+function renderChips(){
+  const keys=recList(recPrefix()); const cont=document.getElementById("chips");
+  if(!keys.length){ cont.innerHTML='<span class="chip empty">Aún no hay registros guardados</span>'; return; }
+  const items=keys.map(k=>{ const p=parseRecKey(k); return {k,w:p.w,dv:p.dimVals}; }).sort((a,b)=> a.w<b.w?-1:a.w>b.w?1:(a.dv.join()<b.dv.join()?-1:1));
+  cont.innerHTML=items.map(it=>`<span class="chip" data-k="${it.k}">${it.w}${it.dv.length?(" · "+it.dv.join(" · ")):""}</span>`).join("");
+  cont.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{ const rec=recGet(c.dataset.k); if(rec){ fillForm(rec); toast("Registro cargado"); window.scrollTo({top:0,behavior:"smooth"}); } });
+}
+
+/* ===================== SEED ===================== */
+function seedRec(chKey,s){ const ch=CHANNELS[chKey]; const flds=ch.sections.flatMap(x=>x.fields); const valores={}; flds.forEach((f,i)=>valores[f.k]=s.v[i]); const dimVals=[]; if(ch.advisors) dimVals.push(s.asesor||""); if(ch.cities) dimVals.push(s.ciudad||""); return {semana:s.w,inicio:s.ini,fin:s.fin,dimVals,valores,notas:s.n||"",aprendizajes:s.a||"",cambios:s.c||""}; }
+let SEEDMAP = {};
+function buildSeedMap(){
+  const out={};
+  for(const key of Object.keys(CHANNELS)){
+    const ch=CHANNELS[key]; if(!ch.sections) continue;
+    const merged={};
+    for(const s of (ch.seed||[])){
+      const dv=[]; if(ch.advisors) dv.push(s.asesor||""); if(ch.cities) dv.push(s.ciudad||"");
+      const k = (ch.advisors||ch.cities) ? `${key}:rec:${s.w}__${dv.join("__")}` : `${key}:week:${s.w}`;
+      const rec=seedRec(key,s);
+      if(merged[k]){ const m=merged[k]; Object.keys(rec.valores).forEach(fk=>m.valores[fk]=(m.valores[fk]||0)+(rec.valores[fk]||0)); m.notas=[m.notas,rec.notas].filter(Boolean).join(" / "); m.aprendizajes=[m.aprendizajes,rec.aprendizajes].filter(Boolean).join(" / "); m.cambios=[m.cambios,rec.cambios].filter(Boolean).join(" / "); }
+      else merged[k]=rec;
+    }
+    Object.assign(out, merged);
+  }
+  return out;
+}
+// Escribe a almacenamiento solo las semillas que aún NO existen guardadas (en segundo plano)
+async function persistSeeds(){
+  for(const k in SEEDMAP){ if(!STORED_KEYS.has(k)){ await sSet(k, SEEDMAP[k]); STORED_KEYS.add(k); } }
+}
+
+/* ===================== REPORTE ===================== */
+function cartesian(arrs){ return arrs.reduce((acc,arr)=>acc.flatMap(a=>arr.map(x=>[...a,x])),[[]]); }
+async function generarReporte(){
+  const out=document.getElementById("rep-output");
+  const pw=s=>{ const m=s&&s.match(/^(\d{4})-W(\d{1,2})$/); return m?dateOfIsoWeek(+m[1],+m[2]):null; };
+  let a=pw(document.getElementById("rep-semana-ini").value), b=pw(document.getElementById("rep-semana-fin").value);
+  if(!a||!b){ out.innerHTML='<div class="empty-rep">Selecciona la semana inicial y la final.</div>'; return; }
+  if(a>b){ const t=a; a=b; b=t; }
+  b=sundayOf(b);
+  const weekSet=weeksInRange(a,b); const nWeeks=weekSet.size; document.getElementById("rep-semanas").textContent=nWeeks;
+
+  const dims=dimsOf();
+  const selected = dims.map((d,i)=>{ const v=document.getElementById("rep-dim-"+i).value; return v==="__todos"? d.values : [v]; });
+  const combos = dims.length? cartesian(selected) : [[]];
+  const flds=allFields(); const sum={}; flds.forEach(f=>sum[f.k]=0); const textos=[];
+  for(const w of [...weekSet].sort()){
+    for(const combo of combos){
+      const rec=recGet(recKey(w,combo));
+      if(rec){ if(rec.valores) flds.forEach(f=>sum[f.k]+=Number(rec.valores[f.k]||0)); if(rec.notas||rec.aprendizajes||rec.cambios) textos.push({semana:w,dims:combo.join(" · "),inicio:rec.inicio,fin:rec.fin,notas:rec.notas,aprendizajes:rec.aprendizajes,cambios:rec.cambios}); }
+    }
+  }
+
+  const hasMetas=flds.some(f=>f.meta!=null);
+  const metaPeriodo=meta=>meta==null?null:(meta/4*nWeeks);
+  const cumpCell=(val,meta)=>{ const mp=metaPeriodo(meta); if(mp==null) return '<td></td><td></td><td></td>'; if(mp===0) return `<td>${meta}</td><td>0</td><td><span class="cump no">#DIV/0!</span></td>`; const pct=val/mp,cls=pct>=1?"ok":"no"; return `<td>${meta}</td><td>${(+mp.toFixed(2))}</td><td><span class="cump ${cls}">${fmtPct(pct)}</span></td>`; };
+  const getv=spec=>Array.isArray(spec)?spec.reduce((acc,k)=>acc+(sum[k]||0),0):(sum[spec]||0);
+  const convVal=c=>{ const den=getv(c.den),num=getv(c.num); if(!den) return `<span class="cump no">#DIV/0!</span>`; const pct=num/den,cls=pct>=c.target?"ok":"no"; return `<span class="cump ${cls}">${fmtPct(pct)}</span>`; };
+
+  const thMeta = hasMetas ? '<th>Meta mensual</th><th>Meta periodo</th><th>Cumplimiento</th>' : '';
+  const sectionsHtml=sections().map(s=>`
+    <div class="rep-section"><h3>${s.title}</h3><div class="layout">
+      <div class="metrics"><table class="rep">
+        <thead><tr><th class="lft">Métrica</th><th>Valor</th>${thMeta}</tr></thead>
+        <tbody>${s.fields.map(f=>`<tr><td class="lft">${f.l}</td><td class="val">${f.money?fmtMoney(sum[f.k]):sum[f.k]}</td>${hasMetas?cumpCell(sum[f.k],f.meta):''}</tr>`).join("")}</tbody>
+      </table></div>
+      ${s.conv?`<div class="conv">${s.conv.map(c=>`<div class="citem"><div class="clabel"><span>${c.l}</span><span class="ctarget">meta ${fmtPct(c.target)}</span></div><div class="cval">${convVal(c)}</div></div>`).join("")}</div>`:""}
+    </div></div>`).join("");
+
+  const dm=iso=>{ const d=parseD(iso); return d?String(d.getUTCDate()).padStart(2,"0")+"/"+String(d.getUTCMonth()+1).padStart(2,"0"):""; };
+  const notasHtml = textos.length ? textos.map(t=>{
+      const rango=(t.inicio&&t.fin)?` · ${dm(t.inicio)} → ${dm(t.fin)}`:"";
+      const parts=[];
+      if(t.notas) parts.push(`<b>Notas:</b> ${t.notas}`);
+      if(t.aprendizajes) parts.push(`<b>Aprendizajes:</b> ${t.aprendizajes}`);
+      if(t.cambios) parts.push(`<b>Cambios:</b> ${t.cambios}`);
+      return `<div style="margin-bottom:15px"><div style="font-weight:600;color:var(--olivo);margin-bottom:3px">${t.semana}${t.dims?(" · "+t.dims):""}${rango}</div>${parts.join("<br>")}</div>`;
+    }).join("") : '<em>Sin notas, aprendizajes ni cambios registrados en el periodo.</em>';
+
+  const dimLine = dims.length ? " · " + dims.map((d,i)=>{ const v=document.getElementById("rep-dim-"+i).value; return v==="__todos"?("Todos: "+d.label.toLowerCase()):v; }).join(" · ") : "";
+  out.innerHTML=`
+    <div class="rep-head"><div class="ttl">Reporte · ${CHANNELS[CH].name}</div>
+      <div class="meta-line">${fmtDate(a)} → ${fmtDate(b)} · ${nWeeks} semana(s)${dimLine}</div></div>
+    ${sectionsHtml}
+    <div class="rep-section conclusion"><h3>Notas del periodo</h3><div class="body">${notasHtml}</div></div>`;
+}
+
+/* ===================== LOGO ===================== */
+async function loadLogo(){
+  const img=document.getElementById("brand-logo");
+  const show=()=>{ img.style.display="block"; document.getElementById("brand-text-name").style.display="none"; document.getElementById("brand-text-sub").style.display="none"; };
+  try{ const saved=await sGet("selvadentro:logo"); if(saved&&saved.data){ img.src=saved.data; show(); return; } }catch(e){}
+  if(window.fs&&window.fs.readFile){
+    const names=["selvadentro.png","Selvadentro.png","logo.png","logo-selvadentro.png","selvadentro-logo.png","SELVADENTRO__20.png","selvadentro.svg","logo.svg"];
+    for(const n of names){ try{ const buf=await window.fs.readFile(n); const type=n.endsWith(".svg")?"image/svg+xml":"image/png"; img.src=URL.createObjectURL(new Blob([buf],{type})); show(); return; }catch(e){} }
+  }
+  img.onload=show; img.onerror=()=>{ img.style.display="none"; };
+  img.src="https://assets.cdn.filesafe.space/crN2IhAuOBAl7D8324yI/media/68a8b604cfc34e61b85396bf.png";
+}
+function setupLogoUpload(){
+  const brand=document.getElementById("brand"), input=document.getElementById("logo-file"), img=document.getElementById("brand-logo");
+  brand.addEventListener("click",()=>input.click());
+  input.addEventListener("click",e=>e.stopPropagation());
+  input.addEventListener("change",e=>{
+    const file=e.target.files[0]; if(!file) return;
+    const r=new FileReader();
+    r.onload=async()=>{ const data=r.result; img.src=data; img.style.display="block"; document.getElementById("brand-text-name").style.display="none"; document.getElementById("brand-text-sub").style.display="none"; try{ await sSet("selvadentro:logo",{data}); }catch(err){} toast("Logo actualizado ✓"); };
+    r.readAsDataURL(file);
+  });
+}
+
+/* ===================== UI ===================== */
+function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"),2200); }
+document.querySelectorAll("[data-tab]").forEach(el=>el.onclick=()=>{
+  document.querySelectorAll("[data-tab]").forEach(t=>t.classList.remove("active"));
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  el.classList.add("active");
+  document.getElementById("view-"+el.dataset.tab).classList.add("active");
+  const dir = ["resultados","dircom","asesores","metas","db"].includes(el.dataset.tab);
+  document.querySelector(".canal-wrap").style.display = dir?"none":"flex";
+  if(el.dataset.tab==="resultados") showResultados();
+  if(el.dataset.tab==="dircom") showDirCom();
+  if(el.dataset.tab==="asesores") renderAdvisors();
+  if(el.dataset.tab==="metas") renderMetas();
+  if(el.dataset.tab==="db") renderDB();
+});
+
+/* ===================== REPORTES DE DIRECCIÓN (CONSOLIDADOS) ===================== */
+// Mapeo de cada métrica común al campo real de cada canal
+const METRIC_MAP = {
+  brokers:       { leads:"leads_registrados", zooms:"zooms_clientes", tours:"tours_clientes", opp:"opp_brokers", opp_zooms:"opp_zooms", opp_tours:"opp_tours", opp_14:"opp_14dias", apartados:"apartados_brokers", won:"won_brokers", ingresos:"ingresos" },
+  paid_organico: { leads:"leads", zooms:"zooms_realizados", tours:"tours_realizados", opp:"opp_total", opp_zooms:"opp_zooms", opp_tours:"opp_tours", opp_14:"opp_14dias", apartados:"apartados", won:"won", ingresos:"ingresos" },
+  seminarios:    { leads:"leads", zooms:"zooms_realizados", tours:"tours_realizados", opp:"opp_total", opp_zooms:"opp_zooms", opp_tours:"opp_tours", opp_14:"opp_14dias", apartados:"apartados", won:"won", ingresos:"ingresos" },
+  referidos:     { leads:"leads", zooms:"zooms_realizados", tours:"tours_realizados", opp:"opp_total", opp_zooms:"opp_zooms", opp_tours:"opp_tours", opp_14:"opp_14dias", apartados:"apartados", won:"won", ingresos:"ingresos" },
+  pd_leads:      { leads:"leads", zooms:"zooms_realizados", tours:"tours_realizados", opp:"opp_total", opp_zooms:"opp_zooms", opp_tours:"opp_tours", opp_14:"opp_14dias", apartados:"apartados", won:"won", ingresos:"ingresos" },
+  pd_brokers:    { leads:"leads_brokers", zooms:"zooms_realizados", tours:"tours_realizados", opp:"opp_total", opp_zooms:"opp_zooms", opp_tours:"opp_tours", opp_14:"opp_14dias", apartados:"apartados", won:"won", ingresos:"ingresos" },
+  rp_vip:        { leads:"leads_embajadores", zooms:"zooms_realizados", tours:"tours_realizados", opp:"opp_total", opp_zooms:"opp_zooms", opp_tours:"opp_tours", opp_14:"opp_14dias", apartados:"apartados", won:"won", ingresos:"ingresos" },
+};
+// Metas por canal (editables): won = meta WON mensual · mix = meta del mix de leads
+const CHANNEL_META = {
+  brokers:{won:4,mix:0.45}, paid_organico:{won:2,mix:0.22}, seminarios:{won:1,mix:0.14},
+  referidos:{won:0.5,mix:0.05}, pd_leads:{won:0.5,mix:0.05}, pd_brokers:{won:0.5,mix:0.05}, rp_vip:{won:0.5,mix:0.04},
+};
+const CONV_T = { zo:0.15, to:0.20, oa:0.30, aw:0.80 };
+const METRIC_KEYS = ["leads","zooms","tours","opp","opp_zooms","opp_tours","opp_14","apartados","won","ingresos"];
+
+function chPrefix(chKey){ const c=CHANNELS[chKey]; return (c.advisors||c.cities)?`${chKey}:rec:`:`${chKey}:week:`; }
+function allWeeksAll(){ const set=new Set(); for(const k of Object.keys(CHANNELS)){ const p=chPrefix(k); recList(p).forEach(x=>set.add(x.slice(p.length).split("__")[0])); } return [...set].filter(Boolean).sort(); }
+function channelMetrics(chKey, weekSet){
+  const map=METRIC_MAP[chKey]; const out={}; METRIC_KEYS.forEach(m=>out[m]=0);
+  const p=chPrefix(chKey); const keys=recList(p);
+  for(const k of keys){ const wk=k.slice(p.length).split("__")[0]; if(weekSet && !weekSet.has(wk)) continue; const rec=recGet(k); if(!rec||!rec.valores) continue; METRIC_KEYS.forEach(m=>{ const fk=map[m]; if(fk) out[m]+=Number(rec.valores[fk]||0); }); }
+  return out;
+}
+function pctTxt(num,den){ if(!den) return '#DIV/0!'; return (num/den*100).toFixed(2)+'%'; }
+function fechaIniW(w){ const m=w.match(/(\d{4})-W(\d+)/); return m?fmtDate(dateOfIsoWeek(+m[1],+m[2])):"—"; }
+function fechaFinW(w){ const m=w.match(/(\d{4})-W(\d+)/); return m?fmtDate(sundayOf(dateOfIsoWeek(+m[1],+m[2]))):"—"; }
+function estadoDot(leads,won,metaWon){ if(leads<=0&&won<=0) return '<span class="estado-dot n" title="Sin actividad"></span>'; if(metaWon>0 && won/metaWon>=1) return '<span class="estado-dot g" title="Meta cumplida"></span>'; if(won>0) return '<span class="estado-dot y" title="En proceso"></span>'; return '<span class="estado-dot r" title="Sin WON aún"></span>'; }
+function convBlock(f){
+  const row=(l,num,den,t)=>{ const v=den?(num/den):null; const cls=v==null?'no':(v>=t?'ok':'no'); const txt=v==null?'#DIV/0!':fmtPct(v); return `<div class="conv-row"><span>${l}</span><span class="ct">meta ${fmtPct(t)}</span><span class="cump ${cls}">${txt}</span></div>`; };
+  return row("Zooms → OPP", f.opp_zooms, f.zooms, CONV_T.zo)
+       + row("Tours → OPP", f.opp_tours, f.tours, CONV_T.to)
+       + row("OPP → Apartados", f.apartados, f.opp, CONV_T.oa)
+       + row("Apartados → WON", f.won, f.apartados, CONV_T.aw);
+}
+function funnelRows(f, metas){
+  const r=(l,v,m)=>`<tr><td class="lbl">${l}</td><td class="v">${v}</td>${m?('<td class="m">'+m+'</td>'):''}</tr>`;
+  return r("Leads",f.leads)+r("Zooms realizados",f.zooms)+r("Tours realizados",f.tours)
+       +r("OPP",f.opp)+r("OPP de zooms",f.opp_zooms)+r("OPP de tours",f.opp_tours)
+       +r("Apartados",f.apartados)+r("WON",f.won, metas||"")+r("Ingresos",fmtMoney(f.ingresos));
+}
+
+const resState={chs:new Set(Object.keys(CHANNELS)), built:false};
+const dcState ={chs:new Set(Object.keys(CHANNELS)), built:false};
+
+function buildChannelChecks(id, state, onChange){
+  const c=document.getElementById(id);
+  c.innerHTML=Object.keys(CHANNELS).map(k=>`<label class="chk"><input type="checkbox" value="${k}" ${state.chs.has(k)?'checked':''}>${CHANNELS[k].name}</label>`).join("");
+  c.querySelectorAll("input").forEach(inp=>inp.onchange=()=>{ inp.checked?state.chs.add(inp.value):state.chs.delete(inp.value); onChange(); });
+}
+async function populateRange(iniId, finId){
+  const weeks=await allWeeksAll();
+  const opts=weeks.map(w=>`<option value="${w}">${weekLabel(w)}</option>`).join("");
+  const si=document.getElementById(iniId), sf=document.getElementById(finId);
+  si.innerHTML=opts; sf.innerHTML=opts;
+  if(weeks.length){ si.value=weeks[0]; sf.value=weeks[weeks.length-1]; }
+}
+function weekSetFromRange(iniW, finW){
+  const pw=s=>{ const m=s&&s.match(/^(\d{4})-W(\d+)$/); return m?dateOfIsoWeek(+m[1],+m[2]):null; };
+  let a=pw(iniW), b=pw(finW); if(!a||!b) return new Set();
+  if(a>b){ const t=a;a=b;b=t; } b=sundayOf(b);
+  return weeksInRange(a,b);
+}
+
+async function renderResultados(){
+  const cont=document.getElementById("res-content");
+  const weekSet=weekSetFromRange(document.getElementById("res-sem-ini").value, document.getElementById("res-sem-fin").value); const wk=[...weekSet].sort();
+  document.getElementById("res-semanas-eval").textContent=weekSet.size||"—";
+  const chsSel=[...resState.chs];
+  const f={}; METRIC_KEYS.forEach(m=>f[m]=0);
+  for(const ch of chsSel){ const m=await channelMetrics(ch,weekSet); METRIC_KEYS.forEach(k=>f[k]+=m[k]); }
+  const fechas = wk.length? `${fechaIniW(wk[0])} → ${fechaFinW(wk[wk.length-1])}`:"—";
+  let rows=""; const tot={}; METRIC_KEYS.forEach(m=>tot[m]=0); let totMeta=0; const nW=weekSet.size;
+  for(const ch of Object.keys(CHANNELS)){
+    const m=await channelMetrics(ch,weekSet); METRIC_KEYS.forEach(k=>tot[k]+=m[k]); const meta=CHANNEL_META[ch].won; totMeta+=meta;
+    const metaPer=meta/4*nW;
+    rows+=`<tr><td class="name">${CHANNELS[ch].name}</td><td>${m.leads}</td><td>${m.zooms}</td><td>${m.tours}</td><td>${m.opp}</td><td>${m.opp_zooms}</td><td>${m.opp_tours}</td><td>${m.apartados}</td><td>${m.won}</td><td>${fmtMoney(m.ingresos)}</td><td>${pctTxt(m.won,m.opp)}</td><td>${meta}</td><td>${estadoDot(m.leads,m.won,metaPer)}</td></tr>`;
+  }
+  cont.innerHTML=`
+    <div class="rep-head"><div class="ttl">Dirección General</div>
+      <div class="meta-line">Canales: ${chsSel.map(c=>CHANNELS[c].name).join(", ")||"—"} · ${wk.length} semana(s) · ${fechas}</div></div>
+    <div class="funnel-box">
+      <div class="funnel-col"><table class="fnl">${funnelRows(f)}</table></div>
+      <div class="funnel-col">${convBlock(f)}</div>
+    </div>
+    <div class="table-scroll"><table class="cons">
+      <thead><tr><th class="lft">Canal</th><th>Leads</th><th>Zooms</th><th>Tours</th><th>OPP</th><th>OPP de zooms</th><th>OPP de tours</th><th>Apartado</th><th>WON</th><th>Ingresos</th><th>Cierre %</th><th>Meta WON mensual</th><th>Estado</th></tr></thead>
+      <tbody>${rows}
+        <tr class="total"><td class="lft">Total</td><td>${tot.leads}</td><td>${tot.zooms}</td><td>${tot.tours}</td><td>${tot.opp}</td><td>${tot.opp_zooms}</td><td>${tot.opp_tours}</td><td>${tot.apartados}</td><td>${tot.won}</td><td>${fmtMoney(tot.ingresos)}</td><td>${pctTxt(tot.won,tot.opp)}</td><td>${totMeta}</td><td>${estadoDot(tot.leads,tot.won,totMeta/4*nW)}</td></tr>
+      </tbody></table></div>`;
+}
+
+async function renderDirCom(){
+  const cont=document.getElementById("dc-content");
+  const weekSet=weekSetFromRange(document.getElementById("dc-sem-ini").value, document.getElementById("dc-sem-fin").value); const nW=weekSet.size; const wk=[...weekSet].sort();
+  document.getElementById("dc-semanas-eval").textContent=nW||"—";
+  const chsSel=[...dcState.chs];
+  const f={}; METRIC_KEYS.forEach(m=>f[m]=0); let metaWonSel=0;
+  for(const ch of chsSel){ const m=await channelMetrics(ch,weekSet); METRIC_KEYS.forEach(k=>f[k]+=m[k]); metaWonSel+=CHANNEL_META[ch].won; }
+  const metaWonPeriodo = +(metaWonSel/4*nW).toFixed(2);
+  const fechas = wk.length? `${fechaIniW(wk[0])} → ${fechaFinW(wk[wk.length-1])}`:"—";
+  const perCh=[]; const tot={}; METRIC_KEYS.forEach(m=>tot[m]=0); let totMetaWon=0, totMix=0;
+  for(const ch of Object.keys(CHANNELS)){ const m=await channelMetrics(ch,weekSet); perCh.push({ch,m}); METRIC_KEYS.forEach(k=>tot[k]+=m[k]); totMetaWon+=CHANNEL_META[ch].won; totMix+=CHANNEL_META[ch].mix; }
+  let rows="";
+  for(const {ch,m} of perCh){ const meta=CHANNEL_META[ch];
+    rows+=`<tr><td class="name">${CHANNELS[ch].name}</td>
+      <td>${m.leads}</td><td class="pct">${pctTxt(m.leads,tot.leads)}</td>
+      <td>${m.zooms}</td><td class="pct">${pctTxt(m.zooms,m.leads)}</td>
+      <td>${m.tours}</td><td class="pct">${pctTxt(m.tours,m.leads)}</td>
+      <td>${m.opp}</td><td class="pct">${pctTxt(m.opp,m.leads)}</td>
+      <td>${m.opp_zooms}</td><td class="pct">${pctTxt(m.opp_zooms,m.zooms)}</td>
+      <td>${m.opp_tours}</td><td class="pct">${pctTxt(m.opp_tours,m.tours)}</td>
+      <td>${m.opp_14}</td>
+      <td>${m.apartados}</td><td class="pct">${pctTxt(m.apartados,m.leads)}</td>
+      <td>${m.won}</td><td>${fmtMoney(m.ingresos)}</td><td class="pct">${pctTxt(m.won,m.leads)}</td>
+      <td>${(meta.mix*100).toFixed(0)}%</td><td>${meta.won}</td><td class="pct">${pctTxt(m.won,meta.won)}</td>
+      <td>${estadoDot(m.leads,m.won,meta.won/4*nW)}</td></tr>`;
+  }
+  const totRow=`<tr class="total"><td class="lft">Total</td>
+    <td>${tot.leads}</td><td class="pct">${pctTxt(tot.leads,tot.leads)}</td>
+    <td>${tot.zooms}</td><td class="pct">${pctTxt(tot.zooms,tot.leads)}</td>
+    <td>${tot.tours}</td><td class="pct">${pctTxt(tot.tours,tot.leads)}</td>
+    <td>${tot.opp}</td><td class="pct">${pctTxt(tot.opp,tot.leads)}</td>
+    <td>${tot.opp_zooms}</td><td class="pct">${pctTxt(tot.opp_zooms,tot.zooms)}</td>
+    <td>${tot.opp_tours}</td><td class="pct">${pctTxt(tot.opp_tours,tot.tours)}</td>
+    <td>${tot.opp_14}</td>
+    <td>${tot.apartados}</td><td class="pct">${pctTxt(tot.apartados,tot.leads)}</td>
+    <td>${tot.won}</td><td>${fmtMoney(tot.ingresos)}</td><td class="pct">${pctTxt(tot.won,tot.leads)}</td>
+    <td>${(totMix*100).toFixed(0)}%</td><td>${totMetaWon}</td><td class="pct">${pctTxt(tot.won,totMetaWon)}</td>
+    <td>${estadoDot(tot.leads,tot.won,totMetaWon/4*nW)}</td></tr>`;
+  cont.innerHTML=`
+    <div class="rep-head"><div class="ttl">Reporte · Dirección Comercial</div>
+      <div class="meta-line">Canales: ${chsSel.map(c=>CHANNELS[c].name).join(" | ")||"—"} · ${wk.length} semana(s) · ${fechas}</div></div>
+    <div class="funnel-box">
+      <div class="funnel-col"><table class="fnl">${funnelRows(f, `Meta mensual ${metaWonSel} · Meta periodo ${metaWonPeriodo}`)}</table></div>
+      <div class="funnel-col">${convBlock(f)}</div>
+    </div>
+    <div class="table-scroll"><table class="cons">
+      <thead><tr>
+        <th class="lft">Canal</th>
+        <th>Leads</th><th>% mix</th>
+        <th>Zooms</th><th>Z/Leads</th>
+        <th>Tours</th><th>T/Leads</th>
+        <th>OPP</th><th>OPP/Leads</th>
+        <th>OPP de zooms</th><th>/Zooms</th>
+        <th>OPP de tours</th><th>/Tours</th>
+        <th>OPP &gt;14 días</th>
+        <th>Apartado</th><th>Lead→APT</th>
+        <th>WON</th><th>Ingresos</th><th>Lead→WON</th>
+        <th>Meta del mix</th><th>Meta WON mens.</th><th>Alcance meta WON</th>
+        <th>Estado</th>
+      </tr></thead>
+      <tbody>${rows}${totRow}</tbody>
+    </table></div>`;
+}
+
+async function showResultados(){
+  if(!resState.built){ buildChannelChecks("res-canales",resState,renderResultados); await populateRange("res-sem-ini","res-sem-fin"); document.getElementById("res-generar").onclick=renderResultados; resState.built=true; await renderResultados(); }
+}
+async function showDirCom(){
+  if(!dcState.built){ buildChannelChecks("dc-canales",dcState,renderDirCom); await populateRange("dc-sem-ini","dc-sem-fin"); document.getElementById("dc-generar").onclick=renderDirCom; dcState.built=true; await renderDirCom(); }
+}
+
+/* ===================== ASESORES ===================== */
+function escAttr(s){ return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function refreshAdvisorDropdowns(){
+  const dims=dimsOf(); if(!dims||!dims.length) return;
+  dims.forEach((d,i)=>{ if(d.id!=="asesor") return;
+    const ing=document.getElementById("ing-dim-"+i); if(ing){ const cur=ing.value; const act=activeAdvisorNames(); ing.innerHTML=act.map(v=>`<option>${v}</option>`).join(""); if(act.includes(cur)) ing.value=cur; }
+    const rep=document.getElementById("rep-dim-"+i); if(rep){ const cur=rep.value; rep.innerHTML=`<option value="__todos">Todos</option>`+advisorNames().map(v=>`<option value="${v}">${v}</option>`).join(""); rep.value=cur; }
+  });
+}
+let advDirty=false;
+function setAdvDirty(v){ advDirty=v; const btn=document.getElementById("adv-save"), st=document.getElementById("adv-status"); if(!btn) return; btn.disabled=!v; btn.style.opacity=v?"1":".5"; if(st) st.textContent=v?"Tienes cambios sin guardar":""; }
+function renderAdvisors(){
+  const t=document.getElementById("adv-table");
+  t.innerHTML = `<thead><tr><th>Asesor</th><th style="width:170px">Estado</th><th style="width:90px"></th></tr></thead><tbody>`+
+    ADVISOR_LIST.map((a,i)=>`<tr>
+      <td><input class="adv-name" data-i="${i}" value="${escAttr(a.name)}"></td>
+      <td><label class="adv-toggle"><input type="checkbox" class="adv-active" data-i="${i}" ${a.active?'checked':''}><span class="adv-pill ${a.active?'on':'off'}">${a.active?'Activo':'Inactivo'}</span></label></td>
+      <td class="right"><button class="adv-del" data-i="${i}">Eliminar</button></td>
+    </tr>`).join("")+`</tbody>`;
+  t.querySelectorAll(".adv-name").forEach(inp=>inp.onchange=()=>{ const i=+inp.dataset.i; const v=inp.value.trim(); if(!v){ inp.value=ADVISOR_LIST[i].name; return; } ADVISOR_LIST[i].name=v; setAdvDirty(true); });
+  t.querySelectorAll(".adv-active").forEach(inp=>inp.onchange=()=>{ const i=+inp.dataset.i; ADVISOR_LIST[i].active=inp.checked; const pill=inp.parentElement.querySelector(".adv-pill"); pill.className="adv-pill "+(inp.checked?"on":"off"); pill.textContent=inp.checked?"Activo":"Inactivo"; setAdvDirty(true); });
+  t.querySelectorAll(".adv-del").forEach(b=>b.onclick=()=>{ const i=+b.dataset.i; if(confirm(`¿Quitar a "${ADVISOR_LIST[i].name}" de la lista? Se aplicará al Guardar. (Su histórico no se borra; considera marcarlo Inactivo en su lugar.)`)){ ADVISOR_LIST.splice(i,1); renderAdvisors(); setAdvDirty(true); } });
+  setAdvDirty(advDirty);
+}
+
+/* ===================== METAS ===================== */
+let META_OVERRIDES = {};
+async function loadMetas(){ const saved=await sGet("selvadentro:metas"); if(saved && typeof saved==="object"){ META_OVERRIDES=saved; applyMetas(); } }
+async function saveMetas(){ await sSet("selvadentro:metas", META_OVERRIDES); }
+function applyMetas(){ for(const ch in META_OVERRIDES){ const c=CHANNELS[ch]; if(!c) continue; const fmap={}; c.sections.forEach(s=>s.fields.forEach(f=>fmap[f.k]=f)); for(const fk in META_OVERRIDES[ch]){ if(fmap[fk]) fmap[fk].meta=META_OVERRIDES[ch][fk]; } } }
+let metasBuilt=false;
+function renderMetas(){
+  const sel=document.getElementById("metas-canal");
+  if(!metasBuilt){ sel.innerHTML=Object.keys(CHANNELS).map(k=>`<option value="${k}">${CHANNELS[k].name}</option>`).join(""); sel.onchange=()=>renderMetasBody(sel.value); metasBuilt=true; }
+  renderMetasBody(sel.value||Object.keys(CHANNELS)[0]);
+}
+function renderMetasBody(ch){
+  const c=CHANNELS[ch]; const body=document.getElementById("metas-body");
+  body.innerHTML=c.sections.map(s=>`
+    <div class="section"><h3><span class="dot"></span>${s.title}</h3><div class="fields">
+      ${s.fields.map(f=>`<div class="frow"><label>${f.l}${f.money?' ($)':''}</label>
+        <input type="number" step="${f.money?'0.01':'1'}" class="meta-in" data-ch="${ch}" data-k="${f.k}" placeholder="—" value="${f.meta!=null?f.meta:''}"></div>`).join("")}
+    </div></div>`).join("");
+  body.querySelectorAll(".meta-in").forEach(inp=>inp.onchange=async()=>{
+    const chK=inp.dataset.ch, fk=inp.dataset.k;
+    const v = inp.value.trim()===""? null : Number(inp.value);
+    CHANNELS[chK].sections.forEach(s=>s.fields.forEach(f=>{ if(f.k===fk) f.meta=v; }));
+    META_OVERRIDES[chK]=META_OVERRIDES[chK]||{}; META_OVERRIDES[chK][fk]=v;
+    await saveMetas(); toast("Meta actualizada ✓");
+  });
+}
+
+/* ===================== BASE DE DATOS ===================== */
+function dbRecords(ch){
+  const p=chPrefix(ch); const keys=recList(p);
+  const recs=keys.map(k=>({key:k, rec:recGet(k)})).filter(x=>x.rec);
+  recs.sort((a,b)=>{ const wa=a.rec.semana||"", wb=b.rec.semana||""; if(wa!==wb) return wa<wb?1:-1; return (a.rec.dimVals||[]).join()<(b.rec.dimVals||[]).join()?-1:1; });
+  return recs;
+}
+function download(filename, content, type){ const blob=new Blob([content],{type}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500); }
+async function dbLoad(chKey, key){
+  const rec=recGet(key); if(!rec) return;
+  document.getElementById("canal-select").value=chKey;
+  await switchChannel(chKey);
+  document.querySelector('.tab[data-tab="ingreso"]').click();
+  document.querySelector(".canal-wrap").style.display="flex";
+  fillForm(rec);
+  toast("Registro cargado en Ingreso ✓"); window.scrollTo({top:0,behavior:"smooth"});
+}
+async function renderDBTable(ch){
+  const c=CHANNELS[ch]; const dims=dimsList(ch); const flds=c.sections.flatMap(s=>s.fields);
+  const recs=dbRecords(ch);
+  const head=`<tr><th class="lft">Semana</th>${dims.map(d=>`<th class="lft">${d.label}</th>`).join("")}${flds.map(f=>`<th>${f.l}</th>`).join("")}<th class="lft">Notas</th><th></th></tr>`;
+  const body=recs.map(({key,rec})=>{
+    const dimCells=dims.map((d,i)=>`<td class="lft">${(rec.dimVals&&rec.dimVals[i])||""}</td>`).join("");
+    const valCells=flds.map(f=>{ const v=rec.valores?rec.valores[f.k]:0; return `<td>${f.money?fmtMoney(v||0):(v??0)}</td>`; }).join("");
+    const nota=(rec.notas||""); const safe=escAttr(nota);
+    return `<tr><td class="lft">${rec.semana||""}</td>${dimCells}${valCells}<td class="lft note" title="${safe}">${safe}</td>
+      <td class="right" style="white-space:nowrap"><button class="db-load" data-ch="${ch}" data-key="${escAttr(key)}">Cargar</button><button class="db-del" data-key="${escAttr(key)}" title="Eliminar">✕</button></td></tr>`;
+  }).join("");
+  document.getElementById("db-count").textContent=recs.length;
+  const colspan=2+dims.length+flds.length;
+  document.getElementById("db-table").innerHTML=`<thead>${head}</thead><tbody>${body||`<tr><td class="lft" colspan="${colspan}"><em>Sin registros en este canal.</em></td></tr>`}</tbody>`;
+  document.querySelectorAll("#db-table .db-del").forEach(b=>b.onclick=async()=>{ if(confirm("¿Eliminar este registro de la base de datos? No se puede deshacer.")){ recDel(b.dataset.key); await sDel(b.dataset.key); toast("Registro eliminado"); renderDBTable(ch); } });
+  document.querySelectorAll("#db-table .db-load").forEach(b=>b.onclick=()=>dbLoad(b.dataset.ch,b.dataset.key));
+}
+function dbExportCSV(ch){
+  const c=CHANNELS[ch]; const dims=dimsList(ch); const flds=c.sections.flatMap(s=>s.fields);
+  const recs=dbRecords(ch);
+  const headers=["Semana", ...dims.map(d=>d.label), ...flds.map(f=>f.l), "Notas","Aprendizajes","Cambios"];
+  const esc=v=>{ const s=(v==null?"":String(v)); return /[",\n]/.test(s)? '"'+s.replace(/"/g,'""')+'"' : s; };
+  const lines=[headers.map(esc).join(",")];
+  recs.forEach(({rec})=>{ lines.push([rec.semana||"", ...dims.map((d,i)=>(rec.dimVals&&rec.dimVals[i])||""), ...flds.map(f=>rec.valores?(rec.valores[f.k]??""):""), rec.notas||"", rec.aprendizajes||"", rec.cambios||""].map(esc).join(",")); });
+  download(`selvadentro-${ch}.csv`, "\ufeff"+lines.join("\n"), "text/csv;charset=utf-8");
+  toast("CSV exportado ✓");
+}
+async function dbExportJSON(){
+  const all={};
+  for(const ch of Object.keys(CHANNELS)){ recList(chPrefix(ch)).forEach(k=>{ all[k]=recGet(k); }); }
+  for(const k of ["selvadentro:asesores","selvadentro:metas"]){ const v=await sGetRetry(k); if(v!=null) all[k]=v; }
+  download("selvadentro-backup.json", JSON.stringify(all,null,2), "application/json");
+  toast("Backup JSON exportado ✓");
+}
+let dbBuilt=false;
+function dbPlaceholder(){ document.getElementById("db-count").textContent="—"; document.getElementById("db-table").innerHTML=`<tbody><tr><td class="lft"><em>Elige un canal y presiona “Buscar” para cargar sus registros.</em></td></tr></tbody>`; }
+function renderDB(){
+  const sel=document.getElementById("db-canal");
+  if(!dbBuilt){
+    sel.innerHTML=Object.keys(CHANNELS).map(k=>`<option value="${k}">${CHANNELS[k].name}</option>`).join("");
+    sel.onchange=dbPlaceholder;
+    document.getElementById("db-get").onclick=()=>renderDBTable(sel.value);
+    dbBuilt=true;
+  }
+  dbPlaceholder();
+}
+
+async function switchChannel(ch){
+  CH=ch; document.getElementById("canal-select").value=ch;
+  const ok=isConfigured();
+  document.getElementById("ing-body").style.display=ok?"":"none";
+  document.getElementById("ing-placeholder").style.display=ok?"none":"block";
+  document.getElementById("rep-body").style.display=ok?"":"none";
+  document.getElementById("rep-placeholder").style.display=ok?"none":"block";
+  if(!ok){
+    const msg=`<div class="placeholder-card"><h3>${CHANNELS[ch].name}</h3><p>Este canal todavía no está configurado.</p><p>Compárteme sus KPIs, conversiones y datos históricos y lo activamos.</p></div>`;
+    document.getElementById("ing-placeholder").innerHTML=msg;
+    document.getElementById("rep-placeholder").innerHTML=msg;
+    return;
+  }
+  const dims=dimsOf();
+  document.getElementById("ing-dims").innerHTML = dims.map((d,i)=>{ const vals = d.id==="asesor" ? activeAdvisorNames() : d.values; return `<div class="grp"><label>${d.label}</label><select id="ing-dim-${i}">${vals.map(v=>`<option>${v}</option>`).join("")}</select></div>`; }).join("");
+  document.getElementById("rep-dims").innerHTML = dims.map((d,i)=>{ const vals = d.id==="ciudad" ? d.values.filter(v=>v!=="General") : d.values; return `<div class="grp"><label>${d.label}</label><select id="rep-dim-${i}"><option value="__todos">Todos</option>${vals.map(v=>`<option value="${v}">${v}</option>`).join("")}</select></div>`; }).join("");
+  renderIngresoForm(); clearForm();
+  renderChips();
+  const keys=recList(recPrefix());
+  const weeks=[...new Set(keys.map(k=>parseRecKey(k).w))].sort();
+  const si=document.getElementById("rep-semana-ini"), sf=document.getElementById("rep-semana-fin");
+  const opts=weeks.map(w=>`<option value="${w}">${weekLabel(w)}</option>`).join("");
+  si.innerHTML=opts; sf.innerHTML=opts;
+  if(weeks.length){ si.value=weeks[0]; sf.value=weeks[weeks.length-1]; if(!dims.length){ const rec=recGet(recKey(weeks[weeks.length-1])); if(rec) fillForm(rec); } }
+  document.getElementById("rep-output").innerHTML='<div class="empty-rep">Selecciona un rango de semanas y genera el reporte.</div>';
+}
+
+async function init(){
+  setupLogoUpload(); loadLogo();
+  const sel=document.getElementById("canal-select");
+  sel.innerHTML=Object.keys(CHANNELS).map(k=>`<option value="${k}">${CHANNELS[k].name}</option>`).join("");
+  sel.addEventListener("change",()=>switchChannel(sel.value));
+
+  const ingIni=document.getElementById("ing-inicio"), ingFin=document.getElementById("ing-fin");
+  ingIni.addEventListener("change",()=>{ const d=parseD(ingIni.value); if(d){ const mon=mondayOf(d); ingIni.value=toISO(mon); ingFin.value=toISO(sundayOf(mon)); } updateSemanaBadge(); });
+
+  document.getElementById("btn-guardar").onclick=saveWeek;
+  document.getElementById("btn-guardar2").onclick=saveWeek;
+  document.getElementById("btn-limpiar").onclick=clearForm;
+  document.getElementById("btn-limpiar2").onclick=clearForm;
+  document.getElementById("btn-generar").onclick=generarReporte;
+
+  document.getElementById("adv-add-btn").onclick=()=>{
+    const el=document.getElementById("adv-new"); const n=el.value.trim();
+    if(!n) return;
+    if(ADVISOR_LIST.some(a=>a.name.toLowerCase()===n.toLowerCase())){ toast("Ese asesor ya existe"); return; }
+    ADVISOR_LIST.push({name:n, active:true}); el.value="";
+    renderAdvisors(); setAdvDirty(true);
+  };
+  document.getElementById("adv-new").addEventListener("keydown",e=>{ if(e.key==="Enter") document.getElementById("adv-add-btn").click(); });
+  document.getElementById("adv-save").onclick=async()=>{
+    await saveAdvisors(); refreshAdvisorDropdowns(); setAdvDirty(false); toast("Cambios guardados ✓");
+  };
+
+  // 1) Contenido instantáneo: llena el caché desde la semilla (síncrono) y pinta Dirección General de inmediato
+  SEEDMAP = buildSeedMap();
+  for(const k in SEEDMAP){ if(!(k in RECCACHE)) RECCACHE[k]=SEEDMAP[k]; }
+  await switchChannel("brokers");
+  document.querySelector(".canal-wrap").style.display="none";
+  await showResultados();
+
+  // 2) En segundo plano: carga datos guardados (autoridad), persiste semillas faltantes y re-pinta si cambió algo
+  (async()=>{
+    try{
+      await loadAdvisors(); await loadMetas();
+      await primeCache(); await persistSeeds();
+      resState.built=false; dcState.built=false; dbBuilt=false; metasBuilt=false;
+      await switchChannel(CH);
+      refreshAdvisorDropdowns();
+      const active=document.querySelector(".view.active");
+      if(active && active.id==="view-resultados"){ await showResultados(); document.querySelector(".canal-wrap").style.display="none"; }
+      else if(active && active.id==="view-dircom"){ await showDirCom(); document.querySelector(".canal-wrap").style.display="none"; }
+    }catch(e){}
+  })();
+}
+init();
+</script>
+</body>
+</html>
