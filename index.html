@@ -188,6 +188,12 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .login-card .btn-primary{ width:100%; padding:13px; margin-top:6px; }
   #login-error{ color:var(--rojo-no-tx); background:var(--rojo-no-bg); border-radius:8px; padding:9px 12px; font-size:12.5px; margin-bottom:12px; display:none; }
   #login-error.show{ display:block; }
+  #login-info{ color:var(--verde-ok-tx); background:var(--verde-ok-bg); border-radius:8px; padding:9px 12px; font-size:12.5px; margin-bottom:12px; display:none; }
+  #login-info.show{ display:block; }
+  .login-link{ display:block; text-align:center; margin-top:14px; font-size:12.5px; color:var(--cobre); text-decoration:none; cursor:pointer; }
+  .login-link:hover{ text-decoration:underline; }
+  .login-step{ display:none; }
+  .login-step.active{ display:block; }
 
   /* ---- User badge en topbar ---- */
   .user-badge{ display:flex; align-items:center; gap:10px; font-size:12px; color:var(--logo); }
@@ -223,23 +229,49 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
 <body>
 
 <div id="login-screen">
-  <form class="login-card" id="login-form" autocomplete="on">
+  <div class="login-card">
     <div class="brand-block">
       <span class="name">Selvadentro</span>
       <span class="sub">tierra de cenotes</span>
     </div>
-    <h2>Sistema de Reportes</h2>
+    <h2 id="login-title">Sistema de Reportes</h2>
     <div id="login-error"></div>
-    <div class="login-field">
-      <label for="login-email">Email</label>
-      <input type="email" id="login-email" autocomplete="username" required>
-    </div>
-    <div class="login-field">
-      <label for="login-pass">Contraseña</label>
-      <input type="password" id="login-pass" autocomplete="current-password" required>
-    </div>
-    <button type="submit" class="btn btn-primary" id="login-submit">Entrar</button>
-  </form>
+    <div id="login-info"></div>
+
+    <form class="login-step active" id="step-signin" autocomplete="on">
+      <div class="login-field">
+        <label for="login-email">Email</label>
+        <input type="email" id="login-email" autocomplete="username" required>
+      </div>
+      <div class="login-field">
+        <label for="login-pass">Contraseña</label>
+        <input type="password" id="login-pass" autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="btn btn-primary" id="login-submit">Entrar</button>
+      <a class="login-link" id="link-forgot">¿Olvidaste tu contraseña?</a>
+    </form>
+
+    <form class="login-step" id="step-reset" autocomplete="off">
+      <div class="login-field">
+        <label for="reset-email">Email de tu cuenta</label>
+        <input type="email" id="reset-email" autocomplete="username" required>
+      </div>
+      <button type="submit" class="btn btn-primary" id="reset-submit">Enviar link</button>
+      <a class="login-link" id="link-back-signin">← Volver a iniciar sesión</a>
+    </form>
+
+    <form class="login-step" id="step-recovery" autocomplete="off">
+      <div class="login-field">
+        <label for="recovery-pass">Nueva contraseña</label>
+        <input type="password" id="recovery-pass" autocomplete="new-password" required minlength="6">
+      </div>
+      <div class="login-field">
+        <label for="recovery-pass2">Confirmar contraseña</label>
+        <input type="password" id="recovery-pass2" autocomplete="new-password" required minlength="6">
+      </div>
+      <button type="submit" class="btn btn-primary" id="recovery-submit">Actualizar contraseña</button>
+    </form>
+  </div>
 </div>
 
 <div id="app" style="display:none">
@@ -1554,9 +1586,26 @@ async function onAuthenticated(){
 }
 
 function showLoginError(msg){
+  document.getElementById("login-info").classList.remove("show");
   const el = document.getElementById("login-error");
   el.textContent = msg;
   el.classList.add("show");
+}
+function showLoginInfo(msg){
+  document.getElementById("login-error").classList.remove("show");
+  const el = document.getElementById("login-info");
+  el.textContent = msg;
+  el.classList.add("show");
+}
+function clearLoginMsgs(){
+  document.getElementById("login-error").classList.remove("show");
+  document.getElementById("login-info").classList.remove("show");
+}
+function showLoginStep(id, title){
+  document.querySelectorAll(".login-step").forEach(s=>s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+  if(title) document.getElementById("login-title").textContent = title;
+  clearLoginMsgs();
 }
 
 async function signInHandler(e){
@@ -1588,8 +1637,54 @@ async function signOut(){
   location.reload();
 }
 
+async function sendPasswordReset(e){
+  e.preventDefault();
+  const email = document.getElementById("reset-email").value.trim();
+  const btn = document.getElementById("reset-submit");
+  if(!sbClient){ showLoginError("Supabase SDK no cargó."); return; }
+  btn.disabled = true; btn.textContent = "Enviando…";
+  try{
+    const { error } = await sbClient.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + window.location.pathname
+    });
+    if(error){ showLoginError(error.message); return; }
+    showLoginInfo("Te enviamos un link a " + email + ". Revisa tu bandeja (y spam).");
+  }catch(err){
+    showLoginError(String(err.message||err));
+  }finally{
+    btn.disabled = false; btn.textContent = "Enviar link";
+  }
+}
+
+let inRecoveryMode = false;
+async function setNewPassword(e){
+  e.preventDefault();
+  const p1 = document.getElementById("recovery-pass").value;
+  const p2 = document.getElementById("recovery-pass2").value;
+  if(p1.length < 6){ showLoginError("La contraseña debe tener al menos 6 caracteres."); return; }
+  if(p1 !== p2){ showLoginError("Las contraseñas no coinciden."); return; }
+  const btn = document.getElementById("recovery-submit");
+  btn.disabled = true; btn.textContent = "Actualizando…";
+  try{
+    const { error } = await sbClient.auth.updateUser({ password: p1 });
+    if(error){ showLoginError(error.message); return; }
+    inRecoveryMode = false;
+    await sbClient.auth.signOut();
+    showLoginStep("step-signin", "Sistema de Reportes");
+    showLoginInfo("Contraseña actualizada. Inicia sesión con la nueva.");
+  }catch(err){
+    showLoginError(String(err.message||err));
+  }finally{
+    btn.disabled = false; btn.textContent = "Actualizar contraseña";
+  }
+}
+
 async function bootAuth(){
-  document.getElementById("login-form").addEventListener("submit", signInHandler);
+  document.getElementById("step-signin").addEventListener("submit", signInHandler);
+  document.getElementById("step-reset").addEventListener("submit", sendPasswordReset);
+  document.getElementById("step-recovery").addEventListener("submit", setNewPassword);
+  document.getElementById("link-forgot").addEventListener("click", e=>{ e.preventDefault(); showLoginStep("step-reset", "Recuperar contraseña"); });
+  document.getElementById("link-back-signin").addEventListener("click", e=>{ e.preventDefault(); showLoginStep("step-signin", "Sistema de Reportes"); });
   document.getElementById("btn-logout").addEventListener("click", signOut);
 
   if(!sbClient){
@@ -1597,20 +1692,24 @@ async function bootAuth(){
     return;
   }
 
-  // Mantener SESSION_JWT al día (auto-refresh)
-  sbClient.auth.onAuthStateChange((event, session)=>{
+  // Mantener SESSION_JWT al día (auto-refresh) + detectar flujo de recovery
+  sbClient.auth.onAuthStateChange(async (event, session)=>{
     if(session){ SESSION_JWT = session.access_token; SESSION_USER = { id: session.user.id, email: session.user.email }; }
     else { SESSION_JWT = null; SESSION_USER = null; }
+    if(event === "PASSWORD_RECOVERY"){
+      inRecoveryMode = true;
+      showLoginStep("step-recovery", "Define tu nueva contraseña");
+    }
   });
 
-  // ¿Sesión persistida?
+  // ¿Sesión persistida? (saltar si entramos en recovery)
   const { data } = await sbClient.auth.getSession();
+  if(inRecoveryMode) return;
   if(data && data.session){
     SESSION_JWT  = data.session.access_token;
     SESSION_USER = { id: data.session.user.id, email: data.session.user.email };
     USER_PROFILE = await fetchOwnProfile();
     if(USER_PROFILE){ await onAuthenticated(); return; }
-    // Si la sesión existe pero no hay perfil, dejarlo en pantalla de login con aviso.
     showLoginError("Tu cuenta no tiene perfil asignado. Contacta al admin.");
     await sbClient.auth.signOut();
   }
