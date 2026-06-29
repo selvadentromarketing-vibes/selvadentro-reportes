@@ -11,7 +11,6 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cardo:ital,wght@0,400;0,700;1,400&family=Lexend:wght@300;400;500;600;700&family=Yellowtail&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
 <style>
   :root{
@@ -172,120 +171,11 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .db-del{ font-family:var(--sans); font-size:12px; color:var(--rojo-no-tx); background:transparent; border:1px solid var(--linea); border-radius:6px; padding:4px 9px; cursor:pointer; margin-left:4px; }
   .db-del:hover{ background:var(--rojo-no-bg); border-color:var(--rojo-no-bg); }
   #db-table td.note{ max-width:220px; overflow:hidden; text-overflow:ellipsis; }
-
-  /* ---- Login screen ---- */
-  #login-screen{ position:fixed; inset:0; z-index:200; background:var(--verde-prof); display:flex; align-items:center; justify-content:center; padding:24px; }
-  #login-screen.hidden{ display:none; }
-  .login-card{ background:var(--crema); border:1px solid var(--cobre); border-radius:16px; padding:38px 42px; max-width:380px; width:100%; box-shadow:0 8px 30px rgba(0,0,0,.25); }
-  .login-card .brand-block{ text-align:center; margin-bottom:22px; }
-  .login-card .brand-block .name{ font-family:var(--serif); font-style:italic; font-size:36px; color:var(--verde-prof); display:block; line-height:1; }
-  .login-card .brand-block .sub{ font-family:var(--serif); font-size:11px; letter-spacing:5px; text-transform:lowercase; color:var(--cobre); display:block; margin-top:4px; }
-  .login-card h2{ font-family:var(--serif); font-size:20px; color:var(--verde-prof); margin:0 0 18px; text-align:center; font-weight:400; }
-  .login-field{ display:flex; flex-direction:column; gap:5px; margin-bottom:14px; }
-  .login-field label{ font-size:11px; text-transform:uppercase; letter-spacing:.8px; color:var(--neutro); font-weight:600; }
-  .login-field input{ font-family:var(--sans); font-size:14px; padding:11px 13px; border:1px solid var(--linea); border-radius:9px; background:#fff; color:var(--texto); }
-  .login-field input:focus{ outline:none; border-color:var(--cobre); }
-  .login-card .btn-primary{ width:100%; padding:13px; margin-top:6px; }
-  #login-error{ color:var(--rojo-no-tx); background:var(--rojo-no-bg); border-radius:8px; padding:9px 12px; font-size:12.5px; margin-bottom:12px; display:none; }
-  #login-error.show{ display:block; }
-  #login-info{ color:var(--verde-ok-tx); background:var(--verde-ok-bg); border-radius:8px; padding:9px 12px; font-size:12.5px; margin-bottom:12px; display:none; }
-  #login-info.show{ display:block; }
-  .login-link{ display:block; text-align:center; margin-top:14px; font-size:12.5px; color:var(--cobre); text-decoration:none; cursor:pointer; }
-  .login-link:hover{ text-decoration:underline; }
-  .login-step{ display:none; }
-  .login-step.active{ display:block; }
-
-  /* ---- User badge en topbar ---- */
-  .user-badge{ display:flex; align-items:center; gap:10px; font-size:12px; color:var(--logo); }
-  .user-badge .email{ opacity:.9; }
-  .user-badge .role{ font-size:9px; letter-spacing:1.2px; text-transform:uppercase; background:var(--cobre); color:#fff; padding:2px 8px; border-radius:10px; font-weight:700; }
-  .user-badge .role.user{ background:var(--olivo); }
-  .user-badge .logout{ background:transparent; border:1px solid rgba(239,231,214,.4); color:var(--logo); border-radius:7px; padding:5px 11px; font-family:var(--sans); font-size:11px; cursor:pointer; letter-spacing:.4px; }
-  .user-badge .logout:hover{ background:rgba(239,231,214,.12); }
-
-  /* ---- Admin panel ---- */
-  .admin-card{ background:#fff; border:1px solid var(--linea); border-radius:12px; padding:22px 24px; max-width:980px; margin:6px auto; box-shadow:0 1px 2px rgba(70,82,65,.05); }
-  .admin-card h3{ font-family:var(--serif); font-size:22px; color:var(--verde-prof); margin:0 0 8px; }
-  table.usr-table{ width:100%; border-collapse:collapse; margin-top:14px; }
-  table.usr-table th{ font-size:10px; text-transform:uppercase; letter-spacing:.6px; color:var(--neutro); font-weight:700; padding:9px 8px; border-bottom:1px solid var(--linea); background:var(--crema); text-align:left; }
-  table.usr-table td{ padding:9px 8px; border-bottom:1px solid var(--crema-2); vertical-align:middle; font-size:13px; }
-  table.usr-table select, table.usr-table input[type=text]{ font-family:var(--sans); font-size:13px; padding:6px 9px; border:1px solid var(--linea); border-radius:7px; background:var(--crema); }
-  .ch-pills{ display:flex; flex-wrap:wrap; gap:5px 8px; max-width:340px; }
-  .ch-pill{ display:inline-flex; align-items:center; gap:5px; font-size:11px; padding:3px 8px; border-radius:14px; border:1px solid var(--linea); background:var(--crema); cursor:pointer; user-select:none; }
-  .ch-pill input{ accent-color:var(--olivo); }
-  .ch-pill.on{ background:var(--verde-ok-bg); border-color:var(--verde-ok-tx); color:var(--verde-ok-tx); font-weight:600; }
-  .usr-action{ font-family:var(--sans); font-size:12px; background:transparent; border:1px solid var(--linea); border-radius:7px; padding:5px 10px; cursor:pointer; color:var(--texto); }
-  .usr-action:hover{ background:var(--crema-2); }
-  .usr-action.danger{ color:var(--rojo-no-tx); }
-  .usr-action.danger:hover{ background:var(--rojo-no-bg); border-color:var(--rojo-no-bg); }
-  .usr-action.save{ color:#fff; background:var(--cobre); border-color:var(--cobre); }
-  .usr-action.save:hover{ background:#bb7536; }
-  .new-user-row{ background:var(--crema-2); }
-  .new-user-row td{ border-bottom:none; }
-  .new-user-row input{ width:100%; }
-  .admin-empty{ color:var(--neutro); font-style:italic; padding:18px 6px; text-align:center; }
-  .usr-action.link{ color:var(--olivo); border-color:var(--olivo); }
-  .usr-action.link:hover{ background:var(--olivo); color:#fff; }
-
-  /* ---- Modal magic link ---- */
-  .modal-overlay{ position:fixed; inset:0; z-index:300; background:rgba(46,51,43,.55); display:none; align-items:center; justify-content:center; padding:20px; }
-  .modal-overlay.show{ display:flex; }
-  .modal-card{ background:#fff; border:1px solid var(--cobre); border-radius:14px; padding:26px 28px; max-width:560px; width:100%; box-shadow:0 10px 30px rgba(0,0,0,.25); }
-  .modal-card h3{ font-family:var(--serif); font-size:20px; color:var(--verde-prof); margin:0 0 10px; }
-  .modal-card p{ font-size:13px; color:var(--neutro); margin:6px 0 14px; line-height:1.5; }
-  .modal-card .link-box{ font-family:monospace; font-size:11px; background:var(--crema); border:1px solid var(--linea); border-radius:8px; padding:11px 12px; word-break:break-all; color:var(--texto); margin-bottom:14px; max-height:120px; overflow:auto; }
-  .modal-card .actions{ display:flex; justify-content:flex-end; gap:10px; }
 </style>
 </head>
 <body>
 
-<div id="login-screen">
-  <div class="login-card">
-    <div class="brand-block">
-      <span class="name">Selvadentro</span>
-      <span class="sub">tierra de cenotes</span>
-    </div>
-    <h2 id="login-title">Sistema de Reportes</h2>
-    <div id="login-error"></div>
-    <div id="login-info"></div>
-
-    <form class="login-step active" id="step-signin" autocomplete="on">
-      <div class="login-field">
-        <label for="login-email">Email</label>
-        <input type="email" id="login-email" autocomplete="username" required>
-      </div>
-      <div class="login-field">
-        <label for="login-pass">Contraseña</label>
-        <input type="password" id="login-pass" autocomplete="current-password" required>
-      </div>
-      <button type="submit" class="btn btn-primary" id="login-submit">Entrar</button>
-      <a class="login-link" id="link-forgot">¿Olvidaste tu contraseña?</a>
-    </form>
-
-    <form class="login-step" id="step-reset" autocomplete="off">
-      <div class="login-field">
-        <label for="reset-email">Email de tu cuenta</label>
-        <input type="email" id="reset-email" autocomplete="username" required>
-      </div>
-      <button type="submit" class="btn btn-primary" id="reset-submit">Enviar link</button>
-      <a class="login-link" id="link-back-signin">← Volver a iniciar sesión</a>
-    </form>
-
-    <form class="login-step" id="step-recovery" autocomplete="off">
-      <div class="login-field">
-        <label for="recovery-pass">Nueva contraseña</label>
-        <input type="password" id="recovery-pass" autocomplete="new-password" required minlength="6">
-      </div>
-      <div class="login-field">
-        <label for="recovery-pass2">Confirmar contraseña</label>
-        <input type="password" id="recovery-pass2" autocomplete="new-password" required minlength="6">
-      </div>
-      <button type="submit" class="btn btn-primary" id="recovery-submit">Actualizar contraseña</button>
-    </form>
-  </div>
-</div>
-
-<div id="app" style="display:none">
+<div id="app">
   <div class="topbar">
     <div class="brand" id="brand" title="Clic para cambiar el logo">
       <img id="brand-logo" alt="Selvadentro · tierra de cenotes">
@@ -296,11 +186,6 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
     <div class="app-title">
       <div class="t1">Sistema de Reportes</div>
       <div class="t2">Multicanal</div>
-    </div>
-    <div class="user-badge" id="user-badge" style="display:none">
-      <span class="email" id="user-email">—</span>
-      <span class="role" id="user-role">user</span>
-      <button type="button" class="logout" id="btn-logout">Salir</button>
     </div>
   </div>
 
@@ -317,10 +202,6 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
       <button class="side-btn" data-tab="db" title="Base de datos">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5.5" rx="7" ry="2.8"/><path d="M5 5.5v6c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-6"/><path d="M5 11.5v6c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-6"/></svg>
         <span>Base&nbsp;datos</span>
-      </button>
-      <button class="side-btn admin-only" data-tab="admin" title="Administración de usuarios" style="display:none">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M4 20c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/><circle cx="18" cy="6" r="1.4" fill="currentColor" stroke="none"/></svg>
-        <span>Admin</span>
       </button>
     </div>
     <div class="main">
@@ -446,20 +327,6 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
       <div id="metas-body"></div>
     </div>
 
-    <!-- ============ ADMIN (solo admin) ============ -->
-    <div class="view" id="view-admin">
-      <div class="admin-card">
-        <h3>Administración de usuarios</h3>
-        <p class="hint">Crea, edita o elimina usuarios. Asigna rol (<b>admin</b> = acceso total, <b>user</b> = solo canales marcados) y los canales permitidos. La contraseña se establece al crear y puede restablecerse después.</p>
-        <div class="table-scroll"><table class="usr-table" id="usr-table"></table></div>
-        <div class="adv-footer">
-          <span class="adv-status" id="usr-status"></span>
-          <button class="btn btn-olive" id="usr-refresh">Recargar</button>
-          <button class="btn btn-primary" id="usr-new-btn">+ Nuevo usuario</button>
-        </div>
-      </div>
-    </div>
-
     <!-- ============ BASE DE DATOS ============ -->
     <div class="view" id="view-db">
       <div class="periodo">
@@ -476,18 +343,6 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   </div>
 
   <div class="toast" id="toast"></div>
-</div>
-
-<div class="modal-overlay" id="link-modal">
-  <div class="modal-card">
-    <h3>Magic link generado</h3>
-    <p>Comparte este link con <b id="link-modal-email"></b>. Es de <b>un solo uso</b> y caduca en 1 hora. Ya lo copiamos al portapapeles.</p>
-    <div class="link-box" id="link-modal-url"></div>
-    <div class="actions">
-      <button class="btn btn-ghost" id="link-modal-copy">Copiar de nuevo</button>
-      <button class="btn btn-primary" id="link-modal-close">Listo</button>
-    </div>
-  </div>
 </div>
 
 <script>
@@ -967,22 +822,10 @@ const SUPABASE = {
   anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZzbmdneGN1em5sZXV2b3lvZW5uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0Mjk0NjQsImV4cCI6MjA5ODAwNTQ2NH0.gTKuAL7yqiLofNjyKwKsngtW8FYBmQ9zxtPtE0T_DR0"
 };
 
-/* ===================== AUTH (Supabase) ===================== */
-const sbClient = (window.supabase && window.supabase.createClient)
-  ? window.supabase.createClient(SUPABASE.url, SUPABASE.anonKey, {
-      auth:{ persistSession:true, autoRefreshToken:true, storageKey:"slvd-reportes-auth" }
-    })
-  : null;
-let SESSION_JWT = null;
-let SESSION_USER = null;       // { id, email }
-let USER_PROFILE = null;       // { user_id, email, role, channels }
-const isAdmin = ()=> !!(USER_PROFILE && USER_PROFILE.role === "admin");
-const allowedChannels = ()=> isAdmin() ? Object.keys(CHANNELS) : ((USER_PROFILE && USER_PROFILE.channels) || []);
-
 /* ===================== STORAGE ===================== */
 const mem={};
 const supaOn = !!(SUPABASE.url && SUPABASE.anonKey);
-const supaHeaders = ()=>({ "apikey":SUPABASE.anonKey, "Authorization":"Bearer "+(SESSION_JWT||SUPABASE.anonKey), "Content-Type":"application/json" });
+const supaHeaders = ()=>({ "apikey":SUPABASE.anonKey, "Authorization":"Bearer "+SUPABASE.anonKey, "Content-Type":"application/json" });
 const supaStore = {
   async get(k){ const r=await fetch(`${SUPABASE.url}/rest/v1/kv?k=eq.${encodeURIComponent(k)}&select=v`,{headers:supaHeaders()}); if(!r.ok) throw new Error("supa get "+r.status); const a=await r.json(); return (a&&a.length)?{value:a[0].v}:null; },
   async set(k,valStr){ const r=await fetch(`${SUPABASE.url}/rest/v1/kv`,{method:"POST",headers:{...supaHeaders(),"Prefer":"resolution=merge-duplicates,return=minimal"},body:JSON.stringify({k,v:valStr})}); if(!r.ok) throw new Error("supa set "+r.status); return true; },
@@ -1189,14 +1032,13 @@ document.querySelectorAll("[data-tab]").forEach(el=>el.onclick=()=>{
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   el.classList.add("active");
   document.getElementById("view-"+el.dataset.tab).classList.add("active");
-  const dir = ["resultados","dircom","asesores","metas","db","admin"].includes(el.dataset.tab);
+  const dir = ["resultados","dircom","asesores","metas","db"].includes(el.dataset.tab);
   document.querySelector(".canal-wrap").style.display = dir?"none":"flex";
   if(el.dataset.tab==="resultados") showResultados();
   if(el.dataset.tab==="dircom") showDirCom();
   if(el.dataset.tab==="asesores") renderAdvisors();
   if(el.dataset.tab==="metas") renderMetas();
   if(el.dataset.tab==="db") renderDB();
-  if(el.dataset.tab==="admin") renderAdmin();
 });
 
 /* ===================== REPORTES DE DIRECCIÓN (CONSOLIDADOS) ===================== */
@@ -1538,8 +1380,7 @@ async function init(){
   // 1) Contenido instantáneo: llena el caché desde la semilla (síncrono) y pinta Dirección General de inmediato
   SEEDMAP = buildSeedMap();
   for(const k in SEEDMAP){ if(!(k in RECCACHE)) RECCACHE[k]=SEEDMAP[k]; }
-  const firstCh = Object.keys(CHANNELS)[0];
-  if(firstCh){ await switchChannel(firstCh); }
+  await switchChannel("brokers");
   document.querySelector(".canal-wrap").style.display="none";
   await showResultados();
 
@@ -1557,399 +1398,7 @@ async function init(){
     }catch(e){}
   })();
 }
-
-/* ===================== AUTH BOOTSTRAP ===================== */
-async function fetchOwnProfile(){
-  try{
-    const r = await fetch(`${SUPABASE.url}/rest/v1/user_profiles?user_id=eq.${SESSION_USER.id}&select=user_id,email,role,channels`, { headers: supaHeaders() });
-    if(!r.ok) return null;
-    const a = await r.json();
-    return a && a.length ? a[0] : null;
-  }catch(e){ return null; }
-}
-
-function applyChannelFilter(){
-  if(isAdmin()) return;
-  const allowed = new Set(USER_PROFILE && USER_PROFILE.channels || []);
-  for(const k of Object.keys(CHANNELS)){
-    if(!allowed.has(k)) delete CHANNELS[k];
-  }
-}
-
-function applyUserBadge(){
-  const u=document.getElementById("user-badge");
-  if(!SESSION_USER){ u.style.display="none"; return; }
-  u.style.display="flex";
-  document.getElementById("user-email").textContent = SESSION_USER.email || "";
-  const r = document.getElementById("user-role");
-  r.textContent = (USER_PROFILE && USER_PROFILE.role) || "user";
-  r.className = "role " + ((USER_PROFILE && USER_PROFILE.role) || "user");
-  document.querySelectorAll(".admin-only").forEach(el=>{ el.style.display = isAdmin() ? "" : "none"; });
-}
-
-function showNoAccessScreen(){
-  document.querySelector(".main").innerHTML = `
-    <div class="wrap">
-      <div class="placeholder-card">
-        <h3>Sin acceso</h3>
-        <p>Tu cuenta no tiene canales asignados todavía.</p>
-        <p>Pídele a un administrador que te asigne acceso desde el panel Admin.</p>
-        <p style="margin-top:18px"><button class="btn btn-ghost" onclick="signOut()">Cerrar sesión</button></p>
-      </div>
-    </div>`;
-}
-
-async function onAuthenticated(){
-  document.getElementById("login-screen").classList.add("hidden");
-  document.getElementById("app").style.display = "";
-  applyUserBadge();
-  applyChannelFilter();
-  if(Object.keys(CHANNELS).length === 0){ showNoAccessScreen(); return; }
-  await init();
-}
-
-function showLoginError(msg){
-  document.getElementById("login-info").classList.remove("show");
-  const el = document.getElementById("login-error");
-  el.textContent = msg;
-  el.classList.add("show");
-}
-function showLoginInfo(msg){
-  document.getElementById("login-error").classList.remove("show");
-  const el = document.getElementById("login-info");
-  el.textContent = msg;
-  el.classList.add("show");
-}
-function clearLoginMsgs(){
-  document.getElementById("login-error").classList.remove("show");
-  document.getElementById("login-info").classList.remove("show");
-}
-function showLoginStep(id, title){
-  document.querySelectorAll(".login-step").forEach(s=>s.classList.remove("active"));
-  document.getElementById(id).classList.add("active");
-  if(title) document.getElementById("login-title").textContent = title;
-  clearLoginMsgs();
-}
-
-async function signInHandler(e){
-  e.preventDefault();
-  const email = document.getElementById("login-email").value.trim();
-  const pass  = document.getElementById("login-pass").value;
-  const btn   = document.getElementById("login-submit");
-  document.getElementById("login-error").classList.remove("show");
-  if(!sbClient){ showLoginError("Supabase SDK no cargó. Recarga la página."); return; }
-  btn.disabled = true; btn.textContent = "Entrando…";
-  try{
-    const { data, error } = await sbClient.auth.signInWithPassword({ email, password: pass });
-    if(error || !data.session){ showLoginError(error ? error.message : "No se pudo iniciar sesión"); return; }
-    SESSION_JWT  = data.session.access_token;
-    SESSION_USER = { id: data.user.id, email: data.user.email };
-    USER_PROFILE = await fetchOwnProfile();
-    if(!USER_PROFILE){ showLoginError("Tu cuenta existe pero no tiene perfil. Contacta al admin."); await sbClient.auth.signOut(); SESSION_JWT=null; SESSION_USER=null; return; }
-    await onAuthenticated();
-  }catch(err){
-    showLoginError(String(err.message||err));
-  }finally{
-    btn.disabled = false; btn.textContent = "Entrar";
-  }
-}
-
-async function signOut(){
-  try{ if(sbClient) await sbClient.auth.signOut(); }catch(e){}
-  SESSION_JWT = null; SESSION_USER = null; USER_PROFILE = null;
-  location.reload();
-}
-
-async function sendPasswordReset(e){
-  e.preventDefault();
-  const email = document.getElementById("reset-email").value.trim();
-  const btn = document.getElementById("reset-submit");
-  if(!sbClient){ showLoginError("Supabase SDK no cargó."); return; }
-  btn.disabled = true; btn.textContent = "Enviando…";
-  try{
-    const { error } = await sbClient.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin + window.location.pathname
-    });
-    if(error){ showLoginError(error.message); return; }
-    showLoginInfo("Te enviamos un link a " + email + ". Revisa tu bandeja (y spam).");
-  }catch(err){
-    showLoginError(String(err.message||err));
-  }finally{
-    btn.disabled = false; btn.textContent = "Enviar link";
-  }
-}
-
-let inRecoveryMode = false;
-async function setNewPassword(e){
-  e.preventDefault();
-  const p1 = document.getElementById("recovery-pass").value;
-  const p2 = document.getElementById("recovery-pass2").value;
-  if(p1.length < 6){ showLoginError("La contraseña debe tener al menos 6 caracteres."); return; }
-  if(p1 !== p2){ showLoginError("Las contraseñas no coinciden."); return; }
-  const btn = document.getElementById("recovery-submit");
-  btn.disabled = true; btn.textContent = "Actualizando…";
-  try{
-    const { error } = await sbClient.auth.updateUser({ password: p1 });
-    if(error){ showLoginError(error.message); return; }
-    inRecoveryMode = false;
-    await sbClient.auth.signOut();
-    showLoginStep("step-signin", "Sistema de Reportes");
-    showLoginInfo("Contraseña actualizada. Inicia sesión con la nueva.");
-  }catch(err){
-    showLoginError(String(err.message||err));
-  }finally{
-    btn.disabled = false; btn.textContent = "Actualizar contraseña";
-  }
-}
-
-function consumeAutoLoginToken(){
-  try{
-    const m = location.hash.match(/[#&]k=([^&]+)/);
-    if(!m) return null;
-    const raw = atob(decodeURIComponent(m[1]));
-    const i = raw.indexOf(":");
-    if(i < 0) return null;
-    history.replaceState(null, "", location.pathname);
-    return { email: raw.slice(0, i), password: raw.slice(i+1) };
-  }catch(e){ return null; }
-}
-
-async function tryAutoLogin(){
-  const auto = consumeAutoLoginToken();
-  if(!auto || !sbClient) return false;
-  showLoginInfo("Iniciando sesión…");
-  const { data, error } = await sbClient.auth.signInWithPassword({ email: auto.email, password: auto.password });
-  if(error || !data.session){ showLoginError(error ? error.message : "Token de acceso inválido"); return false; }
-  SESSION_JWT  = data.session.access_token;
-  SESSION_USER = { id: data.user.id, email: data.user.email };
-  USER_PROFILE = await fetchOwnProfile();
-  if(!USER_PROFILE){ showLoginError("Cuenta sin perfil asignado. Contacta al admin."); await sbClient.auth.signOut(); return false; }
-  await onAuthenticated();
-  return true;
-}
-
-async function bootAuth(){
-  document.getElementById("step-signin").addEventListener("submit", signInHandler);
-  document.getElementById("step-reset").addEventListener("submit", sendPasswordReset);
-  document.getElementById("step-recovery").addEventListener("submit", setNewPassword);
-  document.getElementById("link-forgot").addEventListener("click", e=>{ e.preventDefault(); showLoginStep("step-reset", "Recuperar contraseña"); });
-  document.getElementById("link-back-signin").addEventListener("click", e=>{ e.preventDefault(); showLoginStep("step-signin", "Sistema de Reportes"); });
-  document.getElementById("btn-logout").addEventListener("click", signOut);
-
-  if(!sbClient){
-    showLoginError("Supabase SDK no cargó. Revisa tu conexión y recarga.");
-    return;
-  }
-
-  // Mantener SESSION_JWT al día (auto-refresh) + detectar flujo de recovery
-  sbClient.auth.onAuthStateChange(async (event, session)=>{
-    if(session){ SESSION_JWT = session.access_token; SESSION_USER = { id: session.user.id, email: session.user.email }; }
-    else { SESSION_JWT = null; SESSION_USER = null; }
-    if(event === "PASSWORD_RECOVERY"){
-      inRecoveryMode = true;
-      showLoginStep("step-recovery", "Define tu nueva contraseña");
-    }
-  });
-
-  // Auto-login por token en URL (#k=BASE64(email:password))
-  if(location.hash.includes("k=")){
-    if(await tryAutoLogin()) return;
-  }
-
-  // ¿Sesión persistida? (saltar si entramos en recovery)
-  const { data } = await sbClient.auth.getSession();
-  if(inRecoveryMode) return;
-  if(data && data.session){
-    SESSION_JWT  = data.session.access_token;
-    SESSION_USER = { id: data.session.user.id, email: data.session.user.email };
-    USER_PROFILE = await fetchOwnProfile();
-    if(USER_PROFILE){ await onAuthenticated(); return; }
-    showLoginError("Tu cuenta no tiene perfil asignado. Contacta al admin.");
-    await sbClient.auth.signOut();
-  }
-}
-
-/* ===================== ADMIN PANEL ===================== */
-const ALL_CH_KEYS = ["brokers","paid_organico","seminarios","referidos","pd_leads","pd_brokers","rp_vip"];
-const ALL_CH_NAMES = { brokers:"Brokers", paid_organico:"Paid Orgánico", seminarios:"Seminarios", referidos:"Referidos", pd_leads:"PD Leads", pd_brokers:"PD Brokers", rp_vip:"RP VIP" };
-let USERS_CACHE = [];
-
-async function usrApi(action, payload){
-  const r = await fetch("/.netlify/functions/admin-users", {
-    method: "POST",
-    headers: { "Content-Type":"application/json", "Authorization":"Bearer "+SESSION_JWT },
-    body: JSON.stringify({ action, ...(payload||{}) })
-  });
-  const j = await r.json().catch(()=>({error:"respuesta inválida"}));
-  if(!r.ok || j.error){ throw new Error(j.error || ("HTTP "+r.status)); }
-  return j.data;
-}
-
-function chPillsHtml(selected, idPrefix){
-  return `<div class="ch-pills" data-id="${idPrefix}">${ALL_CH_KEYS.map(k=>{
-    const on = (selected||[]).includes(k);
-    return `<label class="ch-pill ${on?'on':''}"><input type="checkbox" value="${k}" ${on?'checked':''}>${ALL_CH_NAMES[k]}</label>`;
-  }).join("")}</div>`;
-}
-
-function readChannelsFromPills(container){
-  return [...container.querySelectorAll("input[type=checkbox]:checked")].map(i=>i.value);
-}
-
-function bindPillsBehavior(scope){
-  scope.querySelectorAll(".ch-pill input").forEach(inp=>{
-    inp.onchange = ()=>inp.parentElement.classList.toggle("on", inp.checked);
-  });
-}
-
-async function copyToClipboard(txt){
-  try{ await navigator.clipboard.writeText(txt); return true; }
-  catch(e){
-    const ta = document.createElement("textarea");
-    ta.value = txt; ta.style.position = "fixed"; ta.style.opacity = "0";
-    document.body.appendChild(ta); ta.select();
-    try{ document.execCommand("copy"); }catch(_){}
-    document.body.removeChild(ta);
-    return true;
-  }
-}
-function showLinkModal(email, url){
-  document.getElementById("link-modal-email").textContent = email;
-  document.getElementById("link-modal-url").textContent = url;
-  const m = document.getElementById("link-modal");
-  m.classList.add("show");
-  document.getElementById("link-modal-close").onclick = ()=>m.classList.remove("show");
-  document.getElementById("link-modal-copy").onclick = async()=>{
-    await copyToClipboard(url);
-    toast("Link copiado ✓");
-  };
-}
-
-let adminBuilt = false;
-async function renderAdmin(){
-  if(!isAdmin()){ document.getElementById("usr-table").innerHTML = `<tbody><tr><td class="admin-empty">Solo administradores.</td></tr></tbody>`; return; }
-  if(!adminBuilt){
-    document.getElementById("usr-refresh").onclick = ()=>loadUsers();
-    document.getElementById("usr-new-btn").onclick = ()=>openNewUserRow();
-    adminBuilt = true;
-  }
-  await loadUsers();
-}
-
-async function loadUsers(){
-  document.getElementById("usr-status").textContent = "Cargando…";
-  try{
-    USERS_CACHE = await usrApi("list");
-    paintUsersTable();
-    document.getElementById("usr-status").textContent = "";
-  }catch(e){
-    document.getElementById("usr-status").textContent = "Error: " + e.message;
-  }
-}
-
-function paintUsersTable(){
-  const tbl = document.getElementById("usr-table");
-  const rows = USERS_CACHE.map(u=>{
-    const p = u.profile || {};
-    const role = p.role || "user";
-    const channels = p.channels || [];
-    return `<tr data-uid="${u.user_id}">
-      <td>${u.email||"<em>sin email</em>"}</td>
-      <td>
-        <select class="usr-role">
-          <option value="user" ${role==='user'?'selected':''}>user</option>
-          <option value="admin" ${role==='admin'?'selected':''}>admin</option>
-        </select>
-      </td>
-      <td>${chPillsHtml(channels, "edit-"+u.user_id)}</td>
-      <td style="text-align:right; white-space:nowrap;">
-        <button class="usr-action save">Guardar</button>
-        <button class="usr-action link">Magic link</button>
-        <button class="usr-action">Reset pass</button>
-        <button class="usr-action danger">Borrar</button>
-      </td>
-    </tr>`;
-  }).join("");
-  tbl.innerHTML = `<thead><tr><th>Email</th><th>Rol</th><th>Canales</th><th></th></tr></thead><tbody>${rows||`<tr><td colspan="4" class="admin-empty">Sin usuarios todavía. Crea el primero.</td></tr>`}</tbody>`;
-  bindPillsBehavior(tbl);
-  tbl.querySelectorAll("tbody tr[data-uid]").forEach(tr=>{
-    const uid = tr.dataset.uid;
-    const [btnSave, btnLink, btnReset, btnDel] = tr.querySelectorAll(".usr-action");
-    btnSave.onclick = async()=>{
-      const role = tr.querySelector(".usr-role").value;
-      const channels = readChannelsFromPills(tr.querySelector(".ch-pills"));
-      btnSave.disabled = true;
-      try{ await usrApi("update", { user_id: uid, role, channels }); toast("Usuario actualizado ✓"); loadUsers(); }
-      catch(e){ alert("Error: "+e.message); }
-      finally{ btnSave.disabled = false; }
-    };
-    btnLink.onclick = async()=>{
-      btnLink.disabled = true; btnLink.textContent = "Generando…";
-      try{
-        const res = await usrApi("magiclink", { user_id: uid, redirect_to: "https://team.selvadentrotulum.com/" });
-        await copyToClipboard(res.action_link);
-        showLinkModal(res.email, res.action_link);
-      }catch(e){ alert("Error: "+e.message); }
-      finally{ btnLink.disabled = false; btnLink.textContent = "Magic link"; }
-    };
-    btnReset.onclick = async()=>{
-      const pw = prompt("Nueva contraseña para este usuario (mínimo 6 caracteres):");
-      if(!pw) return;
-      try{ await usrApi("password", { user_id: uid, password: pw }); toast("Contraseña actualizada ✓"); }
-      catch(e){ alert("Error: "+e.message); }
-    };
-    btnDel.onclick = async()=>{
-      if(!confirm("¿Borrar este usuario? No se puede deshacer.")) return;
-      try{ await usrApi("delete", { user_id: uid }); toast("Usuario borrado"); loadUsers(); }
-      catch(e){ alert("Error: "+e.message); }
-    };
-  });
-}
-
-function openNewUserRow(){
-  const tbl = document.getElementById("usr-table");
-  if(tbl.querySelector(".new-user-row")) return;
-  const tbody = tbl.querySelector("tbody");
-  const tr = document.createElement("tr");
-  tr.className = "new-user-row";
-  tr.innerHTML = `
-    <td><input type="email" id="new-email" placeholder="email@dominio.com"></td>
-    <td>
-      <select id="new-role">
-        <option value="user" selected>user</option>
-        <option value="admin">admin</option>
-      </select>
-      <input type="text" id="new-pass" placeholder="Contraseña inicial" style="margin-top:5px; width:100%">
-    </td>
-    <td>${chPillsHtml([], "new")}</td>
-    <td style="text-align:right; white-space:nowrap;">
-      <button class="usr-action save" id="new-save">Crear</button>
-      <button class="usr-action" id="new-cancel">Cancelar</button>
-    </td>`;
-  tbody.prepend(tr);
-  bindPillsBehavior(tr);
-  document.getElementById("new-cancel").onclick = ()=>tr.remove();
-  document.getElementById("new-save").onclick = async()=>{
-    const email = document.getElementById("new-email").value.trim();
-    const password = document.getElementById("new-pass").value;
-    const role = document.getElementById("new-role").value;
-    const channels = readChannelsFromPills(tr.querySelector(".ch-pills"));
-    if(!email || !password){ alert("Email y contraseña son obligatorios"); return; }
-    if(password.length < 6){ alert("La contraseña debe tener al menos 6 caracteres"); return; }
-    const btn = document.getElementById("new-save");
-    btn.disabled = true; btn.textContent = "Creando…";
-    try{
-      await usrApi("create", { email, password, role, channels });
-      toast("Usuario creado ✓");
-      loadUsers();
-    }catch(e){
-      alert("Error: "+e.message);
-      btn.disabled = false; btn.textContent = "Crear";
-    }
-  };
-}
-
-bootAuth();
+init();
 </script>
 </body>
 </html>
