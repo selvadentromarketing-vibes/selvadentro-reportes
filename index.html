@@ -1855,7 +1855,7 @@ function paintUsersTable(){
     btnLink.onclick = async()=>{
       btnLink.disabled = true; btnLink.textContent = "Generando…";
       try{
-        const res = await usrApi("magiclink", { user_id: uid, redirect_to: window.location.origin + "/" });
+        const res = await usrApi("magiclink", { user_id: uid, redirect_to: "https://team.selvadentrotulum.com/" });
         await copyToClipboard(res.action_link);
         showLinkModal(res.email, res.action_link);
       }catch(e){ alert("Error: "+e.message); }
