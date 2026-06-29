@@ -11,6 +11,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cardo:ital,wght@0,400;0,700;1,400&family=Lexend:wght@300;400;500;600;700&family=Yellowtail&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
 <style>
   :root{
@@ -171,11 +172,77 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .db-del{ font-family:var(--sans); font-size:12px; color:var(--rojo-no-tx); background:transparent; border:1px solid var(--linea); border-radius:6px; padding:4px 9px; cursor:pointer; margin-left:4px; }
   .db-del:hover{ background:var(--rojo-no-bg); border-color:var(--rojo-no-bg); }
   #db-table td.note{ max-width:220px; overflow:hidden; text-overflow:ellipsis; }
+
+  /* ---- Login screen ---- */
+  #login-screen{ position:fixed; inset:0; z-index:200; background:var(--verde-prof); display:flex; align-items:center; justify-content:center; padding:24px; }
+  #login-screen.hidden{ display:none; }
+  .login-card{ background:var(--crema); border:1px solid var(--cobre); border-radius:16px; padding:38px 42px; max-width:380px; width:100%; box-shadow:0 8px 30px rgba(0,0,0,.25); }
+  .login-card .brand-block{ text-align:center; margin-bottom:22px; }
+  .login-card .brand-block .name{ font-family:var(--serif); font-style:italic; font-size:36px; color:var(--verde-prof); display:block; line-height:1; }
+  .login-card .brand-block .sub{ font-family:var(--serif); font-size:11px; letter-spacing:5px; text-transform:lowercase; color:var(--cobre); display:block; margin-top:4px; }
+  .login-card h2{ font-family:var(--serif); font-size:20px; color:var(--verde-prof); margin:0 0 18px; text-align:center; font-weight:400; }
+  .login-field{ display:flex; flex-direction:column; gap:5px; margin-bottom:14px; }
+  .login-field label{ font-size:11px; text-transform:uppercase; letter-spacing:.8px; color:var(--neutro); font-weight:600; }
+  .login-field input{ font-family:var(--sans); font-size:14px; padding:11px 13px; border:1px solid var(--linea); border-radius:9px; background:#fff; color:var(--texto); }
+  .login-field input:focus{ outline:none; border-color:var(--cobre); }
+  .login-card .btn-primary{ width:100%; padding:13px; margin-top:6px; }
+  #login-error{ color:var(--rojo-no-tx); background:var(--rojo-no-bg); border-radius:8px; padding:9px 12px; font-size:12.5px; margin-bottom:12px; display:none; }
+  #login-error.show{ display:block; }
+
+  /* ---- User badge en topbar ---- */
+  .user-badge{ display:flex; align-items:center; gap:10px; font-size:12px; color:var(--logo); }
+  .user-badge .email{ opacity:.9; }
+  .user-badge .role{ font-size:9px; letter-spacing:1.2px; text-transform:uppercase; background:var(--cobre); color:#fff; padding:2px 8px; border-radius:10px; font-weight:700; }
+  .user-badge .role.user{ background:var(--olivo); }
+  .user-badge .logout{ background:transparent; border:1px solid rgba(239,231,214,.4); color:var(--logo); border-radius:7px; padding:5px 11px; font-family:var(--sans); font-size:11px; cursor:pointer; letter-spacing:.4px; }
+  .user-badge .logout:hover{ background:rgba(239,231,214,.12); }
+
+  /* ---- Admin panel ---- */
+  .admin-card{ background:#fff; border:1px solid var(--linea); border-radius:12px; padding:22px 24px; max-width:980px; margin:6px auto; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .admin-card h3{ font-family:var(--serif); font-size:22px; color:var(--verde-prof); margin:0 0 8px; }
+  table.usr-table{ width:100%; border-collapse:collapse; margin-top:14px; }
+  table.usr-table th{ font-size:10px; text-transform:uppercase; letter-spacing:.6px; color:var(--neutro); font-weight:700; padding:9px 8px; border-bottom:1px solid var(--linea); background:var(--crema); text-align:left; }
+  table.usr-table td{ padding:9px 8px; border-bottom:1px solid var(--crema-2); vertical-align:middle; font-size:13px; }
+  table.usr-table select, table.usr-table input[type=text]{ font-family:var(--sans); font-size:13px; padding:6px 9px; border:1px solid var(--linea); border-radius:7px; background:var(--crema); }
+  .ch-pills{ display:flex; flex-wrap:wrap; gap:5px 8px; max-width:340px; }
+  .ch-pill{ display:inline-flex; align-items:center; gap:5px; font-size:11px; padding:3px 8px; border-radius:14px; border:1px solid var(--linea); background:var(--crema); cursor:pointer; user-select:none; }
+  .ch-pill input{ accent-color:var(--olivo); }
+  .ch-pill.on{ background:var(--verde-ok-bg); border-color:var(--verde-ok-tx); color:var(--verde-ok-tx); font-weight:600; }
+  .usr-action{ font-family:var(--sans); font-size:12px; background:transparent; border:1px solid var(--linea); border-radius:7px; padding:5px 10px; cursor:pointer; color:var(--texto); }
+  .usr-action:hover{ background:var(--crema-2); }
+  .usr-action.danger{ color:var(--rojo-no-tx); }
+  .usr-action.danger:hover{ background:var(--rojo-no-bg); border-color:var(--rojo-no-bg); }
+  .usr-action.save{ color:#fff; background:var(--cobre); border-color:var(--cobre); }
+  .usr-action.save:hover{ background:#bb7536; }
+  .new-user-row{ background:var(--crema-2); }
+  .new-user-row td{ border-bottom:none; }
+  .new-user-row input{ width:100%; }
+  .admin-empty{ color:var(--neutro); font-style:italic; padding:18px 6px; text-align:center; }
 </style>
 </head>
 <body>
 
-<div id="app">
+<div id="login-screen">
+  <form class="login-card" id="login-form" autocomplete="on">
+    <div class="brand-block">
+      <span class="name">Selvadentro</span>
+      <span class="sub">tierra de cenotes</span>
+    </div>
+    <h2>Sistema de Reportes</h2>
+    <div id="login-error"></div>
+    <div class="login-field">
+      <label for="login-email">Email</label>
+      <input type="email" id="login-email" autocomplete="username" required>
+    </div>
+    <div class="login-field">
+      <label for="login-pass">Contraseña</label>
+      <input type="password" id="login-pass" autocomplete="current-password" required>
+    </div>
+    <button type="submit" class="btn btn-primary" id="login-submit">Entrar</button>
+  </form>
+</div>
+
+<div id="app" style="display:none">
   <div class="topbar">
     <div class="brand" id="brand" title="Clic para cambiar el logo">
       <img id="brand-logo" alt="Selvadentro · tierra de cenotes">
@@ -186,6 +253,11 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
     <div class="app-title">
       <div class="t1">Sistema de Reportes</div>
       <div class="t2">Multicanal</div>
+    </div>
+    <div class="user-badge" id="user-badge" style="display:none">
+      <span class="email" id="user-email">—</span>
+      <span class="role" id="user-role">user</span>
+      <button type="button" class="logout" id="btn-logout">Salir</button>
     </div>
   </div>
 
@@ -202,6 +274,10 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
       <button class="side-btn" data-tab="db" title="Base de datos">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5.5" rx="7" ry="2.8"/><path d="M5 5.5v6c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-6"/><path d="M5 11.5v6c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-6"/></svg>
         <span>Base&nbsp;datos</span>
+      </button>
+      <button class="side-btn admin-only" data-tab="admin" title="Administración de usuarios" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M4 20c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/><circle cx="18" cy="6" r="1.4" fill="currentColor" stroke="none"/></svg>
+        <span>Admin</span>
       </button>
     </div>
     <div class="main">
@@ -325,6 +401,20 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
       </div>
       <p class="hint">Define la <b>meta mensual</b> de cada KPI. Se guarda automáticamente y el reporte del canal la usa, ajustada al periodo (meta mensual ÷ 4 × semanas evaluadas). Deja en blanco para no fijar meta.</p>
       <div id="metas-body"></div>
+    </div>
+
+    <!-- ============ ADMIN (solo admin) ============ -->
+    <div class="view" id="view-admin">
+      <div class="admin-card">
+        <h3>Administración de usuarios</h3>
+        <p class="hint">Crea, edita o elimina usuarios. Asigna rol (<b>admin</b> = acceso total, <b>user</b> = solo canales marcados) y los canales permitidos. La contraseña se establece al crear y puede restablecerse después.</p>
+        <div class="table-scroll"><table class="usr-table" id="usr-table"></table></div>
+        <div class="adv-footer">
+          <span class="adv-status" id="usr-status"></span>
+          <button class="btn btn-olive" id="usr-refresh">Recargar</button>
+          <button class="btn btn-primary" id="usr-new-btn">+ Nuevo usuario</button>
+        </div>
+      </div>
     </div>
 
     <!-- ============ BASE DE DATOS ============ -->
@@ -822,10 +912,22 @@ const SUPABASE = {
   anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZzbmdneGN1em5sZXV2b3lvZW5uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0Mjk0NjQsImV4cCI6MjA5ODAwNTQ2NH0.gTKuAL7yqiLofNjyKwKsngtW8FYBmQ9zxtPtE0T_DR0"
 };
 
+/* ===================== AUTH (Supabase) ===================== */
+const sbClient = (window.supabase && window.supabase.createClient)
+  ? window.supabase.createClient(SUPABASE.url, SUPABASE.anonKey, {
+      auth:{ persistSession:true, autoRefreshToken:true, storageKey:"slvd-reportes-auth" }
+    })
+  : null;
+let SESSION_JWT = null;
+let SESSION_USER = null;       // { id, email }
+let USER_PROFILE = null;       // { user_id, email, role, channels }
+const isAdmin = ()=> !!(USER_PROFILE && USER_PROFILE.role === "admin");
+const allowedChannels = ()=> isAdmin() ? Object.keys(CHANNELS) : ((USER_PROFILE && USER_PROFILE.channels) || []);
+
 /* ===================== STORAGE ===================== */
 const mem={};
 const supaOn = !!(SUPABASE.url && SUPABASE.anonKey);
-const supaHeaders = ()=>({ "apikey":SUPABASE.anonKey, "Authorization":"Bearer "+SUPABASE.anonKey, "Content-Type":"application/json" });
+const supaHeaders = ()=>({ "apikey":SUPABASE.anonKey, "Authorization":"Bearer "+(SESSION_JWT||SUPABASE.anonKey), "Content-Type":"application/json" });
 const supaStore = {
   async get(k){ const r=await fetch(`${SUPABASE.url}/rest/v1/kv?k=eq.${encodeURIComponent(k)}&select=v`,{headers:supaHeaders()}); if(!r.ok) throw new Error("supa get "+r.status); const a=await r.json(); return (a&&a.length)?{value:a[0].v}:null; },
   async set(k,valStr){ const r=await fetch(`${SUPABASE.url}/rest/v1/kv`,{method:"POST",headers:{...supaHeaders(),"Prefer":"resolution=merge-duplicates,return=minimal"},body:JSON.stringify({k,v:valStr})}); if(!r.ok) throw new Error("supa set "+r.status); return true; },
@@ -1032,13 +1134,14 @@ document.querySelectorAll("[data-tab]").forEach(el=>el.onclick=()=>{
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   el.classList.add("active");
   document.getElementById("view-"+el.dataset.tab).classList.add("active");
-  const dir = ["resultados","dircom","asesores","metas","db"].includes(el.dataset.tab);
+  const dir = ["resultados","dircom","asesores","metas","db","admin"].includes(el.dataset.tab);
   document.querySelector(".canal-wrap").style.display = dir?"none":"flex";
   if(el.dataset.tab==="resultados") showResultados();
   if(el.dataset.tab==="dircom") showDirCom();
   if(el.dataset.tab==="asesores") renderAdvisors();
   if(el.dataset.tab==="metas") renderMetas();
   if(el.dataset.tab==="db") renderDB();
+  if(el.dataset.tab==="admin") renderAdmin();
 });
 
 /* ===================== REPORTES DE DIRECCIÓN (CONSOLIDADOS) ===================== */
@@ -1380,7 +1483,8 @@ async function init(){
   // 1) Contenido instantáneo: llena el caché desde la semilla (síncrono) y pinta Dirección General de inmediato
   SEEDMAP = buildSeedMap();
   for(const k in SEEDMAP){ if(!(k in RECCACHE)) RECCACHE[k]=SEEDMAP[k]; }
-  await switchChannel("brokers");
+  const firstCh = Object.keys(CHANNELS)[0];
+  if(firstCh){ await switchChannel(firstCh); }
   document.querySelector(".canal-wrap").style.display="none";
   await showResultados();
 
@@ -1398,7 +1502,268 @@ async function init(){
     }catch(e){}
   })();
 }
-init();
+
+/* ===================== AUTH BOOTSTRAP ===================== */
+async function fetchOwnProfile(){
+  try{
+    const r = await fetch(`${SUPABASE.url}/rest/v1/user_profiles?user_id=eq.${SESSION_USER.id}&select=user_id,email,role,channels`, { headers: supaHeaders() });
+    if(!r.ok) return null;
+    const a = await r.json();
+    return a && a.length ? a[0] : null;
+  }catch(e){ return null; }
+}
+
+function applyChannelFilter(){
+  if(isAdmin()) return;
+  const allowed = new Set(USER_PROFILE && USER_PROFILE.channels || []);
+  for(const k of Object.keys(CHANNELS)){
+    if(!allowed.has(k)) delete CHANNELS[k];
+  }
+}
+
+function applyUserBadge(){
+  const u=document.getElementById("user-badge");
+  if(!SESSION_USER){ u.style.display="none"; return; }
+  u.style.display="flex";
+  document.getElementById("user-email").textContent = SESSION_USER.email || "";
+  const r = document.getElementById("user-role");
+  r.textContent = (USER_PROFILE && USER_PROFILE.role) || "user";
+  r.className = "role " + ((USER_PROFILE && USER_PROFILE.role) || "user");
+  document.querySelectorAll(".admin-only").forEach(el=>{ el.style.display = isAdmin() ? "" : "none"; });
+}
+
+function showNoAccessScreen(){
+  document.querySelector(".main").innerHTML = `
+    <div class="wrap">
+      <div class="placeholder-card">
+        <h3>Sin acceso</h3>
+        <p>Tu cuenta no tiene canales asignados todavía.</p>
+        <p>Pídele a un administrador que te asigne acceso desde el panel Admin.</p>
+        <p style="margin-top:18px"><button class="btn btn-ghost" onclick="signOut()">Cerrar sesión</button></p>
+      </div>
+    </div>`;
+}
+
+async function onAuthenticated(){
+  document.getElementById("login-screen").classList.add("hidden");
+  document.getElementById("app").style.display = "";
+  applyUserBadge();
+  applyChannelFilter();
+  if(Object.keys(CHANNELS).length === 0){ showNoAccessScreen(); return; }
+  await init();
+}
+
+function showLoginError(msg){
+  const el = document.getElementById("login-error");
+  el.textContent = msg;
+  el.classList.add("show");
+}
+
+async function signInHandler(e){
+  e.preventDefault();
+  const email = document.getElementById("login-email").value.trim();
+  const pass  = document.getElementById("login-pass").value;
+  const btn   = document.getElementById("login-submit");
+  document.getElementById("login-error").classList.remove("show");
+  if(!sbClient){ showLoginError("Supabase SDK no cargó. Recarga la página."); return; }
+  btn.disabled = true; btn.textContent = "Entrando…";
+  try{
+    const { data, error } = await sbClient.auth.signInWithPassword({ email, password: pass });
+    if(error || !data.session){ showLoginError(error ? error.message : "No se pudo iniciar sesión"); return; }
+    SESSION_JWT  = data.session.access_token;
+    SESSION_USER = { id: data.user.id, email: data.user.email };
+    USER_PROFILE = await fetchOwnProfile();
+    if(!USER_PROFILE){ showLoginError("Tu cuenta existe pero no tiene perfil. Contacta al admin."); await sbClient.auth.signOut(); SESSION_JWT=null; SESSION_USER=null; return; }
+    await onAuthenticated();
+  }catch(err){
+    showLoginError(String(err.message||err));
+  }finally{
+    btn.disabled = false; btn.textContent = "Entrar";
+  }
+}
+
+async function signOut(){
+  try{ if(sbClient) await sbClient.auth.signOut(); }catch(e){}
+  SESSION_JWT = null; SESSION_USER = null; USER_PROFILE = null;
+  location.reload();
+}
+
+async function bootAuth(){
+  document.getElementById("login-form").addEventListener("submit", signInHandler);
+  document.getElementById("btn-logout").addEventListener("click", signOut);
+
+  if(!sbClient){
+    showLoginError("Supabase SDK no cargó. Revisa tu conexión y recarga.");
+    return;
+  }
+
+  // Mantener SESSION_JWT al día (auto-refresh)
+  sbClient.auth.onAuthStateChange((event, session)=>{
+    if(session){ SESSION_JWT = session.access_token; SESSION_USER = { id: session.user.id, email: session.user.email }; }
+    else { SESSION_JWT = null; SESSION_USER = null; }
+  });
+
+  // ¿Sesión persistida?
+  const { data } = await sbClient.auth.getSession();
+  if(data && data.session){
+    SESSION_JWT  = data.session.access_token;
+    SESSION_USER = { id: data.session.user.id, email: data.session.user.email };
+    USER_PROFILE = await fetchOwnProfile();
+    if(USER_PROFILE){ await onAuthenticated(); return; }
+    // Si la sesión existe pero no hay perfil, dejarlo en pantalla de login con aviso.
+    showLoginError("Tu cuenta no tiene perfil asignado. Contacta al admin.");
+    await sbClient.auth.signOut();
+  }
+}
+
+/* ===================== ADMIN PANEL ===================== */
+const ALL_CH_KEYS = ["brokers","paid_organico","seminarios","referidos","pd_leads","pd_brokers","rp_vip"];
+const ALL_CH_NAMES = { brokers:"Brokers", paid_organico:"Paid Orgánico", seminarios:"Seminarios", referidos:"Referidos", pd_leads:"PD Leads", pd_brokers:"PD Brokers", rp_vip:"RP VIP" };
+let USERS_CACHE = [];
+
+async function usrApi(action, payload){
+  const r = await fetch("/.netlify/functions/admin-users", {
+    method: "POST",
+    headers: { "Content-Type":"application/json", "Authorization":"Bearer "+SESSION_JWT },
+    body: JSON.stringify({ action, ...(payload||{}) })
+  });
+  const j = await r.json().catch(()=>({error:"respuesta inválida"}));
+  if(!r.ok || j.error){ throw new Error(j.error || ("HTTP "+r.status)); }
+  return j.data;
+}
+
+function chPillsHtml(selected, idPrefix){
+  return `<div class="ch-pills" data-id="${idPrefix}">${ALL_CH_KEYS.map(k=>{
+    const on = (selected||[]).includes(k);
+    return `<label class="ch-pill ${on?'on':''}"><input type="checkbox" value="${k}" ${on?'checked':''}>${ALL_CH_NAMES[k]}</label>`;
+  }).join("")}</div>`;
+}
+
+function readChannelsFromPills(container){
+  return [...container.querySelectorAll("input[type=checkbox]:checked")].map(i=>i.value);
+}
+
+function bindPillsBehavior(scope){
+  scope.querySelectorAll(".ch-pill input").forEach(inp=>{
+    inp.onchange = ()=>inp.parentElement.classList.toggle("on", inp.checked);
+  });
+}
+
+let adminBuilt = false;
+async function renderAdmin(){
+  if(!isAdmin()){ document.getElementById("usr-table").innerHTML = `<tbody><tr><td class="admin-empty">Solo administradores.</td></tr></tbody>`; return; }
+  if(!adminBuilt){
+    document.getElementById("usr-refresh").onclick = ()=>loadUsers();
+    document.getElementById("usr-new-btn").onclick = ()=>openNewUserRow();
+    adminBuilt = true;
+  }
+  await loadUsers();
+}
+
+async function loadUsers(){
+  document.getElementById("usr-status").textContent = "Cargando…";
+  try{
+    USERS_CACHE = await usrApi("list");
+    paintUsersTable();
+    document.getElementById("usr-status").textContent = "";
+  }catch(e){
+    document.getElementById("usr-status").textContent = "Error: " + e.message;
+  }
+}
+
+function paintUsersTable(){
+  const tbl = document.getElementById("usr-table");
+  const rows = USERS_CACHE.map(u=>{
+    const p = u.profile || {};
+    const role = p.role || "user";
+    const channels = p.channels || [];
+    return `<tr data-uid="${u.user_id}">
+      <td>${u.email||"<em>sin email</em>"}</td>
+      <td>
+        <select class="usr-role">
+          <option value="user" ${role==='user'?'selected':''}>user</option>
+          <option value="admin" ${role==='admin'?'selected':''}>admin</option>
+        </select>
+      </td>
+      <td>${chPillsHtml(channels, "edit-"+u.user_id)}</td>
+      <td style="text-align:right; white-space:nowrap;">
+        <button class="usr-action save">Guardar</button>
+        <button class="usr-action">Reset pass</button>
+        <button class="usr-action danger">Borrar</button>
+      </td>
+    </tr>`;
+  }).join("");
+  tbl.innerHTML = `<thead><tr><th>Email</th><th>Rol</th><th>Canales</th><th></th></tr></thead><tbody>${rows||`<tr><td colspan="4" class="admin-empty">Sin usuarios todavía. Crea el primero.</td></tr>`}</tbody>`;
+  bindPillsBehavior(tbl);
+  tbl.querySelectorAll("tbody tr[data-uid]").forEach(tr=>{
+    const uid = tr.dataset.uid;
+    const [btnSave, btnReset, btnDel] = tr.querySelectorAll(".usr-action");
+    btnSave.onclick = async()=>{
+      const role = tr.querySelector(".usr-role").value;
+      const channels = readChannelsFromPills(tr.querySelector(".ch-pills"));
+      btnSave.disabled = true;
+      try{ await usrApi("update", { user_id: uid, role, channels }); toast("Usuario actualizado ✓"); loadUsers(); }
+      catch(e){ alert("Error: "+e.message); }
+      finally{ btnSave.disabled = false; }
+    };
+    btnReset.onclick = async()=>{
+      const pw = prompt("Nueva contraseña para este usuario (mínimo 6 caracteres):");
+      if(!pw) return;
+      try{ await usrApi("password", { user_id: uid, password: pw }); toast("Contraseña actualizada ✓"); }
+      catch(e){ alert("Error: "+e.message); }
+    };
+    btnDel.onclick = async()=>{
+      if(!confirm("¿Borrar este usuario? No se puede deshacer.")) return;
+      try{ await usrApi("delete", { user_id: uid }); toast("Usuario borrado"); loadUsers(); }
+      catch(e){ alert("Error: "+e.message); }
+    };
+  });
+}
+
+function openNewUserRow(){
+  const tbl = document.getElementById("usr-table");
+  if(tbl.querySelector(".new-user-row")) return;
+  const tbody = tbl.querySelector("tbody");
+  const tr = document.createElement("tr");
+  tr.className = "new-user-row";
+  tr.innerHTML = `
+    <td><input type="email" id="new-email" placeholder="email@dominio.com"></td>
+    <td>
+      <select id="new-role">
+        <option value="user" selected>user</option>
+        <option value="admin">admin</option>
+      </select>
+      <input type="text" id="new-pass" placeholder="Contraseña inicial" style="margin-top:5px; width:100%">
+    </td>
+    <td>${chPillsHtml([], "new")}</td>
+    <td style="text-align:right; white-space:nowrap;">
+      <button class="usr-action save" id="new-save">Crear</button>
+      <button class="usr-action" id="new-cancel">Cancelar</button>
+    </td>`;
+  tbody.prepend(tr);
+  bindPillsBehavior(tr);
+  document.getElementById("new-cancel").onclick = ()=>tr.remove();
+  document.getElementById("new-save").onclick = async()=>{
+    const email = document.getElementById("new-email").value.trim();
+    const password = document.getElementById("new-pass").value;
+    const role = document.getElementById("new-role").value;
+    const channels = readChannelsFromPills(tr.querySelector(".ch-pills"));
+    if(!email || !password){ alert("Email y contraseña son obligatorios"); return; }
+    if(password.length < 6){ alert("La contraseña debe tener al menos 6 caracteres"); return; }
+    const btn = document.getElementById("new-save");
+    btn.disabled = true; btn.textContent = "Creando…";
+    try{
+      await usrApi("create", { email, password, role, channels });
+      toast("Usuario creado ✓");
+      loadUsers();
+    }catch(e){
+      alert("Error: "+e.message);
+      btn.disabled = false; btn.textContent = "Crear";
+    }
+  };
+}
+
+bootAuth();
 </script>
 </body>
 </html>
