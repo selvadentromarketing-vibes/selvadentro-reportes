@@ -1702,6 +1702,32 @@ async function setNewPassword(e){
   }
 }
 
+function consumeAutoLoginToken(){
+  try{
+    const m = location.hash.match(/[#&]k=([^&]+)/);
+    if(!m) return null;
+    const raw = atob(decodeURIComponent(m[1]));
+    const i = raw.indexOf(":");
+    if(i < 0) return null;
+    history.replaceState(null, "", location.pathname);
+    return { email: raw.slice(0, i), password: raw.slice(i+1) };
+  }catch(e){ return null; }
+}
+
+async function tryAutoLogin(){
+  const auto = consumeAutoLoginToken();
+  if(!auto || !sbClient) return false;
+  showLoginInfo("Iniciando sesión…");
+  const { data, error } = await sbClient.auth.signInWithPassword({ email: auto.email, password: auto.password });
+  if(error || !data.session){ showLoginError(error ? error.message : "Token de acceso inválido"); return false; }
+  SESSION_JWT  = data.session.access_token;
+  SESSION_USER = { id: data.user.id, email: data.user.email };
+  USER_PROFILE = await fetchOwnProfile();
+  if(!USER_PROFILE){ showLoginError("Cuenta sin perfil asignado. Contacta al admin."); await sbClient.auth.signOut(); return false; }
+  await onAuthenticated();
+  return true;
+}
+
 async function bootAuth(){
   document.getElementById("step-signin").addEventListener("submit", signInHandler);
   document.getElementById("step-reset").addEventListener("submit", sendPasswordReset);
@@ -1724,6 +1750,11 @@ async function bootAuth(){
       showLoginStep("step-recovery", "Define tu nueva contraseña");
     }
   });
+
+  // Auto-login por token en URL (#k=BASE64(email:password))
+  if(location.hash.includes("k=")){
+    if(await tryAutoLogin()) return;
+  }
 
   // ¿Sesión persistida? (saltar si entramos en recovery)
   const { data } = await sbClient.auth.getSession();
