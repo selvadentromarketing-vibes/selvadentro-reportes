@@ -171,11 +171,94 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .db-del{ font-family:var(--sans); font-size:12px; color:var(--rojo-no-tx); background:transparent; border:1px solid var(--linea); border-radius:6px; padding:4px 9px; cursor:pointer; margin-left:4px; }
   .db-del:hover{ background:var(--rojo-no-bg); border-color:var(--rojo-no-bg); }
   #db-table td.note{ max-width:220px; overflow:hidden; text-overflow:ellipsis; }
+
+  /* ---- Login overlay ---- */
+  #login-screen{ position:fixed; inset:0; z-index:200; background:var(--verde-prof); display:flex; align-items:center; justify-content:center; padding:24px; }
+  #login-screen.hidden{ display:none; }
+  .login-card{ background:var(--crema); border:1px solid var(--cobre); border-radius:16px; padding:38px 42px; max-width:400px; width:100%; box-shadow:0 8px 30px rgba(0,0,0,.25); }
+  .login-card .brand-block{ text-align:center; margin-bottom:22px; }
+  .login-card .brand-block .name{ font-family:var(--serif); font-style:italic; font-size:36px; color:var(--verde-prof); display:block; line-height:1; }
+  .login-card .brand-block .sub{ font-family:var(--serif); font-size:11px; letter-spacing:5px; text-transform:lowercase; color:var(--cobre); display:block; margin-top:4px; }
+  .login-card h2{ font-family:var(--serif); font-size:20px; color:var(--verde-prof); margin:0 0 6px; text-align:center; font-weight:400; }
+  .login-card .subtitle{ font-size:12.5px; color:var(--neutro); text-align:center; margin-bottom:18px; }
+  .login-field{ display:flex; flex-direction:column; gap:5px; margin-bottom:14px; }
+  .login-field label{ font-size:11px; text-transform:uppercase; letter-spacing:.8px; color:var(--neutro); font-weight:600; }
+  .login-field input{ font-family:var(--sans); font-size:14px; padding:11px 13px; border:1px solid var(--linea); border-radius:9px; background:#fff; color:var(--texto); }
+  .login-field input:focus{ outline:none; border-color:var(--cobre); }
+  .login-card .btn-primary{ width:100%; padding:13px; margin-top:6px; }
+  #login-error{ color:var(--rojo-no-tx); background:var(--rojo-no-bg); border-radius:8px; padding:9px 12px; font-size:12.5px; margin-bottom:12px; display:none; }
+  #login-error.show{ display:block; }
+  .login-step{ display:none; }
+  .login-step.active{ display:block; }
+
+  /* ---- User badge en topbar ---- */
+  .user-badge{ display:flex; align-items:center; gap:10px; font-size:12px; color:var(--logo); margin-left:auto; padding-left:18px; }
+  .user-badge .email{ opacity:.9; }
+  .user-badge .role{ font-size:9px; letter-spacing:1.2px; text-transform:uppercase; background:var(--cobre); color:#fff; padding:2px 8px; border-radius:10px; font-weight:700; }
+  .user-badge .role.user{ background:var(--olivo); }
+  .user-badge .logout{ background:transparent; border:1px solid rgba(239,231,214,.4); color:var(--logo); border-radius:7px; padding:5px 11px; font-family:var(--sans); font-size:11px; cursor:pointer; letter-spacing:.4px; }
+  .user-badge .logout:hover{ background:rgba(239,231,214,.12); }
+
+  /* ---- Admin panel ---- */
+  .admin-card{ background:#fff; border:1px solid var(--linea); border-radius:12px; padding:22px 24px; max-width:980px; margin:6px auto; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .admin-card h3{ font-family:var(--serif); font-size:22px; color:var(--verde-prof); margin:0 0 8px; }
+  table.usr-table{ width:100%; border-collapse:collapse; margin-top:14px; }
+  table.usr-table th{ font-size:10px; text-transform:uppercase; letter-spacing:.6px; color:var(--neutro); font-weight:700; padding:9px 8px; border-bottom:1px solid var(--linea); background:var(--crema); text-align:left; }
+  table.usr-table td{ padding:9px 8px; border-bottom:1px solid var(--crema-2); vertical-align:middle; font-size:13px; }
+  table.usr-table select, table.usr-table input{ font-family:var(--sans); font-size:13px; padding:6px 9px; border:1px solid var(--linea); border-radius:7px; background:var(--crema); }
+  .usr-action{ font-family:var(--sans); font-size:12px; background:transparent; border:1px solid var(--linea); border-radius:7px; padding:5px 10px; cursor:pointer; color:var(--texto); }
+  .usr-action:hover{ background:var(--crema-2); }
+  .usr-action.danger{ color:var(--rojo-no-tx); }
+  .usr-action.danger:hover{ background:var(--rojo-no-bg); border-color:var(--rojo-no-bg); }
+  .usr-action.save{ color:#fff; background:var(--cobre); border-color:var(--cobre); }
+  .usr-action.save:hover{ background:#bb7536; }
+  .new-user-row{ background:var(--crema-2); }
+  .new-user-row td{ border-bottom:none; }
+  .new-user-row input{ width:100%; }
+  .admin-empty{ color:var(--neutro); font-style:italic; padding:18px 6px; text-align:center; }
 </style>
 </head>
 <body>
 
-<div id="app">
+<div id="login-screen">
+  <div class="login-card">
+    <div class="brand-block">
+      <span class="name">Selvadentro</span>
+      <span class="sub">tierra de cenotes</span>
+    </div>
+
+    <form class="login-step active" id="step-signin" autocomplete="on">
+      <h2>Sistema de Reportes</h2>
+      <div class="subtitle">Inicia sesión para continuar</div>
+      <div id="login-error"></div>
+      <div class="login-field">
+        <label for="login-email">Email</label>
+        <input type="email" id="login-email" autocomplete="username" required>
+      </div>
+      <div class="login-field">
+        <label for="login-pass">Contraseña</label>
+        <input type="password" id="login-pass" autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="btn btn-primary" id="login-submit">Entrar</button>
+    </form>
+
+    <form class="login-step" id="step-setup" autocomplete="off">
+      <h2>Configuración inicial</h2>
+      <div class="subtitle">No hay usuarios todavía. Crea la cuenta admin principal.</div>
+      <div class="login-field">
+        <label for="setup-email">Email del admin</label>
+        <input type="email" id="setup-email" required>
+      </div>
+      <div class="login-field">
+        <label for="setup-pass">Contraseña (mínimo 6 caracteres)</label>
+        <input type="password" id="setup-pass" required minlength="6">
+      </div>
+      <button type="submit" class="btn btn-primary" id="setup-submit">Crear admin y entrar</button>
+    </form>
+  </div>
+</div>
+
+<div id="app" style="display:none">
   <div class="topbar">
     <div class="brand" id="brand" title="Clic para cambiar el logo">
       <img id="brand-logo" alt="Selvadentro · tierra de cenotes">
@@ -186,6 +269,11 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
     <div class="app-title">
       <div class="t1">Sistema de Reportes</div>
       <div class="t2">Multicanal</div>
+    </div>
+    <div class="user-badge" id="user-badge" style="display:none">
+      <span class="email" id="user-email">—</span>
+      <span class="role" id="user-role">user</span>
+      <button type="button" class="logout" id="btn-logout">Salir</button>
     </div>
   </div>
 
@@ -202,6 +290,10 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
       <button class="side-btn" data-tab="db" title="Base de datos">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5.5" rx="7" ry="2.8"/><path d="M5 5.5v6c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-6"/><path d="M5 11.5v6c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-6"/></svg>
         <span>Base&nbsp;datos</span>
+      </button>
+      <button class="side-btn admin-only" data-tab="admin" title="Administración de usuarios" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M4 20c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/><circle cx="18" cy="6" r="1.4" fill="currentColor" stroke="none"/></svg>
+        <span>Admin</span>
       </button>
     </div>
     <div class="main">
@@ -325,6 +417,20 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
       </div>
       <p class="hint">Define la <b>meta mensual</b> de cada KPI. Se guarda automáticamente y el reporte del canal la usa, ajustada al periodo (meta mensual ÷ 4 × semanas evaluadas). Deja en blanco para no fijar meta.</p>
       <div id="metas-body"></div>
+    </div>
+
+    <!-- ============ ADMIN (solo admin) ============ -->
+    <div class="view" id="view-admin">
+      <div class="admin-card">
+        <h3>Administración de usuarios</h3>
+        <p class="hint">Crea, edita o elimina cuentas. <b>admin</b> = acceso total + este panel; <b>user</b> = acceso al sistema sin este panel.</p>
+        <div class="table-scroll"><table class="usr-table" id="usr-table"></table></div>
+        <div class="adv-footer">
+          <span class="adv-status" id="usr-status"></span>
+          <button class="btn btn-olive" id="usr-refresh">Recargar</button>
+          <button class="btn btn-primary" id="usr-new-btn">+ Nuevo usuario</button>
+        </div>
+      </div>
     </div>
 
     <!-- ============ BASE DE DATOS ============ -->
@@ -1032,13 +1138,14 @@ document.querySelectorAll("[data-tab]").forEach(el=>el.onclick=()=>{
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   el.classList.add("active");
   document.getElementById("view-"+el.dataset.tab).classList.add("active");
-  const dir = ["resultados","dircom","asesores","metas","db"].includes(el.dataset.tab);
+  const dir = ["resultados","dircom","asesores","metas","db","admin"].includes(el.dataset.tab);
   document.querySelector(".canal-wrap").style.display = dir?"none":"flex";
   if(el.dataset.tab==="resultados") showResultados();
   if(el.dataset.tab==="dircom") showDirCom();
   if(el.dataset.tab==="asesores") renderAdvisors();
   if(el.dataset.tab==="metas") renderMetas();
   if(el.dataset.tab==="db") renderDB();
+  if(el.dataset.tab==="admin") renderAdmin();
 });
 
 /* ===================== REPORTES DE DIRECCIÓN (CONSOLIDADOS) ===================== */
@@ -1398,7 +1505,272 @@ async function init(){
     }catch(e){}
   })();
 }
-init();
+
+/* ===================== AUTH LIGERO ===================== */
+const USERS_KEY = "selvadentro:users";
+const SESSION_KEY = "slvd-session";
+let SESSION = null;       // { email, role }
+let USERS = [];           // [{ email, salt, hash, role }]
+
+const isAdmin = ()=> !!(SESSION && SESSION.role === "admin");
+
+function randomSalt(){
+  const b = new Uint8Array(12); crypto.getRandomValues(b);
+  return Array.from(b).map(x=>x.toString(16).padStart(2,"0")).join("");
+}
+async function hashPassword(pass, salt){
+  const data = new TextEncoder().encode(salt + ":" + pass);
+  const buf = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+
+async function loadUsers(){ USERS = (await sGet(USERS_KEY)) || []; return USERS; }
+async function saveUsers(){ await sSet(USERS_KEY, USERS); }
+
+function readSession(){
+  try{ const s = localStorage.getItem(SESSION_KEY); return s ? JSON.parse(s) : null; }
+  catch(e){ return null; }
+}
+function writeSession(s){
+  if(s) localStorage.setItem(SESSION_KEY, JSON.stringify(s));
+  else localStorage.removeItem(SESSION_KEY);
+}
+
+function showLoginError(msg){
+  const el = document.getElementById("login-error");
+  el.textContent = msg; el.classList.add("show");
+}
+function clearLoginError(){ document.getElementById("login-error").classList.remove("show"); }
+function showLoginStep(id){
+  document.querySelectorAll(".login-step").forEach(s=>s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+  clearLoginError();
+}
+
+function applyUserBadge(){
+  const u = document.getElementById("user-badge");
+  if(!SESSION){ u.style.display="none"; return; }
+  u.style.display = "flex";
+  document.getElementById("user-email").textContent = SESSION.email;
+  const r = document.getElementById("user-role");
+  r.textContent = SESSION.role;
+  r.className = "role " + SESSION.role;
+  document.querySelectorAll(".admin-only").forEach(el=>{ el.style.display = isAdmin() ? "" : "none"; });
+}
+
+async function onAuthenticated(){
+  document.getElementById("login-screen").classList.add("hidden");
+  document.getElementById("app").style.display = "";
+  applyUserBadge();
+  await init();
+}
+
+async function signInHandler(e){
+  e.preventDefault();
+  clearLoginError();
+  const email = document.getElementById("login-email").value.trim().toLowerCase();
+  const pass  = document.getElementById("login-pass").value;
+  const btn   = document.getElementById("login-submit");
+  btn.disabled = true; btn.textContent = "Entrando…";
+  try{
+    await loadUsers();
+    const u = USERS.find(x => x.email.toLowerCase() === email);
+    if(!u){ showLoginError("Email o contraseña incorrectos"); return; }
+    const h = await hashPassword(pass, u.salt);
+    if(h !== u.hash){ showLoginError("Email o contraseña incorrectos"); return; }
+    SESSION = { email: u.email, role: u.role };
+    writeSession(SESSION);
+    await onAuthenticated();
+  }catch(err){
+    showLoginError(String(err.message||err));
+  }finally{
+    btn.disabled = false; btn.textContent = "Entrar";
+  }
+}
+
+async function setupHandler(e){
+  e.preventDefault();
+  clearLoginError();
+  const email = document.getElementById("setup-email").value.trim().toLowerCase();
+  const pass  = document.getElementById("setup-pass").value;
+  if(pass.length < 6){ showLoginError("La contraseña debe tener al menos 6 caracteres"); return; }
+  const btn = document.getElementById("setup-submit");
+  btn.disabled = true; btn.textContent = "Creando…";
+  try{
+    // Releemos por si otra pestaña ya creó el admin
+    await loadUsers();
+    if(USERS.length > 0){
+      showLoginStep("step-signin");
+      showLoginError("Ya existen usuarios. Inicia sesión normal.");
+      return;
+    }
+    const salt = randomSalt();
+    const hash = await hashPassword(pass, salt);
+    USERS = [{ email, salt, hash, role: "admin" }];
+    await saveUsers();
+    SESSION = { email, role: "admin" };
+    writeSession(SESSION);
+    await onAuthenticated();
+  }catch(err){
+    showLoginError(String(err.message||err));
+  }finally{
+    btn.disabled = false; btn.textContent = "Crear admin y entrar";
+  }
+}
+
+function signOut(){
+  writeSession(null);
+  SESSION = null;
+  location.reload();
+}
+
+async function bootAuth(){
+  document.getElementById("step-signin").addEventListener("submit", signInHandler);
+  document.getElementById("step-setup").addEventListener("submit", setupHandler);
+  document.getElementById("btn-logout").addEventListener("click", signOut);
+
+  // Sesión existente?
+  const saved = readSession();
+  if(saved){
+    // Validar contra USERS actuales (por si el admin lo borró desde otro lado)
+    try{
+      await loadUsers();
+      const u = USERS.find(x => x.email.toLowerCase() === saved.email.toLowerCase());
+      if(u){
+        SESSION = { email: u.email, role: u.role };
+        writeSession(SESSION); // refresca role si cambió
+        await onAuthenticated();
+        return;
+      }
+      writeSession(null);
+    }catch(e){}
+  }
+
+  // No hay sesión: ¿hay users registrados?
+  try{
+    await loadUsers();
+    if(USERS.length === 0){
+      showLoginStep("step-setup");
+      return;
+    }
+  }catch(e){ /* si falla la lectura caemos a signin igual */ }
+  showLoginStep("step-signin");
+}
+
+/* ===================== ADMIN PANEL ===================== */
+let adminBuilt = false;
+async function renderAdmin(){
+  if(!isAdmin()){
+    document.getElementById("usr-table").innerHTML = `<tbody><tr><td class="admin-empty">Solo administradores.</td></tr></tbody>`;
+    return;
+  }
+  if(!adminBuilt){
+    document.getElementById("usr-refresh").onclick = ()=>renderAdmin();
+    document.getElementById("usr-new-btn").onclick = ()=>openNewUserRow();
+    adminBuilt = true;
+  }
+  await loadUsers();
+  paintUsersTable();
+}
+
+function paintUsersTable(){
+  const tbl = document.getElementById("usr-table");
+  const rows = USERS.map((u, i)=>`
+    <tr data-i="${i}">
+      <td>${u.email}</td>
+      <td>
+        <select class="usr-role">
+          <option value="user" ${u.role==='user'?'selected':''}>user</option>
+          <option value="admin" ${u.role==='admin'?'selected':''}>admin</option>
+        </select>
+      </td>
+      <td style="text-align:right; white-space:nowrap;">
+        <button class="usr-action save">Guardar rol</button>
+        <button class="usr-action">Reset pass</button>
+        <button class="usr-action danger">Borrar</button>
+      </td>
+    </tr>`).join("");
+  tbl.innerHTML = `<thead><tr><th>Email</th><th>Rol</th><th></th></tr></thead><tbody>${rows||`<tr><td colspan="3" class="admin-empty">Sin usuarios. Crea el primero.</td></tr>`}</tbody>`;
+
+  tbl.querySelectorAll("tbody tr[data-i]").forEach(tr=>{
+    const idx = +tr.dataset.i;
+    const [btnSave, btnReset, btnDel] = tr.querySelectorAll(".usr-action");
+    btnSave.onclick = async()=>{
+      const role = tr.querySelector(".usr-role").value;
+      if(USERS[idx].email === SESSION.email && role !== "admin"){
+        if(!confirm("Vas a quitarte el rol admin a ti mismo. ¿Continuar?")) return;
+      }
+      USERS[idx].role = role;
+      try{
+        await saveUsers();
+        toast("Rol actualizado ✓");
+        if(USERS[idx].email === SESSION.email){ SESSION.role = role; writeSession(SESSION); applyUserBadge(); }
+      }catch(e){ alert("Error guardando: "+e.message); }
+    };
+    btnReset.onclick = async()=>{
+      const pw = prompt("Nueva contraseña para "+USERS[idx].email+" (mínimo 6 caracteres):");
+      if(!pw) return;
+      if(pw.length < 6){ alert("Mínimo 6 caracteres"); return; }
+      USERS[idx].salt = randomSalt();
+      USERS[idx].hash = await hashPassword(pw, USERS[idx].salt);
+      try{ await saveUsers(); toast("Contraseña actualizada ✓"); }
+      catch(e){ alert("Error: "+e.message); }
+    };
+    btnDel.onclick = async()=>{
+      if(USERS[idx].email === SESSION.email){ alert("No puedes borrarte a ti mismo."); return; }
+      if(!confirm("¿Borrar a "+USERS[idx].email+"? No se puede deshacer.")) return;
+      USERS.splice(idx, 1);
+      try{ await saveUsers(); paintUsersTable(); toast("Usuario borrado"); }
+      catch(e){ alert("Error: "+e.message); }
+    };
+  });
+}
+
+function openNewUserRow(){
+  const tbl = document.getElementById("usr-table");
+  if(tbl.querySelector(".new-user-row")) return;
+  const tbody = tbl.querySelector("tbody");
+  const tr = document.createElement("tr");
+  tr.className = "new-user-row";
+  tr.innerHTML = `
+    <td><input type="email" id="new-email" placeholder="email@dominio.com"></td>
+    <td>
+      <select id="new-role">
+        <option value="user" selected>user</option>
+        <option value="admin">admin</option>
+      </select>
+      <input type="text" id="new-pass" placeholder="Contraseña (≥6)" style="margin-top:5px">
+    </td>
+    <td style="text-align:right; white-space:nowrap;">
+      <button class="usr-action save" id="new-save">Crear</button>
+      <button class="usr-action" id="new-cancel">Cancelar</button>
+    </td>`;
+  tbody.prepend(tr);
+  document.getElementById("new-cancel").onclick = ()=>tr.remove();
+  document.getElementById("new-save").onclick = async()=>{
+    const email = document.getElementById("new-email").value.trim().toLowerCase();
+    const pass  = document.getElementById("new-pass").value;
+    const role  = document.getElementById("new-role").value;
+    if(!email || !pass){ alert("Email y contraseña son obligatorios"); return; }
+    if(pass.length < 6){ alert("Mínimo 6 caracteres"); return; }
+    if(USERS.some(u => u.email.toLowerCase() === email)){ alert("Ya existe ese email"); return; }
+    const btn = document.getElementById("new-save");
+    btn.disabled = true; btn.textContent = "Creando…";
+    try{
+      const salt = randomSalt();
+      const hash = await hashPassword(pass, salt);
+      USERS.push({ email, salt, hash, role });
+      await saveUsers();
+      paintUsersTable();
+      toast("Usuario creado ✓");
+    }catch(e){
+      alert("Error: "+e.message);
+      btn.disabled = false; btn.textContent = "Crear";
+    }
+  };
+}
+
+bootAuth();
 </script>
 </body>
 </html>
