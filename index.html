@@ -224,6 +224,17 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .new-user-row td{ border-bottom:none; }
   .new-user-row input{ width:100%; }
   .admin-empty{ color:var(--neutro); font-style:italic; padding:18px 6px; text-align:center; }
+  .usr-action.link{ color:var(--olivo); border-color:var(--olivo); }
+  .usr-action.link:hover{ background:var(--olivo); color:#fff; }
+
+  /* ---- Modal magic link ---- */
+  .modal-overlay{ position:fixed; inset:0; z-index:300; background:rgba(46,51,43,.55); display:none; align-items:center; justify-content:center; padding:20px; }
+  .modal-overlay.show{ display:flex; }
+  .modal-card{ background:#fff; border:1px solid var(--cobre); border-radius:14px; padding:26px 28px; max-width:560px; width:100%; box-shadow:0 10px 30px rgba(0,0,0,.25); }
+  .modal-card h3{ font-family:var(--serif); font-size:20px; color:var(--verde-prof); margin:0 0 10px; }
+  .modal-card p{ font-size:13px; color:var(--neutro); margin:6px 0 14px; line-height:1.5; }
+  .modal-card .link-box{ font-family:monospace; font-size:11px; background:var(--crema); border:1px solid var(--linea); border-radius:8px; padding:11px 12px; word-break:break-all; color:var(--texto); margin-bottom:14px; max-height:120px; overflow:auto; }
+  .modal-card .actions{ display:flex; justify-content:flex-end; gap:10px; }
 </style>
 </head>
 <body>
@@ -465,6 +476,18 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   </div>
 
   <div class="toast" id="toast"></div>
+</div>
+
+<div class="modal-overlay" id="link-modal">
+  <div class="modal-card">
+    <h3>Magic link generado</h3>
+    <p>Comparte este link con <b id="link-modal-email"></b>. Es de <b>un solo uso</b> y caduca en 1 hora. Ya lo copiamos al portapapeles.</p>
+    <div class="link-box" id="link-modal-url"></div>
+    <div class="actions">
+      <button class="btn btn-ghost" id="link-modal-copy">Copiar de nuevo</button>
+      <button class="btn btn-primary" id="link-modal-close">Listo</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -1748,6 +1771,29 @@ function bindPillsBehavior(scope){
   });
 }
 
+async function copyToClipboard(txt){
+  try{ await navigator.clipboard.writeText(txt); return true; }
+  catch(e){
+    const ta = document.createElement("textarea");
+    ta.value = txt; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try{ document.execCommand("copy"); }catch(_){}
+    document.body.removeChild(ta);
+    return true;
+  }
+}
+function showLinkModal(email, url){
+  document.getElementById("link-modal-email").textContent = email;
+  document.getElementById("link-modal-url").textContent = url;
+  const m = document.getElementById("link-modal");
+  m.classList.add("show");
+  document.getElementById("link-modal-close").onclick = ()=>m.classList.remove("show");
+  document.getElementById("link-modal-copy").onclick = async()=>{
+    await copyToClipboard(url);
+    toast("Link copiado ✓");
+  };
+}
+
 let adminBuilt = false;
 async function renderAdmin(){
   if(!isAdmin()){ document.getElementById("usr-table").innerHTML = `<tbody><tr><td class="admin-empty">Solo administradores.</td></tr></tbody>`; return; }
@@ -1787,6 +1833,7 @@ function paintUsersTable(){
       <td>${chPillsHtml(channels, "edit-"+u.user_id)}</td>
       <td style="text-align:right; white-space:nowrap;">
         <button class="usr-action save">Guardar</button>
+        <button class="usr-action link">Magic link</button>
         <button class="usr-action">Reset pass</button>
         <button class="usr-action danger">Borrar</button>
       </td>
@@ -1796,7 +1843,7 @@ function paintUsersTable(){
   bindPillsBehavior(tbl);
   tbl.querySelectorAll("tbody tr[data-uid]").forEach(tr=>{
     const uid = tr.dataset.uid;
-    const [btnSave, btnReset, btnDel] = tr.querySelectorAll(".usr-action");
+    const [btnSave, btnLink, btnReset, btnDel] = tr.querySelectorAll(".usr-action");
     btnSave.onclick = async()=>{
       const role = tr.querySelector(".usr-role").value;
       const channels = readChannelsFromPills(tr.querySelector(".ch-pills"));
@@ -1804,6 +1851,15 @@ function paintUsersTable(){
       try{ await usrApi("update", { user_id: uid, role, channels }); toast("Usuario actualizado ✓"); loadUsers(); }
       catch(e){ alert("Error: "+e.message); }
       finally{ btnSave.disabled = false; }
+    };
+    btnLink.onclick = async()=>{
+      btnLink.disabled = true; btnLink.textContent = "Generando…";
+      try{
+        const res = await usrApi("magiclink", { user_id: uid, redirect_to: window.location.origin + "/" });
+        await copyToClipboard(res.action_link);
+        showLinkModal(res.email, res.action_link);
+      }catch(e){ alert("Error: "+e.message); }
+      finally{ btnLink.disabled = false; btnLink.textContent = "Magic link"; }
     };
     btnReset.onclick = async()=>{
       const pw = prompt("Nueva contraseña para este usuario (mínimo 6 caracteres):");

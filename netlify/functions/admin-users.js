@@ -142,6 +142,34 @@ async function setPassword({ user_id, password }) {
   return { ok: true };
 }
 
+async function magicLink({ user_id, redirect_to }) {
+  if (!user_id) throw new Error("user_id requerido");
+  // Obtener el email del user
+  const ru = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${user_id}`, {
+    headers: svcHeaders(),
+  });
+  if (!ru.ok) throw new Error("magicLink lookup " + ru.status);
+  const u = await ru.json();
+  if (!u.email) throw new Error("Usuario sin email");
+
+  const body = { type: "magiclink", email: u.email };
+  if (redirect_to) body.options = { redirect_to };
+
+  const r = await fetch(`${SUPABASE_URL}/auth/v1/admin/generate_link`, {
+    method: "POST",
+    headers: svcHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error("magicLink " + r.status + " " + t);
+  }
+  const data = await r.json();
+  const link = data.action_link || data.properties?.action_link;
+  if (!link) throw new Error("No se recibió action_link");
+  return { action_link: link, email: u.email };
+}
+
 async function deleteUser({ user_id }) {
   if (!user_id) throw new Error("user_id requerido");
   // user_profiles cae solo por ON DELETE CASCADE en la FK a auth.users
@@ -175,6 +203,7 @@ exports.handler = async (event) => {
       case "create":   result = await createUser(body); break;
       case "update":   result = await updateUserProfile(body); break;
       case "password": result = await setPassword(body); break;
+      case "magiclink":result = await magicLink(body); break;
       case "delete":   result = await deleteUser(body); break;
       default: return json(400, { error: "action desconocida: " + action });
     }
