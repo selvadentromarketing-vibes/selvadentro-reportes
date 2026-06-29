@@ -1511,6 +1511,7 @@ const USERS_KEY = "selvadentro:users";
 const SESSION_KEY = "slvd-session";
 let SESSION = null;       // { email, role }
 let USERS = [];           // [{ email, salt, hash, role }]
+let ADMIN_PASS = null;    // password en memoria sólo (se pierde al recargar) — para llamar a la Netlify Function
 
 const isAdmin = ()=> !!(SESSION && SESSION.role === "admin");
 
@@ -1579,6 +1580,7 @@ async function signInHandler(e){
     const h = await hashPassword(pass, u.salt);
     if(h !== u.hash){ showLoginError("Email o contraseña incorrectos"); return; }
     SESSION = { email: u.email, role: u.role };
+    if(u.role === "admin") ADMIN_PASS = pass;
     writeSession(SESSION);
     await onAuthenticated();
   }catch(err){
@@ -1609,6 +1611,7 @@ async function setupHandler(e){
     USERS = [{ email, salt, hash, role: "admin" }];
     await saveUsers();
     SESSION = { email, role: "admin" };
+    ADMIN_PASS = pass;
     writeSession(SESSION);
     await onAuthenticated();
   }catch(err){
@@ -1754,15 +1757,36 @@ function openNewUserRow(){
     if(!email || !pass){ alert("Email y contraseña son obligatorios"); return; }
     if(pass.length < 6){ alert("Mínimo 6 caracteres"); return; }
     if(USERS.some(u => u.email.toLowerCase() === email)){ alert("Ya existe ese email"); return; }
+
+    let adminPw = ADMIN_PASS;
+    if(!adminPw){
+      adminPw = prompt("Confirma tu contraseña de admin (se perdió tras recargar la página):");
+      if(!adminPw) return;
+      ADMIN_PASS = adminPw;
+    }
+
     const btn = document.getElementById("new-save");
     btn.disabled = true; btn.textContent = "Creando…";
     try{
-      const salt = randomSalt();
-      const hash = await hashPassword(pass, salt);
-      USERS.push({ email, salt, hash, role });
-      await saveUsers();
+      const r = await fetch("/.netlify/functions/send-invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          adminEmail: SESSION.email,
+          adminPassword: adminPw,
+          newUser: { email, password: pass, role },
+        }),
+      });
+      const j = await r.json().catch(()=>({error:"respuesta inválida"}));
+      if(!r.ok && r.status !== 207){
+        if(r.status === 403) ADMIN_PASS = null; // contraseña no válida → re-prompt next time
+        throw new Error(j.error || ("HTTP "+r.status));
+      }
+      await loadUsers();
       paintUsersTable();
-      toast("Usuario creado ✓");
+      if(j.email_sent) toast("Usuario creado y email enviado ✓");
+      else if(j.warning) toast("⚠ "+j.warning);
+      else toast("Usuario creado ✓");
     }catch(e){
       alert("Error: "+e.message);
       btn.disabled = false; btn.textContent = "Crear";
