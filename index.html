@@ -1091,9 +1091,9 @@ async function generarReporte(){
 
   const hasMetas=flds.some(f=>f.meta!=null);
   const metaPeriodo=meta=>meta==null?null:(meta/4*nWeeks);
-  const cumpCell=(val,meta)=>{ const mp=metaPeriodo(meta); if(mp==null) return '<td></td><td></td><td></td>'; if(mp===0) return `<td>${meta}</td><td>0</td><td><span class="cump no">#DIV/0!</span></td>`; const pct=val/mp,cls=pct>=1?"ok":"no"; return `<td>${meta}</td><td>${(+mp.toFixed(2))}</td><td><span class="cump ${cls}">${fmtPct(pct)}</span></td>`; };
+  const cumpCell=(val,meta)=>{ const mp=metaPeriodo(meta); if(mp==null) return '<td></td><td></td><td></td>'; if(mp===0) return `<td>${meta}</td><td>0</td><td><span class="cump no">Sin Datos</span></td>`; const pct=val/mp,cls=pct>=1?"ok":"no"; return `<td>${meta}</td><td>${(+mp.toFixed(2))}</td><td><span class="cump ${cls}">${fmtPct(pct)}</span></td>`; };
   const getv=spec=>Array.isArray(spec)?spec.reduce((acc,k)=>acc+(sum[k]||0),0):(sum[spec]||0);
-  const convVal=c=>{ const den=getv(c.den),num=getv(c.num); if(!den) return `<span class="cump no">#DIV/0!</span>`; const pct=num/den,cls=pct>=c.target?"ok":"no"; return `<span class="cump ${cls}">${fmtPct(pct)}</span>`; };
+  const convVal=c=>{ const den=getv(c.den),num=getv(c.num); if(!den) return `<span class="cump no">Sin Datos</span>`; const pct=num/den,cls=pct>=c.target?"ok":"no"; return `<span class="cump ${cls}">${fmtPct(pct)}</span>`; };
 
   const thMeta = hasMetas ? '<th>Meta mensual</th><th>Meta periodo</th><th>Cumplimiento</th>' : '';
   const sectionsHtml=sections().map(s=>`
@@ -1191,12 +1191,12 @@ function channelMetrics(chKey, weekSet){
   for(const k of keys){ const wk=k.slice(p.length).split("__")[0]; if(weekSet && !weekSet.has(wk)) continue; const rec=recGet(k); if(!rec||!rec.valores) continue; METRIC_KEYS.forEach(m=>{ const fk=map[m]; if(fk) out[m]+=Number(rec.valores[fk]||0); }); }
   return out;
 }
-function pctTxt(num,den){ if(!den) return '#DIV/0!'; return (num/den*100).toFixed(2)+'%'; }
+function pctTxt(num,den){ if(!den) return 'Sin Datos'; return (num/den*100).toFixed(2)+'%'; }
 function fechaIniW(w){ const m=w.match(/(\d{4})-W(\d+)/); return m?fmtDate(dateOfIsoWeek(+m[1],+m[2])):"—"; }
 function fechaFinW(w){ const m=w.match(/(\d{4})-W(\d+)/); return m?fmtDate(sundayOf(dateOfIsoWeek(+m[1],+m[2]))):"—"; }
 function estadoDot(leads,won,metaWon){ if(leads<=0&&won<=0) return '<span class="estado-dot n" title="Sin actividad"></span>'; if(metaWon>0 && won/metaWon>=1) return '<span class="estado-dot g" title="Meta cumplida"></span>'; if(won>0) return '<span class="estado-dot y" title="En proceso"></span>'; return '<span class="estado-dot r" title="Sin WON aún"></span>'; }
 function convBlock(f){
-  const row=(l,num,den,t)=>{ const v=den?(num/den):null; const cls=v==null?'no':(v>=t?'ok':'no'); const txt=v==null?'#DIV/0!':fmtPct(v); return `<div class="conv-row"><span>${l}</span><span class="ct">meta ${fmtPct(t)}</span><span class="cump ${cls}">${txt}</span></div>`; };
+  const row=(l,num,den,t)=>{ const v=den?(num/den):null; const cls=v==null?'no':(v>=t?'ok':'no'); const txt=v==null?'Sin Datos':fmtPct(v); return `<div class="conv-row"><span>${l}</span><span class="ct">meta ${fmtPct(t)}</span><span class="cump ${cls}">${txt}</span></div>`; };
   return row("Zooms → OPP", f.opp_zooms, f.zooms, CONV_T.zo)
        + row("Tours → OPP", f.opp_tours, f.tours, CONV_T.to)
        + row("OPP → Apartados", f.apartados, f.opp, CONV_T.oa)
