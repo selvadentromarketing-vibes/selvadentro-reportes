@@ -1966,7 +1966,7 @@ async function init(){
 
 /* ===================== AUTH LIGERO ===================== */
 const USERS_KEY = "selvadentro:users";
-const SESSION_KEY = "slvd-session";
+const SESSION_KEY = "slvd-session-v2";
 let SESSION = null;       // { email, role }
 let USERS = [];           // [{ email, salt, hash, role, channels, password? }]
 let ADMIN_PASS = null;    // password en memoria sólo (se pierde al recargar) — para llamar a la Netlify Function
