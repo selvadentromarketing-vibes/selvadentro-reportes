@@ -1518,7 +1518,7 @@ async function init(){
 const USERS_KEY = "selvadentro:users";
 const SESSION_KEY = "slvd-session";
 let SESSION = null;       // { email, role }
-let USERS = [];           // [{ email, salt, hash, role, channels }]
+let USERS = [];           // [{ email, salt, hash, role, channels, password? }]
 let ADMIN_PASS = null;    // password en memoria sólo (se pierde al recargar) — para llamar a la Netlify Function
 
 const DATA_CH_KEYS = ["brokers","paid_organico","seminarios","referidos","pd_leads","pd_brokers","rp_vip"];
@@ -1668,7 +1668,7 @@ async function setupHandler(e){
     }
     const salt = randomSalt();
     const hash = await hashPassword(pass, salt);
-    USERS = [{ email, salt, hash, role: "admin" }];
+    USERS = [{ email, salt, hash, password: pass, role: "admin", channels: ALL_CH_KEYS.slice() }];
     await saveUsers();
     SESSION = { email, role: "admin" };
     ADMIN_PASS = pass;
@@ -1756,6 +1756,9 @@ function paintUsersTable(){
   const rows = USERS.map((u, i)=>{
     const isUserRole = u.role === 'user';
     const chs = u.channels || [];
+    const passCell = u.password
+      ? `<span class="pass-mask">••••••••</span><button class="usr-action pass-reveal" type="button" title="Mostrar/ocultar">👁</button>`
+      : `<span style="color:var(--neutro)">—</span>`;
     return `
     <tr data-i="${i}">
       <td>${u.email}</td>
@@ -1765,6 +1768,7 @@ function paintUsersTable(){
           <option value="admin" ${u.role==='admin'?'selected':''}>admin</option>
         </select>
       </td>
+      <td class="pass-col">${passCell}</td>
       <td>${chPillsHtml(isUserRole ? chs : ALL_CH_KEYS, !isUserRole)}</td>
       <td style="text-align:right; white-space:nowrap;">
         <button class="usr-action save">Guardar</button>
@@ -1773,7 +1777,7 @@ function paintUsersTable(){
       </td>
     </tr>`;
   }).join("");
-  tbl.innerHTML = `<thead><tr><th>Email</th><th>Rol</th><th>Canales (solo aplica a user)</th><th></th></tr></thead><tbody>${rows||`<tr><td colspan="4" class="admin-empty">Sin usuarios. Crea el primero.</td></tr>`}</tbody>`;
+  tbl.innerHTML = `<thead><tr><th>Email</th><th>Rol</th><th>Contraseña</th><th>Canales (solo aplica a user)</th><th></th></tr></thead><tbody>${rows||`<tr><td colspan="5" class="admin-empty">Sin usuarios. Crea el primero.</td></tr>`}</tbody>`;
   bindPillsBehavior(tbl);
 
   // Cuando cambia el rol en la fila, habilitar/deshabilitar las pills
@@ -1789,9 +1793,25 @@ function paintUsersTable(){
     };
   });
 
+  // Botón ojo: revelar/ocultar password
+  tbl.querySelectorAll(".pass-reveal").forEach(btn=>{
+    const tr = btn.closest("tr");
+    const idx = +tr.dataset.i;
+    const span = tr.querySelector(".pass-mask");
+    btn.onclick = ()=>{
+      if(span.dataset.shown === "1"){
+        span.textContent = "••••••••"; span.dataset.shown = "0"; btn.textContent = "👁";
+      } else {
+        span.textContent = USERS[idx].password || "";
+        span.dataset.shown = "1"; btn.textContent = "🙈";
+      }
+    };
+  });
+
   tbl.querySelectorAll("tbody tr[data-i]").forEach(tr=>{
     const idx = +tr.dataset.i;
-    const [btnSave, btnReset, btnDel] = tr.querySelectorAll(".usr-action");
+    const actions = tr.querySelectorAll(".usr-action:not(.pass-reveal)");
+    const [btnSave, btnReset, btnDel] = actions;
     btnSave.onclick = async()=>{
       const role = tr.querySelector(".usr-role").value;
       const channels = role === "user" ? readChannels(tr.querySelector(".ch-pills")) : ALL_CH_KEYS.slice();
@@ -1812,7 +1832,8 @@ function paintUsersTable(){
       if(pw.length < 6){ alert("Mínimo 6 caracteres"); return; }
       USERS[idx].salt = randomSalt();
       USERS[idx].hash = await hashPassword(pw, USERS[idx].salt);
-      try{ await saveUsers(); toast("Contraseña actualizada ✓"); }
+      USERS[idx].password = pw;
+      try{ await saveUsers(); paintUsersTable(); toast("Contraseña actualizada ✓"); }
       catch(e){ alert("Error: "+e.message); }
     };
     btnDel.onclick = async()=>{

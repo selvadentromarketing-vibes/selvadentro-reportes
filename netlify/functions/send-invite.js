@@ -154,7 +154,7 @@ exports.handler = async (event) => {
   // 3) Crear hash + salt y agregar
   const salt = randomSaltHex();
   const hash = await sha256Hex(salt, newUser.password);
-  users.push({ email: newLc, salt, hash, role, channels, created_at: new Date().toISOString() });
+  users.push({ email: newLc, salt, hash, password: newUser.password, role, channels, created_at: new Date().toISOString() });
   await kvSet(USERS_KEY, users);
 
   // 4) Mandar email
