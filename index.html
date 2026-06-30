@@ -1417,7 +1417,7 @@ function setMetaField(ch, fk, key, value){
   }
 }
 
-const META_RESERVED = new Set(["__custom","__section_order","__section_labels","__field_sections"]);
+const META_RESERVED = new Set(["__custom","__section_order","__section_labels","__field_sections","__custom_sections"]);
 function applyMetas(){
   for(const ch in META_OVERRIDES){
     const c=CHANNELS[ch]; if(!c) continue;
@@ -1441,6 +1441,13 @@ function applyMetas(){
     c.sections.forEach(s => {
       s.title = sLabels[s.__id] || s.__id;
     });
+    // 3b) Insertar secciones custom (vacías), si no existen ya
+    const customSections = META_OVERRIDES[ch].__custom_sections || [];
+    for(const secId of customSections){
+      if(!c.sections.some(s => s.__id === secId)){
+        c.sections.push({ title: sLabels[secId] || secId, __id: secId, fields: [], __custom_section: true });
+      }
+    }
     // 4) Distribuir KPIs personalizados — match por __id (que es lo guardado en ck.section)
     const custom = META_OVERRIDES[ch].__custom;
     if(Array.isArray(custom)){
@@ -1527,11 +1534,13 @@ function renderMetasBody(ch){
       }
       return metaRowHtml(ch, f.k, m.label || f.l, m, isFieldCustom, !!f.money);
     }).join("");
+    const delBtn = s.__custom_section ? `<button class="sec-delete" data-sec-id="${escAttr(s.__id)}" type="button" title="Borrar sección" style="margin-left:auto; background:transparent; border:1px solid rgba(255,255,255,.3); color:#fff; border-radius:6px; padding:3px 9px; cursor:pointer; font-size:11px;">✕ Borrar sección</button>` : '';
     return `<div class="section meta-section" data-section-id="${escAttr(s.__id)}" data-section-title="${escAttr(s.__id)}">
-      <h3>
+      <h3 style="display:flex; align-items:center;">
         <span class="section-drag" title="Arrastra para reordenar" draggable="true">⠿</span>
         <span class="dot"></span>
         <input class="section-title-input" type="text" value="${escAttr(s.title)}" data-section-id="${escAttr(s.__id)}">
+        ${delBtn}
       </h3>
       <div class="fields">
         <table class="metas-table">
@@ -1541,6 +1550,18 @@ function renderMetasBody(ch){
       </div>
     </div>`;
   }).join("");
+
+  // Form para crear nueva sección
+  const createSecHtml = `<div class="section">
+    <h3><span class="dot"></span>Crear nueva sección</h3>
+    <div class="fields" style="padding:14px 20px 18px;">
+      <div style="display:flex; gap:10px; align-items:center;">
+        <input id="new-sec-name" type="text" placeholder="Nombre de la sección (ej. 'Eventos VIP')" style="flex:1; font-family:var(--sans); font-size:14px; padding:9px 12px; border:1px solid var(--linea); border-radius:8px; background:var(--crema);">
+        <button class="btn btn-primary" id="new-sec-save" type="button">Crear sección</button>
+      </div>
+      <p class="hint">Una sección custom es un grupo de KPIs vacío. Aparece como dropzone para arrastrar KPIs, y como opción en "Agregar KPI personalizado". Se puede renombrar y borrar.</p>
+    </div>
+  </div>`;
 
   // Fila/form para agregar KPI personalizado
   const sectionsForSelect = c.sections.filter(s => !s.__personalizados);
@@ -1565,7 +1586,7 @@ function renderMetasBody(ch){
     </div>
   </div>`;
 
-  body.innerHTML = sectionsHtml + addHtml;
+  body.innerHTML = sectionsHtml + createSecHtml + addHtml;
 
   // --- Handlers para filas existentes ---
   body.querySelectorAll("tr[data-k]").forEach(tr=>{
@@ -1652,6 +1673,60 @@ function renderMetasBody(ch){
     toast(`KPI agregado${secId ? ` en "${secId}"` : ""} ✓`);
     renderMetasBody(ch);
   };
+
+  // --- Crear nueva sección ---
+  document.getElementById("new-sec-save").onclick = async()=>{
+    const name = document.getElementById("new-sec-name").value.trim();
+    if(!name){ alert("Pon un nombre para la sección"); return; }
+    META_OVERRIDES[ch] = META_OVERRIDES[ch] || {};
+    META_OVERRIDES[ch].__custom_sections = META_OVERRIDES[ch].__custom_sections || [];
+    // Verifica colisión con secciones existentes (nativas o custom)
+    if(c.sections.some(s => s.__id === name) || META_OVERRIDES[ch].__custom_sections.includes(name)){
+      alert(`Ya existe una sección con ese nombre.`);
+      return;
+    }
+    META_OVERRIDES[ch].__custom_sections.push(name);
+    applyMetas();
+    await saveMetas();
+    toast(`Sección "${name}" creada ✓`);
+    renderMetasBody(ch);
+  };
+
+  // --- Borrar sección custom (botón ✕ que añadimos abajo) ---
+  body.querySelectorAll(".sec-delete").forEach(btn=>{
+    btn.onclick = async()=>{
+      const id = btn.dataset.secId;
+      const sec = c.sections.find(s => s.__id === id);
+      if(!sec || !sec.__custom_section) return;
+      const kpiCount = sec.fields.length;
+      if(kpiCount > 0){
+        if(!confirm(`La sección "${sec.title}" tiene ${kpiCount} KPI(s). Si la borras, esos KPIs irán a "KPIs personalizados" (sin sección). ¿Continuar?`)) return;
+      } else {
+        if(!confirm(`¿Borrar la sección "${sec.title}"?`)) return;
+      }
+      // Limpiar referencias en __field_sections y en custom KPIs
+      const ov = META_OVERRIDES[ch];
+      ov.__custom_sections = (ov.__custom_sections || []).filter(s => s !== id);
+      if(ov.__field_sections){
+        for(const fk in ov.__field_sections){
+          if(ov.__field_sections[fk] === id) delete ov.__field_sections[fk];
+        }
+      }
+      if(ov.__custom){
+        ov.__custom.forEach(ck => { if(ck.section === id) ck.section = null; });
+      }
+      if(ov.__section_order){
+        ov.__section_order = ov.__section_order.filter(s => s !== id);
+      }
+      if(ov.__section_labels){
+        delete ov.__section_labels[id];
+      }
+      applyMetas();
+      await saveMetas();
+      toast("Sección borrada");
+      renderMetasBody(ch);
+    };
+  });
 
   // --- Drag de TODOS los KPIs (nativos + custom) ---
   body.querySelectorAll('tr[data-k]').forEach(tr=>{
