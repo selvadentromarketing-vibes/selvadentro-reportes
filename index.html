@@ -168,6 +168,8 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   /* ---- Base de datos ---- */
   .db-load{ font-family:var(--sans); font-size:11px; color:var(--olivo); background:transparent; border:1px solid var(--linea); border-radius:6px; padding:4px 9px; cursor:pointer; }
   .db-load:hover{ background:var(--crema-2); }
+  .db-dup{ font-family:var(--sans); font-size:11px; color:var(--cobre); background:transparent; border:1px solid var(--linea); border-radius:6px; padding:4px 9px; cursor:pointer; margin-left:4px; }
+  .db-dup:hover{ background:var(--crema-2); border-color:var(--cobre); }
   .db-del{ font-family:var(--sans); font-size:12px; color:var(--rojo-no-tx); background:transparent; border:1px solid var(--linea); border-radius:6px; padding:4px 9px; cursor:pointer; margin-left:4px; }
   .db-del:hover{ background:var(--rojo-no-bg); border-color:var(--rojo-no-bg); }
   #db-table td.note{ max-width:220px; overflow:hidden; text-overflow:ellipsis; }
@@ -446,7 +448,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
         <div class="grp"><label>Registros</label><div class="semana-badge" id="db-count">—</div></div>
         <div class="spacer"></div>
       </div>
-      <p class="hint">Registros guardados de cada canal. <b>Cargar</b> lleva el registro al formulario de Ingreso para editarlo; <b>✕</b> lo elimina (no se puede deshacer). El CSV exporta el canal actual; el backup JSON incluye todos los canales más asesores y metas.</p>
+      <p class="hint">Registros guardados de cada canal. Solo admin puede ver acciones: <b>Editar</b> lleva el registro al formulario de Ingreso; <b>Duplicar</b> lo lleva con fecha vacía para guardarlo como uno nuevo; <b>✕</b> lo elimina (no se puede deshacer). El CSV exporta el canal actual; el backup JSON incluye todos los canales más asesores y metas.</p>
       <div class="table-scroll"><table class="cons" id="db-table"></table></div>
     </div>
   </div>
@@ -1388,22 +1390,43 @@ async function dbLoad(chKey, key){
   fillForm(rec);
   toast("Registro cargado en Ingreso ✓"); window.scrollTo({top:0,behavior:"smooth"});
 }
+async function dbDuplicate(chKey, key){
+  const rec=recGet(key); if(!rec) return;
+  document.getElementById("canal-select").value=chKey;
+  await switchChannel(chKey);
+  document.querySelector('.tab[data-tab="ingreso"]').click();
+  document.querySelector(".canal-wrap").style.display="flex";
+  fillForm(rec);
+  // Limpiar fechas para forzar elegir una nueva semana (si no, sobrescribe el original)
+  document.getElementById("ing-inicio").value="";
+  document.getElementById("ing-fin").value="";
+  document.getElementById("ing-semana").textContent="—";
+  toast("Duplicado. Cambia la semana (o asesor/ciudad) antes de Guardar.");
+  window.scrollTo({top:0,behavior:"smooth"});
+}
 async function renderDBTable(ch){
   const c=CHANNELS[ch]; const dims=dimsList(ch); const flds=c.sections.flatMap(s=>s.fields);
   const recs=dbRecords(ch);
-  const head=`<tr><th class="lft">Semana</th>${dims.map(d=>`<th class="lft">${d.label}</th>`).join("")}${flds.map(f=>`<th>${f.l}</th>`).join("")}<th class="lft">Notas</th><th></th></tr>`;
+  const adm = isAdmin();
+  const actionHeader = adm ? '<th class="lft">Acciones</th>' : '';
+  const head=`<tr><th class="lft">Semana</th>${dims.map(d=>`<th class="lft">${d.label}</th>`).join("")}${flds.map(f=>`<th>${f.l}</th>`).join("")}<th class="lft">Notas</th>${actionHeader}</tr>`;
   const body=recs.map(({key,rec})=>{
     const dimCells=dims.map((d,i)=>`<td class="lft">${(rec.dimVals&&rec.dimVals[i])||""}</td>`).join("");
     const valCells=flds.map(f=>{ const v=rec.valores?rec.valores[f.k]:0; return `<td>${f.money?fmtMoney(v||0):(v??0)}</td>`; }).join("");
     const nota=(rec.notas||""); const safe=escAttr(nota);
-    return `<tr><td class="lft">${rec.semana||""}</td>${dimCells}${valCells}<td class="lft note" title="${safe}">${safe}</td>
-      <td class="right" style="white-space:nowrap"><button class="db-load" data-ch="${ch}" data-key="${escAttr(key)}">Cargar</button><button class="db-del" data-key="${escAttr(key)}" title="Eliminar">✕</button></td></tr>`;
+    const actions = adm
+      ? `<td class="right" style="white-space:nowrap"><button class="db-load" data-ch="${ch}" data-key="${escAttr(key)}">Editar</button><button class="db-dup" data-ch="${ch}" data-key="${escAttr(key)}">Duplicar</button><button class="db-del" data-key="${escAttr(key)}" title="Eliminar">✕</button></td>`
+      : "";
+    return `<tr><td class="lft">${rec.semana||""}</td>${dimCells}${valCells}<td class="lft note" title="${safe}">${safe}</td>${actions}</tr>`;
   }).join("");
   document.getElementById("db-count").textContent=recs.length;
-  const colspan=2+dims.length+flds.length;
+  const colspan=2+dims.length+flds.length+(adm?1:0);
   document.getElementById("db-table").innerHTML=`<thead>${head}</thead><tbody>${body||`<tr><td class="lft" colspan="${colspan}"><em>Sin registros en este canal.</em></td></tr>`}</tbody>`;
-  document.querySelectorAll("#db-table .db-del").forEach(b=>b.onclick=async()=>{ if(confirm("¿Eliminar este registro de la base de datos? No se puede deshacer.")){ recDel(b.dataset.key); await sDel(b.dataset.key); toast("Registro eliminado"); renderDBTable(ch); } });
-  document.querySelectorAll("#db-table .db-load").forEach(b=>b.onclick=()=>dbLoad(b.dataset.ch,b.dataset.key));
+  if(adm){
+    document.querySelectorAll("#db-table .db-del").forEach(b=>b.onclick=async()=>{ if(confirm("¿Eliminar este registro de la base de datos? No se puede deshacer.")){ recDel(b.dataset.key); await sDel(b.dataset.key); toast("Registro eliminado"); renderDBTable(ch); } });
+    document.querySelectorAll("#db-table .db-load").forEach(b=>b.onclick=()=>dbLoad(b.dataset.ch,b.dataset.key));
+    document.querySelectorAll("#db-table .db-dup").forEach(b=>b.onclick=()=>dbDuplicate(b.dataset.ch,b.dataset.key));
+  }
 }
 function dbExportCSV(ch){
   const c=CHANNELS[ch]; const dims=dimsList(ch); const flds=c.sections.flatMap(s=>s.fields);
