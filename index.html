@@ -239,6 +239,12 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .add-kpi-row td{ background:var(--crema-2); border-bottom:none; }
   .add-kpi-row .meta-num, .add-kpi-row .meta-pct, .add-kpi-row .meta-name{ background:#fff; }
   .add-kpi-row button.btn-primary{ padding:8px 16px; font-size:12.5px; }
+  /* drag-and-drop de KPIs custom */
+  .meta-drag{ display:inline-block; width:18px; text-align:center; color:var(--neutro); cursor:grab; user-select:none; font-size:16px; line-height:1; }
+  .meta-drag:hover{ color:var(--cobre); }
+  tr.dragging{ opacity:.4; }
+  .section.drop-target{ outline:2px dashed var(--cobre); outline-offset:-2px; background:rgba(207,133,67,0.05); }
+  .section.drop-target h3{ background:var(--cobre); }
   .ch-pills{ display:flex; flex-wrap:wrap; gap:5px 6px; max-width:360px; }
   .ch-pill{ display:inline-flex; align-items:center; gap:5px; font-size:11px; padding:3px 8px; border-radius:14px; border:1px solid var(--linea); background:var(--crema); cursor:pointer; user-select:none; }
   .ch-pill input{ accent-color:var(--olivo); }
@@ -1406,8 +1412,9 @@ function setMetaField(ch, fk, key, value){
 function applyMetas(){
   for(const ch in META_OVERRIDES){
     const c=CHANNELS[ch]; if(!c) continue;
-    // 1) Quitar la sección "Personalizados" previa (si la había) antes de reaplicar
+    // 1) Quitar sección "Personalizados" previa y limpiar custom de secciones nativas
     c.sections = c.sections.filter(s => !s.__personalizados);
+    c.sections.forEach(s => { s.fields = s.fields.filter(f => !f.__custom); });
     // 2) Aplicar overrides de label/meta a campos existentes
     const fmap={}; c.sections.forEach(s=>s.fields.forEach(f=>fmap[f.k]=f));
     for(const fk in META_OVERRIDES[ch]){
@@ -1418,11 +1425,23 @@ function applyMetas(){
         if(m.label) fmap[fk].l = m.label;
       }
     }
-    // 3) Anexar KPIs personalizados como nueva sección
+    // 3) Distribuir KPIs personalizados a sus secciones target (o a "KPIs personalizados" si no asignados)
     const custom = META_OVERRIDES[ch].__custom;
-    if(Array.isArray(custom) && custom.length){
-      const fields = custom.map(k => ({ k: k.k, l: k.l, meta: k.meta_num ?? null }));
-      c.sections.push({ title: "KPIs personalizados", fields, __personalizados: true });
+    if(Array.isArray(custom)){
+      const sectionMap = {};
+      c.sections.forEach(s => sectionMap[s.title] = s);
+      const unassigned = [];
+      for(const ck of custom){
+        const field = { k: ck.k, l: ck.l, meta: ck.meta_num ?? null, __custom: true };
+        if(ck.section && sectionMap[ck.section]){
+          sectionMap[ck.section].fields.push(field);
+        } else {
+          unassigned.push(field);
+        }
+      }
+      if(unassigned.length){
+        c.sections.push({ title: "KPIs personalizados", fields: unassigned, __personalizados: true });
+      }
     }
   }
 }
@@ -1435,8 +1454,9 @@ function renderMetas(){
 function metaRowHtml(ch, fk, label, m, isCustom, money){
   const numV = m.meta_num != null ? m.meta_num : "";
   const pctV = m.meta_pct != null ? m.meta_pct : "";
-  return `<tr data-ch="${ch}" data-k="${fk}" data-custom="${isCustom?1:0}">
-    <td><input class="meta-name" type="text" value="${escAttr(label)}${money?' ($)':''}" data-orig="${escAttr(label)}"></td>
+  const dragHandle = isCustom ? '<span class="meta-drag" title="Arrastra a otra sección">⠿</span>' : '';
+  return `<tr data-ch="${ch}" data-k="${fk}" data-custom="${isCustom?1:0}" ${isCustom?'draggable="true"':''}>
+    <td>${dragHandle}<input class="meta-name" type="text" value="${escAttr(label)}${money?' ($)':''}" data-orig="${escAttr(label)}" style="width:calc(100% - 28px)"></td>
     <td class="right"><input class="meta-num" type="number" step="${money?'0.01':'1'}" placeholder="—" value="${numV}"></td>
     <td class="right"><span class="meta-pct-wrap"><input class="meta-pct" type="number" step="0.01" placeholder="—" value="${pctV}"><span>%</span></span></td>
     <td class="right">${isCustom?'<button class="meta-del" type="button" title="Borrar KPI">Borrar</button>':''}</td>
@@ -1447,10 +1467,10 @@ function renderMetasBody(ch){
   const c=CHANNELS[ch]; const body=document.getElementById("metas-body");
   // Renderiza una "section" por cada sección del canal
   const sectionsHtml = c.sections.map(s => {
-    const isCustom = !!s.__personalizados;
     const rows = s.fields.map(f => {
+      const isFieldCustom = !!f.__custom;
       let m;
-      if(isCustom){
+      if(isFieldCustom){
         const item = (META_OVERRIDES[ch]?.__custom || []).find(x => x.k === f.k);
         m = item
           ? { meta_num: item.meta_num ?? null, meta_pct: item.meta_pct ?? null, label: item.l }
@@ -1458,9 +1478,9 @@ function renderMetasBody(ch){
       } else {
         m = getMeta(ch, f.k);
       }
-      return metaRowHtml(ch, f.k, m.label || f.l, m, isCustom, !!f.money);
+      return metaRowHtml(ch, f.k, m.label || f.l, m, isFieldCustom, !!f.money);
     }).join("");
-    return `<div class="section">
+    return `<div class="section meta-section" data-section-title="${escAttr(s.title)}">
       <h3><span class="dot"></span>${s.title}</h3>
       <div class="fields">
         <table class="metas-table">
@@ -1575,6 +1595,47 @@ function renderMetasBody(ch){
     toast("KPI agregado ✓");
     renderMetasBody(ch);
   };
+
+  // --- Drag and drop de KPIs custom entre secciones ---
+  body.querySelectorAll('tr[data-custom="1"]').forEach(tr=>{
+    tr.ondragstart = (e)=>{
+      e.dataTransfer.setData("text/plain", JSON.stringify({ ch: tr.dataset.ch, fk: tr.dataset.k }));
+      e.dataTransfer.effectAllowed = "move";
+      tr.classList.add("dragging");
+    };
+    tr.ondragend = ()=>{
+      tr.classList.remove("dragging");
+      body.querySelectorAll(".meta-section.drop-target").forEach(s=>s.classList.remove("drop-target"));
+    };
+  });
+  body.querySelectorAll(".meta-section").forEach(sec=>{
+    sec.ondragover = (e)=>{
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      sec.classList.add("drop-target");
+    };
+    sec.ondragleave = (e)=>{
+      // Solo quitar si salimos de la sección por completo
+      if(!sec.contains(e.relatedTarget)) sec.classList.remove("drop-target");
+    };
+    sec.ondrop = async(e)=>{
+      e.preventDefault();
+      sec.classList.remove("drop-target");
+      let data;
+      try{ data = JSON.parse(e.dataTransfer.getData("text/plain")); }catch{ return; }
+      const targetTitle = sec.dataset.sectionTitle;
+      if(!targetTitle) return;
+      const arr = META_OVERRIDES[data.ch]?.__custom || [];
+      const item = arr.find(x => x.k === data.fk);
+      if(!item) return;
+      // Si la target es "KPIs personalizados" (sin section asignada), borramos el campo
+      item.section = targetTitle === "KPIs personalizados" ? null : targetTitle;
+      applyMetas();
+      await saveMetas();
+      toast(`Movido a "${targetTitle}" ✓`);
+      renderMetasBody(data.ch);
+    };
+  });
 }
 
 /* ===================== BASE DE DATOS ===================== */
