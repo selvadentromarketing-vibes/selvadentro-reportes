@@ -1472,8 +1472,35 @@ function renderDB(){
   dbPlaceholder();
 }
 
+function applyTabsVisibility(){
+  const rules = [
+    { tab: "metas",     visible: isAdmin() },
+    { tab: "asesores",  visible: CH !== "brokers" },
+  ];
+  let activeHidden = false;
+  for(const { tab, visible } of rules){
+    const btn = document.querySelector(`.side-btn[data-tab="${tab}"]`);
+    if(!btn) continue;
+    btn.style.display = visible ? "" : "none";
+    if(!visible && btn.classList.contains("active")){
+      btn.classList.remove("active");
+      document.getElementById("view-"+tab)?.classList.remove("active");
+      activeHidden = true;
+    }
+  }
+  if(activeHidden){
+    const firstTab = document.querySelector(".tabs .tab:not([style*='display: none'])");
+    if(firstTab){
+      firstTab.classList.add("active");
+      document.getElementById("view-"+firstTab.dataset.tab)?.classList.add("active");
+      document.querySelector(".canal-wrap").style.display = ["resultados","dircom"].includes(firstTab.dataset.tab) ? "none" : "flex";
+    }
+  }
+}
+
 async function switchChannel(ch){
   CH=ch; document.getElementById("canal-select").value=ch;
+  applyTabsVisibility();
   const ok=isConfigured();
   document.getElementById("ing-body").style.display=ok?"":"none";
   document.getElementById("ing-placeholder").style.display=ok?"none":"block";
@@ -1659,6 +1686,7 @@ async function onAuthenticated(){
   document.getElementById("app").style.display = "";
   applyUserBadge();
   applyChannelFilter();
+  applyTabsVisibility();
   if(!isAdmin() && userChannelsOf(SESSION.email).length === 0){ showNoAccessScreen(); return; }
   await init();
 }
