@@ -1799,6 +1799,9 @@ function applyChannelFilter(){
   for(const k of Object.keys(CHANNELS)){
     if(!allowed.has(k)) delete CHANNELS[k];
   }
+  // Sync los sets de selección de Dirección General/Comercial con los canales sobrevivientes
+  if(typeof resState !== "undefined" && resState && resState.chs){ resState.chs = new Set(Object.keys(CHANNELS)); }
+  if(typeof dcState !== "undefined" && dcState && dcState.chs){ dcState.chs = new Set(Object.keys(CHANNELS)); }
   // Tabs sintéticos (reportes consolidados de dirección)
   let activeHidden = false;
   for(const [chKey, tab] of Object.entries(DIR_TABS)){
