@@ -218,6 +218,27 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .new-user-row td{ border-bottom:none; }
   .new-user-row input{ width:100%; }
   .admin-empty{ color:var(--neutro); font-style:italic; padding:18px 6px; text-align:center; }
+
+  /* ---- Metas table ---- */
+  table.metas-table{ width:100%; border-collapse:collapse; }
+  table.metas-table th{ font-size:10px; text-transform:uppercase; letter-spacing:.6px; color:var(--neutro); font-weight:700; padding:9px 10px; border-bottom:1px solid var(--linea); background:var(--crema); text-align:left; }
+  table.metas-table th.right{ text-align:right; }
+  table.metas-table td{ padding:6px 10px; border-bottom:1px dashed var(--crema-2); vertical-align:middle; }
+  table.metas-table td.right{ text-align:right; }
+  table.metas-table tr:last-child td{ border-bottom:none; }
+  .meta-name{ width:100%; font-family:var(--sans); font-size:13.5px; padding:7px 9px; border:1px solid transparent; background:transparent; color:var(--texto); border-radius:6px; }
+  .meta-name:hover{ border-color:var(--linea); background:var(--crema); }
+  .meta-name:focus{ outline:none; border-color:var(--cobre); background:#fff; }
+  .meta-num, .meta-pct{ width:110px; font-family:var(--sans); font-size:14px; text-align:right; padding:7px 10px; border:1px solid var(--linea); border-radius:7px; background:var(--gris-input); }
+  .meta-num:focus, .meta-pct:focus{ outline:none; border-color:var(--cobre); background:#fff; }
+  .meta-pct{ width:90px; }
+  .meta-pct-wrap{ display:inline-flex; align-items:center; gap:4px; }
+  .meta-pct-wrap span{ color:var(--neutro); font-size:13px; }
+  .meta-del{ font-family:var(--sans); font-size:12px; color:var(--rojo-no-tx); background:transparent; border:1px solid var(--linea); border-radius:7px; padding:5px 10px; cursor:pointer; }
+  .meta-del:hover{ background:var(--rojo-no-bg); border-color:var(--rojo-no-bg); }
+  .add-kpi-row td{ background:var(--crema-2); border-bottom:none; }
+  .add-kpi-row .meta-num, .add-kpi-row .meta-pct, .add-kpi-row .meta-name{ background:#fff; }
+  .add-kpi-row button.btn-primary{ padding:8px 16px; font-size:12.5px; }
   .ch-pills{ display:flex; flex-wrap:wrap; gap:5px 6px; max-width:360px; }
   .ch-pill{ display:inline-flex; align-items:center; gap:5px; font-size:11px; padding:3px 8px; border-radius:14px; border:1px solid var(--linea); background:var(--crema); cursor:pointer; user-select:none; }
   .ch-pill input{ accent-color:var(--olivo); }
@@ -1359,27 +1380,201 @@ function renderAdvisors(){
 let META_OVERRIDES = {};
 async function loadMetas(){ const saved=await sGet("selvadentro:metas"); if(saved && typeof saved==="object"){ META_OVERRIDES=saved; applyMetas(); } }
 async function saveMetas(){ await sSet("selvadentro:metas", META_OVERRIDES); }
-function applyMetas(){ for(const ch in META_OVERRIDES){ const c=CHANNELS[ch]; if(!c) continue; const fmap={}; c.sections.forEach(s=>s.fields.forEach(f=>fmap[f.k]=f)); for(const fk in META_OVERRIDES[ch]){ if(fmap[fk]) fmap[fk].meta=META_OVERRIDES[ch][fk]; } } }
+
+// META_OVERRIDES[ch][fk] puede ser:
+//   - number (legacy)        → meta_num
+//   - { meta_num, meta_pct, label }
+// META_OVERRIDES[ch].__custom = [{k, l, meta_num, meta_pct}]   ← KPIs personalizados
+function getMeta(ch, fk){
+  const o = META_OVERRIDES[ch] && META_OVERRIDES[ch][fk];
+  if(o == null) return { meta_num: null, meta_pct: null, label: null };
+  if(typeof o === "number") return { meta_num: o, meta_pct: null, label: null };
+  return { meta_num: o.meta_num ?? null, meta_pct: o.meta_pct ?? null, label: o.label ?? null };
+}
+function setMetaField(ch, fk, key, value){
+  META_OVERRIDES[ch] = META_OVERRIDES[ch] || {};
+  const cur = getMeta(ch, fk);
+  cur[key] = value;
+  // Si todo es null/'' lo borramos; si no guardamos como objeto
+  if(cur.meta_num == null && cur.meta_pct == null && (cur.label==null || cur.label==="")){
+    delete META_OVERRIDES[ch][fk];
+  } else {
+    META_OVERRIDES[ch][fk] = { meta_num: cur.meta_num, meta_pct: cur.meta_pct, label: cur.label };
+  }
+}
+
+function applyMetas(){
+  for(const ch in META_OVERRIDES){
+    const c=CHANNELS[ch]; if(!c) continue;
+    // 1) Quitar la sección "Personalizados" previa (si la había) antes de reaplicar
+    c.sections = c.sections.filter(s => !s.__personalizados);
+    // 2) Aplicar overrides de label/meta a campos existentes
+    const fmap={}; c.sections.forEach(s=>s.fields.forEach(f=>fmap[f.k]=f));
+    for(const fk in META_OVERRIDES[ch]){
+      if(fk === "__custom") continue;
+      const m = getMeta(ch, fk);
+      if(fmap[fk]){
+        if(m.meta_num !== null) fmap[fk].meta = m.meta_num;
+        if(m.label) fmap[fk].l = m.label;
+      }
+    }
+    // 3) Anexar KPIs personalizados como nueva sección
+    const custom = META_OVERRIDES[ch].__custom;
+    if(Array.isArray(custom) && custom.length){
+      const fields = custom.map(k => ({ k: k.k, l: k.l, meta: k.meta_num ?? null }));
+      c.sections.push({ title: "KPIs personalizados", fields, __personalizados: true });
+    }
+  }
+}
 let metasBuilt=false;
 function renderMetas(){
   const sel=document.getElementById("metas-canal");
   if(!metasBuilt){ sel.innerHTML=Object.keys(CHANNELS).map(k=>`<option value="${k}">${CHANNELS[k].name}</option>`).join(""); sel.onchange=()=>renderMetasBody(sel.value); metasBuilt=true; }
   renderMetasBody(sel.value||Object.keys(CHANNELS)[0]);
 }
+function metaRowHtml(ch, fk, label, m, isCustom, money){
+  const numV = m.meta_num != null ? m.meta_num : "";
+  const pctV = m.meta_pct != null ? m.meta_pct : "";
+  return `<tr data-ch="${ch}" data-k="${fk}" data-custom="${isCustom?1:0}">
+    <td><input class="meta-name" type="text" value="${escAttr(label)}${money?' ($)':''}" data-orig="${escAttr(label)}"></td>
+    <td class="right"><input class="meta-num" type="number" step="${money?'0.01':'1'}" placeholder="—" value="${numV}"></td>
+    <td class="right"><span class="meta-pct-wrap"><input class="meta-pct" type="number" step="0.01" placeholder="—" value="${pctV}"><span>%</span></span></td>
+    <td class="right">${isCustom?'<button class="meta-del" type="button" title="Borrar KPI">Borrar</button>':''}</td>
+  </tr>`;
+}
+
 function renderMetasBody(ch){
   const c=CHANNELS[ch]; const body=document.getElementById("metas-body");
-  body.innerHTML=c.sections.map(s=>`
-    <div class="section"><h3><span class="dot"></span>${s.title}</h3><div class="fields">
-      ${s.fields.map(f=>`<div class="frow"><label>${f.l}${f.money?' ($)':''}</label>
-        <input type="number" step="${f.money?'0.01':'1'}" class="meta-in" data-ch="${ch}" data-k="${f.k}" placeholder="—" value="${f.meta!=null?f.meta:''}"></div>`).join("")}
-    </div></div>`).join("");
-  body.querySelectorAll(".meta-in").forEach(inp=>inp.onchange=async()=>{
-    const chK=inp.dataset.ch, fk=inp.dataset.k;
-    const v = inp.value.trim()===""? null : Number(inp.value);
-    CHANNELS[chK].sections.forEach(s=>s.fields.forEach(f=>{ if(f.k===fk) f.meta=v; }));
-    META_OVERRIDES[chK]=META_OVERRIDES[chK]||{}; META_OVERRIDES[chK][fk]=v;
-    await saveMetas(); toast("Meta actualizada ✓");
+  // Renderiza una "section" por cada sección del canal
+  const sectionsHtml = c.sections.map(s => {
+    const isCustom = !!s.__personalizados;
+    const rows = s.fields.map(f => {
+      let m;
+      if(isCustom){
+        const item = (META_OVERRIDES[ch]?.__custom || []).find(x => x.k === f.k);
+        m = item
+          ? { meta_num: item.meta_num ?? null, meta_pct: item.meta_pct ?? null, label: item.l }
+          : { meta_num: null, meta_pct: null, label: null };
+      } else {
+        m = getMeta(ch, f.k);
+      }
+      return metaRowHtml(ch, f.k, m.label || f.l, m, isCustom, !!f.money);
+    }).join("");
+    return `<div class="section">
+      <h3><span class="dot"></span>${s.title}</h3>
+      <div class="fields">
+        <table class="metas-table">
+          <thead><tr><th>Nombre del KPI</th><th class="right">Meta numérica</th><th class="right">Meta %</th><th></th></tr></thead>
+          <tbody>${rows||`<tr><td colspan="4" class="admin-empty">Sin KPIs en esta sección.</td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join("");
+
+  // Fila/form para agregar KPI personalizado
+  const addHtml = `<div class="section">
+    <h3><span class="dot"></span>Agregar KPI personalizado</h3>
+    <div class="fields">
+      <table class="metas-table">
+        <thead><tr><th>Nombre del KPI</th><th class="right">Meta numérica</th><th class="right">Meta %</th><th></th></tr></thead>
+        <tbody>
+          <tr class="add-kpi-row" data-ch="${ch}">
+            <td><input class="meta-name" id="new-kpi-name" type="text" placeholder="Ej. Llamadas semanales"></td>
+            <td class="right"><input class="meta-num" id="new-kpi-num" type="number" step="1" placeholder="—"></td>
+            <td class="right"><span class="meta-pct-wrap"><input class="meta-pct" id="new-kpi-pct" type="number" step="0.01" placeholder="—"><span>%</span></span></td>
+            <td class="right"><button class="btn btn-primary" id="new-kpi-save" type="button">Guardar KPI</button></td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="hint">Los KPIs personalizados aparecen en Ingreso de datos, Reportes y Base de datos del canal seleccionado.</p>
+    </div>
+  </div>`;
+
+  body.innerHTML = sectionsHtml + addHtml;
+
+  // --- Handlers para filas existentes ---
+  body.querySelectorAll("tr[data-k]").forEach(tr=>{
+    const chK = tr.dataset.ch, fk = tr.dataset.k, isCustom = tr.dataset.custom === "1";
+    const nameInp = tr.querySelector(".meta-name");
+    const numInp  = tr.querySelector(".meta-num");
+    const pctInp  = tr.querySelector(".meta-pct");
+    const delBtn  = tr.querySelector(".meta-del");
+
+    nameInp.onchange = async()=>{
+      const v = nameInp.value.trim();
+      if(isCustom){
+        // Edita el __custom array
+        const arr = META_OVERRIDES[chK]?.__custom || [];
+        const item = arr.find(x => x.k === fk);
+        if(item){ item.l = v; }
+      } else {
+        const orig = nameInp.dataset.orig || "";
+        if(v === orig || v === ""){ setMetaField(chK, fk, "label", null); }
+        else { setMetaField(chK, fk, "label", v); }
+      }
+      applyMetas();
+      await saveMetas();
+      toast("Nombre actualizado ✓");
+    };
+
+    numInp.onchange = async()=>{
+      const v = numInp.value.trim() === "" ? null : Number(numInp.value);
+      if(isCustom){
+        const arr = META_OVERRIDES[chK]?.__custom || [];
+        const item = arr.find(x => x.k === fk);
+        if(item){ item.meta_num = v; }
+      } else {
+        setMetaField(chK, fk, "meta_num", v);
+      }
+      applyMetas();
+      await saveMetas();
+      toast("Meta numérica actualizada ✓");
+    };
+
+    pctInp.onchange = async()=>{
+      const v = pctInp.value.trim() === "" ? null : Number(pctInp.value);
+      if(isCustom){
+        const arr = META_OVERRIDES[chK]?.__custom || [];
+        const item = arr.find(x => x.k === fk);
+        if(item){ item.meta_pct = v; }
+      } else {
+        setMetaField(chK, fk, "meta_pct", v);
+      }
+      await saveMetas();
+      toast("Meta % actualizada ✓");
+    };
+
+    if(delBtn){
+      delBtn.onclick = async()=>{
+        if(!confirm(`¿Borrar el KPI "${nameInp.value}"? Los datos históricos quedan en kv pero el campo deja de aparecer.`)) return;
+        META_OVERRIDES[chK].__custom = (META_OVERRIDES[chK].__custom||[]).filter(x => x.k !== fk);
+        applyMetas();
+        await saveMetas();
+        toast("KPI borrado");
+        renderMetasBody(chK);
+      };
+    }
   });
+
+  // --- Handler para agregar nuevo KPI ---
+  document.getElementById("new-kpi-save").onclick = async()=>{
+    const name = document.getElementById("new-kpi-name").value.trim();
+    const num  = document.getElementById("new-kpi-num").value.trim();
+    const pct  = document.getElementById("new-kpi-pct").value.trim();
+    if(!name){ alert("Pon un nombre para el KPI"); return; }
+    const k = "custom_" + name.toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"").slice(0,40) + "_" + Math.random().toString(36).slice(2,6);
+    META_OVERRIDES[ch] = META_OVERRIDES[ch] || {};
+    META_OVERRIDES[ch].__custom = META_OVERRIDES[ch].__custom || [];
+    META_OVERRIDES[ch].__custom.push({
+      k, l: name,
+      meta_num: num === "" ? null : Number(num),
+      meta_pct: pct === "" ? null : Number(pct),
+    });
+    applyMetas();
+    await saveMetas();
+    toast("KPI agregado ✓");
+    renderMetasBody(ch);
+  };
 }
 
 /* ===================== BASE DE DATOS ===================== */
