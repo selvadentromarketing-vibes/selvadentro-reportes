@@ -1475,7 +1475,7 @@ function renderDB(){
 function applyTabsVisibility(){
   const rules = [
     { tab: "metas",     visible: isAdmin() },
-    { tab: "asesores",  visible: CH !== "brokers" },
+    { tab: "asesores",  visible: isAdmin() || CH !== "brokers" },
   ];
   let activeHidden = false;
   for(const { tab, visible } of rules){
