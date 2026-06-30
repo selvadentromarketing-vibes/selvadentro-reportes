@@ -1414,6 +1414,7 @@ async function dbDuplicate(chKey, key){
   window.scrollTo({top:0,behavior:"smooth"});
 }
 async function renderDBTable(ch){
+  dbLastCh = ch;
   const c=CHANNELS[ch]; const dims=dimsList(ch); const flds=c.sections.flatMap(s=>s.fields);
   const recs=dbRecords(ch);
   const adm = isAdmin();
@@ -1460,16 +1461,18 @@ async function dbExportJSON(){
   toast("Backup JSON exportado ✓");
 }
 let dbBuilt=false;
+let dbLastCh=null;
 function dbPlaceholder(){ document.getElementById("db-count").textContent="—"; document.getElementById("db-table").innerHTML=`<tbody><tr><td class="lft"><em>Elige un canal y presiona “Buscar” para cargar sus registros.</em></td></tr></tbody>`; }
 function renderDB(){
   const sel=document.getElementById("db-canal");
   if(!dbBuilt){
     sel.innerHTML=Object.keys(CHANNELS).map(k=>`<option value="${k}">${CHANNELS[k].name}</option>`).join("");
-    sel.onchange=dbPlaceholder;
+    sel.onchange=()=>renderDBTable(sel.value);
     document.getElementById("db-get").onclick=()=>renderDBTable(sel.value);
     dbBuilt=true;
   }
-  dbPlaceholder();
+  // Auto-render: si ya hay un canal seleccionado, mostrar su tabla con datos actuales.
+  if(sel.value){ renderDBTable(sel.value); } else { dbPlaceholder(); }
 }
 
 function applyTabsVisibility(){
@@ -1574,6 +1577,7 @@ async function init(){
       const active=document.querySelector(".view.active");
       if(active && active.id==="view-resultados"){ await showResultados(); document.querySelector(".canal-wrap").style.display="none"; }
       else if(active && active.id==="view-dircom"){ await showDirCom(); document.querySelector(".canal-wrap").style.display="none"; }
+      else if(active && active.id==="view-db"){ renderDB(); if(dbLastCh && CHANNELS[dbLastCh]) await renderDBTable(dbLastCh); }
     }catch(e){}
   })();
 }
