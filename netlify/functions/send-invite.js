@@ -76,11 +76,15 @@ async function sendEmail({ to, subject, html }) {
   return JSON.parse(t);
 }
 
-function inviteHtml({ email, password, role, siteUrl }) {
+function inviteHtml({ email, password, role, channels, siteUrl }) {
   const esc = (s) =>
     String(s).replace(/[&<>"']/g, (c) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
     );
+  const NAMES = { brokers:"Brokers", paid_organico:"Paid Orgánico", seminarios:"Seminarios", referidos:"Referidos", pd_leads:"PD Leads", pd_brokers:"PD Brokers", rp_vip:"RP VIP" };
+  const chsList = role === "admin"
+    ? "todos"
+    : (channels && channels.length ? channels.map(c => NAMES[c] || c).join(", ") : "ninguno aún");
   return `
   <div style="font-family:Helvetica,Arial,sans-serif;background:#465241;padding:32px;color:#FAF8F3">
     <div style="max-width:520px;margin:auto;background:#FAF8F3;color:#2E332B;border-radius:14px;border:1px solid #CF8543;padding:32px">
@@ -94,6 +98,7 @@ function inviteHtml({ email, password, role, siteUrl }) {
         <tr><td style="padding:6px 12px 6px 0;color:#6F7468">Email</td><td style="padding:6px 0"><b>${esc(email)}</b></td></tr>
         <tr><td style="padding:6px 12px 6px 0;color:#6F7468">Contraseña</td><td style="padding:6px 0"><code style="background:#F1ECE1;padding:3px 8px;border-radius:5px">${esc(password)}</code></td></tr>
         <tr><td style="padding:6px 12px 6px 0;color:#6F7468">Rol</td><td style="padding:6px 0"><b>${esc(role)}</b></td></tr>
+        <tr><td style="padding:6px 12px 6px 0;color:#6F7468">Canales</td><td style="padding:6px 0">${esc(chsList)}</td></tr>
       </table>
       <p style="margin:18px 0">
         <a href="${esc(siteUrl)}" style="display:inline-block;background:#CF8543;color:#fff;text-decoration:none;padding:12px 22px;border-radius:9px;font-weight:600;font-size:14px">Entrar al sistema</a>
@@ -127,6 +132,9 @@ exports.handler = async (event) => {
   if (newUser.password.length < 6)
     return json(400, { error: "Contraseña del nuevo user demasiado corta" });
   const role = newUser.role === "admin" ? "admin" : "user";
+  const ALL_CH = ["brokers","paid_organico","seminarios","referidos","pd_leads","pd_brokers","rp_vip"];
+  let channels = Array.isArray(newUser.channels) ? newUser.channels.filter(c => ALL_CH.includes(c)) : [];
+  if (role === "admin") channels = ALL_CH.slice();
 
   // 1) Verificar admin
   let users = (await kvGet(USERS_KEY)) || [];
@@ -146,7 +154,7 @@ exports.handler = async (event) => {
   // 3) Crear hash + salt y agregar
   const salt = randomSaltHex();
   const hash = await sha256Hex(salt, newUser.password);
-  users.push({ email: newLc, salt, hash, role, created_at: new Date().toISOString() });
+  users.push({ email: newLc, salt, hash, role, channels, created_at: new Date().toISOString() });
   await kvSet(USERS_KEY, users);
 
   // 4) Mandar email
@@ -154,7 +162,7 @@ exports.handler = async (event) => {
     await sendEmail({
       to: newLc,
       subject: "Acceso al Sistema de Reportes Selvadentro",
-      html: inviteHtml({ email: newLc, password: newUser.password, role, siteUrl: SITE_URL }),
+      html: inviteHtml({ email: newLc, password: newUser.password, role, channels, siteUrl: SITE_URL }),
     });
   } catch (e) {
     // El user ya quedó creado; reportamos el error de email pero no rollback.

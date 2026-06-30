@@ -216,6 +216,11 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .new-user-row td{ border-bottom:none; }
   .new-user-row input{ width:100%; }
   .admin-empty{ color:var(--neutro); font-style:italic; padding:18px 6px; text-align:center; }
+  .ch-pills{ display:flex; flex-wrap:wrap; gap:5px 6px; max-width:360px; }
+  .ch-pill{ display:inline-flex; align-items:center; gap:5px; font-size:11px; padding:3px 8px; border-radius:14px; border:1px solid var(--linea); background:var(--crema); cursor:pointer; user-select:none; }
+  .ch-pill input{ accent-color:var(--olivo); }
+  .ch-pill.on{ background:var(--verde-ok-bg); border-color:var(--verde-ok-tx); color:var(--verde-ok-tx); font-weight:600; }
+  .ch-pill.disabled{ opacity:.5; cursor:not-allowed; }
 </style>
 </head>
 <body>
@@ -423,7 +428,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
     <div class="view" id="view-admin">
       <div class="admin-card">
         <h3>Administración de usuarios</h3>
-        <p class="hint">Crea, edita o elimina cuentas. <b>admin</b> = acceso total + este panel; <b>user</b> = acceso al sistema sin este panel.</p>
+        <p class="hint">Crea, edita o elimina cuentas. <b>admin</b> = acceso total + este panel; <b>user</b> = acceso solo a los canales marcados, sin este panel.</p>
         <div class="table-scroll"><table class="usr-table" id="usr-table"></table></div>
         <div class="adv-footer">
           <span class="adv-status" id="usr-status"></span>
@@ -1487,7 +1492,7 @@ async function init(){
   // 1) Contenido instantáneo: llena el caché desde la semilla (síncrono) y pinta Dirección General de inmediato
   SEEDMAP = buildSeedMap();
   for(const k in SEEDMAP){ if(!(k in RECCACHE)) RECCACHE[k]=SEEDMAP[k]; }
-  await switchChannel("brokers");
+  await switchChannel(Object.keys(CHANNELS)[0] || "brokers");
   document.querySelector(".canal-wrap").style.display="none";
   await showResultados();
 
@@ -1510,8 +1515,34 @@ async function init(){
 const USERS_KEY = "selvadentro:users";
 const SESSION_KEY = "slvd-session";
 let SESSION = null;       // { email, role }
-let USERS = [];           // [{ email, salt, hash, role }]
+let USERS = [];           // [{ email, salt, hash, role, channels }]
 let ADMIN_PASS = null;    // password en memoria sólo (se pierde al recargar) — para llamar a la Netlify Function
+
+const ALL_CH_KEYS  = ["brokers","paid_organico","seminarios","referidos","pd_leads","pd_brokers","rp_vip"];
+const ALL_CH_NAMES = { brokers:"Brokers", paid_organico:"Paid Orgánico", seminarios:"Seminarios", referidos:"Referidos", pd_leads:"PD Leads", pd_brokers:"PD Brokers", rp_vip:"RP VIP" };
+
+function userChannelsOf(email){
+  const u = USERS.find(x => x.email.toLowerCase() === (email||"").toLowerCase());
+  return (u && Array.isArray(u.channels)) ? u.channels : [];
+}
+function applyChannelFilter(){
+  if(isAdmin()) return;
+  const allowed = new Set(userChannelsOf(SESSION.email));
+  for(const k of Object.keys(CHANNELS)){
+    if(!allowed.has(k)) delete CHANNELS[k];
+  }
+}
+function showNoAccessScreen(){
+  document.querySelector(".main").innerHTML = `
+    <div class="wrap">
+      <div class="placeholder-card">
+        <h3>Sin acceso</h3>
+        <p>Tu cuenta no tiene canales asignados todavía.</p>
+        <p>Pídele al admin que te asigne acceso.</p>
+        <p style="margin-top:18px"><button class="btn btn-ghost" onclick="signOut()">Cerrar sesión</button></p>
+      </div>
+    </div>`;
+}
 
 const isAdmin = ()=> !!(SESSION && SESSION.role === "admin");
 
@@ -1563,6 +1594,8 @@ async function onAuthenticated(){
   document.getElementById("login-screen").classList.add("hidden");
   document.getElementById("app").style.display = "";
   applyUserBadge();
+  applyChannelFilter();
+  if(Object.keys(CHANNELS).length === 0){ showNoAccessScreen(); return; }
   await init();
 }
 
@@ -1676,9 +1709,27 @@ async function renderAdmin(){
   paintUsersTable();
 }
 
+function chPillsHtml(selected, disabled){
+  return `<div class="ch-pills">${ALL_CH_KEYS.map(k=>{
+    const on = (selected||[]).includes(k);
+    return `<label class="ch-pill ${on?'on':''} ${disabled?'disabled':''}"><input type="checkbox" value="${k}" ${on?'checked':''} ${disabled?'disabled':''}>${ALL_CH_NAMES[k]}</label>`;
+  }).join("")}</div>`;
+}
+function bindPillsBehavior(scope){
+  scope.querySelectorAll(".ch-pill input").forEach(inp=>{
+    inp.onchange = ()=>inp.parentElement.classList.toggle("on", inp.checked);
+  });
+}
+function readChannels(container){
+  return [...container.querySelectorAll("input[type=checkbox]:checked")].map(i=>i.value);
+}
+
 function paintUsersTable(){
   const tbl = document.getElementById("usr-table");
-  const rows = USERS.map((u, i)=>`
+  const rows = USERS.map((u, i)=>{
+    const isUserRole = u.role === 'user';
+    const chs = u.channels || [];
+    return `
     <tr data-i="${i}">
       <td>${u.email}</td>
       <td>
@@ -1687,26 +1738,44 @@ function paintUsersTable(){
           <option value="admin" ${u.role==='admin'?'selected':''}>admin</option>
         </select>
       </td>
+      <td>${chPillsHtml(isUserRole ? chs : ALL_CH_KEYS, !isUserRole)}</td>
       <td style="text-align:right; white-space:nowrap;">
-        <button class="usr-action save">Guardar rol</button>
+        <button class="usr-action save">Guardar</button>
         <button class="usr-action">Reset pass</button>
         <button class="usr-action danger">Borrar</button>
       </td>
-    </tr>`).join("");
-  tbl.innerHTML = `<thead><tr><th>Email</th><th>Rol</th><th></th></tr></thead><tbody>${rows||`<tr><td colspan="3" class="admin-empty">Sin usuarios. Crea el primero.</td></tr>`}</tbody>`;
+    </tr>`;
+  }).join("");
+  tbl.innerHTML = `<thead><tr><th>Email</th><th>Rol</th><th>Canales (solo aplica a user)</th><th></th></tr></thead><tbody>${rows||`<tr><td colspan="4" class="admin-empty">Sin usuarios. Crea el primero.</td></tr>`}</tbody>`;
+  bindPillsBehavior(tbl);
+
+  // Cuando cambia el rol en la fila, habilitar/deshabilitar las pills
+  tbl.querySelectorAll(".usr-role").forEach(sel=>{
+    sel.onchange = ()=>{
+      const tr = sel.closest("tr");
+      const isUserRole = sel.value === "user";
+      tr.querySelectorAll(".ch-pill").forEach(p => p.classList.toggle("disabled", !isUserRole));
+      tr.querySelectorAll(".ch-pill input").forEach(i => i.disabled = !isUserRole);
+      if(!isUserRole){
+        tr.querySelectorAll(".ch-pill input").forEach(i => { i.checked = true; i.parentElement.classList.add("on"); });
+      }
+    };
+  });
 
   tbl.querySelectorAll("tbody tr[data-i]").forEach(tr=>{
     const idx = +tr.dataset.i;
     const [btnSave, btnReset, btnDel] = tr.querySelectorAll(".usr-action");
     btnSave.onclick = async()=>{
       const role = tr.querySelector(".usr-role").value;
+      const channels = role === "user" ? readChannels(tr.querySelector(".ch-pills")) : ALL_CH_KEYS.slice();
       if(USERS[idx].email === SESSION.email && role !== "admin"){
         if(!confirm("Vas a quitarte el rol admin a ti mismo. ¿Continuar?")) return;
       }
       USERS[idx].role = role;
+      USERS[idx].channels = channels;
       try{
         await saveUsers();
-        toast("Rol actualizado ✓");
+        toast("Usuario actualizado ✓");
         if(USERS[idx].email === SESSION.email){ SESSION.role = role; writeSession(SESSION); applyUserBadge(); }
       }catch(e){ alert("Error guardando: "+e.message); }
     };
@@ -1744,19 +1813,30 @@ function openNewUserRow(){
       </select>
       <input type="text" id="new-pass" placeholder="Contraseña (≥6)" style="margin-top:5px">
     </td>
+    <td>${chPillsHtml(ALL_CH_KEYS, false)}</td>
     <td style="text-align:right; white-space:nowrap;">
       <button class="usr-action save" id="new-save">Crear</button>
       <button class="usr-action" id="new-cancel">Cancelar</button>
     </td>`;
   tbody.prepend(tr);
+  bindPillsBehavior(tr);
+  document.getElementById("new-role").onchange = (e)=>{
+    const isUserRole = e.target.value === "user";
+    tr.querySelectorAll(".ch-pill").forEach(p => p.classList.toggle("disabled", !isUserRole));
+    tr.querySelectorAll(".ch-pill input").forEach(i => i.disabled = !isUserRole);
+  };
   document.getElementById("new-cancel").onclick = ()=>tr.remove();
   document.getElementById("new-save").onclick = async()=>{
     const email = document.getElementById("new-email").value.trim().toLowerCase();
     const pass  = document.getElementById("new-pass").value;
     const role  = document.getElementById("new-role").value;
+    const channels = role === "user" ? readChannels(tr.querySelector(".ch-pills")) : ALL_CH_KEYS.slice();
     if(!email || !pass){ alert("Email y contraseña son obligatorios"); return; }
     if(pass.length < 6){ alert("Mínimo 6 caracteres"); return; }
     if(USERS.some(u => u.email.toLowerCase() === email)){ alert("Ya existe ese email"); return; }
+    if(role === "user" && channels.length === 0){
+      if(!confirm("Este user no tiene canales asignados — no podrá ver nada. ¿Crear igual?")) return;
+    }
 
     let adminPw = ADMIN_PASS;
     if(!adminPw){
@@ -1774,7 +1854,7 @@ function openNewUserRow(){
         body: JSON.stringify({
           adminEmail: SESSION.email,
           adminPassword: adminPw,
-          newUser: { email, password: pass, role },
+          newUser: { email, password: pass, role, channels },
         }),
       });
       const j = await r.json().catch(()=>({error:"respuesta inválida"}));
