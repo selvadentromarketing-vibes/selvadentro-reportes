@@ -81,7 +81,7 @@ function inviteHtml({ email, password, role, channels, siteUrl }) {
     String(s).replace(/[&<>"']/g, (c) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
     );
-  const NAMES = { brokers:"Brokers", paid_organico:"Paid Orgánico", seminarios:"Seminarios", referidos:"Referidos", pd_leads:"PD Leads", pd_brokers:"PD Brokers", rp_vip:"RP VIP" };
+  const NAMES = { brokers:"Brokers", paid_organico:"Paid Orgánico", seminarios:"Seminarios", referidos:"Referidos", pd_leads:"PD Leads", pd_brokers:"PD Brokers", rp_vip:"RP VIP", direccion_general:"Dir. General", direccion_comercial:"Dir. Comercial" };
   const chsList = role === "admin"
     ? "todos"
     : (channels && channels.length ? channels.map(c => NAMES[c] || c).join(", ") : "ninguno aún");
@@ -132,7 +132,7 @@ exports.handler = async (event) => {
   if (newUser.password.length < 6)
     return json(400, { error: "Contraseña del nuevo user demasiado corta" });
   const role = newUser.role === "admin" ? "admin" : "user";
-  const ALL_CH = ["brokers","paid_organico","seminarios","referidos","pd_leads","pd_brokers","rp_vip"];
+  const ALL_CH = ["brokers","paid_organico","seminarios","referidos","pd_leads","pd_brokers","rp_vip","direccion_general","direccion_comercial"];
   let channels = Array.isArray(newUser.channels) ? newUser.channels.filter(c => ALL_CH.includes(c)) : [];
   if (role === "admin") channels = ALL_CH.slice();
 

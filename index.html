@@ -1492,9 +1492,12 @@ async function init(){
   // 1) Contenido instantáneo: llena el caché desde la semilla (síncrono) y pinta Dirección General de inmediato
   SEEDMAP = buildSeedMap();
   for(const k in SEEDMAP){ if(!(k in RECCACHE)) RECCACHE[k]=SEEDMAP[k]; }
-  await switchChannel(Object.keys(CHANNELS)[0] || "brokers");
+  const firstCh = Object.keys(CHANNELS)[0];
+  if(firstCh){ await switchChannel(firstCh); }
   document.querySelector(".canal-wrap").style.display="none";
-  await showResultados();
+  const activeView = document.querySelector(".view.active");
+  if(activeView?.id === "view-dircom") await showDirCom();
+  else if(activeView?.id === "view-resultados") await showResultados();
 
   // 2) En segundo plano: carga datos guardados (autoridad), persiste semillas faltantes y re-pinta si cambió algo
   (async()=>{
@@ -1518,8 +1521,10 @@ let SESSION = null;       // { email, role }
 let USERS = [];           // [{ email, salt, hash, role, channels }]
 let ADMIN_PASS = null;    // password en memoria sólo (se pierde al recargar) — para llamar a la Netlify Function
 
-const ALL_CH_KEYS  = ["brokers","paid_organico","seminarios","referidos","pd_leads","pd_brokers","rp_vip"];
-const ALL_CH_NAMES = { brokers:"Brokers", paid_organico:"Paid Orgánico", seminarios:"Seminarios", referidos:"Referidos", pd_leads:"PD Leads", pd_brokers:"PD Brokers", rp_vip:"RP VIP" };
+const DATA_CH_KEYS = ["brokers","paid_organico","seminarios","referidos","pd_leads","pd_brokers","rp_vip"];
+const DIR_TABS = { direccion_general:"resultados", direccion_comercial:"dircom" };
+const ALL_CH_KEYS  = [...DATA_CH_KEYS, ...Object.keys(DIR_TABS)];
+const ALL_CH_NAMES = { brokers:"Brokers", paid_organico:"Paid Orgánico", seminarios:"Seminarios", referidos:"Referidos", pd_leads:"PD Leads", pd_brokers:"PD Brokers", rp_vip:"RP VIP", direccion_general:"Dir. General", direccion_comercial:"Dir. Comercial" };
 
 function userChannelsOf(email){
   const u = USERS.find(x => x.email.toLowerCase() === (email||"").toLowerCase());
@@ -1530,6 +1535,28 @@ function applyChannelFilter(){
   const allowed = new Set(userChannelsOf(SESSION.email));
   for(const k of Object.keys(CHANNELS)){
     if(!allowed.has(k)) delete CHANNELS[k];
+  }
+  // Tabs sintéticos (reportes consolidados de dirección)
+  let activeHidden = false;
+  for(const [chKey, tab] of Object.entries(DIR_TABS)){
+    if(!allowed.has(chKey)){
+      const el = document.querySelector(`.tab[data-tab="${tab}"]`);
+      if(el){
+        el.style.display = "none";
+        if(el.classList.contains("active")){
+          el.classList.remove("active");
+          document.getElementById("view-"+tab)?.classList.remove("active");
+          activeHidden = true;
+        }
+      }
+    }
+  }
+  if(activeHidden){
+    const firstVisible = [...document.querySelectorAll(".tabs .tab")].find(t => t.style.display !== "none");
+    if(firstVisible){
+      firstVisible.classList.add("active");
+      document.getElementById("view-"+firstVisible.dataset.tab)?.classList.add("active");
+    }
   }
 }
 function showNoAccessScreen(){
@@ -1595,7 +1622,7 @@ async function onAuthenticated(){
   document.getElementById("app").style.display = "";
   applyUserBadge();
   applyChannelFilter();
-  if(Object.keys(CHANNELS).length === 0){ showNoAccessScreen(); return; }
+  if(!isAdmin() && userChannelsOf(SESSION.email).length === 0){ showNoAccessScreen(); return; }
   await init();
 }
 
