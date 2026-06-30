@@ -245,6 +245,14 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   tr.dragging{ opacity:.4; }
   .section.drop-target{ outline:2px dashed var(--cobre); outline-offset:-2px; background:rgba(207,133,67,0.05); }
   .section.drop-target h3{ background:var(--cobre); }
+  /* drag y rename de secciones */
+  .meta-section.dragging-section{ opacity:.4; }
+  .meta-section.drop-section-before{ border-top:3px solid var(--cobre); margin-top:-3px; }
+  .meta-section .section-drag{ display:inline-block; width:18px; color:var(--logo); cursor:grab; opacity:.75; user-select:none; font-size:16px; line-height:1; margin-right:4px; }
+  .meta-section .section-drag:hover{ opacity:1; color:#fff; }
+  .meta-section h3 .section-title-input{ background:transparent; border:1px solid transparent; color:#fff; font-family:var(--serif); font-size:16px; font-weight:700; padding:2px 8px; border-radius:6px; min-width:200px; }
+  .meta-section h3 .section-title-input:hover{ border-color:rgba(255,255,255,.3); }
+  .meta-section h3 .section-title-input:focus{ outline:none; border-color:#fff; background:rgba(255,255,255,.1); }
   .ch-pills{ display:flex; flex-wrap:wrap; gap:5px 6px; max-width:360px; }
   .ch-pill{ display:inline-flex; align-items:center; gap:5px; font-size:11px; padding:3px 8px; border-radius:14px; border:1px solid var(--linea); background:var(--crema); cursor:pointer; user-select:none; }
   .ch-pill input{ accent-color:var(--olivo); }
@@ -1409,39 +1417,60 @@ function setMetaField(ch, fk, key, value){
   }
 }
 
+const META_RESERVED = new Set(["__custom","__section_order","__section_labels"]);
 function applyMetas(){
   for(const ch in META_OVERRIDES){
     const c=CHANNELS[ch]; if(!c) continue;
+    // 0) Asignar __id canónico (estable, no cambia al renombrar)
+    c.sections.forEach(s => { if(!s.__id) s.__id = s.title; });
     // 1) Quitar sección "Personalizados" previa y limpiar custom de secciones nativas
     c.sections = c.sections.filter(s => !s.__personalizados);
     c.sections.forEach(s => { s.fields = s.fields.filter(f => !f.__custom); });
     // 2) Aplicar overrides de label/meta a campos existentes
     const fmap={}; c.sections.forEach(s=>s.fields.forEach(f=>fmap[f.k]=f));
     for(const fk in META_OVERRIDES[ch]){
-      if(fk === "__custom") continue;
+      if(META_RESERVED.has(fk)) continue;
       const m = getMeta(ch, fk);
       if(fmap[fk]){
         if(m.meta_num !== null) fmap[fk].meta = m.meta_num;
         if(m.label) fmap[fk].l = m.label;
       }
     }
-    // 3) Distribuir KPIs personalizados a sus secciones target (o a "KPIs personalizados" si no asignados)
+    // 3) Aplicar renames de secciones (override de title; __id no cambia)
+    const sLabels = META_OVERRIDES[ch].__section_labels || {};
+    c.sections.forEach(s => {
+      s.title = sLabels[s.__id] || s.__id;
+    });
+    // 4) Distribuir KPIs personalizados — match por __id (que es lo guardado en ck.section)
     const custom = META_OVERRIDES[ch].__custom;
     if(Array.isArray(custom)){
-      const sectionMap = {};
-      c.sections.forEach(s => sectionMap[s.title] = s);
+      const sectionByIdMap = {};
+      c.sections.forEach(s => sectionByIdMap[s.__id] = s);
       const unassigned = [];
       for(const ck of custom){
         const field = { k: ck.k, l: ck.l, meta: ck.meta_num ?? null, __custom: true };
-        if(ck.section && sectionMap[ck.section]){
-          sectionMap[ck.section].fields.push(field);
+        if(ck.section && sectionByIdMap[ck.section]){
+          sectionByIdMap[ck.section].fields.push(field);
         } else {
           unassigned.push(field);
         }
       }
       if(unassigned.length){
-        c.sections.push({ title: "KPIs personalizados", fields: unassigned, __personalizados: true });
+        const personId = "KPIs personalizados";
+        c.sections.push({ title: sLabels[personId] || personId, __id: personId, fields: unassigned, __personalizados: true });
       }
+    }
+    // 5) Aplicar reorden persistido (basado en __id)
+    const order = META_OVERRIDES[ch].__section_order || [];
+    if(order.length){
+      c.sections.sort((a,b)=>{
+        const ai = order.indexOf(a.__id);
+        const bi = order.indexOf(b.__id);
+        if(ai === -1 && bi === -1) return 0;
+        if(ai === -1) return 1;
+        if(bi === -1) return -1;
+        return ai - bi;
+      });
     }
   }
 }
@@ -1480,8 +1509,12 @@ function renderMetasBody(ch){
       }
       return metaRowHtml(ch, f.k, m.label || f.l, m, isFieldCustom, !!f.money);
     }).join("");
-    return `<div class="section meta-section" data-section-title="${escAttr(s.title)}">
-      <h3><span class="dot"></span>${s.title}</h3>
+    return `<div class="section meta-section" data-section-id="${escAttr(s.__id)}" data-section-title="${escAttr(s.__id)}">
+      <h3>
+        <span class="section-drag" title="Arrastra para reordenar" draggable="true">⠿</span>
+        <span class="dot"></span>
+        <input class="section-title-input" type="text" value="${escAttr(s.title)}" data-section-id="${escAttr(s.__id)}">
+      </h3>
       <div class="fields">
         <table class="metas-table">
           <thead><tr><th>Nombre del KPI</th><th class="right">Meta numérica</th><th class="right">Meta %</th><th></th></tr></thead>
@@ -1596,45 +1629,109 @@ function renderMetasBody(ch){
     renderMetasBody(ch);
   };
 
-  // --- Drag and drop de KPIs custom entre secciones ---
+  // --- Drag de KPIs custom ---
   body.querySelectorAll('tr[data-custom="1"]').forEach(tr=>{
     tr.ondragstart = (e)=>{
-      e.dataTransfer.setData("text/plain", JSON.stringify({ ch: tr.dataset.ch, fk: tr.dataset.k }));
+      e.dataTransfer.setData("text/plain", JSON.stringify({ type:"kpi", ch: tr.dataset.ch, fk: tr.dataset.k }));
       e.dataTransfer.effectAllowed = "move";
       tr.classList.add("dragging");
     };
     tr.ondragend = ()=>{
       tr.classList.remove("dragging");
-      body.querySelectorAll(".meta-section.drop-target").forEach(s=>s.classList.remove("drop-target"));
+      body.querySelectorAll(".meta-section.drop-target,.meta-section.drop-section-before").forEach(s=>s.classList.remove("drop-target","drop-section-before"));
     };
   });
+
+  // --- Drag de secciones (handle ⠿) ---
+  body.querySelectorAll(".meta-section .section-drag").forEach(handle=>{
+    handle.ondragstart = (e)=>{
+      const sec = handle.closest(".meta-section");
+      e.dataTransfer.setData("text/plain", JSON.stringify({ type:"section", ch, id: sec.dataset.sectionId }));
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setDragImage(sec, 20, 20);
+      sec.classList.add("dragging-section");
+    };
+    handle.ondragend = ()=>{
+      body.querySelectorAll(".dragging-section,.drop-section-before,.drop-target").forEach(s=>s.classList.remove("dragging-section","drop-section-before","drop-target"));
+    };
+  });
+
+  // --- Drop targets: cada sección recibe drops de KPI o de reorder ---
   body.querySelectorAll(".meta-section").forEach(sec=>{
     sec.ondragover = (e)=>{
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
-      sec.classList.add("drop-target");
+      // Decidir feedback visual según lo que se está arrastrando
+      const draggingSec = body.querySelector(".dragging-section");
+      if(draggingSec && draggingSec !== sec){
+        body.querySelectorAll(".drop-section-before").forEach(s=>s.classList.remove("drop-section-before"));
+        sec.classList.add("drop-section-before");
+      } else if(!draggingSec){
+        sec.classList.add("drop-target");
+      }
     };
     sec.ondragleave = (e)=>{
-      // Solo quitar si salimos de la sección por completo
-      if(!sec.contains(e.relatedTarget)) sec.classList.remove("drop-target");
+      if(!sec.contains(e.relatedTarget)){
+        sec.classList.remove("drop-target","drop-section-before");
+      }
     };
     sec.ondrop = async(e)=>{
       e.preventDefault();
-      sec.classList.remove("drop-target");
+      sec.classList.remove("drop-target","drop-section-before");
       let data;
       try{ data = JSON.parse(e.dataTransfer.getData("text/plain")); }catch{ return; }
-      const targetTitle = sec.dataset.sectionTitle;
-      if(!targetTitle) return;
-      const arr = META_OVERRIDES[data.ch]?.__custom || [];
-      const item = arr.find(x => x.k === data.fk);
-      if(!item) return;
-      // Si la target es "KPIs personalizados" (sin section asignada), borramos el campo
-      item.section = targetTitle === "KPIs personalizados" ? null : targetTitle;
+
+      if(data.type === "kpi"){
+        const targetId = sec.dataset.sectionId;
+        if(!targetId) return;
+        const arr = META_OVERRIDES[data.ch]?.__custom || [];
+        const item = arr.find(x => x.k === data.fk);
+        if(!item) return;
+        item.section = targetId === "KPIs personalizados" ? null : targetId;
+        applyMetas();
+        await saveMetas();
+        toast(`KPI movido ✓`);
+        renderMetasBody(data.ch);
+      }
+      else if(data.type === "section"){
+        if(data.id === sec.dataset.sectionId) return; // self-drop
+        const cc = CHANNELS[data.ch]; if(!cc) return;
+        // Reordenar in-memory: sacar la sección dragged, insertarla antes de la target
+        const draggedIdx = cc.sections.findIndex(s => s.__id === data.id);
+        const targetIdx  = cc.sections.findIndex(s => s.__id === sec.dataset.sectionId);
+        if(draggedIdx === -1 || targetIdx === -1) return;
+        const [moved] = cc.sections.splice(draggedIdx, 1);
+        // Si dragged estaba antes del target, el índice del target bajó en 1
+        const insertAt = draggedIdx < targetIdx ? targetIdx - 1 : targetIdx;
+        cc.sections.splice(insertAt, 0, moved);
+        // Persistir orden
+        META_OVERRIDES[data.ch] = META_OVERRIDES[data.ch] || {};
+        META_OVERRIDES[data.ch].__section_order = cc.sections.map(s => s.__id);
+        await saveMetas();
+        toast(`Sección reordenada ✓`);
+        renderMetasBody(data.ch);
+      }
+    };
+  });
+
+  // --- Rename de secciones (input en el h3) ---
+  body.querySelectorAll(".section-title-input").forEach(inp=>{
+    inp.onchange = async()=>{
+      const id = inp.dataset.sectionId;
+      const newLabel = inp.value.trim();
+      META_OVERRIDES[ch] = META_OVERRIDES[ch] || {};
+      META_OVERRIDES[ch].__section_labels = META_OVERRIDES[ch].__section_labels || {};
+      if(newLabel === "" || newLabel === id){
+        delete META_OVERRIDES[ch].__section_labels[id];
+      } else {
+        META_OVERRIDES[ch].__section_labels[id] = newLabel;
+      }
       applyMetas();
       await saveMetas();
-      toast(`Movido a "${targetTitle}" ✓`);
-      renderMetasBody(data.ch);
+      toast("Sección renombrada ✓");
     };
+    // No queremos que el clic en el input dispare el drag del handle
+    inp.onmousedown = (e)=>e.stopPropagation();
   });
 }
 
