@@ -1417,7 +1417,7 @@ function setMetaField(ch, fk, key, value){
   }
 }
 
-const META_RESERVED = new Set(["__custom","__section_order","__section_labels"]);
+const META_RESERVED = new Set(["__custom","__section_order","__section_labels","__field_sections"]);
 function applyMetas(){
   for(const ch in META_OVERRIDES){
     const c=CHANNELS[ch]; if(!c) continue;
@@ -1460,7 +1460,26 @@ function applyMetas(){
         c.sections.push({ title: sLabels[personId] || personId, __id: personId, fields: unassigned, __personalizados: true });
       }
     }
-    // 5) Aplicar reorden persistido (basado en __id)
+    // 5) Aplicar __field_sections: mover KPIs (nativos o custom) a su sección destino
+    const fieldSections = META_OVERRIDES[ch].__field_sections || {};
+    if(Object.keys(fieldSections).length){
+      const sByIdMap = {};
+      c.sections.forEach(s => sByIdMap[s.__id] = s);
+      const moves = [];
+      for(const s of c.sections){
+        for(const f of s.fields){
+          const tgt = fieldSections[f.k];
+          if(tgt && sByIdMap[tgt] && sByIdMap[tgt] !== s){
+            moves.push({ field: f, from: s, to: sByIdMap[tgt] });
+          }
+        }
+      }
+      for(const m of moves){
+        m.from.fields = m.from.fields.filter(f => f.k !== m.field.k);
+        m.to.fields.push(m.field);
+      }
+    }
+    // 6) Aplicar reorden persistido (basado en __id)
     const order = META_OVERRIDES[ch].__section_order || [];
     if(order.length){
       c.sections.sort((a,b)=>{
@@ -1483,9 +1502,8 @@ function renderMetas(){
 function metaRowHtml(ch, fk, label, m, isCustom, money){
   const numV = m.meta_num != null ? m.meta_num : "";
   const pctV = m.meta_pct != null ? m.meta_pct : "";
-  const dragHandle = isCustom ? '<span class="meta-drag" title="Arrastra a otra sección">⠿</span>' : '';
-  return `<tr data-ch="${ch}" data-k="${fk}" data-custom="${isCustom?1:0}" ${isCustom?'draggable="true"':''}>
-    <td>${dragHandle}<input class="meta-name" type="text" value="${escAttr(label)}${money?' ($)':''}" data-orig="${escAttr(label)}" style="width:calc(100% - 28px)"></td>
+  return `<tr data-ch="${ch}" data-k="${fk}" data-custom="${isCustom?1:0}" draggable="true">
+    <td><span class="meta-drag" title="Arrastra a otra sección">⠿</span><input class="meta-name" type="text" value="${escAttr(label)}${money?' ($)':''}" data-orig="${escAttr(label)}" style="width:calc(100% - 28px)"></td>
     <td class="right"><input class="meta-num" type="number" step="${money?'0.01':'1'}" placeholder="—" value="${numV}"></td>
     <td class="right"><span class="meta-pct-wrap"><input class="meta-pct" type="number" step="0.01" placeholder="—" value="${pctV}"><span>%</span></span></td>
     <td class="right">${isCustom?'<button class="meta-del" type="button" title="Borrar KPI">Borrar</button>':''}</td>
@@ -1525,21 +1543,25 @@ function renderMetasBody(ch){
   }).join("");
 
   // Fila/form para agregar KPI personalizado
+  const sectionsForSelect = c.sections.filter(s => !s.__personalizados);
+  const sectionOptions = `<option value="">(KPIs personalizados — sin sección asignada)</option>` +
+    sectionsForSelect.map(s => `<option value="${escAttr(s.__id)}">${escAttr(s.title)}</option>`).join("");
   const addHtml = `<div class="section">
     <h3><span class="dot"></span>Agregar KPI personalizado</h3>
     <div class="fields">
       <table class="metas-table">
-        <thead><tr><th>Nombre del KPI</th><th class="right">Meta numérica</th><th class="right">Meta %</th><th></th></tr></thead>
+        <thead><tr><th>Nombre del KPI</th><th>Sección destino</th><th class="right">Meta numérica</th><th class="right">Meta %</th><th></th></tr></thead>
         <tbody>
           <tr class="add-kpi-row" data-ch="${ch}">
             <td><input class="meta-name" id="new-kpi-name" type="text" placeholder="Ej. Llamadas semanales"></td>
+            <td><select id="new-kpi-section" class="meta-num" style="width:auto; min-width:180px; text-align:left;">${sectionOptions}</select></td>
             <td class="right"><input class="meta-num" id="new-kpi-num" type="number" step="1" placeholder="—"></td>
             <td class="right"><span class="meta-pct-wrap"><input class="meta-pct" id="new-kpi-pct" type="number" step="0.01" placeholder="—"><span>%</span></span></td>
             <td class="right"><button class="btn btn-primary" id="new-kpi-save" type="button">Guardar KPI</button></td>
           </tr>
         </tbody>
       </table>
-      <p class="hint">Los KPIs personalizados aparecen en Ingreso de datos, Reportes y Base de datos del canal seleccionado.</p>
+      <p class="hint">Los KPIs personalizados aparecen en Ingreso de datos, Reportes y Base de datos del canal seleccionado. Puedes elegir su sección destino o dejarlo sin asignar.</p>
     </div>
   </div>`;
 
@@ -1611,9 +1633,10 @@ function renderMetasBody(ch){
 
   // --- Handler para agregar nuevo KPI ---
   document.getElementById("new-kpi-save").onclick = async()=>{
-    const name = document.getElementById("new-kpi-name").value.trim();
-    const num  = document.getElementById("new-kpi-num").value.trim();
-    const pct  = document.getElementById("new-kpi-pct").value.trim();
+    const name    = document.getElementById("new-kpi-name").value.trim();
+    const num     = document.getElementById("new-kpi-num").value.trim();
+    const pct     = document.getElementById("new-kpi-pct").value.trim();
+    const secId   = document.getElementById("new-kpi-section").value || null;
     if(!name){ alert("Pon un nombre para el KPI"); return; }
     const k = "custom_" + name.toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"").slice(0,40) + "_" + Math.random().toString(36).slice(2,6);
     META_OVERRIDES[ch] = META_OVERRIDES[ch] || {};
@@ -1622,17 +1645,18 @@ function renderMetasBody(ch){
       k, l: name,
       meta_num: num === "" ? null : Number(num),
       meta_pct: pct === "" ? null : Number(pct),
+      section: secId,
     });
     applyMetas();
     await saveMetas();
-    toast("KPI agregado ✓");
+    toast(`KPI agregado${secId ? ` en "${secId}"` : ""} ✓`);
     renderMetasBody(ch);
   };
 
-  // --- Drag de KPIs custom ---
-  body.querySelectorAll('tr[data-custom="1"]').forEach(tr=>{
+  // --- Drag de TODOS los KPIs (nativos + custom) ---
+  body.querySelectorAll('tr[data-k]').forEach(tr=>{
     tr.ondragstart = (e)=>{
-      e.dataTransfer.setData("text/plain", JSON.stringify({ type:"kpi", ch: tr.dataset.ch, fk: tr.dataset.k }));
+      e.dataTransfer.setData("text/plain", JSON.stringify({ type:"kpi", ch: tr.dataset.ch, fk: tr.dataset.k, isCustom: tr.dataset.custom === "1" }));
       e.dataTransfer.effectAllowed = "move";
       tr.classList.add("dragging");
     };
@@ -1684,10 +1708,15 @@ function renderMetasBody(ch){
       if(data.type === "kpi"){
         const targetId = sec.dataset.sectionId;
         if(!targetId) return;
-        const arr = META_OVERRIDES[data.ch]?.__custom || [];
-        const item = arr.find(x => x.k === data.fk);
-        if(!item) return;
-        item.section = targetId === "KPIs personalizados" ? null : targetId;
+        META_OVERRIDES[data.ch] = META_OVERRIDES[data.ch] || {};
+        META_OVERRIDES[data.ch].__field_sections = META_OVERRIDES[data.ch].__field_sections || {};
+        META_OVERRIDES[data.ch].__field_sections[data.fk] = targetId;
+        // Para custom KPIs también actualizamos su ck.section por consistencia
+        if(data.isCustom){
+          const arr = META_OVERRIDES[data.ch].__custom || [];
+          const item = arr.find(x => x.k === data.fk);
+          if(item) item.section = targetId === "KPIs personalizados" ? null : targetId;
+        }
         applyMetas();
         await saveMetas();
         toast(`KPI movido ✓`);
