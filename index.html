@@ -1417,7 +1417,7 @@ function setMetaField(ch, fk, key, value){
   }
 }
 
-const META_RESERVED = new Set(["__custom","__section_order","__section_labels","__field_sections","__custom_sections"]);
+const META_RESERVED = new Set(["__custom","__section_order","__section_labels","__field_sections","__custom_sections","__hidden_fields"]);
 function applyMetas(){
   for(const ch in META_OVERRIDES){
     const c=CHANNELS[ch]; if(!c) continue;
@@ -1426,6 +1426,14 @@ function applyMetas(){
     // 1) Quitar sección "Personalizados" previa y limpiar custom de secciones nativas
     c.sections = c.sections.filter(s => !s.__personalizados);
     c.sections.forEach(s => { s.fields = s.fields.filter(f => !f.__custom); });
+    // 1b) Ocultar KPIs nativos marcados como borrados (histórico se preserva en records)
+    const hidden = META_OVERRIDES[ch].__hidden_fields;
+    if(hidden && typeof hidden === "object"){
+      const hiddenKeys = new Set(Object.keys(hidden));
+      if(hiddenKeys.size){
+        c.sections.forEach(s => { s.fields = s.fields.filter(f => !hiddenKeys.has(f.k)); });
+      }
+    }
     // 2) Aplicar overrides de label/meta a campos existentes
     const fmap={}; c.sections.forEach(s=>s.fields.forEach(f=>fmap[f.k]=f));
     for(const fk in META_OVERRIDES[ch]){
@@ -1513,7 +1521,7 @@ function metaRowHtml(ch, fk, label, m, isCustom, money){
     <td><span class="meta-drag" title="Arrastra a otra sección">⠿</span><input class="meta-name" type="text" value="${escAttr(label)}${money?' ($)':''}" data-orig="${escAttr(label)}" style="width:calc(100% - 28px)"></td>
     <td class="right"><input class="meta-num" type="number" step="${money?'0.01':'1'}" placeholder="—" value="${numV}"></td>
     <td class="right"><span class="meta-pct-wrap"><input class="meta-pct" type="number" step="0.01" placeholder="—" value="${pctV}"><span>%</span></span></td>
-    <td class="right">${isCustom?'<button class="meta-del" type="button" title="Borrar KPI">Borrar</button>':''}</td>
+    <td class="right"><button class="meta-del" type="button" title="Borrar KPI">Borrar</button></td>
   </tr>`;
 }
 
@@ -1586,7 +1594,36 @@ function renderMetasBody(ch){
     </div>
   </div>`;
 
-  body.innerHTML = sectionsHtml + createSecHtml + addHtml;
+  // Sección "KPIs eliminados" — permite restaurar KPIs nativos borrados
+  const hiddenMap = (META_OVERRIDES[ch] && META_OVERRIDES[ch].__hidden_fields) || {};
+  const hiddenEntries = Object.entries(hiddenMap);
+  const hiddenHtml = hiddenEntries.length ? `<div class="section">
+    <h3><span class="dot"></span>KPIs eliminados</h3>
+    <div class="fields" style="padding:14px 20px 18px;">
+      <p class="hint" style="margin-top:0;">Estos KPIs se ocultaron pero conservan sus datos históricos. Restaurar los vuelve a mostrar en Ingreso de datos, Reportes y Base de datos.</p>
+      <ul style="list-style:none; padding:0; margin:6px 0 0; display:flex; flex-direction:column; gap:6px;">
+        ${hiddenEntries.map(([k,l])=>`<li style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--crema-2); border:1px solid var(--linea); border-radius:8px; padding:8px 12px;"><span>${escAttr(l)}</span><button class="btn" data-restore-key="${escAttr(k)}" type="button" style="padding:5px 12px; font-size:12.5px;">Restaurar</button></li>`).join("")}
+      </ul>
+    </div>
+  </div>` : "";
+
+  body.innerHTML = sectionsHtml + createSecHtml + addHtml + hiddenHtml;
+
+  // --- Handler para restaurar KPIs nativos eliminados ---
+  body.querySelectorAll("[data-restore-key]").forEach(btn=>{
+    btn.onclick = async()=>{
+      const k = btn.dataset.restoreKey;
+      if(META_OVERRIDES[ch] && META_OVERRIDES[ch].__hidden_fields){
+        delete META_OVERRIDES[ch].__hidden_fields[k];
+        if(!Object.keys(META_OVERRIDES[ch].__hidden_fields).length){
+          delete META_OVERRIDES[ch].__hidden_fields;
+        }
+      }
+      await saveMetas();
+      toast("KPI restaurado — recargando…");
+      setTimeout(()=>location.reload(), 400);
+    };
+  });
 
   // --- Handlers para filas existentes ---
   body.querySelectorAll("tr[data-k]").forEach(tr=>{
@@ -1643,7 +1680,13 @@ function renderMetasBody(ch){
     if(delBtn){
       delBtn.onclick = async()=>{
         if(!confirm(`¿Borrar el KPI "${nameInp.value}"? Los datos históricos quedan en kv pero el campo deja de aparecer.`)) return;
-        META_OVERRIDES[chK].__custom = (META_OVERRIDES[chK].__custom||[]).filter(x => x.k !== fk);
+        if(isCustom){
+          META_OVERRIDES[chK].__custom = (META_OVERRIDES[chK].__custom||[]).filter(x => x.k !== fk);
+        } else {
+          META_OVERRIDES[chK] = META_OVERRIDES[chK] || {};
+          META_OVERRIDES[chK].__hidden_fields = META_OVERRIDES[chK].__hidden_fields || {};
+          META_OVERRIDES[chK].__hidden_fields[fk] = nameInp.value.trim() || fk;
+        }
         applyMetas();
         await saveMetas();
         toast("KPI borrado");
