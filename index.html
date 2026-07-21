@@ -327,7 +327,6 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
       <img id="brand-logo" alt="Selvadentro · tierra de cenotes">
       <span class="name" id="brand-text-name">Selvadentro</span>
       <span class="sub" id="brand-text-sub">tierra de cenotes</span>
-      <input type="file" id="logo-file" accept="image/*" style="display:none">
     </div>
     <div class="app-title">
       <div class="t1">Sistema de Reportes</div>
@@ -1218,16 +1217,50 @@ async function loadLogo(){
   img.onload=show; img.onerror=()=>{ img.style.display="none"; };
   img.src="https://assets.cdn.filesafe.space/crN2IhAuOBAl7D8324yI/media/68a8b604cfc34e61b85396bf.png";
 }
-function setupLogoUpload(){
-  const brand=document.getElementById("brand"), input=document.getElementById("logo-file"), img=document.getElementById("brand-logo");
-  brand.addEventListener("click",()=>input.click());
-  input.addEventListener("click",e=>e.stopPropagation());
-  input.addEventListener("change",e=>{
-    const file=e.target.files[0]; if(!file) return;
-    const r=new FileReader();
-    r.onload=async()=>{ const data=r.result; img.src=data; img.style.display="block"; document.getElementById("brand-text-name").style.display="none"; document.getElementById("brand-text-sub").style.display="none"; try{ await sSet("selvadentro:logo",{data}); }catch(err){} toast("Logo actualizado ✓"); };
-    r.readAsDataURL(file);
+const BRAND_PHRASES = [
+  "La selva no compite. Crece.",
+  "Cada lote apartado empezó con un mensaje bien enviado.",
+  "Tulum no se construye en un día. Ni un cierre se hace en un click.",
+  "El WON de hoy fue el lead de hace dos meses. Sigue sembrando.",
+  "En la selva el que va solo llega más rápido, el que va en manada llega más lejos.",
+  "Los grandes cerradores fueron una vez principiantes con paciencia.",
+  "La constancia es la magia disfrazada de trabajo.",
+  "El bosque más frondoso comenzó con una semilla.",
+  "Cada 'no' te acerca al 'sí' que estás buscando.",
+  "No vendemos lotes. Vendemos horizontes.",
+  "Selvadentro se construye una decisión a la vez.",
+  "La disciplina vence al talento cuando el talento no se disciplina.",
+  "El mejor recorrido es el que empieza con una historia bien contada.",
+  "Un broker feliz vale más que diez leads fríos.",
+  "Riega tu pipeline como riegas la selva: con paciencia y ritmo.",
+  "El sol sale para todos, pero el que madruga lo aprovecha.",
+  "Cada semana es una semilla. Cuida qué siembras.",
+  "La calma del cenote esconde una fuerza tremenda. Como tu equipo.",
+  "Los cierres no se persiguen. Se preparan.",
+  "Tu próximo apartado ya está en tu CRM. Solo tienes que llamarlo."
+];
+function setupBrandPhrase(){
+  const brand=document.getElementById("brand");
+  if(!brand) return;
+  brand.style.cursor="pointer";
+  brand.title="Click para una dosis de energía";
+  brand.addEventListener("click",()=>{
+    const phrase = BRAND_PHRASES[Math.floor(Math.random()*BRAND_PHRASES.length)];
+    showPhrase(phrase);
   });
+}
+function showPhrase(text){
+  let el = document.getElementById("brand-phrase-pop");
+  if(!el){
+    el = document.createElement("div");
+    el.id = "brand-phrase-pop";
+    el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(.9);background:var(--verde-prof);color:var(--crema);padding:28px 36px;border-radius:16px;border-left:5px solid var(--cobre);box-shadow:0 20px 60px rgba(0,0,0,.35);font-family:var(--serif);font-style:italic;font-size:22px;line-height:1.4;max-width:520px;text-align:center;z-index:300;opacity:0;transition:all .35s cubic-bezier(.2,.9,.3,1.4);pointer-events:none;";
+    document.body.appendChild(el);
+  }
+  el.textContent = "“" + text + "”";
+  requestAnimationFrame(()=>{ el.style.opacity="1"; el.style.transform="translate(-50%,-50%) scale(1)"; });
+  clearTimeout(el._t);
+  el._t = setTimeout(()=>{ el.style.opacity="0"; el.style.transform="translate(-50%,-50%) scale(.9)"; }, 3500);
 }
 
 /* ===================== UI ===================== */
@@ -2324,7 +2357,7 @@ async function switchChannel(ch){
 }
 
 async function init(){
-  setupLogoUpload(); loadLogo();
+  setupBrandPhrase(); loadLogo();
   const sel=document.getElementById("canal-select");
   sel.innerHTML=Object.keys(CHANNELS).map(k=>`<option value="${k}">${CHANNELS[k].name}</option>`).join("");
   sel.addEventListener("change",()=>switchChannel(sel.value));
