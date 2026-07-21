@@ -51,6 +51,14 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .anal-conc{ margin-top:14px; padding:14px 16px; background:var(--crema-2); border:1px solid var(--linea); border-radius:10px; font-size:13.5px; line-height:1.5; color:var(--texto); white-space:pre-wrap; }
   .anal-conc.loading{ color:var(--neutro); font-style:italic; }
   .anal-empty{ background:var(--crema-2); border:1px dashed var(--linea); border-radius:10px; padding:22px; text-align:center; color:var(--neutro); grid-column:1/-1; }
+  .anal-notes-card{ background:#fff; border:1px solid var(--linea); border-radius:12px; padding:18px 20px; margin-top:22px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .anal-notes-card h3{ font-family:var(--serif); font-size:20px; color:var(--verde-prof); margin:0 0 4px; }
+  .anal-notes-card .anal-notes-sub{ font-size:12.5px; color:var(--neutro); margin-bottom:14px; }
+  .anal-notes-list{ display:flex; flex-direction:column; gap:12px; max-height:420px; overflow-y:auto; padding-right:6px; }
+  .anal-note-entry{ background:var(--crema); border:1px solid var(--linea); border-radius:10px; padding:11px 14px; }
+  .anal-note-entry .ane-head{ font-size:12px; font-weight:700; color:var(--olivo); margin-bottom:5px; }
+  .anal-note-entry .ane-line{ font-size:13px; line-height:1.45; margin-top:3px; color:var(--texto); }
+  .anal-note-entry .ane-lbl{ font-weight:700; color:var(--verde-prof); margin-right:4px; }
   .canal-wrap{ margin-left:auto; display:flex; align-items:center; gap:9px; }
   .canal-wrap .lbl{ font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--neutro); font-weight:700; }
   #canal-select{ font-family:var(--sans); font-weight:600; font-size:12.5px; letter-spacing:.4px; color:#fff; background:var(--olivo); border:none; border-radius:20px; padding:8px 16px; cursor:pointer; }
@@ -436,6 +444,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
     <div class="view" id="view-analitica">
       <p class="hint">Dashboard de KPIs del canal. Clic en una tarjeta para expandir y pedir conclusión con IA.</p>
       <div id="anal-grid" class="anal-grid"></div>
+      <div id="anal-notes"></div>
     </div>
 
     <!-- ============ RESULTADOS (DIRECCIÓN GENERAL) ============ -->
@@ -1576,8 +1585,88 @@ function renderDirAnalitica(prefix, chsSel, weekSet, tabName){
       finally { btn.disabled = false; }
     };
   });
+  // Notas cualitativas agregadas
+  const notes = collectDirNotes(chsSel, weekSet);
+  let notesHost = document.getElementById(`${prefix}-notes`);
+  if(!notesHost){ notesHost = document.createElement("div"); notesHost.id = `${prefix}-notes`; host.parentNode.insertBefore(notesHost, host.nextSibling); }
+  renderNotesSection(notesHost, notes, tabName, NOTES_CACHE[prefix], "notes");
 }
-const ANAL_STATE = { expanded: null, charts: {}, cache: {} };
+const ANAL_STATE = { expanded: null, charts: {}, cache: {}, notesCache: {} };
+const NOTES_CACHE = { res:{}, dc:{}, ch:{} };
+function renderNotesSection(container, entradas, canalName, cacheKeyBucket, cacheKey){
+  if(!container) return;
+  const cache = (cacheKeyBucket && cacheKey!=null) ? cacheKeyBucket[cacheKey] : null;
+  if(!entradas || !entradas.length){
+    container.innerHTML = `<div class="anal-notes-card"><h3>Notas cualitativas del periodo</h3><div class="anal-notes-sub">No hay notas, aprendizajes ni cambios registrados en el rango seleccionado.</div></div>`;
+    return;
+  }
+  const entriesHtml = entradas.map(e => {
+    const head = [e.periodo, e.canal, e.dims, e.responsable?`resp. ${e.responsable}`:null].filter(Boolean).join(" · ");
+    const parts = [];
+    if(e.notas)        parts.push(`<div class="ane-line"><span class="ane-lbl">Notas:</span>${escAttr(e.notas)}</div>`);
+    if(e.aprendizajes) parts.push(`<div class="ane-line"><span class="ane-lbl">Aprendizajes:</span>${escAttr(e.aprendizajes)}</div>`);
+    if(e.cambios)      parts.push(`<div class="ane-line"><span class="ane-lbl">Cambios:</span>${escAttr(e.cambios)}</div>`);
+    return `<div class="anal-note-entry"><div class="ane-head">${head}</div>${parts.join("")}</div>`;
+  }).join("");
+  container.innerHTML = `<div class="anal-notes-card">
+    <h3>Notas cualitativas del periodo</h3>
+    <div class="anal-notes-sub">${entradas.length} registro(s) con texto · ${canalName}</div>
+    <div class="anal-notes-list">${entriesHtml}</div>
+    <div class="anal-actions" style="margin-top:14px"><button class="btn btn-olive" data-analyze-notes>Generar conclusión con IA</button></div>
+    ${cache?`<div class="anal-conc">${cache}</div>`:``}
+  </div>`;
+  const btn = container.querySelector("[data-analyze-notes]");
+  btn.onclick = async ()=>{
+    let conc = container.querySelector(".anal-conc");
+    if(!conc){ conc = document.createElement("div"); conc.className = "anal-conc loading"; conc.textContent = "Sintetizando con IA…"; container.querySelector(".anal-notes-card").appendChild(conc); }
+    else { conc.classList.add("loading"); conc.textContent = "Sintetizando con IA…"; }
+    btn.disabled = true;
+    try{
+      const resp = await fetch("/.netlify/functions/notes-analyze", {
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ canal: canalName, entradas })
+      });
+      const data = await resp.json();
+      if(!resp.ok){ conc.classList.remove("loading"); conc.textContent = "Error: " + (data.error || resp.status); }
+      else {
+        conc.classList.remove("loading"); conc.textContent = data.conclusion || "(sin conclusión)";
+        if(cacheKeyBucket && cacheKey!=null) cacheKeyBucket[cacheKey] = data.conclusion;
+      }
+    } catch(err){ conc.classList.remove("loading"); conc.textContent = "Error de red: " + err.message; }
+    finally { btn.disabled = false; }
+  };
+}
+function collectChannelNotes(chKey){
+  const p = chPrefix(chKey); const keys = recList(p);
+  const out = [];
+  for(const k of keys){
+    const wk = k.slice(p.length).split("__")[0];
+    const rec = recGet(k); if(!rec) continue;
+    if(rec.notas || rec.aprendizajes || rec.cambios){
+      const dv = k.slice(p.length).split("__").slice(1).join(" · ");
+      out.push({ periodo: wk, dims: dv, responsable: rec.responsable||"", notas: rec.notas||"", aprendizajes: rec.aprendizajes||"", cambios: rec.cambios||"" });
+    }
+  }
+  out.sort((a,b)=> a.periodo<b.periodo?1:a.periodo>b.periodo?-1:0);
+  return out;
+}
+function collectDirNotes(chsSel, weekSet){
+  const out = [];
+  for(const ch of chsSel){
+    const p = chPrefix(ch); const keys = recList(p);
+    for(const k of keys){
+      const wk = k.slice(p.length).split("__")[0];
+      if(!weekSet.has(wk)) continue;
+      const rec = recGet(k); if(!rec) continue;
+      if(rec.notas || rec.aprendizajes || rec.cambios){
+        const dv = k.slice(p.length).split("__").slice(1).join(" · ");
+        out.push({ periodo: wk, canal: CHANNELS[ch].name, dims: dv, responsable: rec.responsable||"", notas: rec.notas||"", aprendizajes: rec.aprendizajes||"", cambios: rec.cambios||"" });
+      }
+    }
+  }
+  out.sort((a,b)=> a.periodo<b.periodo?1:a.periodo>b.periodo?-1:0);
+  return out;
+}
 function analSeriesForChannel(chKey){
   // Devuelve { weeks:[...], byField:{ [fk]: [values por week] } } sumado sobre asesores/ciudades
   const p = chPrefix(chKey);
@@ -1672,6 +1761,9 @@ function renderAnalitica(){
       finally { btn.disabled = false; }
     };
   });
+  // Notas cualitativas del canal
+  const notes = collectChannelNotes(chKey);
+  renderNotesSection(document.getElementById("anal-notes"), notes, CHANNELS[chKey].name, NOTES_CACHE.ch, chKey);
 }
 
 /* ===================== ASESORES ===================== */

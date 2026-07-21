@@ -135,6 +135,14 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   .anal-conc{ margin-top:14px; padding:14px 16px; background:var(--crema-2); border:1px solid var(--linea); border-radius:10px; font-size:13.5px; line-height:1.5; color:var(--texto); white-space:pre-wrap; }
   .anal-conc.loading{ color:var(--neutro); font-style:italic; }
   .anal-empty{ background:var(--crema-2); border:1px dashed var(--linea); border-radius:10px; padding:22px; text-align:center; color:var(--neutro); grid-column:1/-1; }
+  .anal-notes-card{ background:#fff; border:1px solid var(--linea); border-radius:14px; padding:18px 20px; margin-top:22px; }
+  .anal-notes-card h3{ font-family:var(--serif); font-size:20px; color:var(--verde-prof); margin:0 0 4px; }
+  .anal-notes-sub{ font-size:12.5px; color:var(--neutro); margin-bottom:14px; }
+  .anal-notes-list{ display:flex; flex-direction:column; gap:12px; max-height:420px; overflow-y:auto; padding-right:6px; }
+  .anal-note-entry{ background:var(--crema); border:1px solid var(--linea); border-radius:10px; padding:11px 14px; }
+  .anal-note-entry .ane-head{ font-size:12px; font-weight:700; color:var(--olivo); margin-bottom:5px; }
+  .anal-note-entry .ane-line{ font-size:13px; line-height:1.45; margin-top:3px; color:var(--texto); }
+  .anal-note-entry .ane-lbl{ font-weight:700; color:var(--verde-prof); margin-right:4px; }
 </style>
 </head>
 <body>
@@ -407,7 +415,56 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   LQ_SRC.forEach(([k,l]) => LQ_KPIS.push({ path:`src.${k}`, label:`Leads · ${l}`, unit:'' }));
   LQ_SEG.forEach(s => FUNNEL.forEach(([k,l]) => LQ_KPIS.push({ path:`funnels.${s.key}.${k}`, label:`${s.def} · ${l}`, unit:'' })));
   const KPIS_BY_MOD = { rrss:RS_KPIS, ppc:PPC_KPIS, crm:CRM_KPIS, lq:LQ_KPIS };
-  const ANAL_MKT = { expanded: null, charts: {}, cache: {} };
+  const ANAL_MKT = { expanded: null, charts: {}, cache: {}, notesCache: {} };
+  function escHtml(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  function renderNotesMkt(container, entradas, canalName, cacheKey){
+    if(!container) return;
+    const cache = ANAL_MKT.notesCache[cacheKey];
+    if(!entradas || !entradas.length){
+      container.innerHTML = `<div class="anal-notes-card"><h3>Notas cualitativas</h3><div class="anal-notes-sub">Sin notas registradas para este módulo aún.</div></div>`;
+      return;
+    }
+    const entriesHtml = entradas.map(e => {
+      const head = [e.periodo, e.responsable?`resp. ${e.responsable}`:null].filter(Boolean).join(" · ");
+      const parts = [];
+      if(e.notas)        parts.push(`<div class="ane-line"><span class="ane-lbl">Notas:</span>${escHtml(e.notas)}</div>`);
+      if(e.aprendizajes) parts.push(`<div class="ane-line"><span class="ane-lbl">Aprendizajes:</span>${escHtml(e.aprendizajes)}</div>`);
+      if(e.cambios)      parts.push(`<div class="ane-line"><span class="ane-lbl">Cambios:</span>${escHtml(e.cambios)}</div>`);
+      return `<div class="anal-note-entry"><div class="ane-head">${head}</div>${parts.join("")}</div>`;
+    }).join("");
+    container.innerHTML = `<div class="anal-notes-card">
+      <h3>Notas cualitativas</h3>
+      <div class="anal-notes-sub">${entradas.length} registro(s) con texto · ${canalName}</div>
+      <div class="anal-notes-list">${entriesHtml}</div>
+      <div class="anal-actions" style="margin-top:14px"><button class="btn-prim" data-analyze-notes>Generar conclusión con IA</button></div>
+      ${cache?`<div class="anal-conc">${escHtml(cache)}</div>`:``}
+    </div>`;
+    const btn = container.querySelector("[data-analyze-notes]");
+    btn.onclick = async ()=>{
+      let conc = container.querySelector(".anal-conc");
+      if(!conc){ conc = document.createElement("div"); conc.className = "anal-conc loading"; conc.textContent = "Sintetizando con IA…"; container.querySelector(".anal-notes-card").appendChild(conc); }
+      else { conc.classList.add("loading"); conc.textContent = "Sintetizando con IA…"; }
+      btn.disabled = true;
+      try{
+        const resp = await fetch("/.netlify/functions/notes-analyze", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ canal: canalName, entradas }) });
+        const data = await resp.json();
+        if(!resp.ok){ conc.classList.remove("loading"); conc.textContent = "Error: " + (data.error || resp.status); }
+        else { conc.classList.remove("loading"); conc.textContent = data.conclusion || "(sin conclusión)"; ANAL_MKT.notesCache[cacheKey] = data.conclusion; }
+      } catch(err){ conc.classList.remove("loading"); conc.textContent = "Error de red: " + err.message; }
+      finally { btn.disabled = false; }
+    };
+  }
+  function collectMktNotes(M, periodos){
+    const out = [];
+    for(const p of periodos){
+      const rec = M.records[p]; if(!rec) continue;
+      if(rec.notas || rec.aprendizajes || rec.cambios){
+        out.push({ periodo: M.period==='week'?p:ymLabel(p), responsable: rec.responsable||"", notas: rec.notas||"", aprendizajes: rec.aprendizajes||"", cambios: rec.cambios||"" });
+      }
+    }
+    out.sort((a,b)=> a.periodo<b.periodo?1:a.periodo>b.periodo?-1:0);
+    return out;
+  }
   function analDrawMkt(canvasId, label, xs, values){
     const el = document.getElementById(canvasId); if(!el || !window.Chart) return null;
     if(ANAL_MKT.charts[canvasId]){ ANAL_MKT.charts[canvasId].destroy(); }
@@ -478,6 +535,12 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
         finally { btn.disabled = false; }
       };
     });
+    // Notas cualitativas del módulo
+    const notes = collectMktNotes(M, periodos);
+    let notesHost = document.getElementById('mkt-anal-notes');
+    if(!notesHost){ notesHost = document.createElement('div'); notesHost.id = 'mkt-anal-notes'; host.appendChild(notesHost); }
+    else if(!host.contains(notesHost)){ host.appendChild(notesHost); }
+    renderNotesMkt(notesHost, notes, MODS[state.active].name, state.active);
   }
 
   function renderView(){ const M=MODS[state.active]; ['ingreso','reporte','analitica','metas','responsable','basedatos'].forEach(v=> $('#view-'+v).style.display = state.view===v?'block':'none'); $('#periodbar').style.display=(state.view==='ingreso'||state.view==='reporte')?'flex':'none'; setNavActive();
