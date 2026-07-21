@@ -27,6 +27,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   /* Topbar y sidebar ocultos porque marketing va embebido dentro del multicanal */
   .topbar{ display:none !important; }
   .sidebar{ display:none !important; }
+  body.iframed .tabrow-right{ display:none !important; }
   body.embed .tabrow{ display:none !important; }
   body.embed .periodbar{ display:none !important; }
   body.embed .wrap{ padding:0 4px 40px; max-width:none; }
@@ -986,7 +987,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     updatePill();
     try{ if(window.parent && window.parent!==window && typeof window.parent.mktViewChanged==='function') window.parent.mktViewChanged(state.view); }catch(e){}
   }
-  function setActive(id){ state.active=id; renderReportSelect(); fillPeriodSelect(MODS[id]); state.ingresoRendered=null; renderView(); }
+  function setActive(id){ state.active=id; renderReportSelect(); fillPeriodSelect(MODS[id]); state.ingresoRendered=null; renderView(); try{ if(window.parent && window.parent!==window && typeof window.parent.mktActiveChanged==='function') window.parent.mktActiveChanged(id); }catch(e){} }
   window.mktShowView=function(v){ state.view=v; renderView(); };
   window.mktGetView=function(){ return state.view; };
   window.mktSetActive=function(id){ if(MODS[id]) setActive(id); };
@@ -997,6 +998,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   $('#brand').onclick=()=>$('#logo-input').click();
   $('#logo-input').onchange=e=>{ const f=e.target.files[0]; if(!f)return; const rd=new FileReader(); rd.onload=async()=>{ setLogo(rd.result); try{await window.storage.set(LOGO_KEY,rd.result);}catch(err){} }; rd.readAsDataURL(f); };
 
+  if(window.parent && window.parent !== window) document.body.classList.add('iframed');
   (async function init(){ for(const id of ORDER){ await loadMod(MODS[id]); } try{ const r=await window.storage.get('mkt_resp'); if(r&&r.value) RESP=JSON.parse(r.value); }catch(e){} try{ const r=await window.storage.get(LOGO_KEY); if(r&&r.value) setLogo(r.value);}catch(e){} const list=orderFiltered(); setActive(list[0]||'rrss'); })();
 })();
 </script>

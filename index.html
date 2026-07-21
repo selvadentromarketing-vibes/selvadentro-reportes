@@ -64,10 +64,10 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .anal-note-entry .ane-head{ font-size:12px; font-weight:700; color:var(--olivo); margin-bottom:5px; }
   .anal-note-entry .ane-line{ font-size:13px; line-height:1.45; margin-top:3px; color:var(--texto); }
   .anal-note-entry .ane-lbl{ font-weight:700; color:var(--verde-prof); margin-right:4px; }
-  .canal-wrap{ margin-left:auto; display:flex; align-items:center; gap:9px; }
-  .canal-wrap .lbl{ font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--neutro); font-weight:700; }
-  #canal-select{ font-family:var(--sans); font-weight:600; font-size:12.5px; letter-spacing:.4px; color:#fff; background:var(--olivo); border:none; border-radius:20px; padding:8px 16px; cursor:pointer; }
-  #canal-select option{ color:var(--texto); background:#fff; }
+  .canal-wrap, .mkt-wrap{ margin-left:auto; display:flex; align-items:center; gap:9px; }
+  .canal-wrap .lbl, .mkt-wrap .lbl{ font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--neutro); font-weight:700; }
+  #canal-select, #mkt-select{ font-family:var(--sans); font-weight:600; font-size:12.5px; letter-spacing:.4px; color:#fff; background:var(--olivo); border:none; border-radius:20px; padding:8px 16px; cursor:pointer; }
+  #canal-select option, #mkt-select option{ color:var(--texto); background:#fff; }
 
   .wrap{ max-width:1180px; margin:0 auto; padding:26px 28px 60px; }
 
@@ -397,6 +397,10 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
     <div class="canal-wrap">
       <span class="lbl">Reporte</span>
       <select id="canal-select"></select>
+    </div>
+    <div class="mkt-wrap" style="display:none">
+      <span class="lbl">Reporte</span>
+      <select id="mkt-select"></select>
     </div>
   </div>
   <div class="subtabs" id="ventas-subtabs" style="display:none">
@@ -1356,9 +1360,10 @@ document.querySelectorAll("[data-tab]").forEach(el=>el.onclick=()=>{
   }
   const dir = ["resultados","dircom","marketing","asesores","metas","db","admin"].includes(tab);
   document.querySelector(".canal-wrap").style.display = dir?"none":"flex";
+  document.querySelector(".mkt-wrap").style.display = (tab==="marketing")?"flex":"none";
   if(tab==="resultados") showResultados();
   if(tab==="dircom") showDirCom();
-  if(tab==="marketing"){ showMarketing(); const api=mktFrameApi(); if(api && typeof api.mktGetView==="function") window.mktViewChanged(api.mktGetView()); }
+  if(tab==="marketing"){ showMarketing(); populateMktSelect(); const api=mktFrameApi(); if(api && typeof api.mktGetView==="function") window.mktViewChanged(api.mktGetView()); if(api && typeof api.mktGetActive==="function") { const cur=api.mktGetActive(); const sel=document.getElementById("mkt-select"); if(sel && cur) sel.value=cur; } }
   if(tab==="asesores") renderAdvisors();
   if(tab==="metas") renderMetas();
   if(tab==="db") renderDB();
@@ -1374,6 +1379,22 @@ window.mktViewChanged=function(v){
   if(v==="metas") document.querySelector('.side-btn[data-tab="metas"]')?.classList.add("active");
   else if(v==="basedatos") document.querySelector('.side-btn[data-tab="db"]')?.classList.add("active");
 };
+window.mktActiveChanged=function(id){ const sel=document.getElementById("mkt-select"); if(sel && sel.value!==id) sel.value=id; };
+function populateMktSelect(){
+  const sel=document.getElementById("mkt-select"); if(!sel) return;
+  const allowed = window.getMktAllowedModules ? window.getMktAllowedModules() : null;
+  const all=[{id:'rrss',name:'Redes Sociales'},{id:'ppc',name:'PPC Ads'},{id:'crm',name:'CRM Manager'},{id:'lq',name:'Calidad de Leads'}];
+  const list = allowed==null ? all : all.filter(m => allowed.includes(m.id));
+  if(sel.options.length === list.length && [...sel.options].every((o,i)=>o.value===list[i].id)) return;
+  const cur = sel.value;
+  sel.innerHTML = list.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+  if(cur && list.some(m=>m.id===cur)) sel.value = cur;
+}
+document.getElementById("mkt-select")?.addEventListener("change", ()=>{
+  const id = document.getElementById("mkt-select").value;
+  const api = mktFrameApi();
+  if(api && typeof api.mktSetActive === "function") api.mktSetActive(id);
+});
 document.querySelectorAll(".subtab[data-subtab]").forEach(el=>el.onclick=()=>{
   document.querySelectorAll(".subtab[data-subtab]").forEach(t=>t.classList.remove("active"));
   el.classList.add("active");
