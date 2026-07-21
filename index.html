@@ -1664,7 +1664,20 @@ function renderAdvisors(){
 
 /* ===================== METAS ===================== */
 let META_OVERRIDES = {};
-async function loadMetas(){ const saved=await sGet("selvadentro:metas"); if(saved && typeof saved==="object"){ META_OVERRIDES=saved; applyMetas(); } }
+async function loadMetas(){ const saved=await sGet("selvadentro:metas"); if(saved && typeof saved==="object"){ META_OVERRIDES=saved; sanitizeProtectedFields(); applyMetas(); } }
+function sanitizeProtectedFields(){
+  let dirty = false;
+  for(const ch in META_OVERRIDES){
+    const prot = protectedFieldsOf(ch); if(!prot.size) continue;
+    const hidden = META_OVERRIDES[ch] && META_OVERRIDES[ch].__hidden_fields;
+    if(!hidden) continue;
+    for(const k of Object.keys(hidden)){
+      if(prot.has(k)){ delete hidden[k]; dirty = true; }
+    }
+    if(!Object.keys(hidden).length) delete META_OVERRIDES[ch].__hidden_fields;
+  }
+  if(dirty){ saveMetas(); }
+}
 async function saveMetas(){ await sSet("selvadentro:metas", META_OVERRIDES); }
 
 // META_OVERRIDES[ch][fk] puede ser:
@@ -1786,14 +1799,20 @@ function renderMetas(){
   if(!metasBuilt){ sel.innerHTML=Object.keys(CHANNELS).map(k=>`<option value="${k}">${CHANNELS[k].name}</option>`).join(""); sel.onchange=()=>renderMetasBody(sel.value); metasBuilt=true; }
   renderMetasBody(sel.value||Object.keys(CHANNELS)[0]);
 }
+function protectedFieldsOf(ch){ const map=METRIC_MAP[ch]||{}; return new Set(Object.values(map).filter(Boolean)); }
 function metaRowHtml(ch, fk, label, m, isCustom, money){
   const numV = m.meta_num != null ? m.meta_num : "";
   const pctV = m.meta_pct != null ? m.meta_pct : "";
-  return `<tr data-ch="${ch}" data-k="${fk}" data-custom="${isCustom?1:0}" draggable="true">
-    <td><span class="meta-drag" title="Arrastra a otra sección">⠿</span><input class="meta-name" type="text" value="${escAttr(label)}${money?' ($)':''}" data-orig="${escAttr(label)}" style="width:calc(100% - 28px)"></td>
+  const isProt = !isCustom && protectedFieldsOf(ch).has(fk);
+  const lockIcon = isProt ? `<span title="Campo requerido por los reportes de Dirección — no se puede borrar" style="margin-right:4px;font-size:11px;color:var(--cobre)">🔒</span>` : "";
+  const delBtnHtml = isProt
+    ? `<button class="meta-del" type="button" disabled title="Requerido por Dirección" style="opacity:.35;cursor:not-allowed">Borrar</button>`
+    : `<button class="meta-del" type="button" title="Borrar KPI">Borrar</button>`;
+  return `<tr data-ch="${ch}" data-k="${fk}" data-custom="${isCustom?1:0}" data-protected="${isProt?1:0}" draggable="true">
+    <td><span class="meta-drag" title="Arrastra a otra sección">⠿</span>${lockIcon}<input class="meta-name" type="text" value="${escAttr(label)}${money?' ($)':''}" data-orig="${escAttr(label)}" style="width:calc(100% - ${isProt?46:28}px)"></td>
     <td class="right"><input class="meta-num" type="number" step="${money?'0.01':'1'}" placeholder="—" value="${numV}"></td>
     <td class="right"><span class="meta-pct-wrap"><input class="meta-pct" type="number" step="0.01" placeholder="—" value="${pctV}"><span>%</span></span></td>
-    <td class="right"><button class="meta-del" type="button" title="Borrar KPI">Borrar</button></td>
+    <td class="right">${delBtnHtml}</td>
   </tr>`;
 }
 
@@ -1951,6 +1970,7 @@ function renderMetasBody(ch){
 
     if(delBtn){
       delBtn.onclick = async()=>{
+        if(!isCustom && protectedFieldsOf(chK).has(fk)){ alert("Este KPI es requerido por los reportes de Dirección y no puede borrarse."); return; }
         if(!confirm(`¿Borrar el KPI "${nameInp.value}"? Los datos históricos quedan en kv pero el campo deja de aparecer.`)) return;
         if(isCustom){
           META_OVERRIDES[chK].__custom = (META_OVERRIDES[chK].__custom||[]).filter(x => x.k !== fk);
