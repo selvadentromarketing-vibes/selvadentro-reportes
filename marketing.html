@@ -490,6 +490,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   function setActive(id){ state.active=id; renderReportSelect(); fillPeriodSelect(MODS[id]); state.ingresoRendered=null; renderView(); }
   window.mktShowView=function(v){ state.view=v; renderView(); };
   window.mktGetView=function(){ return state.view; };
+  window.mktSetActive=function(id){ if(MODS[id]) setActive(id); };
 
   document.querySelectorAll('[data-view]').forEach(el=>el.onclick=()=>{ state.view=el.dataset.view; renderView(); });
   function setLogo(d){ const i=$('#brand-logo'); i.src=d; i.style.display='block'; $('#brand-name').style.display='none'; $('#brand-sub').style.display='none'; }

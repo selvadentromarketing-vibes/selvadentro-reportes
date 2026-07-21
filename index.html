@@ -493,7 +493,8 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
     <!-- ============ METAS ============ -->
     <div class="view" id="view-metas">
       <div class="periodo">
-        <div class="grp"><label>Canal</label><select id="metas-canal"></select></div>
+        <div class="grp"><label>Ventas</label><select id="metas-canal"></select></div>
+        <div class="grp"><label>Marketing</label><select id="metas-marketing"></select></div>
         <div class="spacer"></div>
       </div>
       <p class="hint">Define la <b>meta mensual</b> de cada KPI. Se guarda automáticamente y el reporte del canal la usa, ajustada al periodo (meta mensual ÷ 4 × semanas evaluadas). Deja en blanco para no fijar meta.</p>
@@ -1827,10 +1828,28 @@ function applyMetas(){
   }
 }
 let metasBuilt=false;
+const MKT_MODULES = [ {id:'rrss',name:'Redes Sociales'}, {id:'ppc',name:'PPC Ads'}, {id:'crm',name:'CRM Manager'}, {id:'lq',name:'Calidad de Leads'} ];
 function renderMetas(){
   const sel=document.getElementById("metas-canal");
-  if(!metasBuilt){ sel.innerHTML=Object.keys(CHANNELS).map(k=>`<option value="${k}">${CHANNELS[k].name}</option>`).join(""); sel.onchange=()=>renderMetasBody(sel.value); metasBuilt=true; }
-  renderMetasBody(sel.value||Object.keys(CHANNELS)[0]);
+  const selM=document.getElementById("metas-marketing");
+  if(!metasBuilt){
+    sel.innerHTML='<option value="">—</option>' + Object.keys(CHANNELS).map(k=>`<option value="${k}">${CHANNELS[k].name}</option>`).join("");
+    selM.innerHTML='<option value="">—</option>' + MKT_MODULES.map(m=>`<option value="${m.id}">${m.name}</option>`).join("");
+    sel.onchange=()=>{
+      if(!sel.value){ document.getElementById("metas-body").innerHTML=''; return; }
+      selM.value=""; renderMetasBody(sel.value);
+    };
+    selM.onchange=()=>{
+      if(!selM.value) return;
+      const modKey=selM.value; sel.value=""; document.getElementById("metas-body").innerHTML='';
+      document.querySelector('.tab[data-tab="marketing"]').click();
+      const trySet=()=>{ const api=mktFrameApi(); if(api && typeof api.mktSetActive==='function' && typeof api.mktShowView==='function'){ api.mktSetActive(modKey); api.mktShowView('metas'); } else { setTimeout(trySet, 200); } };
+      trySet();
+    };
+    metasBuilt=true;
+  }
+  if(!sel.value && !selM.value){ sel.value = Object.keys(CHANNELS)[0] || ""; }
+  if(sel.value){ renderMetasBody(sel.value); }
 }
 function protectedFieldsOf(ch){ const map=METRIC_MAP[ch]||{}; return new Set(Object.values(map).filter(Boolean)); }
 function metaRowHtml(ch, fk, label, m, isCustom, money){
