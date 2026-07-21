@@ -37,6 +37,20 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .subtab{ padding:10px 18px; cursor:pointer; font-weight:500; font-size:12px; letter-spacing:.3px; color:var(--neutro); border-bottom:2px solid transparent; user-select:none; transition:.15s; }
   .subtab:hover{ color:var(--verde-prof); }
   .subtab.active{ color:var(--verde-prof); border-bottom-color:var(--olivo); }
+  .anal-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:14px; margin-top:6px; }
+  .anal-card{ background:#fff; border:1px solid var(--linea); border-radius:12px; padding:14px; cursor:pointer; transition:.15s; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .anal-card:hover{ border-color:var(--cobre); transform:translateY(-1px); }
+  .anal-card .ac-title{ font-family:var(--serif); font-size:14px; color:var(--verde-prof); font-weight:700; margin-bottom:6px; line-height:1.2; }
+  .anal-card .ac-total{ font-size:11px; color:var(--neutro); margin-bottom:8px; }
+  .anal-card canvas{ width:100%!important; height:80px!important; }
+  .anal-card.expanded{ grid-column:1/-1; cursor:default; }
+  .anal-card.expanded canvas{ height:280px!important; }
+  .anal-card.expanded .ac-title{ font-size:20px; margin-bottom:4px; }
+  .anal-card.expanded .ac-total{ font-size:13px; margin-bottom:14px; }
+  .anal-actions{ display:flex; gap:10px; align-items:center; margin-top:12px; flex-wrap:wrap; }
+  .anal-conc{ margin-top:14px; padding:14px 16px; background:var(--crema-2); border:1px solid var(--linea); border-radius:10px; font-size:13.5px; line-height:1.5; color:var(--texto); white-space:pre-wrap; }
+  .anal-conc.loading{ color:var(--neutro); font-style:italic; }
+  .anal-empty{ background:var(--crema-2); border:1px dashed var(--linea); border-radius:10px; padding:22px; text-align:center; color:var(--neutro); grid-column:1/-1; }
   .canal-wrap{ margin-left:auto; display:flex; align-items:center; gap:9px; }
   .canal-wrap .lbl{ font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--neutro); font-weight:700; }
   #canal-select{ font-family:var(--sans); font-weight:600; font-size:12.5px; letter-spacing:.4px; color:#fff; background:var(--olivo); border:none; border-radius:20px; padding:8px 16px; cursor:pointer; }
@@ -266,6 +280,8 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
 </head>
 <body>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
 <div id="login-screen">
   <div class="login-card">
     <div class="brand-block">
@@ -357,6 +373,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   <div class="subtabs" id="ventas-subtabs" style="display:none">
     <div class="subtab active" data-subtab="reporte">Reporte</div>
     <div class="subtab" data-subtab="ingreso">Ingreso de datos</div>
+    <div class="subtab" data-subtab="analitica">Analítica</div>
   </div>
 
   <div class="wrap">
@@ -414,6 +431,12 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
         <p class="hint">Elige la semana inicial y final del periodo a evaluar.</p>
         <div id="rep-output"><div class="empty-rep">Selecciona un rango de semanas y genera el reporte.</div></div>
       </div>
+    </div>
+
+    <!-- ============ ANALÍTICA ============ -->
+    <div class="view" id="view-analitica">
+      <p class="hint">Dashboard de KPIs del canal. Clic en una tarjeta para expandir y pedir conclusión con IA.</p>
+      <div id="anal-grid" class="anal-grid"></div>
     </div>
 
     <!-- ============ RESULTADOS (DIRECCIÓN GENERAL) ============ -->
@@ -1228,6 +1251,7 @@ document.querySelectorAll("[data-tab]").forEach(el=>el.onclick=()=>{
   if(tab==="ventas"){
     document.getElementById("view-"+VENTAS_SUBTAB).classList.add("active");
     document.getElementById("ventas-subtabs").style.display="flex";
+    if(VENTAS_SUBTAB==="analitica") renderAnalitica();
   } else {
     document.getElementById("view-"+tab).classList.add("active");
     document.getElementById("ventas-subtabs").style.display="none";
@@ -1255,6 +1279,7 @@ document.querySelectorAll(".subtab[data-subtab]").forEach(el=>el.onclick=()=>{
   VENTAS_SUBTAB=el.dataset.subtab;
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   document.getElementById("view-"+VENTAS_SUBTAB).classList.add("active");
+  if(VENTAS_SUBTAB==="analitica") renderAnalitica();
 });
 function showMarketing(){ const f=document.getElementById("mkt-frame"); if(f && (!f.src || f.src==="about:blank" || f.src.endsWith("about:blank"))) f.src="marketing.html"; }
 
@@ -1423,6 +1448,104 @@ async function showResultados(){
 }
 async function showDirCom(){
   if(!dcState.built){ buildChannelChecks("dc-canales",dcState,renderDirCom); await populateRange("dc-sem-ini","dc-sem-fin"); document.getElementById("dc-generar").onclick=renderDirCom; dcState.built=true; await renderDirCom(); }
+}
+
+/* ===================== ANALÍTICA ===================== */
+const ANAL_STATE = { expanded: null, charts: {}, cache: {} };
+function analSeriesForChannel(chKey){
+  // Devuelve { weeks:[...], byField:{ [fk]: [values por week] } } sumado sobre asesores/ciudades
+  const p = chPrefix(chKey);
+  const keys = recList(p);
+  const bucket = {};
+  for(const k of keys){
+    const wk = k.slice(p.length).split("__")[0];
+    const rec = recGet(k); if(!rec || !rec.valores) continue;
+    if(!bucket[wk]) bucket[wk] = {};
+    for(const fk in rec.valores){
+      bucket[wk][fk] = (bucket[wk][fk]||0) + Number(rec.valores[fk]||0);
+    }
+  }
+  const weeks = Object.keys(bucket).sort();
+  const flds = (CHANNELS[chKey].sections||[]).flatMap(s=>s.fields);
+  const byField = {};
+  for(const f of flds){
+    byField[f.k] = weeks.map(w => Number((bucket[w]||{})[f.k] || 0));
+  }
+  return { weeks, byField, fields: flds };
+}
+function analDrawChart(canvasId, label, weeks, values, color){
+  const el = document.getElementById(canvasId); if(!el || !window.Chart) return null;
+  if(ANAL_STATE.charts[canvasId]){ ANAL_STATE.charts[canvasId].destroy(); }
+  const ctx = el.getContext("2d");
+  const c = new Chart(ctx, {
+    type: "line",
+    data: { labels: weeks, datasets: [{ label, data: values, borderColor: color||"#65713F", backgroundColor: "rgba(101,113,63,0.12)", tension: .3, fill: true, pointRadius: 2, borderWidth: 2 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { enabled: true } },
+      scales: { x: { ticks: { font: { size: 9 }, maxRotation: 0, autoSkipPadding: 12 }, grid: { display: false } }, y: { beginAtZero: true, ticks: { font: { size: 9 } }, grid: { color: "rgba(0,0,0,0.05)" } } }
+    }
+  });
+  ANAL_STATE.charts[canvasId] = c;
+  return c;
+}
+function renderAnalitica(){
+  const grid = document.getElementById("anal-grid"); if(!grid) return;
+  if(!window.Chart){ grid.innerHTML = '<div class="anal-empty">Cargando librería de gráficas…</div>'; setTimeout(renderAnalitica, 300); return; }
+  const chKey = CH;
+  const { weeks, byField, fields } = analSeriesForChannel(chKey);
+  if(!weeks.length){ grid.innerHTML = '<div class="anal-empty">Este canal aún no tiene datos registrados.</div>'; return; }
+  const cards = fields.map((f, i) => {
+    const values = byField[f.k] || [];
+    const total = values.reduce((a,b)=>a+b,0);
+    const canvasId = `anal-c-${chKey}-${f.k}`;
+    const expanded = ANAL_STATE.expanded === f.k;
+    const totalTxt = f.money ? fmtMoney(total) : total;
+    const conc = ANAL_STATE.cache[chKey+":"+f.k];
+    return `<div class="anal-card${expanded?' expanded':''}" data-fk="${f.k}">
+      <div class="ac-title">${f.l}</div>
+      <div class="ac-total">Total periodo: <b>${totalTxt}</b> · ${weeks.length} sem.</div>
+      <canvas id="${canvasId}"></canvas>
+      ${expanded ? `<div class="anal-actions"><button class="btn btn-olive" data-analyze="${f.k}">Analizar con IA</button>${f.meta!=null?`<span style="font-size:12px;color:var(--neutro)">Meta mensual: <b>${f.meta}</b></span>`:''}</div>${conc?`<div class="anal-conc">${conc}</div>`:''}` : ''}
+    </div>`;
+  }).join("");
+  grid.innerHTML = cards;
+  // Dibujar charts
+  fields.forEach(f => analDrawChart(`anal-c-${chKey}-${f.k}`, f.l, weeks, byField[f.k]||[]));
+  // Click en card → expandir/colapsar
+  grid.querySelectorAll(".anal-card").forEach(card => {
+    card.onclick = (e) => {
+      if(e.target.tagName === "BUTTON") return;
+      const fk = card.dataset.fk;
+      ANAL_STATE.expanded = (ANAL_STATE.expanded === fk) ? null : fk;
+      renderAnalitica();
+    };
+  });
+  // Botón analizar
+  grid.querySelectorAll("[data-analyze]").forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const fk = btn.dataset.analyze;
+      const field = fields.find(f=>f.k===fk); if(!field) return;
+      const card = btn.closest(".anal-card");
+      let conc = card.querySelector(".anal-conc");
+      if(!conc){ conc = document.createElement("div"); conc.className = "anal-conc loading"; conc.textContent = "Analizando con IA…"; card.appendChild(conc); }
+      else { conc.classList.add("loading"); conc.textContent = "Analizando con IA…"; }
+      btn.disabled = true;
+      try {
+        const puntos = weeks.map((w,i)=>({ periodo: w, valor: byField[fk][i] }));
+        const resp = await fetch("/.netlify/functions/kpi-analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ canal: CHANNELS[chKey].name, kpi: field.l, unidad: field.money?"MXN":"", meta: field.meta, puntos, periodicidad: "semanal" })
+        });
+        const data = await resp.json();
+        if(!resp.ok){ conc.classList.remove("loading"); conc.textContent = "Error: " + (data.error || resp.status); }
+        else { conc.classList.remove("loading"); conc.textContent = data.conclusion || "(sin conclusión)"; ANAL_STATE.cache[chKey+":"+fk] = data.conclusion; }
+      } catch(err){ conc.classList.remove("loading"); conc.textContent = "Error de red: " + err.message; }
+      finally { btn.disabled = false; }
+    };
+  });
 }
 
 /* ===================== ASESORES ===================== */
@@ -2088,6 +2211,7 @@ async function switchChannel(ch){
   si.innerHTML=opts; sf.innerHTML=opts;
   if(weeks.length){ si.value=weeks[0]; sf.value=weeks[weeks.length-1]; if(!dims.length){ const rec=recGet(recKey(weeks[weeks.length-1])); if(rec) fillForm(rec); } }
   document.getElementById("rep-output").innerHTML='<div class="empty-rep">Selecciona un rango de semanas y genera el reporte.</div>';
+  if(document.getElementById("view-analitica").classList.contains("active")){ ANAL_STATE.expanded=null; renderAnalitica(); }
 }
 
 async function init(){

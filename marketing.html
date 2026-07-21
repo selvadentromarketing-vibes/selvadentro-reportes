@@ -13,6 +13,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cardo:ital,wght@0,400;0,700;1,400&family=Lexend:wght@300;400;500;600;700&family=Yellowtail&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
   :root{
     --verde-prof:#465241; --olivo:#65713F; --cobre:#CF8543; --arena:#D9B37E;
@@ -117,6 +118,20 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   .toast{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--verde-prof); color:var(--crema); padding:13px 24px; border-radius:10px; border-left:4px solid var(--cobre); opacity:0; transition:all .25s; font-size:14px; z-index:50; }
   .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
   @media(max-width:720px){ .shell{ flex-direction:column; } .sidebar{ width:auto; flex:none; flex-direction:row; justify-content:space-around; padding:8px 6px; } .snav{ flex:1; } .notes-grid,.rnotes{ grid-template-columns:1fr; } }
+  .anal-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:14px; margin-top:6px; }
+  .anal-card{ background:#fff; border:1px solid var(--linea); border-radius:12px; padding:14px; cursor:pointer; transition:.15s; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .anal-card:hover{ border-color:var(--cobre); transform:translateY(-1px); }
+  .anal-card .ac-title{ font-family:var(--serif); font-size:14px; color:var(--verde-prof); font-weight:700; margin-bottom:6px; line-height:1.2; }
+  .anal-card .ac-total{ font-size:11px; color:var(--neutro); margin-bottom:8px; }
+  .anal-card canvas{ width:100%!important; height:80px!important; }
+  .anal-card.expanded{ grid-column:1/-1; cursor:default; }
+  .anal-card.expanded canvas{ height:280px!important; }
+  .anal-card.expanded .ac-title{ font-size:20px; margin-bottom:4px; }
+  .anal-card.expanded .ac-total{ font-size:13px; margin-bottom:14px; }
+  .anal-actions{ display:flex; gap:10px; align-items:center; margin-top:12px; flex-wrap:wrap; }
+  .anal-conc{ margin-top:14px; padding:14px 16px; background:var(--crema-2); border:1px solid var(--linea); border-radius:10px; font-size:13.5px; line-height:1.5; color:var(--texto); white-space:pre-wrap; }
+  .anal-conc.loading{ color:var(--neutro); font-style:italic; }
+  .anal-empty{ background:var(--crema-2); border:1px dashed var(--linea); border-radius:10px; padding:22px; text-align:center; color:var(--neutro); grid-column:1/-1; }
 </style>
 </head>
 <body>
@@ -141,6 +156,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
       <div class="tabrow">
         <div class="ttab" data-view="reporte">Reporte</div>
         <div class="ttab" data-view="ingreso">Ingreso de datos</div>
+        <div class="ttab" data-view="analitica">Analítica</div>
         <div class="tabrow-right"><span class="canal-lbl">REPORTE</span><select id="report-select" class="sel-green"></select></div>
       </div>
       <div class="wrap">
@@ -152,6 +168,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
         </div>
         <div id="view-ingreso"></div>
         <div id="view-reporte"></div>
+        <div id="view-analitica" style="display:none"></div>
         <div id="view-metas" style="display:none"></div>
         <div id="view-responsable" style="display:none"></div>
         <div id="view-basedatos" style="display:none"></div>
@@ -369,9 +386,101 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     $('#view-basedatos').querySelectorAll('.db-del').forEach(b=>b.onclick=async()=>{ if(confirm('¿Eliminar el registro '+b.dataset.k+'? No se puede deshacer.')){ delete M.records[b.dataset.k]; await saveRec(M); renderBaseDatos(M); updatePill(); showToast('Registro eliminado'); } });
     const ex=$('#db-export'); if(ex) ex.onclick=()=>{ const data=JSON.stringify({reporte:MODS[state.active].name,records:M.records,metas:M.metas,responsable:RESP[state.active]||''},null,2); const blob=new Blob([data],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='selvadentro_'+state.active+'.json'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000); };
   }
-  function renderView(){ const M=MODS[state.active]; ['ingreso','reporte','metas','responsable','basedatos'].forEach(v=> $('#view-'+v).style.display = state.view===v?'block':'none'); $('#periodbar').style.display=(state.view==='ingreso'||state.view==='reporte')?'flex':'none'; setNavActive();
+  /* ===== ANALÍTICA ===== */
+  function getPath(obj, path){ return path.split('.').reduce((o,k)=> (o!=null && o[k]!=null) ? o[k] : 0, obj); }
+  const RS_KPIS = []; RS_PLAT.forEach(p => p.fields.forEach(([k, l]) => RS_KPIS.push({ path: `${p.key}.${k}`, label: `${p.name} · ${l}`, unit: '' })));
+  const PPC_KPIS = [
+    { path:'tot.leads', label:'Total · Leads', unit:'' },
+    { path:'tot.inv',   label:'Total · Inversión', unit:'MXN' },
+  ];
+  ['meta','google'].forEach(p => ['leads','inv','cpl','campanas'].forEach(k => PPC_KPIS.push({ path:`${p}.${k}`, label:`${p==='meta'?'Meta ADS':'Google ADS'} · ${k[0].toUpperCase()+k.slice(1)}`, unit:(k==='inv'||k==='cpl')?'MXN':'' })));
+  const CRM_KPIS = [];
+  CRM_SRC.forEach(([k,l]) => CRM_KPIS.push({ path:`src.${k}`, label:`Leads · ${l}`, unit:'' }));
+  CRM_SEG.forEach(s => FUNNEL.forEach(([k,l]) => CRM_KPIS.push({ path:`funnels.${s.key}.${k}`, label:`${s.name} · ${l}`, unit:'' })));
+  CRM_WEB.forEach(([k,l]) => CRM_KPIS.push({ path:`web.${k}`, label:`Website · ${l}`, unit:'' }));
+  CRM_EM.forEach(([k,l]) => CRM_KPIS.push({ path:`email.${k}`, label:`Email · ${l}`, unit:'' }));
+  CRM_MS.forEach(([k,l]) => CRM_KPIS.push({ path:`msg.${k}`, label:`Mensaje · ${l}`, unit:'' }));
+  const LQ_KPIS = [];
+  LQ_SRC.forEach(([k,l]) => LQ_KPIS.push({ path:`src.${k}`, label:`Leads · ${l}`, unit:'' }));
+  LQ_SEG.forEach(s => FUNNEL.forEach(([k,l]) => LQ_KPIS.push({ path:`funnels.${s.key}.${k}`, label:`${s.def} · ${l}`, unit:'' })));
+  const KPIS_BY_MOD = { rrss:RS_KPIS, ppc:PPC_KPIS, crm:CRM_KPIS, lq:LQ_KPIS };
+  const ANAL_MKT = { expanded: null, charts: {}, cache: {} };
+  function analDrawMkt(canvasId, label, xs, values){
+    const el = document.getElementById(canvasId); if(!el || !window.Chart) return null;
+    if(ANAL_MKT.charts[canvasId]){ ANAL_MKT.charts[canvasId].destroy(); }
+    const ctx = el.getContext("2d");
+    const c = new Chart(ctx, {
+      type: "line",
+      data: { labels: xs, datasets: [{ label, data: values, borderColor: "#65713F", backgroundColor: "rgba(101,113,63,0.12)", tension: .3, fill: true, pointRadius: 2, borderWidth: 2 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { font: { size: 9 }, maxRotation: 0, autoSkipPadding: 12 }, grid: { display: false } }, y: { beginAtZero: true, ticks: { font: { size: 9 } }, grid: { color: "rgba(0,0,0,0.05)" } } } }
+    });
+    ANAL_MKT.charts[canvasId] = c;
+    return c;
+  }
+  function renderAnaliticaMkt(){
+    const host = $('#view-analitica'); if(!host) return;
+    if(!window.Chart){ host.innerHTML = '<div class="anal-empty">Cargando librería de gráficas…</div>'; setTimeout(renderAnaliticaMkt, 300); return; }
+    const M = MODS[state.active]; const kpis = KPIS_BY_MOD[state.active] || [];
+    const periodos = Object.keys(M.records).sort();
+    if(!periodos.length){ host.innerHTML = '<p class="metas-hint">Dashboard de KPIs. Clic en una tarjeta para expandir y pedir conclusión con IA.</p><div class="anal-grid"><div class="anal-empty">Este módulo aún no tiene datos.</div></div>'; return; }
+    const xs = periodos.map(p => M.period==='week' ? p : ymLabel(p));
+    const html = ['<p class="metas-hint">Dashboard de KPIs. Clic en una tarjeta para expandir y pedir conclusión con IA.</p><div class="anal-grid">'];
+    kpis.forEach((k, i) => {
+      const values = periodos.map(p => Number(getPath(M.records[p], k.path) || 0));
+      const total = values.reduce((a,b)=>a+b,0);
+      const canvasId = `mktc-${state.active}-${i}`;
+      const expanded = ANAL_MKT.expanded === k.path;
+      const totalTxt = k.unit === 'MXN' ? money(total) : fmt(total);
+      const conc = ANAL_MKT.cache[state.active+':'+k.path];
+      html.push(`<div class="anal-card${expanded?' expanded':''}" data-kpi="${i}">
+        <div class="ac-title">${k.label}</div>
+        <div class="ac-total">Total: <b>${totalTxt}</b> · ${periodos.length} periodo(s)</div>
+        <canvas id="${canvasId}"></canvas>
+        ${expanded ? `<div class="anal-actions"><button class="btn-prim" data-analyze-mkt="${i}">Analizar con IA</button></div>${conc?`<div class="anal-conc">${conc}</div>`:''}` : ''}
+      </div>`);
+    });
+    html.push('</div>');
+    host.innerHTML = html.join('');
+    kpis.forEach((k, i) => {
+      const values = periodos.map(p => Number(getPath(M.records[p], k.path) || 0));
+      analDrawMkt(`mktc-${state.active}-${i}`, k.label, xs, values);
+    });
+    host.querySelectorAll('.anal-card').forEach(card => {
+      card.onclick = (e) => {
+        if(e.target.tagName === 'BUTTON') return;
+        const idx = +card.dataset.kpi; const k = kpis[idx];
+        ANAL_MKT.expanded = (ANAL_MKT.expanded === k.path) ? null : k.path;
+        renderAnaliticaMkt();
+      };
+    });
+    host.querySelectorAll('[data-analyze-mkt]').forEach(btn => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const idx = +btn.dataset.analyzeMkt; const k = kpis[idx];
+        const card = btn.closest('.anal-card');
+        let conc = card.querySelector('.anal-conc');
+        if(!conc){ conc = document.createElement('div'); conc.className = 'anal-conc loading'; conc.textContent = 'Analizando con IA…'; card.appendChild(conc); }
+        else { conc.classList.add('loading'); conc.textContent = 'Analizando con IA…'; }
+        btn.disabled = true;
+        try {
+          const puntos = periodos.map(p => ({ periodo: p, valor: Number(getPath(M.records[p], k.path) || 0) }));
+          const resp = await fetch('/.netlify/functions/kpi-analyze', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ canal: MODS[state.active].name, kpi: k.label, unidad: k.unit, meta: null, puntos, periodicidad: M.period==='week'?'semanal':'mensual' })
+          });
+          const data = await resp.json();
+          if(!resp.ok){ conc.classList.remove('loading'); conc.textContent = 'Error: ' + (data.error || resp.status); }
+          else { conc.classList.remove('loading'); conc.textContent = data.conclusion || '(sin conclusión)'; ANAL_MKT.cache[state.active+':'+k.path] = data.conclusion; }
+        } catch(err){ conc.classList.remove('loading'); conc.textContent = 'Error de red: ' + err.message; }
+        finally { btn.disabled = false; }
+      };
+    });
+  }
+
+  function renderView(){ const M=MODS[state.active]; ['ingreso','reporte','analitica','metas','responsable','basedatos'].forEach(v=> $('#view-'+v).style.display = state.view===v?'block':'none'); $('#periodbar').style.display=(state.view==='ingreso'||state.view==='reporte')?'flex':'none'; setNavActive();
     if(state.view==='ingreso'){ if(state.ingresoRendered!==state.active){ M.ingreso($('#view-ingreso')); M.fill(M.records[M.pval]||null); state.ingresoRendered=state.active; bindSave(); } }
     else if(state.view==='reporte'){ M.reporte($('#view-reporte'),M.pval,M); }
+    else if(state.view==='analitica'){ ANAL_MKT.expanded=null; renderAnaliticaMkt(); }
     else if(state.view==='metas'){ M.metasView($('#view-metas'),M); }
     else if(state.view==='responsable'){ renderResponsable(); }
     else if(state.view==='basedatos'){ renderBaseDatos(M); }
