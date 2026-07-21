@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Selvadentro · Reportes de Marketing</title>
+<!--
+Selvadentro — Sistema de Reportes · MARKETING (embed)
+Layout homologado al multicanal: sidebar (Metas · Responsable · Base Datos),
+tabs (Reporte · Ingreso de datos) + dropdown de REPORTE, periodos como dropdown.
+Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads (semanales)
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cardo:ital,wght@0,400;0,700;1,400&family=Lexend:wght@300;400;500;600;700&family=Yellowtail&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --verde-prof:#465241; --olivo:#65713F; --cobre:#CF8543; --arena:#D9B37E;
+    --crema:#FAF8F3; --crema-2:#F1ECE1; --linea:#E3DBCC; --texto:#2E332B;
+    --verde-ok-bg:#CBDDC0; --verde-ok-tx:#3C5A2E; --rojo-no-bg:#F2CFC9; --rojo-no-tx:#9B3B2E; --neutro:#6F7468; --logo:#EFE7D6;
+    --serif:"Cardo",Georgia,serif; --sans:"Lexend",system-ui,-apple-system,"Segoe UI",sans-serif; --script:"Yellowtail",cursive;
+    --fb:#3B5BA5; --ig:#C13584; --tt:#10b9bd; --yt:#CF8543; --meta:#3B5BA5; --google:#CF8543; --web:#65713F; --mail:#a45c8a; --otras:#8a7a55;
+  }
+  *{ box-sizing:border-box; } body{ margin:0; }
+  #app{ font-family:var(--sans); color:var(--texto); background:var(--crema); min-height:100vh; font-size:14px; line-height:1.45; }
+  /* Topbar oculto porque marketing va embebido dentro del multicanal */
+  .topbar{ display:none !important; }
+  .brand{ display:flex; flex-direction:column; align-items:flex-start; line-height:1; cursor:pointer; }
+  #brand-logo{ height:50px; display:none; }
+  .brand .name{ font-family:var(--script); font-size:42px; color:var(--logo); line-height:.9; padding-right:6px; }
+  .brand .sub{ font-family:var(--serif); font-size:12px; letter-spacing:6px; text-transform:lowercase; color:var(--logo); margin-top:2px; padding-left:6px; opacity:.92; }
+  .app-title{ text-align:right; } .app-title .t1{ font-family:var(--serif); font-size:20px; } .app-title .t2{ font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--arena); }
+  .shell{ display:flex; align-items:stretch; min-height:100vh; }
+  .sidebar{ background:var(--verde-prof); width:94px; flex:0 0 94px; padding:18px 6px; display:flex; flex-direction:column; gap:6px; }
+  .snav{ color:var(--logo); text-align:center; padding:13px 4px; border-radius:10px; cursor:pointer; font-size:10px; letter-spacing:1px; text-transform:uppercase; font-weight:600; opacity:.85; }
+  .snav svg{ display:block; margin:0 auto 6px; width:22px; height:22px; }
+  .snav:hover{ background:rgba(255,255,255,.07); opacity:1; }
+  .snav.active{ background:var(--cobre); color:#fff; opacity:1; }
+  .main{ flex:1 1 auto; min-width:0; }
+  .tabrow{ display:flex; align-items:center; gap:4px; background:var(--crema-2); padding:0 22px; border-bottom:1px solid var(--linea); flex-wrap:wrap; }
+  .ttab{ padding:16px 18px; cursor:pointer; font-weight:600; font-size:14px; color:var(--neutro); border-bottom:3px solid transparent; }
+  .ttab:hover{ color:var(--verde-prof); }
+  .ttab.active{ color:var(--verde-prof); border-bottom-color:var(--cobre); background:#fff; }
+  .tabrow-right{ margin-left:auto; display:flex; align-items:center; gap:10px; padding:9px 0; }
+  .canal-lbl{ font-size:11px; letter-spacing:2px; color:var(--neutro); font-weight:700; }
+  .sel-green{ appearance:none; -webkit-appearance:none; background-color:var(--olivo); color:#fff; font-weight:600; font-family:var(--sans); border:none; border-radius:999px; padding:11px 42px 11px 20px; font-size:14px; cursor:pointer; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23ffffff' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 16px center; }
+  .sel-light{ appearance:none; -webkit-appearance:none; background-color:var(--crema); color:var(--texto); font-family:var(--sans); border:1px solid var(--linea); border-radius:8px; padding:9px 38px 9px 12px; font-size:14px; cursor:pointer; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23465241' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 14px center; }
+  .wrap{ max-width:1080px; margin:0 auto; padding:26px 28px 60px; }
+  .periodbar{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; background:#fff; border:1px solid var(--linea); border-radius:12px; padding:14px 18px; margin-bottom:22px; }
+  .periodbar label{ font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--neutro); font-weight:600; }
+  .pill{ font-size:11px; padding:3px 10px; border-radius:999px; background:var(--crema-2); color:var(--neutro); border:1px solid var(--linea); }
+  .card{ background:#fff; border:1px solid var(--linea); border-radius:14px; margin-bottom:20px; overflow:hidden; }
+  .card-head{ display:flex; align-items:center; gap:10px; padding:13px 18px; border-bottom:1px solid var(--linea); background:var(--crema-2); }
+  .dot{ width:11px; height:11px; border-radius:50%; }
+  .card-head h3{ margin:0; font-family:var(--serif); font-size:17px; font-weight:700; color:var(--verde-prof); }
+  .card-body{ padding:18px; }
+  .subhead{ font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--cobre); font-weight:700; margin:6px 0 12px; }
+  .grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:14px; }
+  .field{ display:flex; flex-direction:column; gap:5px; }
+  .field label{ font-size:11.5px; color:var(--neutro); font-weight:500; }
+  .field .calc-tag{ font-size:9.5px; color:var(--olivo); font-weight:600; }
+  .field input{ font-family:var(--sans); font-size:14px; padding:8px 10px; border:1px solid var(--linea); border-radius:8px; background:var(--crema); color:var(--texto); width:100%; }
+  .field input:focus{ outline:none; border-color:var(--olivo); }
+  .field input.auto{ background:#F3F6EF; }
+  .camp{ border:1px solid var(--linea); border-radius:11px; padding:14px; margin-top:12px; background:var(--crema); }
+  .camp-top{ display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
+  .camp-top .badge{ width:26px; height:26px; border-radius:50%; background:var(--arena); color:#fff; font-family:var(--serif); font-weight:700; display:flex; align-items:center; justify-content:center; font-size:14px; flex:0 0 auto; }
+  .camp-top input{ font-family:var(--sans); font-size:13.5px; padding:7px 10px; border:1px solid var(--linea); border-radius:8px; background:#fff; }
+  .camp-top .cn{ flex:2 1 220px; } .camp-top .ci{ flex:1 1 140px; }
+  .camp-name{ font-family:var(--sans); font-size:14px; padding:9px 12px; border:1px solid var(--linea); border-radius:8px; background:#fff; width:100%; margin-bottom:12px; font-weight:600; color:var(--verde-prof); }
+  .notes-grid{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
+  .notes-grid textarea{ font-family:var(--sans); font-size:13px; padding:10px; border:1px solid var(--linea); border-radius:8px; background:var(--crema); resize:vertical; min-height:96px; width:100%; }
+  .actions{ display:flex; gap:12px; justify-content:flex-end; margin-top:8px; }
+  button{ font-family:var(--sans); cursor:pointer; border:none; border-radius:9px; padding:11px 24px; font-size:14px; font-weight:600; }
+  .btn-prim{ background:var(--cobre); color:#fff; } .btn-prim:hover{ background:#bb7536; }
+  .btn-ghost{ background:transparent; color:var(--neutro); border:1px solid var(--linea); } .btn-ghost:hover{ background:var(--crema-2); }
+  .summary{ background:var(--verde-prof); color:var(--crema); border-radius:14px; padding:20px 22px; margin-bottom:22px; }
+  .summary .stitle{ font-family:var(--serif); font-size:15px; color:var(--arena); margin-bottom:6px; }
+  .summary .sresp{ font-size:12px; color:var(--logo); opacity:.85; margin-bottom:14px; }
+  .summary-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; }
+  .kpi{ background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:12px 14px; }
+  .kpi .klabel{ font-size:11px; text-transform:uppercase; letter-spacing:.6px; color:var(--arena); }
+  .kpi .kval{ font-family:var(--serif); font-size:25px; font-weight:700; margin-top:3px; }
+  .kpi .kcumpl,.kpi .kdelta{ font-size:12px; margin-top:3px; font-weight:700; }
+  .rtable{ width:100%; border-collapse:collapse; }
+  .rtable td{ padding:9px 10px; border-bottom:1px solid var(--linea); font-size:13.5px; }
+  .rtable tr:last-child td{ border-bottom:none; }
+  .rtable .kname{ color:var(--texto); font-weight:500; width:40%; }
+  .rtable .kval{ font-family:var(--serif); font-weight:700; font-size:16px; }
+  .rtable .kmeta{ color:var(--neutro); text-align:right; white-space:nowrap; }
+  .rtable .kmeta .mlbl{ font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--arena); display:block; }
+  .rtable .ccell{ width:120px; text-align:center; }
+  .calc-row td{ background:var(--crema); } .calc-row .kname{ font-style:italic; color:var(--olivo); }
+  .cumpl{ display:inline-block; padding:5px 10px; border-radius:7px; font-weight:700; font-size:12.5px; min-width:84px; text-align:center; }
+  .cumpl.ok{ background:var(--verde-ok-bg); color:var(--verde-ok-tx); }
+  .cumpl.no{ background:var(--rojo-no-bg); color:var(--rojo-no-tx); }
+  .cumpl.na{ color:var(--neutro); font-weight:500; }
+  .scroll{ overflow-x:auto; }
+  .ctable{ width:100%; border-collapse:collapse; margin-top:10px; font-size:12.5px; }
+  .ctable.wide{ min-width:720px; }
+  .ctable th{ text-align:right; color:var(--neutro); font-weight:600; font-size:10.5px; text-transform:uppercase; letter-spacing:.4px; padding:7px 8px; border-bottom:2px solid var(--linea); }
+  .ctable th.l, .ctable td.l{ text-align:left; }
+  .ctable td{ padding:7px 8px; border-bottom:1px solid var(--linea); text-align:right; }
+  .ctable td.l{ font-weight:600; color:var(--verde-prof); }
+  .ctable .kw{ font-size:11px; color:var(--olivo); }
+  .ctable td .chip{ display:inline-block; padding:3px 8px; border-radius:6px; font-weight:700; }
+  .ctable td .ok{ background:var(--verde-ok-bg); color:var(--verde-ok-tx); } .ctable td .no{ background:var(--rojo-no-bg); color:var(--rojo-no-tx); } .ctable td .na{ color:var(--neutro); }
+  .ctable tr.best td{ background:#F1F6EC; } .rank{ font-family:var(--serif); color:var(--arena); font-weight:700; }
+  .rnotes{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
+  .rnotes .nblock{ background:var(--crema); border:1px solid var(--linea); border-radius:10px; padding:13px; }
+  .rnotes h5{ margin:0 0 7px; font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--cobre); }
+  .rnotes p{ margin:0; font-size:13px; white-space:pre-wrap; } .empty-note{ color:var(--neutro); font-style:italic; }
+  .metas-hint,.ex-banner{ font-size:12.5px; border-radius:10px; padding:11px 14px; margin-bottom:18px; }
+  .metas-hint{ color:var(--neutro); background:var(--crema-2); border:1px solid var(--linea); }
+  .ex-banner{ background:#FBF3E6; border:1px solid var(--arena); color:#8a5a23; }
+  .toast{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--verde-prof); color:var(--crema); padding:13px 24px; border-radius:10px; border-left:4px solid var(--cobre); opacity:0; transition:all .25s; font-size:14px; z-index:50; }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  @media(max-width:720px){ .shell{ flex-direction:column; } .sidebar{ width:auto; flex:none; flex-direction:row; justify-content:space-around; padding:8px 6px; } .snav{ flex:1; } .notes-grid,.rnotes{ grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div class="topbar">
+    <div class="brand" id="brand" title="Clic para subir el logo">
+      <img id="brand-logo" alt="Selvadentro">
+      <span class="name" id="brand-name">Selvadentro</span>
+      <span class="sub" id="brand-sub">tierra de cenotes</span>
+    </div>
+    <div class="app-title"><div class="t1">Sistema de Reportes</div><div class="t2">Marketing</div></div>
+  </div>
+  <input type="file" id="logo-input" accept="image/*" style="display:none">
+  <div class="shell">
+    <div class="sidebar">
+      <div class="snav" data-view="metas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>Metas</div>
+      <div class="snav" data-view="responsable"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>Responsable</div>
+      <div class="snav" data-view="basedatos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.6 3.6 3 8 3s8-1.4 8-3V5"/><path d="M4 12c0 1.6 3.6 3 8 3s8-1.4 8-3"/></svg>Base Datos</div>
+    </div>
+    <div class="main">
+      <div class="tabrow">
+        <div class="ttab" data-view="reporte">Reporte</div>
+        <div class="ttab" data-view="ingreso">Ingreso de datos</div>
+        <div class="tabrow-right"><span class="canal-lbl">REPORTE</span><select id="report-select" class="sel-green"></select></div>
+      </div>
+      <div class="wrap">
+        <div class="periodbar" id="periodbar">
+          <label id="period-label">Periodo</label>
+          <select id="period" class="sel-light"></select>
+          <span class="pill" id="status-pill">—</span>
+          <span class="pill" id="resp-pill">—</span>
+        </div>
+        <div id="view-ingreso"></div>
+        <div id="view-reporte"></div>
+        <div id="view-metas" style="display:none"></div>
+        <div id="view-responsable" style="display:none"></div>
+        <div id="view-basedatos" style="display:none"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ===================== BOOTSTRAP: window.storage (mismo Supabase que multicanal) ===================== */
+(function(){
+  const SUPABASE = {
+    url: "https://vsnggxcuznleuvoyoenn.supabase.co",
+    anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZzbmdneGN1em5sZXV2b3lvZW5uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0Mjk0NjQsImV4cCI6MjA5ODAwNTQ2NH0.gTKuAL7yqiLofNjyKwKsngtW8FYBmQ9zxtPtE0T_DR0"
+  };
+  const H = ()=>({ "apikey":SUPABASE.anonKey, "Authorization":"Bearer "+SUPABASE.anonKey, "Content-Type":"application/json" });
+  window.storage = {
+    async get(k){ const r=await fetch(`${SUPABASE.url}/rest/v1/kv?k=eq.${encodeURIComponent(k)}&select=v`,{headers:H()}); if(!r.ok) throw new Error("supa get "+r.status); const a=await r.json(); return (a&&a.length)?{value:a[0].v}:null; },
+    async set(k,valStr){ const r=await fetch(`${SUPABASE.url}/rest/v1/kv`,{method:"POST",headers:{...H(),"Prefer":"resolution=merge-duplicates,return=minimal"},body:JSON.stringify({k,v:valStr})}); if(!r.ok) throw new Error("supa set "+r.status); return true; },
+    async list(p){ const r=await fetch(`${SUPABASE.url}/rest/v1/kv?k=like.${encodeURIComponent(p+"*")}&select=k`,{headers:H()}); if(!r.ok) throw new Error("supa list "+r.status); const a=await r.json(); return {keys:a.map(x=>x.k)}; },
+    async delete(k){ const r=await fetch(`${SUPABASE.url}/rest/v1/kv?k=eq.${encodeURIComponent(k)}`,{method:"DELETE",headers:H()}); if(!r.ok) throw new Error("supa del "+r.status); return true; }
+  };
+})();
+</script>
+
+<script>
+(function(){
+  const $=s=>document.querySelector(s);
+  const toast=$('#toast');
+  function num(v){ const n=parseFloat(String(v).replace(/[, $%]/g,'')); return isNaN(n)?0:n; }
+  function fmt(n){ return (Math.round((n||0)*100)/100).toLocaleString('es-MX',{maximumFractionDigits:2}); }
+  function money(n){ return '$'+fmt(n); }
+  function pct(n){ return n.toFixed(2)+'%'; }
+  function showToast(m){ toast.textContent=m; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'),2200); }
+  function naP(){ return '<span class="cumpl na">—</span>'; }
+  function pillSpan(ok,t){ return `<span class="cumpl ${ok?'ok':'no'}">${t}</span>`; }
+  function cpH(val,meta){ if(!meta) return ''; if(val===null) return naP(); const c=val/meta*100; return pillSpan(c>=100,pct(c)); }
+  function cpL(val,meta){ if(!meta) return ''; if(val===null) return naP(); if(val<=0) return pillSpan(true,'óptimo'); const c=meta/val*100; return pillSpan(c>=100,pct(c)); }
+  function metaTxt(meta,opt){ opt=opt||{}; if(!meta) return ''; return `<span class="mlbl">Meta</span>${opt.lower?'≤':''}${opt.money?money(meta):fmt(meta)}${opt.pct?'%':''}`; }
+  function isoWeekOf(d0){ const d=new Date(Date.UTC(d0.getFullYear(),d0.getMonth(),d0.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const w=1+Math.round(((d-ft)/86400000-3+((ft.getUTCDay()+6)%7))/7); return d.getUTCFullYear()+'-W'+String(w).padStart(2,'0'); }
+  function weekToMonday(ws){ const m=ws.match(/(\d{4})-W(\d{2})/); if(!m)return null; const y=+m[1],w=+m[2]; const j=new Date(Date.UTC(y,0,4)); const dn=(j.getUTCDay()+6)%7; const w1=new Date(j); w1.setUTCDate(j.getUTCDate()-dn); const mo=new Date(w1); mo.setUTCDate(w1.getUTCDate()+(w-1)*7); return mo; }
+  function weekRange(ws){ const mo=weekToMonday(ws); if(!mo)return''; const su=new Date(mo); su.setUTCDate(mo.getUTCDate()+6); const f=d=>String(d.getUTCDate()).padStart(2,'0')+'/'+String(d.getUTCMonth()+1).padStart(2,'0')+'/'+d.getUTCFullYear(); return f(mo)+' → '+f(su); }
+  function ymLabel(ym){ if(!ym)return''; const [y,m]=ym.split('-').map(Number); const d=new Date(y,m-1,1); let s=d.toLocaleDateString('es-MX',{month:'long',year:'numeric'}); return s.charAt(0).toUpperCase()+s.slice(1); }
+  function prevYM(ym){ const [y,m]=ym.split('-').map(Number); const d=new Date(y,m-2,1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+
+  /* ===== shared UI helpers ===== */
+  function setV(id,v){ const e=$('#'+id); if(e) e.value=(v!==undefined&&v!==null&&v!=='')?v:''; }
+  function setVAuto(id,v){ const e=$('#'+id); if(e){ e.value=(v!==undefined&&v!==null&&v!=='')?v:''; if(e.classList.contains('auto')) e.dataset.auto=(e.value!=='')?'0':'1'; } }
+  function gv(id){ const e=$('#'+id); return e?e.value.trim():''; }
+  function fillNotes(rec){ setV('x_notas',rec&&rec.notas); setV('x_aprendizajes',rec&&rec.aprendizajes); setV('x_cambios',rec&&rec.cambios); }
+  function readNotes(rec){ rec.notas=gv('x_notas'); rec.aprendizajes=gv('x_aprendizajes'); rec.cambios=gv('x_cambios'); }
+  function notesBlock(){ return `<div class="card"><div class="card-head"><span class="dot" style="background:var(--olivo)"></span><h3>Cierre del periodo</h3></div><div class="card-body"><div class="notes-grid">
+    <div><label style="font-size:11px;color:var(--neutro);font-weight:600">Notas</label><textarea id="x_notas"></textarea></div>
+    <div><label style="font-size:11px;color:var(--neutro);font-weight:600">3 aprendizajes</label><textarea id="x_aprendizajes"></textarea></div>
+    <div><label style="font-size:11px;color:var(--neutro);font-weight:600">3 cambios</label><textarea id="x_cambios"></textarea></div></div></div></div>`; }
+  function notesReport(rec){ return `<div class="card"><div class="card-head"><span class="dot" style="background:var(--olivo)"></span><h3>Cierre del periodo</h3></div><div class="card-body"><div class="rnotes">
+    <div class="nblock"><h5>Notas</h5><p class="${rec.notas?'':'empty-note'}">${rec.notas||'Sin notas'}</p></div>
+    <div class="nblock"><h5>3 aprendizajes</h5><p class="${rec.aprendizajes?'':'empty-note'}">${rec.aprendizajes||'Sin registro'}</p></div>
+    <div class="nblock"><h5>3 cambios</h5><p class="${rec.cambios?'':'empty-note'}">${rec.cambios||'Sin registro'}</p></div></div></div></div>`; }
+  function saveBar(){ return `<div class="actions"><button class="btn-ghost" id="btn-clear">Limpiar</button><button class="btn-prim" id="btn-save">Guardar</button></div>`; }
+  function noData(p,type){ const r=type==='week'?weekRange(p):ymLabel(p); return `<div class="card"><div class="card-body" style="text-align:center;color:var(--neutro)">No hay datos para <b>${type==='week'?p:r}</b>${type==='week'?' ('+r+')':''}. Captúralos en <b>Ingreso de datos</b>.</div></div>`; }
+  function respLine(){ const r=RESP[state.active]; return `<div class="sresp">Responsable: ${r&&r.trim()?r:'sin asignar'}</div>`; }
+  function cRow(n,v){ return `<tr><td class="kname">${n}</td><td class="kval">${fmt(v)}</td><td class="kmeta"></td><td class="ccell"></td></tr>`; }
+  function rRow(n,v,meta,lower){ const vt=v===null?'—':pct(v); const mt=meta?`<span class="mlbl">Meta</span>${lower?'≤':'≥'}${fmt(meta)}%`:''; const cu=meta?(lower?cpL(v,meta):cpH(v,meta)):''; return `<tr class="calc-row"><td class="kname">${n}</td><td class="kval">${vt}</td><td class="kmeta">${mt}</td><td class="ccell">${cu}</td></tr>`; }
+
+  /* ===== MÓDULO 1 · REDES SOCIALES (mensual) ===== */
+  const RS_PLAT=[
+    {key:'fb',name:'Facebook',color:'var(--fb)',fields:[['leads','Leads orgánicos'],['totalSeg','Total de seguidores'],['segMesPasado','Seguidores mes pasado'],['segNuevos','Seguidores nuevos'],['reels','Reels publicados'],['posts','Posts publicados'],['carruseles','Carruseles publicados'],['stories','Stories publicadas'],['alcance','Alcance total'],['interacciones','Interacciones totales']]},
+    {key:'ig',name:'Instagram',color:'var(--ig)',fields:[['leads','Leads orgánicos'],['totalSeg','Total de seguidores'],['segNuevos','Seguidores nuevos'],['reels','Reels publicados'],['posts','Posts publicados'],['carruseles','Carruseles publicados'],['stories','Stories publicadas'],['alcance','Alcance total'],['interacciones','Interacciones totales']]},
+    {key:'tt',name:'TikTok',color:'var(--tt)',fields:[['leads','Leads orgánicos'],['totalSeg','Total de seguidores'],['segNuevos','Seguidores nuevos'],['posts','Posts publicados'],['alcance','Alcance total'],['interacciones','Interacciones totales']]},
+    {key:'yt',name:'YouTube',color:'var(--yt)',fields:[['leads','Leads orgánicos'],['totalSeg','Total de seguidores'],['segNuevos','Seguidores nuevos'],['videos','Videos publicados'],['shorts','Shorts publicados'],['alcance','Alcance total'],['interacciones','Interacciones totales']]}
+  ];
+  const RS_SEED_METAS={ fb:{leads:4,segNuevos:30,reels:9,posts:9,carruseles:4,stories:20,alcance:3200,interacciones:200}, ig:{leads:8,segNuevos:100,reels:9,posts:9,carruseles:5,stories:20,alcance:10000,interacciones:600}, tt:{leads:2,segNuevos:40,posts:9,alcance:6000,interacciones:240}, yt:{leads:2,segNuevos:15,videos:1,shorts:9,interacciones:20}, _crec:5 };
+  const RS_SEED={ '2026-05':{
+    fb:{leads:3,totalSeg:438,segMesPasado:0,segNuevos:13,reels:6,posts:9,carruseles:3,stories:31,alcance:40641,interacciones:1302,top:[{desc:'Selvadentro en Madrid, JUAN.',link:'https://fb.watch/HtydGVuCcb/'},{desc:'Recorrido cenote Mirador',link:'https://fb.watch/Htyh1hYRXU/'},{desc:'Foto testimonio con quote',link:'https://www.facebook.com/61565754962833/posts/'}]},
+    ig:{leads:10,totalSeg:2649,segNuevos:162,reels:6,posts:9,carruseles:3,stories:31,alcance:36128,interacciones:1314,top:[{desc:'Selvadentro llega a Madrid · Omar',link:'https://www.instagram.com/reel/DYFeLs_kgKq/'},{desc:'Render vs foto real de acceso',link:'https://www.instagram.com/p/DX16As3FtEI/'},{desc:'Comunidad Selvadentro / sound healing',link:'https://www.instagram.com/reel/DYlApIuFT7r/'}]},
+    tt:{leads:0,totalSeg:0,segNuevos:0,posts:0,alcance:0,interacciones:0,top:[{desc:'',link:''},{desc:'',link:''},{desc:'',link:''}]},
+    yt:{leads:0,totalSeg:2,segNuevos:2,videos:2,shorts:4,alcance:123,interacciones:11,top:[{desc:'Selvadentro llega a Madrid · Juan',link:'https://youtube.com/shorts/Dg5hf0mi1TE'},{desc:'Short lifestyle',link:'https://youtube.com/shorts/P6OrmHvswBU'},{desc:'Comunidad Selvadentro',link:'https://youtube.com/shorts/zVhxPD0oj3k'}]},
+    notas:'',aprendizajes:'',cambios:'' } };
+  function rsIngreso(host){ let h=''; RS_PLAT.forEach(p=>{ h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${p.color}"></span><h3>${p.name}</h3></div><div class="card-body"><div class="grid">`; p.fields.forEach(([k,l])=>h+=`<div class="field"><label>${l}</label><input type="text" inputmode="numeric" id="rs_${p.key}_${k}" placeholder="0"></div>`); h+=`</div><div class="subhead" style="margin-top:14px">Top 3 publicaciones</div>`; for(let i=1;i<=3;i++) h+=`<div class="camp-top"><span class="badge">${i}</span><input class="cn" id="rs_${p.key}_top${i}_desc" placeholder="Descripción ${i}"><input class="cn" id="rs_${p.key}_top${i}_link" placeholder="Link"></div>`; h+=`</div></div>`; }); h+=notesBlock()+saveBar(); host.innerHTML=h; }
+  function rsFill(rec){ RS_PLAT.forEach(p=>{ const d=(rec&&rec[p.key])||{}; p.fields.forEach(([k])=>setV(`rs_${p.key}_${k}`,d[k])); const t=d.top||[]; for(let i=1;i<=3;i++){ setV(`rs_${p.key}_top${i}_desc`,(t[i-1]||{}).desc); setV(`rs_${p.key}_top${i}_link`,(t[i-1]||{}).link);} }); fillNotes(rec); }
+  function rsRead(){ const rec={}; RS_PLAT.forEach(p=>{ const d={}; p.fields.forEach(([k])=>d[k]=num(gv(`rs_${p.key}_${k}`))); d.top=[]; for(let i=1;i<=3;i++) d.top.push({desc:gv(`rs_${p.key}_top${i}_desc`),link:gv(`rs_${p.key}_top${i}_link`)}); rec[p.key]=d; }); readNotes(rec); return rec; }
+  function rsMetas(host,M){ let h=`<div class="metas-hint">Objetivos mensuales por plataforma (verde ≥100% / rojo &lt;100%). Total de seguidores, Engagement y Seguidores mes pasado no llevan meta.</div>`; RS_PLAT.forEach(p=>{ h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${p.color}"></span><h3>${p.name}</h3></div><div class="card-body"><div class="grid">`; Object.keys(M.metas[p.key]||{}).forEach(k=>{ const lbl=(p.fields.find(f=>f[0]===k)||[k,k])[1]; h+=`<div class="field"><label>${lbl}</label><input type="text" inputmode="numeric" id="rsm_${p.key}_${k}" value="${M.metas[p.key][k]}"></div>`; }); h+=`</div></div></div>`; }); h+=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--olivo)"></span><h3>Crecimiento de red</h3></div><div class="card-body"><div class="grid"><div class="field"><label>Meta de crecimiento mensual (%)</label><input type="text" inputmode="numeric" id="rsm__crec" value="${M.metas._crec}"></div></div></div></div>`; h+=`<div class="actions"><button class="btn-prim" id="btn-save-metas">Guardar metas</button></div>`; host.innerHTML=h; $('#btn-save-metas').onclick=async()=>{ RS_PLAT.forEach(p=>Object.keys(M.metas[p.key]).forEach(k=>M.metas[p.key][k]=num($(`#rsm_${p.key}_${k}`).value))); M.metas._crec=num($('#rsm__crec').value); await saveMeta(M); showToast('✓ Metas guardadas'); }; }
+  function rsReporte(host,ym,M){ const rec=M.records[ym]; if(!rec){ host.innerHTML=noData(ym,'month'); return; } const prev=M.records[prevYM(ym)]; const sum=(r,f)=>RS_PLAT.reduce((a,p)=>a+((r&&r[p.key]&&num(r[p.key][f]))||0),0);
+    let h=`<div class="summary"><div class="stitle">Consolidado Redes Sociales · ${ymLabel(ym)}</div>${respLine()}<div class="summary-grid">`;
+    [['Leads orgánicos','leads'],['Alcance total','alcance'],['Interacciones','interacciones'],['Seguidores totales','totalSeg'],['Seguidores nuevos','segNuevos']].forEach(([l,f])=>{ const cur=sum(rec,f); let dt='sin dato previo',dc='var(--arena)'; if(prev){ const d=cur-sum(prev,f); if(d===0)dt='= vs mes anterior'; else{ const pv=sum(prev,f); const pc=pv?Math.round(Math.abs(d)/pv*100):null; dt=(d>0?'▲ +':'▼ −')+fmt(Math.abs(d))+(pc!==null?` (${pc}%)`:''); dc=d>0?'#CBDDC0':'#F2CFC9'; } } h+=`<div class="kpi"><div class="klabel">${l}</div><div class="kval">${fmt(cur)}</div><div class="kdelta" style="color:${dc}">${dt}</div></div>`; });
+    h+=`</div></div>`;
+    RS_PLAT.forEach(p=>{ const d=rec[p.key]||{}; const mp=M.metas[p.key]||{}; const pd=(prev&&prev[p.key])||null; h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${p.color}"></span><h3>${p.name}</h3></div><div class="card-body"><table class="rtable">`; p.fields.forEach(([k,l])=>{ const v=num(d[k]); const meta=mp[k]; h+=`<tr><td class="kname">${l}</td><td class="kval">${fmt(v)}</td><td class="kmeta">${metaTxt(meta)}</td><td class="ccell">${meta?cpH(v,meta):''}</td></tr>`; }); const alc=num(d.alcance),inter=num(d.interacciones); const eng=alc>0?inter/alc*100:null; h+=`<tr class="calc-row"><td class="kname">Engagement</td><td class="kval">${eng===null?'—':pct(eng)}</td><td class="kmeta"></td><td class="ccell"></td></tr>`; let base=null; if(p.key==='fb') base=num(d.segMesPasado); else if(pd) base=num(pd.totalSeg); const crec=(base&&base>0)?num(d.segNuevos)/base*100:null; h+=`<tr class="calc-row"><td class="kname">Crecimiento de red</td><td class="kval">${crec===null?'—':pct(crec)}</td><td class="kmeta">${metaTxt(M.metas._crec,{pct:1})}</td><td class="ccell">${crec===null?naP():cpH(crec,M.metas._crec)}</td></tr></table>`; const tops=(d.top||[]).filter(t=>t.desc||t.link); if(tops.length){ h+=`<div class="subhead" style="margin-top:14px">Top publicaciones</div>`; tops.forEach((t,i)=>{ h+=`<div style="padding:7px 0;border-top:1px dashed var(--linea)"><span class="rank">${i+1}</span> ${t.desc||'(sin descripción)'}`+(t.link?` · <a href="${t.link}" target="_blank" style="color:var(--olivo);font-size:12px;word-break:break-all">${t.link}</a>`:'')+`</div>`; }); } h+=`</div></div>`; });
+    h+=notesReport(rec); host.innerHTML=h;
+  }
+
+  /* ===== MÓDULO 2 · PPC ADS (semanal) ===== */
+  const PPC_CF=[['leads','Leads'],['cpl','CPL'],['alcance','Alcance'],['clics','Clics'],['ctr','CTR'],['cpr','CPR']]; const CUR='MXN';
+  const PPC_SEED_METAS={ global:{leadsTotales:12,cplGlobal:800}, meta:{leads:8,cpl:500,ctr:2.5,campanas:3}, google:{leads:3,cpl:1800,ctr:6,campanas:1} };
+  const PPC_MF=[['global','leadsTotales','Leads totales / semana','mín'],['global','cplGlobal','CPL global','máx '+CUR+' · menos mejor'],['meta','leads','Leads de Meta / sem','mín'],['meta','cpl','CPL Meta','máx · menos mejor'],['meta','ctr','CTR Meta','mín %'],['meta','campanas','Campañas activas Meta','mín'],['google','leads','Leads de Google / sem','mín'],['google','cpl','CPL Google','máx · menos mejor'],['google','ctr','CTR Google','mín %'],['google','campanas','Campañas activas Google','mín']];
+  function ppcPlatCard(plt,name,color,nc,isG){ let h=`<div class="card"><div class="card-head"><span class="dot" style="background:${color}"></span><h3>${name}</h3></div><div class="card-body"><div class="subhead">Resumen</div><div class="grid">
+    <div class="field"><label>Leads de ${name}</label><input type="text" inputmode="numeric" id="ppc_${plt}_leads" placeholder="0"></div>
+    <div class="field"><label>Inversión (${CUR})</label><input type="text" inputmode="numeric" id="ppc_${plt}_inv" placeholder="0"></div>
+    <div class="field"><label>CPL <span class="calc-tag">(auto inv÷leads)</span></label><input type="text" inputmode="numeric" id="ppc_${plt}_cpl" class="auto" placeholder="0"></div>
+    <div class="field"><label>Campañas activas</label><input type="text" inputmode="numeric" id="ppc_${plt}_campanas" placeholder="0"></div></div><div class="subhead" style="margin-top:18px">Campañas</div>`;
+    for(let i=1;i<=nc;i++){ h+=`<div class="camp"><div class="camp-top"><span class="badge">${i}</span><input class="cn" id="ppc_${plt}_c${i}_name" placeholder="Nombre campaña ${i}"><input class="ci" id="ppc_${plt}_c${i}_id" placeholder="ID ${i}"></div><div class="grid">`; PPC_CF.forEach(([k,l])=>{ const ca=(k==='ctr'); h+=`<div class="field"><label>${l}${ca?' <span class="calc-tag">(auto)</span>':''}</label><input type="text" inputmode="numeric" id="ppc_${plt}_c${i}_${k}" class="${ca?'auto':''}" placeholder="0"></div>`; }); if(isG) h+=`<div class="field" style="grid-column:1/-1"><label>Top Search Keyword</label><input type="text" id="ppc_${plt}_c${i}_topkw" placeholder="palabra clave top"></div>`; h+=`</div></div>`; } h+=`</div></div>`; return h; }
+  function ppcIngreso(host){ let h=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--cobre)"></span><h3>Totales del periodo</h3></div><div class="card-body"><div class="grid">
+    <div class="field"><label>Leads totales <span class="calc-tag">(auto)</span></label><input type="text" inputmode="numeric" id="ppc_tot_leads" class="auto" placeholder="0"></div>
+    <div class="field"><label>Inversión total (${CUR}) <span class="calc-tag">(auto)</span></label><input type="text" inputmode="numeric" id="ppc_tot_inv" class="auto" placeholder="0"></div></div></div></div>`;
+    h+=ppcPlatCard('meta','Meta ADS','var(--meta)',5,false)+ppcPlatCard('google','Google ADS','var(--google)',2,true)+notesBlock()+saveBar(); host.innerHTML=h;
+    const aw=(id,fn,deps)=>{ const t=$('#'+id); t.addEventListener('input',()=>t.dataset.auto='0'); deps.forEach(d=>{const e=$('#'+d); if(e)e.addEventListener('input',()=>{ if(t.dataset.auto!=='0'){ const v=fn(); t.value=(v===null?'':fmt(v)); t.dataset.auto='1'; } });}); };
+    aw('ppc_tot_leads',()=>num($('#ppc_meta_leads').value)+num($('#ppc_google_leads').value),['ppc_meta_leads','ppc_google_leads']);
+    aw('ppc_tot_inv',()=>num($('#ppc_meta_inv').value)+num($('#ppc_google_inv').value),['ppc_meta_inv','ppc_google_inv']);
+    ['meta','google'].forEach(p=>{ aw('ppc_'+p+'_cpl',()=>{const l=num($('#ppc_'+p+'_leads').value);return l>0?num($('#ppc_'+p+'_inv').value)/l:null;},['ppc_'+p+'_inv','ppc_'+p+'_leads']); const nc=p==='meta'?5:2; for(let i=1;i<=nc;i++){(function(p,i){aw(`ppc_${p}_c${i}_ctr`,()=>{const a=num($(`#ppc_${p}_c${i}_alcance`).value);return a>0?num($(`#ppc_${p}_c${i}_clics`).value)/a*100:null;},[`ppc_${p}_c${i}_clics`,`ppc_${p}_c${i}_alcance`]);})(p,i);} });
+  }
+  function ppcFill(rec){ setVAuto('ppc_tot_leads',rec&&rec.tot?rec.tot.leads:''); setVAuto('ppc_tot_inv',rec&&rec.tot?rec.tot.inv:''); ['meta','google'].forEach(p=>{ const d=(rec&&rec[p])||{}; setVAuto('ppc_'+p+'_leads',d.leads); setVAuto('ppc_'+p+'_inv',d.inv); setVAuto('ppc_'+p+'_cpl',d.cpl); setVAuto('ppc_'+p+'_campanas',d.campanas); const nc=p==='meta'?5:2; for(let i=1;i<=nc;i++){ const c=(d.camps&&d.camps[i-1])||{}; setV(`ppc_${p}_c${i}_name`,c.name); setV(`ppc_${p}_c${i}_id`,c.id); PPC_CF.forEach(([k])=>setVAuto(`ppc_${p}_c${i}_${k}`,c[k])); if(p==='google') setV(`ppc_${p}_c${i}_topkw`,c.topkw); } }); fillNotes(rec); }
+  function ppcRead(){ const rec={tot:{leads:num(gv('ppc_tot_leads')),inv:num(gv('ppc_tot_inv'))}}; ['meta','google'].forEach(p=>{ const d={leads:num(gv('ppc_'+p+'_leads')),inv:num(gv('ppc_'+p+'_inv')),cpl:num(gv('ppc_'+p+'_cpl')),campanas:num(gv('ppc_'+p+'_campanas')),camps:[]}; const nc=p==='meta'?5:2; for(let i=1;i<=nc;i++){ const c={name:gv(`ppc_${p}_c${i}_name`),id:gv(`ppc_${p}_c${i}_id`)}; PPC_CF.forEach(([k])=>c[k]=num(gv(`ppc_${p}_c${i}_${k}`))); if(p==='google')c.topkw=gv(`ppc_${p}_c${i}_topkw`); d.camps.push(c);} rec[p]=d; }); readNotes(rec); return rec; }
+  function ppcMetas(host,M){ let h=`<div class="metas-hint">Objetivos semanales editables. En <b>CPL</b> la lógica es inversa (verde si el real ≤ meta). Inversión y CPR sin meta. Precargados = benchmarks de bienes raíces.</div>`; ['global','meta','google'].forEach(sc=>{ const tit={global:'Totales',meta:'Meta ADS',google:'Google ADS'}[sc]; const col={global:'var(--olivo)',meta:'var(--meta)',google:'var(--google)'}[sc]; h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${col}"></span><h3>${tit}</h3></div><div class="card-body"><div class="grid">`; PPC_MF.filter(f=>f[0]===sc).forEach(f=>h+=`<div class="field"><label>${f[2]} <span class="calc-tag">${f[3]}</span></label><input type="text" inputmode="numeric" id="ppcm_${f[0]}_${f[1]}" value="${M.metas[f[0]][f[1]]}"></div>`); h+=`</div></div></div>`; }); h+=`<div class="actions"><button class="btn-prim" id="btn-save-metas">Guardar metas</button></div>`; host.innerHTML=h; $('#btn-save-metas').onclick=async()=>{ PPC_MF.forEach(f=>M.metas[f[0]][f[1]]=num($(`#ppcm_${f[0]}_${f[1]}`).value)); await saveMeta(M); showToast('✓ Metas guardadas'); }; }
+  function ppcReporte(host,w,M){ const rec=M.records[w]; if(!rec){ host.innerHTML=noData(w,'week'); return; } const tl=num(rec.tot.leads),ti=num(rec.tot.inv); const cg=tl>0?ti/tl:0; const mg=M.metas.global;
+    let h=`<div class="summary"><div class="stitle">PPC Ads · ${w} · ${weekRange(w)}</div>${respLine()}<div class="summary-grid">`;
+    h+=`<div class="kpi"><div class="klabel">Leads totales</div><div class="kval">${fmt(tl)}</div><div class="kcumpl">${cpH(tl,mg.leadsTotales)}</div></div>`;
+    h+=`<div class="kpi"><div class="klabel">Inversión total</div><div class="kval">${money(ti)}</div><div class="kcumpl" style="color:var(--arena)">presupuesto</div></div>`;
+    h+=`<div class="kpi"><div class="klabel">CPL global</div><div class="kval">${money(cg)}</div><div class="kcumpl">${cpL(cg||null,mg.cplGlobal)}</div></div></div></div>`;
+    [['meta','Meta ADS','var(--meta)'],['google','Google ADS','var(--google)']].forEach(([plt,name,color])=>{ const d=rec[plt]||{}; const m=M.metas[plt]||{}; let a=0,c=0; (d.camps||[]).forEach(x=>{a+=num(x.alcance);c+=num(x.clics);}); const ctr=a>0?c/a*100:null; const cpl=num(d.cpl)||(num(d.leads)>0?num(d.inv)/num(d.leads):0);
+      h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${color}"></span><h3>${name}</h3></div><div class="card-body"><table class="rtable">`;
+      h+=`<tr><td class="kname">Leads</td><td class="kval">${fmt(num(d.leads))}</td><td class="kmeta">${metaTxt(m.leads)}</td><td class="ccell">${cpH(num(d.leads),m.leads)}</td></tr>`;
+      h+=`<tr><td class="kname">Inversión</td><td class="kval">${money(num(d.inv))}</td><td class="kmeta"></td><td class="ccell"></td></tr>`;
+      h+=`<tr><td class="kname">CPL</td><td class="kval">${money(cpl)}</td><td class="kmeta">${metaTxt(m.cpl,{money:1,lower:1})}</td><td class="ccell">${cpL(cpl||null,m.cpl)}</td></tr>`;
+      h+=`<tr><td class="kname">Campañas activas</td><td class="kval">${fmt(num(d.campanas))}</td><td class="kmeta">${metaTxt(m.campanas)}</td><td class="ccell">${cpH(num(d.campanas),m.campanas)}</td></tr>`;
+      h+=`<tr class="calc-row"><td class="kname">CTR ponderado</td><td class="kval">${ctr===null?'—':pct(ctr)}</td><td class="kmeta">${metaTxt(m.ctr,{pct:1})}</td><td class="ccell">${ctr===null?naP():cpH(ctr,m.ctr)}</td></tr>`;
+      h+=`<tr class="calc-row"><td class="kname">Alcance / Clics</td><td class="kval">${fmt(a)} / ${fmt(c)}</td><td class="kmeta"></td><td class="ccell"></td></tr></table>`;
+      const camps=(d.camps||[]).filter(x=>x.name||num(x.leads)||num(x.alcance)||num(x.clics)); const isG=plt==='google';
+      if(camps.length){ h+=`<div class="scroll"><table class="ctable"><tr><th class="l">Campaña</th><th>Leads</th><th>CPL</th><th>Alcance</th><th>Clics</th><th>CTR</th><th>CPR</th>${isG?'<th class="l">Top KW</th>':''}</tr>`; camps.forEach(x=>{ const xc=num(x.ctr)||(num(x.alcance)>0?num(x.clics)/num(x.alcance)*100:0); h+=`<tr><td class="l">${x.name||'(sin nombre)'}</td><td>${fmt(num(x.leads))}</td><td>${money(num(x.cpl))}</td><td>${fmt(num(x.alcance))}</td><td>${fmt(num(x.clics))}</td><td>${xc?pct(xc):'—'}</td><td>${num(x.cpr)?money(num(x.cpr)):'—'}</td>${isG?`<td class="l kw">${x.topkw||'—'}</td>`:''}</tr>`; }); h+=`</table></div>`; }
+      h+=`</div></div>`; });
+    h+=notesReport(rec); host.innerHTML=h;
+  }
+
+  /* ===== MÓDULO 3 · CRM MANAGER (semanal) ===== */
+  const CRM_SRC=[['totales','Leads totales'],['meta','Leads de Meta ADS'],['google','Leads de Google ADS'],['brokers','Leads de brokers'],['referidos','Leads de referidos'],['otras','Leads de otras fuentes']];
+  const CRM_SEG=[{key:'totales',name:'Leads totales',color:'var(--verde-prof)'},{key:'meta',name:'Leads de Meta ADS',color:'var(--meta)'},{key:'google',name:'Leads de Google ADS',color:'var(--google)'},{key:'otras',name:'Leads de otras fuentes',color:'var(--otras)'}];
+  const FUNNEL=[['cql','CQL'],['mql','MQL'],['sql','SQL'],['sqls','SQL Selvadentro'],['corretaje','Corretaje'],['descal','Descalificados']];
+  const CRM_WEB=[['trafico','Tráfico orgánico'],['registros','Registros en formularios'],['seo','Artículos SEO (blog)']];
+  const CRM_EM=[['enviadas','Email enviadas'],['abiertas','Email abiertas'],['click','Email click'],['respuesta','Email con respuesta']];
+  const CRM_MS=[['enviadas','Mensaje enviadas'],['abiertas','Mensaje abiertas'],['click','Mensaje click']];
+  const CRM_SEED_METAS={ funnel:{leadToCQL:35,cqlToMQL:40,mqlToSQL:50,sqlToSQLS:60}, leads:{totales:15}, web:{formConv:2}, email:{open:25,click:3,reply:5}, msg:{open:60,click:10} };
+  const CRM_MF=[['funnel','leadToCQL','Lead → CQL','% mín'],['funnel','cqlToMQL','CQL → MQL','% mín'],['funnel','mqlToSQL','MQL → SQL','% mín'],['funnel','sqlToSQLS','SQL → SQL Selvadentro','% mín'],['leads','totales','Leads totales / semana','mín'],['web','formConv','Conversión de formulario','% mín'],['email','open','Email · Open rate','% mín'],['email','click','Email · Click rate','% mín'],['email','reply','Email · Reply rate','% mín'],['msg','open','Mensaje · Open rate','% mín'],['msg','click','Mensaje · Click rate','% mín']];
+  const CRM_SEED={ '2026-W15':{ src:{totales:20,meta:12,google:5,brokers:2,referidos:1,otras:0}, funnels:{totales:{cql:8,mql:5,sql:3,sqls:1,corretaje:1,descal:6},meta:{cql:5,mql:3,sql:2,sqls:1,corretaje:0,descal:4},google:{cql:2,mql:1,sql:1,sqls:0,corretaje:0,descal:2},otras:{cql:1,mql:1,sql:0,sqls:0,corretaje:0,descal:1}}, web:{trafico:1240,registros:31,seo:3}, email:{enviadas:480,abiertas:134,click:17,respuesta:9}, msg:{enviadas:210,abiertas:145,click:25}, notas:'Semana de EJEMPLO precargada. Sobrescríbela con datos reales.',aprendizajes:'',cambios:'' } };
+  function crmIngreso(host){ let h=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--cobre)"></span><h3>Conteo de leads por fuente</h3></div><div class="card-body"><div class="grid">`; CRM_SRC.forEach(([k,l])=>{ const au=k==='totales'; h+=`<div class="field"><label>${l}${au?' <span class="calc-tag">(auto)</span>':''}</label><input type="text" inputmode="numeric" id="crm_src_${k}" class="${au?'auto':''}" placeholder="0"></div>`; }); h+=`</div></div></div>`; CRM_SEG.forEach(s=>{ h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${s.color}"></span><h3>Embudo · ${s.name}</h3></div><div class="card-body"><div class="grid">`; FUNNEL.forEach(([k,l])=>h+=`<div class="field"><label>${l}</label><input type="text" inputmode="numeric" id="crm_f_${s.key}_${k}" placeholder="0"></div>`); h+=`</div></div></div>`; }); h+=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--web)"></span><h3>Website</h3></div><div class="card-body"><div class="grid">`; CRM_WEB.forEach(([k,l])=>h+=`<div class="field"><label>${l}</label><input type="text" inputmode="numeric" id="crm_web_${k}" placeholder="0"></div>`); h+=`</div></div></div>`; h+=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--mail)"></span><h3>Email &amp; Chat MKT</h3></div><div class="card-body"><div class="subhead">Email</div><div class="grid">`; CRM_EM.forEach(([k,l])=>h+=`<div class="field"><label>${l}</label><input type="text" inputmode="numeric" id="crm_email_${k}" placeholder="0"></div>`); h+=`</div><div class="subhead" style="margin-top:16px">Mensaje / Chat</div><div class="grid">`; CRM_MS.forEach(([k,l])=>h+=`<div class="field"><label>${l}</label><input type="text" inputmode="numeric" id="crm_msg_${k}" placeholder="0"></div>`); h+=`</div></div></div>`; h+=notesBlock()+saveBar(); host.innerHTML=h; const t=$('#crm_src_totales'); t.addEventListener('input',()=>t.dataset.auto='0'); ['meta','google','brokers','referidos','otras'].forEach(k=>$('#crm_src_'+k).addEventListener('input',()=>{ if(t.dataset.auto!=='0'){ t.value=fmt(['meta','google','brokers','referidos','otras'].reduce((a,x)=>a+num($('#crm_src_'+x).value),0)); t.dataset.auto='1'; } })); }
+  function crmFill(rec){ CRM_SRC.forEach(([k])=>setVAuto('crm_src_'+k,rec&&rec.src?rec.src[k]:'')); CRM_SEG.forEach(s=>{ const f=(rec&&rec.funnels&&rec.funnels[s.key])||{}; FUNNEL.forEach(([k])=>setV(`crm_f_${s.key}_${k}`,f[k])); }); CRM_WEB.forEach(([k])=>setV('crm_web_'+k,rec&&rec.web?rec.web[k]:'')); CRM_EM.forEach(([k])=>setV('crm_email_'+k,rec&&rec.email?rec.email[k]:'')); CRM_MS.forEach(([k])=>setV('crm_msg_'+k,rec&&rec.msg?rec.msg[k]:'')); fillNotes(rec); }
+  function crmRead(){ const rec={src:{},funnels:{},web:{},email:{},msg:{}}; CRM_SRC.forEach(([k])=>rec.src[k]=num(gv('crm_src_'+k))); CRM_SEG.forEach(s=>{ rec.funnels[s.key]={}; FUNNEL.forEach(([k])=>rec.funnels[s.key][k]=num(gv(`crm_f_${s.key}_${k}`))); }); CRM_WEB.forEach(([k])=>rec.web[k]=num(gv('crm_web_'+k))); CRM_EM.forEach(([k])=>rec.email[k]=num(gv('crm_email_'+k))); CRM_MS.forEach(([k])=>rec.msg[k]=num(gv('crm_msg_'+k))); readNotes(rec); return rec; }
+  function crmMetas(host,M){ let h=`<div class="metas-hint">Objetivos editables. Las conversiones del embudo se comparan en los 4 segmentos. Precargados = punto de partida.</div>`; [['funnel','Embudo de calificación · aplica a los 4 segmentos','var(--cobre)'],['leads','Volumen','var(--verde-prof)'],['web','Website','var(--web)'],['email','Email MKT','var(--mail)'],['msg','Mensaje / Chat MKT','var(--mail)']].forEach(([sc,tit,col])=>{ h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${col}"></span><h3>${tit}</h3></div><div class="card-body"><div class="grid">`; CRM_MF.filter(f=>f[0]===sc).forEach(f=>h+=`<div class="field"><label>${f[2]} <span class="calc-tag">${f[3]}</span></label><input type="text" inputmode="numeric" id="crmm_${f[0]}_${f[1]}" value="${M.metas[f[0]][f[1]]}"></div>`); h+=`</div></div></div>`; }); h+=`<div class="actions"><button class="btn-prim" id="btn-save-metas">Guardar metas</button></div>`; host.innerHTML=h; $('#btn-save-metas').onclick=async()=>{ CRM_MF.forEach(f=>M.metas[f[0]][f[1]]=num($(`#crmm_${f[0]}_${f[1]}`).value)); await saveMeta(M); showToast('✓ Metas guardadas'); }; }
+  function crmReporte(host,w,M){ const rec=M.records[w]; if(!rec){ host.innerHTML=noData(w,'week'); return; } let h=''; if((rec.notas||'').indexOf('EJEMPLO')>=0) h+=`<div class="ex-banner">⚠️ ${w} trae <b>datos de ejemplo</b>. Sobrescríbelos en Ingreso.</div>`;
+    h+=`<div class="summary"><div class="stitle">CRM Manager · ${w} · ${weekRange(w)}</div>${respLine()}<div class="summary-grid">`;
+    h+=`<div class="kpi"><div class="klabel">Leads totales</div><div class="kval">${fmt(num(rec.src.totales))}</div><div class="kcumpl">${M.metas.leads.totales?cpH(num(rec.src.totales),M.metas.leads.totales):'<span style="color:var(--arena)">—</span>'}</div></div>`;
+    [['meta','Meta ADS'],['google','Google ADS'],['brokers','Brokers'],['referidos','Referidos'],['otras','Otras']].forEach(([k,l])=>h+=`<div class="kpi"><div class="klabel">${l}</div><div class="kval">${fmt(num(rec.src[k]))}</div></div>`); h+=`</div></div>`;
+    CRM_SEG.forEach(s=>{ const lead=num(rec.src[s.key]); const f=rec.funnels[s.key]||{}; const mf=M.metas.funnel; h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${s.color}"></span><h3>Embudo · ${s.name}</h3></div><div class="card-body"><table class="rtable">`; FUNNEL.forEach(([k,l])=>h+=cRow(l,num(f[k]))); h+=rRow('Lead → CQL',lead>0?num(f.cql)/lead*100:null,mf.leadToCQL,false)+rRow('CQL → MQL',num(f.cql)>0?num(f.mql)/num(f.cql)*100:null,mf.cqlToMQL,false)+rRow('MQL → SQL',num(f.mql)>0?num(f.sql)/num(f.mql)*100:null,mf.mqlToSQL,false)+rRow('SQL → SQL Selvadentro',num(f.sql)>0?num(f.sqls)/num(f.sql)*100:null,mf.sqlToSQLS,false); h+=`</table></div></div>`; });
+    const web=rec.web||{}; const fc=num(web.trafico)>0?num(web.registros)/num(web.trafico)*100:null; h+=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--web)"></span><h3>Website</h3></div><div class="card-body"><table class="rtable">`+cRow('Tráfico orgánico',num(web.trafico))+cRow('Registros en formularios',num(web.registros))+cRow('Artículos SEO (blog)',num(web.seo))+rRow('Conversión de formulario',fc,M.metas.web.formConv,false)+`</table></div></div>`;
+    const em=rec.email||{},ms=rec.msg||{}; const eo=num(em.enviadas)>0?num(em.abiertas)/num(em.enviadas)*100:null,ec=num(em.enviadas)>0?num(em.click)/num(em.enviadas)*100:null,er=num(em.enviadas)>0?num(em.respuesta)/num(em.enviadas)*100:null; const mo=num(ms.enviadas)>0?num(ms.abiertas)/num(ms.enviadas)*100:null,mc=num(ms.enviadas)>0?num(ms.click)/num(ms.enviadas)*100:null;
+    h+=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--mail)"></span><h3>Email &amp; Chat MKT</h3></div><div class="card-body"><div class="subhead">Email</div><table class="rtable">`+cRow('Enviadas',num(em.enviadas))+cRow('Abiertas',num(em.abiertas))+cRow('Click',num(em.click))+cRow('Con respuesta',num(em.respuesta))+rRow('Open rate',eo,M.metas.email.open,false)+rRow('Click rate',ec,M.metas.email.click,false)+rRow('Reply rate',er,M.metas.email.reply,false)+`</table><div class="subhead" style="margin-top:16px">Mensaje / Chat</div><table class="rtable">`+cRow('Enviadas',num(ms.enviadas))+cRow('Abiertas',num(ms.abiertas))+cRow('Click',num(ms.click))+rRow('Open rate',mo,M.metas.msg.open,false)+rRow('Click rate',mc,M.metas.msg.click,false)+`</table></div></div>`;
+    h+=notesReport(rec); host.innerHTML=h;
+  }
+
+  /* ===== MÓDULO 4 · CALIDAD DE LEADS POR AD (semanal) ===== */
+  const LQ_SRC=[['totales','Leads totales'],['meta','Leads de Meta ADS'],['google','Leads de Google ADS'],['otras','Leads de otras fuentes']];
+  const LQ_SEG=[{key:'gesp',def:'Google ADS ESP',color:'var(--web)'},{key:'geng',def:'Google ADS ENG',color:'#8a9a55'},{key:'m1',def:'Campaña Meta ADS 1',color:'var(--meta)'},{key:'m2',def:'Campaña Meta ADS 2',color:'var(--meta)'},{key:'m3',def:'Campaña Meta ADS 3',color:'var(--meta)'},{key:'m4',def:'Campaña Meta ADS 4',color:'var(--meta)'},{key:'m5',def:'Campaña Meta ADS 5',color:'var(--meta)'}];
+  const LQ_SEED_METAS={ funnel:{cqlToMQL:40,mqlToSQL:50,sqlToSQLS:60}, quality:{endToEnd:12,descalRate:30}, leads:{totales:15} };
+  const LQ_MF=[['funnel','cqlToMQL','CQL → MQL','% mín'],['funnel','mqlToSQL','MQL → SQL','% mín'],['funnel','sqlToSQLS','SQL → SQL Selvadentro','% mín'],['quality','endToEnd','Calidad (CQL → SQL Selvadentro)','% mín · más alto mejor'],['quality','descalRate','Tasa de descalificación','% máx · menos mejor'],['leads','totales','Leads totales / semana','mín']];
+  const LQ_SEED={ '2026-W15':{ src:{totales:20,meta:12,google:5,otras:3}, names:{gesp:'Google ESP · Lotes inversión',geng:'Google ENG · Investors',m1:'Meta · Cenotes lifestyle',m2:'Meta · Retargeting web',m3:'Meta · Awareness Tulum',m4:'Meta · Broadcast frío',m5:'Campaña Meta ADS 5'}, funnels:{gesp:{cql:4,mql:2,sql:1,sqls:1,corretaje:0,descal:1},geng:{cql:3,mql:1,sql:1,sqls:0,corretaje:0,descal:2},m1:{cql:5,mql:3,sql:2,sqls:1,corretaje:1,descal:1},m2:{cql:4,mql:2,sql:1,sqls:0,corretaje:0,descal:3},m3:{cql:2,mql:1,sql:1,sqls:1,corretaje:0,descal:0},m4:{cql:3,mql:0,sql:0,sqls:0,corretaje:0,descal:3},m5:{cql:0,mql:0,sql:0,sqls:0,corretaje:0,descal:0}}, notas:'Semana de EJEMPLO precargada. Sobrescríbela con datos reales.',aprendizajes:'',cambios:'' } };
+  function lqIngreso(host){ let h=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--cobre)"></span><h3>Conteo de leads</h3></div><div class="card-body"><div class="grid">`; LQ_SRC.forEach(([k,l])=>{ const au=k==='totales'; h+=`<div class="field"><label>${l}${au?' <span class="calc-tag">(auto)</span>':''}</label><input type="text" inputmode="numeric" id="lq_src_${k}" class="${au?'auto':''}" placeholder="0"></div>`; }); h+=`</div></div></div>`; LQ_SEG.forEach(s=>{ h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${s.color}"></span><h3>${s.def}</h3></div><div class="card-body"><input class="camp-name" id="lq_name_${s.key}" placeholder="Nombre del anuncio / campaña"><div class="grid">`; FUNNEL.forEach(([k,l])=>h+=`<div class="field"><label>${l}</label><input type="text" inputmode="numeric" id="lq_f_${s.key}_${k}" placeholder="0"></div>`); h+=`</div></div></div>`; }); h+=notesBlock()+saveBar(); host.innerHTML=h; const t=$('#lq_src_totales'); t.addEventListener('input',()=>t.dataset.auto='0'); ['meta','google','otras'].forEach(k=>$('#lq_src_'+k).addEventListener('input',()=>{ if(t.dataset.auto!=='0'){ t.value=fmt(['meta','google','otras'].reduce((a,x)=>a+num($('#lq_src_'+x).value),0)); t.dataset.auto='1'; } })); }
+  function lqFill(rec){ LQ_SRC.forEach(([k])=>setVAuto('lq_src_'+k,rec&&rec.src?rec.src[k]:'')); LQ_SEG.forEach(s=>{ setV('lq_name_'+s.key,rec&&rec.names?rec.names[s.key]:''); const f=(rec&&rec.funnels&&rec.funnels[s.key])||{}; FUNNEL.forEach(([k])=>setV(`lq_f_${s.key}_${k}`,f[k])); }); fillNotes(rec); }
+  function lqRead(){ const rec={src:{},names:{},funnels:{}}; LQ_SRC.forEach(([k])=>rec.src[k]=num(gv('lq_src_'+k))); LQ_SEG.forEach(s=>{ rec.names[s.key]=gv('lq_name_'+s.key); rec.funnels[s.key]={}; FUNNEL.forEach(([k])=>rec.funnels[s.key][k]=num(gv(`lq_f_${s.key}_${k}`))); }); readNotes(rec); return rec; }
+  function lqMetas(host,M){ let h=`<div class="metas-hint">Objetivos editables. Se comparan en cada anuncio. En <b>Tasa de descalificación</b> la lógica es inversa (verde si queda por debajo).</div>`; [['funnel','Conversiones del embudo · aplica a todos los anuncios','var(--cobre)'],['quality','Calidad por anuncio','var(--meta)'],['leads','Volumen','var(--verde-prof)']].forEach(([sc,tit,col])=>{ h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${col}"></span><h3>${tit}</h3></div><div class="card-body"><div class="grid">`; LQ_MF.filter(f=>f[0]===sc).forEach(f=>h+=`<div class="field"><label>${f[2]} <span class="calc-tag">${f[3]}</span></label><input type="text" inputmode="numeric" id="lqm_${f[0]}_${f[1]}" value="${M.metas[f[0]][f[1]]}"></div>`); h+=`</div></div></div>`; }); h+=`<div class="actions"><button class="btn-prim" id="btn-save-metas">Guardar metas</button></div>`; host.innerHTML=h; $('#btn-save-metas').onclick=async()=>{ LQ_MF.forEach(f=>M.metas[f[0]][f[1]]=num($(`#lqm_${f[0]}_${f[1]}`).value)); await saveMeta(M); showToast('✓ Metas guardadas'); }; }
+  function lqCalc(f){ const cql=num(f.cql),mql=num(f.mql),sql=num(f.sql),sqls=num(f.sqls),des=num(f.descal); return { cqlToMQL:cql>0?mql/cql*100:null, mqlToSQL:mql>0?sql/mql*100:null, sqlToSQLS:sql>0?sqls/sql*100:null, endToEnd:cql>0?sqls/cql*100:null, descalRate:cql>0?des/cql*100:null, hasData:(cql+mql+sql+sqls+num(f.corretaje)+des)>0 }; }
+  function chipH(v,m){ if(v===null)return'<span class="chip na">—</span>'; const c=m?v/m*100:100; return `<span class="chip ${(!m||c>=100)?'ok':'no'}">${pct(v)}</span>`; }
+  function chipL(v,m){ if(v===null)return'<span class="chip na">—</span>'; const ok=(!m)||v<=m; return `<span class="chip ${ok?'ok':'no'}">${pct(v)}</span>`; }
+  function lqReporte(host,w,M){ const rec=M.records[w]; if(!rec){ host.innerHTML=noData(w,'week'); return; } let h=''; if((rec.notas||'').indexOf('EJEMPLO')>=0) h+=`<div class="ex-banner">⚠️ ${w} trae <b>datos de ejemplo</b>. Sobrescríbelos en Ingreso.</div>`;
+    h+=`<div class="summary"><div class="stitle">Calidad de Leads por Ad · ${w} · ${weekRange(w)}</div>${respLine()}<div class="summary-grid">`;
+    h+=`<div class="kpi"><div class="klabel">Leads totales</div><div class="kval">${fmt(num(rec.src.totales))}</div><div class="kcumpl">${M.metas.leads.totales?cpH(num(rec.src.totales),M.metas.leads.totales):'<span style="color:var(--arena)">—</span>'}</div></div>`;
+    [['meta','Meta ADS'],['google','Google ADS'],['otras','Otras']].forEach(([k,l])=>h+=`<div class="kpi"><div class="klabel">${l}</div><div class="kval">${fmt(num(rec.src[k]))}</div></div>`); h+=`</div></div>`;
+    const rows=LQ_SEG.map(s=>{ const f=rec.funnels[s.key]||{}; return {name:(rec.names&&rec.names[s.key])||s.def,f,c:lqCalc(f),color:s.color}; });
+    const wd=rows.filter(r=>r.c.hasData).sort((a,b)=>{ const av=a.c.endToEnd===null?-1:a.c.endToEnd,bv=b.c.endToEnd===null?-1:b.c.endToEnd; return bv-av; }); const nd=rows.filter(r=>!r.c.hasData); const ord=wd.concat(nd);
+    h+=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--cobre)"></span><h3>Comparativa por anuncio · rankeada por calidad</h3></div><div class="card-body"><div class="scroll"><table class="ctable wide"><tr><th class="l">#</th><th class="l">Anuncio</th><th>CQL</th><th>MQL</th><th>SQL</th><th>SQL Selv.</th><th>Corr.</th><th>Descal.</th><th>Calidad</th><th>Descal %</th></tr>`;
+    ord.forEach((r,i)=>{ h+=`<tr class="${(i===0&&r.c.hasData)?'best':''}"><td class="l rank">${r.c.hasData?(i+1):'—'}</td><td class="l">${r.name}</td><td>${fmt(num(r.f.cql))}</td><td>${fmt(num(r.f.mql))}</td><td>${fmt(num(r.f.sql))}</td><td>${fmt(num(r.f.sqls))}</td><td>${fmt(num(r.f.corretaje))}</td><td>${fmt(num(r.f.descal))}</td><td>${chipH(r.c.endToEnd,M.metas.quality.endToEnd)}</td><td>${chipL(r.c.descalRate,M.metas.quality.descalRate)}</td></tr>`; });
+    h+=`</table></div><div style="font-size:11.5px;color:var(--neutro);margin-top:10px">Calidad = SQL Selvadentro ÷ CQL · Descal % = Descalificados ÷ CQL · fila resaltada = mejor calidad.</div></div></div>`;
+    LQ_SEG.forEach(s=>{ const f=rec.funnels[s.key]||{}; const c=lqCalc(f); const nm=(rec.names&&rec.names[s.key])||s.def; h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${s.color}"></span><h3>${nm}</h3></div><div class="card-body"><table class="rtable">`; FUNNEL.forEach(([k,l])=>h+=cRow(l,num(f[k]))); h+=rRow('CQL → MQL',c.cqlToMQL,M.metas.funnel.cqlToMQL,false)+rRow('MQL → SQL',c.mqlToSQL,M.metas.funnel.mqlToSQL,false)+rRow('SQL → SQL Selvadentro',c.sqlToSQLS,M.metas.funnel.sqlToSQLS,false)+rRow('Calidad (CQL → SQL Selvadentro)',c.endToEnd,M.metas.quality.endToEnd,false)+rRow('Tasa de descalificación',c.descalRate,M.metas.quality.descalRate,true); h+=`</table></div></div>`; });
+    h+=notesReport(rec); host.innerHTML=h;
+  }
+
+  /* ===== Registro de módulos + controlador ===== */
+  const MODS={
+    rrss:{ name:'Redes Sociales', period:'month', records:{}, metas:{}, pval:'', key:'mkt_rrss_rec', mkey:'mkt_rrss_meta', seed:RS_SEED, seedMetas:RS_SEED_METAS, ingreso:rsIngreso, fill:rsFill, read:rsRead, metasView:rsMetas, reporte:rsReporte },
+    ppc:{ name:'PPC Ads', period:'week', records:{}, metas:{}, pval:'', key:'mkt_ppc_rec', mkey:'mkt_ppc_meta', seed:{}, seedMetas:PPC_SEED_METAS, ingreso:ppcIngreso, fill:ppcFill, read:ppcRead, metasView:ppcMetas, reporte:ppcReporte },
+    crm:{ name:'CRM Manager', period:'week', records:{}, metas:{}, pval:'', key:'mkt_crm_rec', mkey:'mkt_crm_meta', seed:CRM_SEED, seedMetas:CRM_SEED_METAS, ingreso:crmIngreso, fill:crmFill, read:crmRead, metasView:crmMetas, reporte:crmReporte },
+    lq:{ name:'Calidad de Leads', period:'week', records:{}, metas:{}, pval:'', key:'mkt_lq_rec', mkey:'mkt_lq_meta', seed:LQ_SEED, seedMetas:LQ_SEED_METAS, ingreso:lqIngreso, fill:lqFill, read:lqRead, metasView:lqMetas, reporte:lqReporte }
+  };
+  const ORDER=['rrss','ppc','crm','lq'];
+  const LOGO_KEY='mkt_logo';
+  let RESP={};
+  const state={ active:'rrss', view:'reporte', ingresoRendered:null };
+
+  async function loadMod(M){ try{ const r=await window.storage.get(M.key); if(r&&r.value) M.records=JSON.parse(r.value); }catch(e){ M.records={}; } if((!M.records||Object.keys(M.records).length===0)&&Object.keys(M.seed).length){ M.records=JSON.parse(JSON.stringify(M.seed)); await saveRec(M); } try{ const m=await window.storage.get(M.mkey); if(m&&m.value) M.metas=JSON.parse(m.value); }catch(e){} if(!M.metas||Object.keys(M.metas).length===0){ M.metas=JSON.parse(JSON.stringify(M.seedMetas)); await saveMeta(M); } const ks=Object.keys(M.records).sort(); M.pval=ks.length?ks[ks.length-1]:(M.period==='week'?isoWeekOf(new Date()):'2026-05'); }
+  async function saveRec(M){ try{ await window.storage.set(M.key,JSON.stringify(M.records)); }catch(e){console.error(e);} }
+  async function saveMeta(M){ try{ await window.storage.set(M.mkey,JSON.stringify(M.metas)); }catch(e){console.error(e);} }
+
+  function renderReportSelect(){ const s=$('#report-select'); s.innerHTML=ORDER.map(id=>`<option value="${id}" ${id===state.active?'selected':''}>${MODS[id].name}</option>`).join(''); s.onchange=()=>setActive(s.value); }
+  function fillPeriodSelect(M){ $('#period-label').textContent = M.period==='week'?'Semana':'Mes'; const sel=$('#period'); let opts=[]; if(M.period==='week'){ for(let w=52;w>=1;w--){ const v='2026-W'+String(w).padStart(2,'0'); opts.push([v, v+' · '+weekRange(v)]); } } else { for(let m=12;m>=1;m--){ const v='2026-'+String(m).padStart(2,'0'); opts.push([v, ymLabel(v)]); } } if(!opts.some(o=>o[0]===M.pval)) opts.unshift([M.pval, M.period==='week'?(M.pval+' · '+weekRange(M.pval)):ymLabel(M.pval)]); sel.innerHTML=opts.map(o=>`<option value="${o[0]}" ${o[0]===M.pval?'selected':''}>${o[1]}</option>`).join(''); sel.onchange=()=>{ M.pval=sel.value; if(state.view==='ingreso'){ M.ingreso($('#view-ingreso')); M.fill(M.records[M.pval]||null); bindSave(); state.ingresoRendered=state.active; } else if(state.view==='reporte'){ M.reporte($('#view-reporte'),M.pval,M); } updatePill(); }; }
+  function updatePill(){ const M=MODS[state.active]; const lbl=M.period==='week'?M.pval:ymLabel(M.pval); $('#status-pill').textContent = M.records[M.pval]?('Guardado · '+lbl):('Sin datos · '+lbl); const r=RESP[state.active]; $('#resp-pill').textContent='Responsable: '+(r&&r.trim()?r:'sin asignar'); }
+  function setNavActive(){ document.querySelectorAll('[data-view]').forEach(el=>el.classList.toggle('active', el.dataset.view===state.view)); }
+  function bindSave(){ const b=$('#btn-save'); if(b) b.onclick=async()=>{ const M=MODS[state.active]; if(!M.pval){alert('Elige periodo.');return;} M.records[M.pval]=M.read(); await saveRec(M); updatePill(); showToast('✓ Guardado · '+(M.period==='week'?M.pval:ymLabel(M.pval))); }; const c=$('#btn-clear'); if(c) c.onclick=()=>{ if(confirm('¿Limpiar el formulario? (no borra lo guardado)')) MODS[state.active].fill(null); }; }
+  function renderResponsable(){ let h=`<div class="metas-hint">Escribe el responsable de cada reporte. Aparece junto al periodo y en el encabezado de cada reporte.</div><div class="card"><div class="card-head"><span class="dot" style="background:var(--meta)"></span><h3>Responsable del reporte</h3></div><div class="card-body"><div class="grid">`; ORDER.forEach(id=> h+=`<div class="field"><label>${MODS[id].name}</label><input type="text" id="resp_${id}" value="${(RESP[id]||'').replace(/"/g,'&quot;')}" placeholder="Nombre del responsable"></div>`); h+=`</div></div></div><div class="actions"><button class="btn-prim" id="btn-save-resp">Guardar responsables</button></div>`; $('#view-responsable').innerHTML=h; $('#btn-save-resp').onclick=async()=>{ ORDER.forEach(id=>RESP[id]=$('#resp_'+id).value.trim()); try{await window.storage.set('mkt_resp',JSON.stringify(RESP));}catch(e){} showToast('✓ Responsables guardados'); updatePill(); }; }
+  function renderBaseDatos(M){ const keys=Object.keys(M.records).sort().reverse(); let h=`<div class="metas-hint">Registros guardados de <b>${MODS[state.active].name}</b>. Abre, elimina o exporta tus datos.</div><div class="card"><div class="card-head"><span class="dot" style="background:var(--verde-prof)"></span><h3>Base de datos · ${keys.length} registro(s)</h3></div><div class="card-body">`;
+    if(!keys.length) h+=`<p style="color:var(--neutro)">Aún no hay registros guardados.</p>`; else { h+=`<table class="ctable"><tr><th class="l">Periodo</th><th class="l">Rango</th><th class="l">Acciones</th></tr>`; keys.forEach(k=>{ const rng=M.period==='week'?weekRange(k):''; h+=`<tr><td class="l">${M.period==='week'?k:ymLabel(k)}</td><td class="l">${rng}</td><td class="l"><button class="btn-ghost db-open" data-k="${k}" style="padding:6px 12px;font-size:12px">Abrir</button> <button class="btn-ghost db-del" data-k="${k}" style="padding:6px 12px;font-size:12px;color:var(--rojo-no-tx);border-color:var(--rojo-no-bg)">Eliminar</button></td></tr>`; }); h+=`</table>`; }
+    h+=`<div class="actions" style="justify-content:flex-start;margin-top:16px"><button class="btn-prim" id="db-export">Exportar JSON</button></div></div></div>`; $('#view-basedatos').innerHTML=h;
+    $('#view-basedatos').querySelectorAll('.db-open').forEach(b=>b.onclick=()=>{ M.pval=b.dataset.k; fillPeriodSelect(M); state.view='reporte'; renderView(); });
+    $('#view-basedatos').querySelectorAll('.db-del').forEach(b=>b.onclick=async()=>{ if(confirm('¿Eliminar el registro '+b.dataset.k+'? No se puede deshacer.')){ delete M.records[b.dataset.k]; await saveRec(M); renderBaseDatos(M); updatePill(); showToast('Registro eliminado'); } });
+    const ex=$('#db-export'); if(ex) ex.onclick=()=>{ const data=JSON.stringify({reporte:MODS[state.active].name,records:M.records,metas:M.metas,responsable:RESP[state.active]||''},null,2); const blob=new Blob([data],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='selvadentro_'+state.active+'.json'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000); };
+  }
+  function renderView(){ const M=MODS[state.active]; ['ingreso','reporte','metas','responsable','basedatos'].forEach(v=> $('#view-'+v).style.display = state.view===v?'block':'none'); $('#periodbar').style.display=(state.view==='ingreso'||state.view==='reporte')?'flex':'none'; setNavActive();
+    if(state.view==='ingreso'){ if(state.ingresoRendered!==state.active){ M.ingreso($('#view-ingreso')); M.fill(M.records[M.pval]||null); state.ingresoRendered=state.active; bindSave(); } }
+    else if(state.view==='reporte'){ M.reporte($('#view-reporte'),M.pval,M); }
+    else if(state.view==='metas'){ M.metasView($('#view-metas'),M); }
+    else if(state.view==='responsable'){ renderResponsable(); }
+    else if(state.view==='basedatos'){ renderBaseDatos(M); }
+    updatePill();
+  }
+  function setActive(id){ state.active=id; renderReportSelect(); fillPeriodSelect(MODS[id]); state.ingresoRendered=null; renderView(); }
+
+  document.querySelectorAll('[data-view]').forEach(el=>el.onclick=()=>{ state.view=el.dataset.view; renderView(); });
+  function setLogo(d){ const i=$('#brand-logo'); i.src=d; i.style.display='block'; $('#brand-name').style.display='none'; $('#brand-sub').style.display='none'; }
+  $('#brand').onclick=()=>$('#logo-input').click();
+  $('#logo-input').onchange=e=>{ const f=e.target.files[0]; if(!f)return; const rd=new FileReader(); rd.onload=async()=>{ setLogo(rd.result); try{await window.storage.set(LOGO_KEY,rd.result);}catch(err){} }; rd.readAsDataURL(f); };
+
+  (async function init(){ for(const id of ORDER){ await loadMod(MODS[id]); } try{ const r=await window.storage.get('mkt_resp'); if(r&&r.value) RESP=JSON.parse(r.value); }catch(e){} try{ const r=await window.storage.get(LOGO_KEY); if(r&&r.value) setLogo(r.value);}catch(e){} setActive('rrss'); })();
+})();
+</script>
+
+</body>
+</html>

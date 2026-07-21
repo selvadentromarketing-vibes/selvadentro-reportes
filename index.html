@@ -342,6 +342,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   <div class="tabs">
     <div class="tab active" data-tab="resultados">Dirección General</div>
     <div class="tab" data-tab="dircom">Dirección Comercial</div>
+    <div class="tab" data-tab="marketing">Marketing</div>
     <div class="tab" data-tab="reporte">Reporte</div>
     <div class="tab" data-tab="ingreso">Ingreso de datos</div>
     <div class="canal-wrap">
@@ -432,6 +433,11 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
       <div class="canal-chips"><span class="cc-lbl">Canales</span><div id="dc-canales"></div></div>
       <p class="hint">Elige el rango de semanas; los canales marcados alimentan el embudo de arriba (la tabla siempre muestra los 7).</p>
       <div class="dir-content" id="dc-content"><div class="empty-rep">Genera el reporte para ver los resultados.</div></div>
+    </div>
+
+    <!-- ============ MARKETING (embebido) ============ -->
+    <div class="view" id="view-marketing" style="padding:0;margin:-22px -28px -60px">
+      <iframe id="mkt-frame" src="about:blank" style="width:100%;min-height:calc(100vh - 145px);border:none;display:block;background:var(--crema)"></iframe>
     </div>
 
     <!-- ============ ASESORES ============ -->
@@ -1010,12 +1016,12 @@ async function getMany(keys, concurrency=4){
 const STORED_KEYS = new Set();
 // Carga TODOS los registros guardados al caché (autoridad sobre la semilla)
 async function primeCache(){
-  for(const chKey of Object.keys(CHANNELS)){
+  await Promise.all(Object.keys(CHANNELS).map(async chKey => {
     const p=chPrefix(chKey); const keys=await sList(p);
-    if(!keys.length) continue;
-    const map=await getMany(keys, 4);
+    if(!keys.length) return;
+    const map=await getMany(keys, 8);
     for(const k of keys){ if(map[k]){ RECCACHE[k]=map[k]; STORED_KEYS.add(k); } }
-  }
+  }));
 }
 
 /* ===================== FECHAS / ISO ===================== */
@@ -1189,15 +1195,17 @@ document.querySelectorAll("[data-tab]").forEach(el=>el.onclick=()=>{
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   el.classList.add("active");
   document.getElementById("view-"+el.dataset.tab).classList.add("active");
-  const dir = ["resultados","dircom","asesores","metas","db","admin"].includes(el.dataset.tab);
+  const dir = ["resultados","dircom","marketing","asesores","metas","db","admin"].includes(el.dataset.tab);
   document.querySelector(".canal-wrap").style.display = dir?"none":"flex";
   if(el.dataset.tab==="resultados") showResultados();
   if(el.dataset.tab==="dircom") showDirCom();
+  if(el.dataset.tab==="marketing") showMarketing();
   if(el.dataset.tab==="asesores") renderAdvisors();
   if(el.dataset.tab==="metas") renderMetas();
   if(el.dataset.tab==="db") renderDB();
   if(el.dataset.tab==="admin") renderAdmin();
 });
+function showMarketing(){ const f=document.getElementById("mkt-frame"); if(f && (!f.src || f.src==="about:blank" || f.src.endsWith("about:blank"))) f.src="marketing.html"; }
 
 /* ===================== REPORTES DE DIRECCIÓN (CONSOLIDADOS) ===================== */
 // Mapeo de cada métrica común al campo real de cada canal
@@ -1254,7 +1262,8 @@ function buildChannelChecks(id, state, onChange){
 }
 async function populateRange(iniId, finId){
   const weeks=await allWeeksAll();
-  const opts=weeks.map(w=>`<option value="${w}">${weekLabel(w)}</option>`).join("");
+  const weeksDesc=[...weeks].reverse();
+  const opts=weeksDesc.map(w=>`<option value="${w}">${weekLabel(w)}</option>`).join("");
   const si=document.getElementById(iniId), sf=document.getElementById(finId);
   si.innerHTML=opts; sf.innerHTML=opts;
   if(weeks.length){ si.value=weeks[0]; sf.value=weeks[weeks.length-1]; }
@@ -2022,8 +2031,9 @@ async function switchChannel(ch){
   renderChips();
   const keys=recList(recPrefix());
   const weeks=[...new Set(keys.map(k=>parseRecKey(k).w))].sort();
+  const weeksDesc=[...weeks].reverse();
   const si=document.getElementById("rep-semana-ini"), sf=document.getElementById("rep-semana-fin");
-  const opts=weeks.map(w=>`<option value="${w}">${weekLabel(w)}</option>`).join("");
+  const opts=weeksDesc.map(w=>`<option value="${w}">${weekLabel(w)}</option>`).join("");
   si.innerHTML=opts; sf.innerHTML=opts;
   if(weeks.length){ si.value=weeks[0]; sf.value=weeks[weeks.length-1]; if(!dims.length){ const rec=recGet(recKey(weeks[weeks.length-1])); if(rec) fillForm(rec); } }
   document.getElementById("rep-output").innerHTML='<div class="empty-rep">Selecciona un rango de semanas y genera el reporte.</div>';
@@ -2090,9 +2100,9 @@ let USERS = [];           // [{ email, salt, hash, role, channels, password? }]
 let ADMIN_PASS = null;    // password en memoria sólo (se pierde al recargar) — para llamar a la Netlify Function
 
 const DATA_CH_KEYS = ["brokers","paid_organico","seminarios","referidos","pd_leads","pd_brokers","rp_vip"];
-const DIR_TABS = { direccion_general:"resultados", direccion_comercial:"dircom" };
+const DIR_TABS = { direccion_general:"resultados", direccion_comercial:"dircom", marketing:"marketing" };
 const ALL_CH_KEYS  = [...DATA_CH_KEYS, ...Object.keys(DIR_TABS)];
-const ALL_CH_NAMES = { brokers:"Brokers", paid_organico:"Paid Orgánico", seminarios:"Seminarios", referidos:"Referidos", pd_leads:"PD Leads", pd_brokers:"PD Brokers", rp_vip:"RP VIP", direccion_general:"Dir. General", direccion_comercial:"Dir. Comercial" };
+const ALL_CH_NAMES = { brokers:"Brokers", paid_organico:"Paid Orgánico", seminarios:"Seminarios", referidos:"Referidos", pd_leads:"PD Leads", pd_brokers:"PD Brokers", rp_vip:"RP VIP", direccion_general:"Dir. General", direccion_comercial:"Dir. Comercial", marketing:"Marketing" };
 
 function userChannelsOf(email){
   const u = USERS.find(x => x.email.toLowerCase() === (email||"").toLowerCase());
