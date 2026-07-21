@@ -27,6 +27,9 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   /* Topbar y sidebar ocultos porque marketing va embebido dentro del multicanal */
   .topbar{ display:none !important; }
   .sidebar{ display:none !important; }
+  body.embed .tabrow{ display:none !important; }
+  body.embed .periodbar{ display:none !important; }
+  body.embed .wrap{ padding:0 4px 40px; max-width:none; }
   .brand{ display:flex; flex-direction:column; align-items:flex-start; line-height:1; cursor:pointer; }
   #brand-logo{ height:50px; display:none; }
   .brand .name{ font-family:var(--script); font-size:42px; color:var(--logo); line-height:.9; padding-right:6px; }
@@ -491,6 +494,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   window.mktShowView=function(v){ state.view=v; renderView(); };
   window.mktGetView=function(){ return state.view; };
   window.mktSetActive=function(id){ if(MODS[id]) setActive(id); };
+  window.mktSetEmbedMode=function(on){ document.body.classList.toggle('embed', !!on); };
 
   document.querySelectorAll('[data-view]').forEach(el=>el.onclick=()=>{ state.view=el.dataset.view; renderView(); });
   function setLogo(d){ const i=$('#brand-logo'); i.src=d; i.style.display='block'; $('#brand-name').style.display='none'; $('#brand-sub').style.display='none'; }

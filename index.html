@@ -497,8 +497,9 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
         <div class="grp"><label>Marketing</label><select id="metas-marketing"></select></div>
         <div class="spacer"></div>
       </div>
-      <p class="hint">Define la <b>meta mensual</b> de cada KPI. Se guarda automáticamente y el reporte del canal la usa, ajustada al periodo (meta mensual ÷ 4 × semanas evaluadas). Deja en blanco para no fijar meta.</p>
+      <p class="hint" id="metas-hint">Define la <b>meta mensual</b> de cada KPI. Se guarda automáticamente y el reporte del canal la usa, ajustada al periodo (meta mensual ÷ 4 × semanas evaluadas). Deja en blanco para no fijar meta.</p>
       <div id="metas-body"></div>
+      <iframe id="mkt-metas-frame" src="about:blank" style="display:none;width:100%;min-height:800px;border:none;background:var(--crema);border-radius:12px"></iframe>
     </div>
 
     <!-- ============ ADMIN (solo admin) ============ -->
@@ -1823,20 +1824,35 @@ function renderMetas(){
     sel.innerHTML='<option value="">—</option>' + Object.keys(CHANNELS).map(k=>`<option value="${k}">${CHANNELS[k].name}</option>`).join("");
     selM.innerHTML='<option value="">—</option>' + MKT_MODULES.map(m=>`<option value="${m.id}">${m.name}</option>`).join("");
     sel.onchange=()=>{
-      if(!sel.value){ document.getElementById("metas-body").innerHTML=''; return; }
-      selM.value=""; renderMetasBody(sel.value);
+      if(!sel.value){ metasShowFrame(false); document.getElementById("metas-body").innerHTML=''; return; }
+      selM.value=""; metasShowFrame(false); renderMetasBody(sel.value);
     };
     selM.onchange=()=>{
-      if(!selM.value) return;
+      if(!selM.value){ metasShowFrame(false); return; }
       const modKey=selM.value; sel.value=""; document.getElementById("metas-body").innerHTML='';
-      document.querySelector('.tab[data-tab="marketing"]').click();
-      const trySet=()=>{ const api=mktFrameApi(); if(api && typeof api.mktSetActive==='function' && typeof api.mktShowView==='function'){ api.mktSetActive(modKey); api.mktShowView('metas'); } else { setTimeout(trySet, 200); } };
-      trySet();
+      metasShowFrame(true, modKey);
     };
     metasBuilt=true;
   }
   if(!sel.value && !selM.value){ sel.value = Object.keys(CHANNELS)[0] || ""; }
-  if(sel.value){ renderMetasBody(sel.value); }
+  if(sel.value){ metasShowFrame(false); renderMetasBody(sel.value); }
+  else if(selM.value){ metasShowFrame(true, selM.value); }
+}
+function metasShowFrame(show, modKey){
+  const frame = document.getElementById("mkt-metas-frame");
+  const body = document.getElementById("metas-body");
+  const hint = document.getElementById("metas-hint");
+  if(!show){ frame.style.display="none"; body.style.display=""; hint.style.display=""; return; }
+  body.style.display="none"; hint.style.display="none"; frame.style.display="block";
+  const apply = ()=>{
+    const w = frame.contentWindow;
+    if(w && typeof w.mktSetEmbedMode==='function' && typeof w.mktSetActive==='function' && typeof w.mktShowView==='function'){
+      w.mktSetEmbedMode(true); w.mktSetActive(modKey); w.mktShowView('metas');
+    } else { setTimeout(apply, 150); }
+  };
+  if(!frame.src || frame.src==="about:blank" || frame.src.endsWith("about:blank")){
+    frame.onload = apply; frame.src = "marketing.html";
+  } else { apply(); }
 }
 function protectedFieldsOf(ch){ const map=METRIC_MAP[ch]||{}; return new Set(Object.values(map).filter(Boolean)); }
 const UNLOCKED_FIELDS = new Set();
