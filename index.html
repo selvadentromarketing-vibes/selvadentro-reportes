@@ -72,8 +72,8 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   /* layout con barra lateral */
   .shell{ display:flex; align-items:stretch; min-height:calc(100vh - 90px); }
   .main{ flex:1; min-width:0; }
-  .sidebar{ flex:0 0 70px; background:var(--verde-prof); display:flex; flex-direction:column; align-items:center; gap:6px; padding:16px 7px 12px; border-right:1px solid rgba(0,0,0,.1); position:sticky; top:0; align-self:flex-start; height:100vh; overflow-y:auto; }
-  .nav-hist{ margin-top:auto; display:flex; gap:6px; padding-top:10px; border-top:1px solid rgba(255,255,255,.12); width:100%; justify-content:center; }
+  .sidebar{ flex:0 0 70px; background:var(--verde-prof); display:flex; flex-direction:column; align-items:center; gap:6px; padding:16px 7px 0; border-right:1px solid rgba(0,0,0,.1); position:sticky; top:0; align-self:flex-start; height:100vh; overflow-y:auto; }
+  .nav-hist{ position:sticky; bottom:0; margin-top:auto; display:flex; gap:6px; padding:10px 0 12px; border-top:1px solid rgba(255,255,255,.12); width:100%; justify-content:center; background:var(--verde-prof); z-index:2; }
   .nav-hist button{ background:transparent; border:1px solid rgba(255,255,255,.25); color:var(--logo); width:26px; height:26px; border-radius:6px; cursor:pointer; font-size:14px; line-height:1; display:flex; align-items:center; justify-content:center; padding:0; transition:.15s; }
   .nav-hist button:not(:disabled):hover{ background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.4); color:#fff; }
   .nav-hist button:disabled{ opacity:.3; cursor:not-allowed; }
