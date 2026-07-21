@@ -69,7 +69,11 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   /* layout con barra lateral */
   .shell{ display:flex; align-items:stretch; min-height:calc(100vh - 90px); }
   .main{ flex:1; min-width:0; }
-  .sidebar{ flex:0 0 70px; background:var(--verde-prof); display:flex; flex-direction:column; align-items:center; gap:6px; padding:16px 7px; border-right:1px solid rgba(0,0,0,.1); }
+  .sidebar{ flex:0 0 70px; background:var(--verde-prof); display:flex; flex-direction:column; align-items:center; gap:6px; padding:16px 7px 12px; border-right:1px solid rgba(0,0,0,.1); position:sticky; top:0; align-self:flex-start; height:100vh; overflow-y:auto; }
+  .nav-hist{ margin-top:auto; display:flex; gap:6px; padding-top:10px; border-top:1px solid rgba(255,255,255,.12); width:100%; justify-content:center; }
+  .nav-hist button{ background:transparent; border:1px solid rgba(255,255,255,.25); color:var(--logo); width:26px; height:26px; border-radius:6px; cursor:pointer; font-size:14px; line-height:1; display:flex; align-items:center; justify-content:center; padding:0; transition:.15s; }
+  .nav-hist button:not(:disabled):hover{ background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.4); color:#fff; }
+  .nav-hist button:disabled{ opacity:.3; cursor:not-allowed; }
   .side-btn{ width:56px; height:56px; border:none; background:transparent; color:var(--logo); border-radius:11px; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-family:var(--sans); font-size:8.5px; font-weight:600; letter-spacing:.2px; text-transform:uppercase; opacity:.78; transition:.15s; }
   .side-btn svg{ width:21px; height:21px; }
   .side-btn:hover{ background:rgba(255,255,255,.09); opacity:1; }
@@ -374,6 +378,10 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M4 20c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/><circle cx="18" cy="6" r="1.4" fill="currentColor" stroke="none"/></svg>
         <span>Admin</span>
       </button>
+      <div class="nav-hist">
+        <button id="nav-back" type="button" title="Atrás" disabled>←</button>
+        <button id="nav-fwd" type="button" title="Adelante" disabled>→</button>
+      </div>
     </div>
     <div class="main">
   <div class="tabs">
@@ -1288,6 +1296,34 @@ function showPhrase(text){
 /* ===================== UI ===================== */
 function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"),2200); }
 let VENTAS_SUBTAB = "reporte";
+const NAV_HIST = { stack: [], idx: -1, silent: false };
+function navPush(entry){
+  if(NAV_HIST.silent) return;
+  const cur = NAV_HIST.stack[NAV_HIST.idx];
+  if(cur && cur.tab === entry.tab && cur.subtab === entry.subtab) return;
+  NAV_HIST.stack = NAV_HIST.stack.slice(0, NAV_HIST.idx + 1);
+  NAV_HIST.stack.push(entry);
+  NAV_HIST.idx = NAV_HIST.stack.length - 1;
+  navUpdateButtons();
+}
+function navUpdateButtons(){
+  const b = document.getElementById("nav-back"), f = document.getElementById("nav-fwd");
+  if(b) b.disabled = NAV_HIST.idx <= 0;
+  if(f) f.disabled = NAV_HIST.idx >= NAV_HIST.stack.length - 1;
+}
+function navGo(delta){
+  const target = NAV_HIST.idx + delta;
+  if(target < 0 || target >= NAV_HIST.stack.length) return;
+  NAV_HIST.idx = target;
+  const e = NAV_HIST.stack[target];
+  NAV_HIST.silent = true;
+  try {
+    if(e.tab === "ventas" && e.subtab){ VENTAS_SUBTAB = e.subtab; }
+    const el = document.querySelector('.tab[data-tab="'+e.tab+'"], .side-btn[data-tab="'+e.tab+'"]');
+    if(el) el.click();
+    if(e.tab === "ventas" && e.subtab){ const st = document.querySelector('.subtab[data-subtab="'+e.subtab+'"]'); if(st) st.click(); }
+  } finally { NAV_HIST.silent = false; navUpdateButtons(); }
+}
 function mktIsActive(){ return document.querySelector('.tab[data-tab="marketing"]').classList.contains("active"); }
 function mktFrameApi(){ const f=document.getElementById("mkt-frame"); return f && f.contentWindow ? f.contentWindow : null; }
 document.querySelectorAll("[data-tab]").forEach(el=>el.onclick=()=>{
@@ -1322,7 +1358,10 @@ document.querySelectorAll("[data-tab]").forEach(el=>el.onclick=()=>{
   if(tab==="metas") renderMetas();
   if(tab==="db") renderDB();
   if(tab==="admin") renderAdmin();
+  navPush({ tab, subtab: tab==="ventas" ? VENTAS_SUBTAB : null });
 });
+document.getElementById("nav-back")?.addEventListener("click", ()=>navGo(-1));
+document.getElementById("nav-fwd")?.addEventListener("click", ()=>navGo(1));
 // Sincroniza el estado visual del sidebar cuando el iframe de marketing cambia de vista
 window.mktViewChanged=function(v){
   if(!mktIsActive()) return;
@@ -1337,6 +1376,7 @@ document.querySelectorAll(".subtab[data-subtab]").forEach(el=>el.onclick=()=>{
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   document.getElementById("view-"+VENTAS_SUBTAB).classList.add("active");
   if(VENTAS_SUBTAB==="analitica") renderAnalitica();
+  navPush({ tab: "ventas", subtab: VENTAS_SUBTAB });
 });
 function showMarketing(){ const f=document.getElementById("mkt-frame"); if(f && (!f.src || f.src==="about:blank" || f.src.endsWith("about:blank"))) f.src="marketing.html"; }
 
@@ -1395,8 +1435,7 @@ function buildChannelChecks(id, state, onChange){
 }
 async function populateRange(iniId, finId){
   const weeks=await allWeeksAll();
-  const weeksDesc=[...weeks].reverse();
-  const opts=weeksDesc.map(w=>`<option value="${w}">${weekLabel(w)}</option>`).join("");
+  const opts=weeks.map(w=>`<option value="${w}">${weekLabel(w)}</option>`).join("");
   const si=document.getElementById(iniId), sf=document.getElementById(finId);
   si.innerHTML=opts; sf.innerHTML=opts;
   if(weeks.length){ si.value=weeks[0]; sf.value=weeks[weeks.length-1]; }
@@ -2537,9 +2576,8 @@ async function switchChannel(ch){
   renderChips();
   const keys=recList(recPrefix());
   const weeks=[...new Set(keys.map(k=>parseRecKey(k).w))].sort();
-  const weeksDesc=[...weeks].reverse();
   const si=document.getElementById("rep-semana-ini"), sf=document.getElementById("rep-semana-fin");
-  const opts=weeksDesc.map(w=>`<option value="${w}">${weekLabel(w)}</option>`).join("");
+  const opts=weeks.map(w=>`<option value="${w}">${weekLabel(w)}</option>`).join("");
   si.innerHTML=opts; sf.innerHTML=opts;
   if(weeks.length){ si.value=weeks[0]; sf.value=weeks[weeks.length-1]; if(!dims.length){ const rec=recGet(recKey(weeks[weeks.length-1])); if(rec) fillForm(rec); } }
   document.getElementById("rep-output").innerHTML='<div class="empty-rep">Selecciona un rango de semanas y genera el reporte.</div>';

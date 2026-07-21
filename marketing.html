@@ -343,50 +343,66 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   function mktCustomSections(M){ return (M.metas.__custom_sections || []); }
   function mktCustomKPIsFor(M, sectionId){ return mktCustomKPIs(M).filter(c => c.section === sectionId); }
   function mktCustomKPIsUnassigned(M){ return mktCustomKPIs(M).filter(c => !c.section); }
+  function fieldSecOverride(M){ return M.metas.__field_sections || {}; }
+  function kpiDisplaySection(M, kpi){ const fs = fieldSecOverride(M); return fs[kpi.scope+':'+kpi.key] || kpi.scope; }
+  function setKpiSection(M, kpi, targetSec){
+    if(targetSec === kpi.scope){
+      if(M.metas.__field_sections){ delete M.metas.__field_sections[kpi.scope+':'+kpi.key]; if(!Object.keys(M.metas.__field_sections).length) delete M.metas.__field_sections; }
+    } else {
+      M.metas.__field_sections = M.metas.__field_sections || {};
+      M.metas.__field_sections[kpi.scope+':'+kpi.key] = targetSec;
+    }
+  }
   function renderMktMetasTable(host, moduleId, nativeSections, hintText){
     const M = MODS[moduleId];
     const html = [`<div class="metas-hint">${hintText}</div>`];
+    // Orden de secciones: __section_order (si existe) filtrado por ids existentes, luego el resto en orden default
+    const nativeIds = nativeSections.map(s => s.scope);
+    const customIds = mktCustomSections(M);
+    const allIds = [...nativeIds, ...customIds];
+    const savedOrder = (M.metas.__section_order || []).filter(id => allIds.includes(id));
+    const orderedIds = [...savedOrder, ...allIds.filter(id => !savedOrder.includes(id))];
+    const sectionInfo = {};
+    nativeSections.forEach(s => sectionInfo[s.scope] = {id: s.scope, title: s.title, isCustom: false});
+    customIds.forEach(id => sectionInfo[id] = {id, title: M.metas.__section_labels?.[id] || id, isCustom: true});
+    // Lista plana de KPIs nativos (con label override aplicado)
+    const nativeAll = [];
+    nativeSections.forEach(s => s.kpis.forEach(k => nativeAll.push(k)));
     const buildRow = (kpi, isCustom) => {
       const numV = isCustom ? (kpi.meta_num ?? '') : readMetaNum(M, kpi.scope, kpi.key);
       const pctV = isCustom ? (kpi.meta_pct ?? '') : readMetaPct(M, kpi.scope, kpi.key);
       const displayLabel = isCustom ? kpi.l : readMetaLabel(M, kpi);
       const origLabel = isCustom ? kpi.l : kpi.label;
-      return `<tr data-sec="${escHtmlSafe(kpi.scope||'')}" data-k="${escHtmlSafe(kpi.key||kpi.k)}" data-custom="${isCustom?1:0}" draggable="${isCustom?'true':'false'}" style="${isCustom?'cursor:move;':''}">
-        <td>${isCustom?`<span class="mt-drag" draggable="false" style="cursor:grab;padding:2px 6px;color:var(--neutro);user-select:none;font-size:14px">⠿</span>`:''}<input class="mt-name-inp" type="text" value="${escHtmlSafe(displayLabel)}" data-orig="${escHtmlSafe(origLabel)}" draggable="false" style="border:1px solid transparent;background:transparent;font:inherit;font-size:13.5px;color:var(--texto);padding:5px 8px;border-radius:6px;width:calc(100% - ${isCustom?26:0}px);">${(!isCustom && kpi.hint)?`<span class="mt-hint">${escHtmlSafe(kpi.hint)}</span>`:''}</td>
+      return `<tr data-sec="${escHtmlSafe(kpi.scope||'')}" data-k="${escHtmlSafe(kpi.key||kpi.k)}" data-custom="${isCustom?1:0}" draggable="true" style="cursor:move">
+        <td><span class="mt-drag" draggable="false" style="cursor:grab;padding:2px 6px;color:var(--neutro);user-select:none;font-size:14px">⠿</span><input class="mt-name-inp" type="text" value="${escHtmlSafe(displayLabel)}" data-orig="${escHtmlSafe(origLabel)}" draggable="false" style="border:1px solid transparent;background:transparent;font:inherit;font-size:13.5px;color:var(--texto);padding:5px 8px;border-radius:6px;width:calc(100% - 26px);">${(!isCustom && kpi.hint)?`<span class="mt-hint">${escHtmlSafe(kpi.hint)}</span>`:''}</td>
         <td class="right"><input class="mt-num" type="number" draggable="false" step="${kpi.money?'0.01':'1'}" placeholder="—" value="${numV===''?'':numV}"></td>
         <td class="right"><span class="mt-pct-wrap"><input class="mt-pct" type="number" draggable="false" step="0.01" placeholder="—" value="${pctV===''?'':pctV}"><span>%</span></span></td>
         <td class="right"><button class="mt-del" type="button">Borrar</button></td>
       </tr>`;
     };
-    const renderSection = (sec, kpis, isCustomSec) => {
-      const secId = sec.scope || sec.id;
-      html.push(`<div class="meta-section-mkt" data-sec-id="${escHtmlSafe(secId)}">
-        <div class="msec-head"><span class="msec-dot"></span>
-          ${isCustomSec?`<input class="msec-title-inp" type="text" value="${escHtmlSafe(sec.title)}" data-orig="${escHtmlSafe(sec.title)}" data-sec-id="${escHtmlSafe(secId)}" style="background:transparent;border:1px solid transparent;color:#fff;font-family:var(--serif);font-size:16px;font-weight:700;padding:2px 8px;border-radius:6px;flex:1">`:`<span>${escHtmlSafe(sec.title)}</span>`}
-          ${isCustomSec?`<button class="msec-del" data-sec-id="${escHtmlSafe(secId)}" style="margin-left:auto;background:transparent;border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px">✕ Borrar sección</button>`:''}
+    const renderSectionInfo = (info) => {
+      const nativesHere = nativeAll.filter(k => kpiDisplaySection(M, k) === info.id);
+      const customsHere = mktCustomKPIsFor(M, info.id).map(c => ({ ...c, __custom: true, scope: info.id, key: c.k }));
+      const kpis = [...nativesHere, ...customsHere];
+      html.push(`<div class="meta-section-mkt" data-sec-id="${escHtmlSafe(info.id)}" draggable="true">
+        <div class="msec-head">
+          <span class="msec-drag" draggable="false" style="cursor:grab;color:#fff;user-select:none;font-size:14px;margin-right:6px;opacity:.7">⠿</span>
+          <span class="msec-dot"></span>
+          ${info.isCustom?`<input class="msec-title-inp" type="text" value="${escHtmlSafe(info.title)}" data-orig="${escHtmlSafe(info.title)}" data-sec-id="${escHtmlSafe(info.id)}" style="background:transparent;border:1px solid transparent;color:#fff;font-family:var(--serif);font-size:16px;font-weight:700;padding:2px 8px;border-radius:6px;flex:1">`:`<span style="flex:1">${escHtmlSafe(info.title)}</span>`}
+          ${info.isCustom?`<button class="msec-del" data-sec-id="${escHtmlSafe(info.id)}" style="margin-left:auto;background:transparent;border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px">✕ Borrar sección</button>`:''}
         </div>
         <table class="metas-table-mkt">
           <thead><tr><th>Nombre del KPI</th><th class="right">Meta numérica</th><th class="right">Meta %</th><th></th></tr></thead>
-          <tbody data-drop-sec="${escHtmlSafe(secId)}">`);
+          <tbody data-drop-sec="${escHtmlSafe(info.id)}">`);
       kpis.forEach(kpi => html.push(buildRow(kpi, !!kpi.__custom)));
       if(!kpis.length) html.push(`<tr class="msec-empty"><td colspan="4" style="text-align:center;color:var(--neutro);font-style:italic;padding:14px">Sin KPIs. Arrastra aquí o crea uno nuevo.</td></tr>`);
       html.push('</tbody></table></div>');
     };
-    // 1) Secciones nativas con sus KPIs (nativos + custom asignados)
-    nativeSections.forEach(sec => {
-      const customs = mktCustomKPIsFor(M, sec.scope).map(c => ({ ...c, __custom: true, scope: sec.scope, key: c.k }));
-      renderSection(sec, [...sec.kpis, ...customs], false);
-    });
-    // 2) Secciones custom
-    mktCustomSections(M).forEach(secId => {
-      const label = M.metas.__section_labels?.[secId] || secId;
-      const customs = mktCustomKPIsFor(M, secId).map(c => ({ ...c, __custom: true, scope: secId, key: c.k }));
-      renderSection({ id: secId, scope: secId, title: label }, customs, true);
-    });
-    // 3) KPIs personalizados sin sección
+    orderedIds.forEach(id => { if(sectionInfo[id]) renderSectionInfo(sectionInfo[id]); });
+    // KPIs personalizados sin sección
     const unassigned = mktCustomKPIsUnassigned(M);
     if(unassigned.length){
-      renderSection({ id: '__unassigned', scope: '', title: 'KPIs personalizados' }, unassigned.map(c => ({ ...c, __custom: true, scope: '', key: c.k })), false);
+      renderSectionInfo({ id: '__unassigned', title: 'KPIs personalizados', isCustom: false });
     }
     // 4) Crear nueva sección
     html.push(`<div class="meta-section-mkt"><div class="msec-head"><span class="msec-dot"></span>Crear nueva sección</div>
@@ -455,24 +471,67 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
         }
         await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText);
       };
-      // Drag & drop para custom KPIs
-      if(isCustom){
-        tr.ondragstart = (e) => { e.dataTransfer.setData('text/plain', key); e.dataTransfer.effectAllowed = 'move'; tr.style.opacity='.4'; };
-        tr.ondragend = () => { tr.style.opacity='1'; };
-      }
+      // Drag universal (nativos y custom)
+      tr.ondragstart = (e) => {
+        e.dataTransfer.setData('text/plain', JSON.stringify({ type:'kpi', sec, key, isCustom }));
+        e.dataTransfer.effectAllowed = 'move'; tr.style.opacity='.4';
+      };
+      tr.ondragend = () => { tr.style.opacity='1'; };
     });
-    // Drop targets: cada tbody
+    // Drop targets: cada tbody acepta KPIs
     host.querySelectorAll('tbody[data-drop-sec]').forEach(tb => {
       tb.ondragover = (e) => { e.preventDefault(); e.dataTransfer.dropEffect='move'; tb.style.background='rgba(207,133,67,.08)'; };
       tb.ondragleave = () => { tb.style.background=''; };
       tb.ondrop = async (e) => {
         e.preventDefault(); tb.style.background='';
-        const key = e.dataTransfer.getData('text/plain'); if(!key) return;
+        let data; try{ data = JSON.parse(e.dataTransfer.getData('text/plain')); }catch{ return; }
+        if(!data || data.type !== 'kpi') return;
         const targetSec = tb.dataset.dropSec === '' ? null : tb.dataset.dropSec;
-        const item = mktCustomKPIs(M).find(c => c.k === key); if(!item) return;
-        if(item.section === targetSec) return;
-        item.section = targetSec;
+        if(data.isCustom){
+          const item = mktCustomKPIs(M).find(c => c.k === data.key); if(!item) return;
+          if(item.section === targetSec) return;
+          item.section = targetSec;
+        } else {
+          setKpiSection(M, { scope: data.sec, key: data.key }, targetSec);
+        }
         await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); showToast('KPI movido ✓');
+      };
+    });
+    // Drag de secciones para reorder
+    host.querySelectorAll('.meta-section-mkt').forEach(secEl => {
+      const handle = secEl.querySelector('.msec-drag');
+      if(!handle) return;
+      handle.addEventListener('mousedown', () => secEl.setAttribute('data-draggable-armed','1'));
+      secEl.ondragstart = (e) => {
+        if(secEl.getAttribute('data-draggable-armed') !== '1'){ e.preventDefault(); return; }
+        e.dataTransfer.setData('text/plain', JSON.stringify({ type:'section', id: secEl.dataset.secId }));
+        e.dataTransfer.effectAllowed = 'move'; secEl.style.opacity='.4';
+      };
+      secEl.ondragend = () => { secEl.style.opacity='1'; secEl.removeAttribute('data-draggable-armed'); };
+      secEl.ondragover = (e) => {
+        // Detectar solo si es drag de sección (no de KPI); si el drag es de KPI, deja que el tbody lo maneje
+        const items = e.dataTransfer.types.includes('text/plain') ? true : false;
+        if(!items) return;
+        e.preventDefault();
+        secEl.style.outline = '2px dashed var(--cobre)';
+      };
+      secEl.ondragleave = () => { secEl.style.outline=''; };
+      secEl.ondrop = async (e) => {
+        secEl.style.outline='';
+        let data; try{ data = JSON.parse(e.dataTransfer.getData('text/plain')); }catch{ return; }
+        if(!data || data.type !== 'section') return;
+        e.preventDefault();
+        const draggedId = data.id, targetId = secEl.dataset.secId;
+        if(draggedId === targetId) return;
+        const cur = M.metas.__section_order || allIds.slice();
+        const order = cur.filter(id => allIds.includes(id));
+        allIds.forEach(id => { if(!order.includes(id)) order.push(id); });
+        const fromIdx = order.indexOf(draggedId), toIdx = order.indexOf(targetId);
+        if(fromIdx < 0 || toIdx < 0) return;
+        order.splice(fromIdx, 1);
+        order.splice(toIdx, 0, draggedId);
+        M.metas.__section_order = order;
+        await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); showToast('Sección reordenada ✓');
       };
     });
     // Renombrar sección custom
