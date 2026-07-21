@@ -2888,7 +2888,7 @@ function chPillsHtml(selected, disabled){
       const on = sel.has(k);
       return `<label class="ch-pill ${on?'on':''} ${disabled?'disabled':''}"><input type="checkbox" value="${k}" ${on?'checked':''} ${disabled?'disabled':''}>${ALL_CH_NAMES[k]}</label>`;
     }).join("");
-    return `<details class="ch-group" ${count>0?'open':''}><summary><span class="ch-grp-title">${title}</span><span class="ch-grp-count">${count}/${keys.length}</span></summary><div class="ch-pills-inner">${inner}</div></details>`;
+    return `<details class="ch-group"><summary><span class="ch-grp-title">${title}</span><span class="ch-grp-count">${count}/${keys.length}</span></summary><div class="ch-pills-inner">${inner}</div></details>`;
   };
   return `<div class="ch-pills ch-groups">${groupHtml(VENTAS_CH_KEYS, 'Ventas')}${groupHtml(MKT_CH_KEYS, 'Marketing')}</div>`;
 }
