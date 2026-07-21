@@ -368,6 +368,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
           <div class="grp"><label>Fin (domingo)</label><input type="date" id="ing-fin" readonly></div>
           <div class="grp"><label>Semana ISO</label><div class="semana-badge" id="ing-semana">—</div></div>
           <div id="ing-dims"></div>
+          <div class="grp"><label>Responsable</label><input type="text" id="ing-responsable" placeholder="Nombre del responsable" style="min-width:200px;padding:8px 10px;border:1px solid var(--linea);border-radius:8px;font-family:var(--sans);font-size:14px;background:var(--crema)"></div>
           <div class="spacer"></div>
           <button class="btn btn-ghost" id="btn-limpiar">Limpiar</button>
           <button class="btn btn-primary" id="btn-guardar">Guardar</button>
@@ -1063,24 +1064,31 @@ function allowedEditWeeks(){
 function isWeekEditable(w){ return typeof isAdmin === "function" && isAdmin() ? true : allowedEditWeeks().has(w); }
 function updateSemanaBadge(){ document.getElementById("ing-semana").textContent=currentWeekId()||"—"; }
 function curDimVals(){ return dimsOf().map((d,i)=>document.getElementById("ing-dim-"+i).value); }
+let LAST_RESP = {};
+async function loadLastResp(){ const s=await sGet("selvadentro:last_resp"); if(s && typeof s==="object") LAST_RESP=s; }
+async function saveLastResp(){ await sSet("selvadentro:last_resp", LAST_RESP); }
+function defaultResp(){ return LAST_RESP[CH] || ""; }
 function gatherForm(){
   const data={}; allFields().forEach(f=>{ const el=document.getElementById("in_"+f.k); data[f.k]= el&&el.value!=="" ? Number(el.value):0; });
   return { inicio:document.getElementById("ing-inicio").value, fin:document.getElementById("ing-fin").value, semana:currentWeekId(),
-    dimVals:curDimVals(), valores:data, notas:document.getElementById("txt-notas").value, aprendizajes:document.getElementById("txt-aprendizajes").value, cambios:document.getElementById("txt-cambios").value };
+    dimVals:curDimVals(), valores:data, notas:document.getElementById("txt-notas").value, aprendizajes:document.getElementById("txt-aprendizajes").value, cambios:document.getElementById("txt-cambios").value,
+    responsable:(document.getElementById("ing-responsable")?.value||"").trim() };
 }
 function fillForm(rec){
   document.getElementById("ing-inicio").value=rec.inicio||""; document.getElementById("ing-fin").value=rec.fin||"";
   dimsOf().forEach((d,i)=>{ const el=document.getElementById("ing-dim-"+i); if(el&&rec.dimVals&&rec.dimVals[i]!=null){ const val=rec.dimVals[i]; if(![...el.options].some(o=>o.value===val)){ const o=document.createElement("option"); o.value=val; o.textContent=val; el.appendChild(o); } el.value=val; } });
   allFields().forEach(f=>{ const el=document.getElementById("in_"+f.k); if(el) el.value=(rec.valores&&rec.valores[f.k]!=null)?rec.valores[f.k]:""; });
   document.getElementById("txt-notas").value=rec.notas||""; document.getElementById("txt-aprendizajes").value=rec.aprendizajes||""; document.getElementById("txt-cambios").value=rec.cambios||"";
+  const respEl=document.getElementById("ing-responsable"); if(respEl) respEl.value=rec.responsable||defaultResp();
   updateSemanaBadge();
 }
-function clearForm(){ allFields().forEach(f=>{ const el=document.getElementById("in_"+f.k); if(el) el.value=""; }); document.getElementById("txt-notas").value=""; document.getElementById("txt-aprendizajes").value=""; document.getElementById("txt-cambios").value=""; }
+function clearForm(){ allFields().forEach(f=>{ const el=document.getElementById("in_"+f.k); if(el) el.value=""; }); document.getElementById("txt-notas").value=""; document.getElementById("txt-aprendizajes").value=""; document.getElementById("txt-cambios").value=""; const respEl=document.getElementById("ing-responsable"); if(respEl) respEl.value=defaultResp(); }
 async function saveWeek(){
   const w=currentWeekId(); if(!w){ toast("Selecciona la fecha de inicio primero"); return; }
   if(!isWeekEditable(w)){ toast("Solo puedes guardar la semana actual o la anterior"); return; }
   const dv=curDimVals(); const k=recKey(w,dv); const form=gatherForm();
   recSet(k, form); await sSet(k, form);
+  if(form.responsable && form.responsable !== LAST_RESP[CH]){ LAST_RESP[CH]=form.responsable; await saveLastResp(); }
   toast("Guardado ✓ "+w+(dv.length?(" · "+dv.join(" · ")):"")); renderChips();
 }
 function renderChips(){
@@ -1164,9 +1172,10 @@ async function generarReporte(){
     }).join("") : '<em>Sin notas, aprendizajes ni cambios registrados en el periodo.</em>';
 
   const dimLine = dims.length ? " · " + dims.map((d,i)=>{ const v=document.getElementById("rep-dim-"+i).value; return v==="__todos"?("Todos: "+d.label.toLowerCase()):v; }).join(" · ") : "";
+  const respTxt = LAST_RESP[CH] ? ` · Responsable: ${LAST_RESP[CH]}` : "";
   out.innerHTML=`
     <div class="rep-head"><div class="ttl">Reporte · ${CHANNELS[CH].name}</div>
-      <div class="meta-line">${fmtDate(a)} → ${fmtDate(b)} · ${nWeeks} semana(s)${dimLine}</div></div>
+      <div class="meta-line">${fmtDate(a)} → ${fmtDate(b)} · ${nWeeks} semana(s)${dimLine}${respTxt}</div></div>
     ${sectionsHtml}
     <div class="rep-section conclusion"><h3>Notas del periodo</h3><div class="body">${notasHtml}</div></div>`;
 }
@@ -2101,7 +2110,7 @@ async function init(){
   // 2) En segundo plano: carga datos guardados (autoridad), persiste semillas faltantes y re-pinta si cambió algo
   (async()=>{
     try{
-      await loadAdvisors(); await loadMetas();
+      await loadAdvisors(); await loadMetas(); await loadLastResp();
       await primeCache(); await persistSeeds();
       resState.built=false; dcState.built=false; dbBuilt=false; metasBuilt=false;
       await switchChannel(CH);
