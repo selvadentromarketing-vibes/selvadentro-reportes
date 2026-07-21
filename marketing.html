@@ -668,19 +668,107 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   async function saveRec(M){ try{ await window.storage.set(M.key,JSON.stringify(M.records)); }catch(e){console.error(e);} }
   async function saveMeta(M){ try{ await window.storage.set(M.mkey,JSON.stringify(M.metas)); }catch(e){console.error(e);} state.ingresoRendered=null; }
 
-  function renderReportSelect(){ const s=$('#report-select'); s.innerHTML=ORDER.map(id=>`<option value="${id}" ${id===state.active?'selected':''}>${MODS[id].name}</option>`).join(''); s.onchange=()=>setActive(s.value); }
+  function getAllowedMods(){ try{ if(window.parent && window.parent!==window && typeof window.parent.getMktAllowedModules==='function'){ const r = window.parent.getMktAllowedModules(); return r==null ? null : r; } }catch(e){} return null; }
+  function orderFiltered(){ const a=getAllowedMods(); return a==null ? ORDER : ORDER.filter(id=>a.includes(id)); }
+  function renderReportSelect(){ const list=orderFiltered(); const s=$('#report-select'); s.innerHTML=list.map(id=>`<option value="${id}" ${id===state.active?'selected':''}>${MODS[id].name}</option>`).join(''); s.onchange=()=>setActive(s.value); }
   function fillPeriodSelect(M){ $('#period-label').textContent = M.period==='week'?'Semana':'Mes'; const sel=$('#period'); let opts=[]; if(M.period==='week'){ for(let w=52;w>=1;w--){ const v='2026-W'+String(w).padStart(2,'0'); opts.push([v, v+' · '+weekRange(v)]); } } else { for(let m=12;m>=1;m--){ const v='2026-'+String(m).padStart(2,'0'); opts.push([v, ymLabel(v)]); } } if(!opts.some(o=>o[0]===M.pval)) opts.unshift([M.pval, M.period==='week'?(M.pval+' · '+weekRange(M.pval)):ymLabel(M.pval)]); sel.innerHTML=opts.map(o=>`<option value="${o[0]}" ${o[0]===M.pval?'selected':''}>${o[1]}</option>`).join(''); sel.onchange=()=>{ M.pval=sel.value; if(state.view==='ingreso'){ M.ingreso($('#view-ingreso')); M.fill(M.records[M.pval]||null); bindSave(); state.ingresoRendered=state.active; } else if(state.view==='reporte'){ M.reporte($('#view-reporte'),M.pval,M); } updatePill(); }; }
   function updatePill(){ const M=MODS[state.active]; const lbl=M.period==='week'?M.pval:ymLabel(M.pval); $('#status-pill').textContent = M.records[M.pval]?('Guardado · '+lbl):('Sin datos · '+lbl); const inp=$('#resp-pill-input'); if(inp && document.activeElement!==inp){ inp.value = RESP[state.active] || ''; } }
   (function(){ const inp=$('#resp-pill-input'); if(!inp) return; const save=async()=>{ const v=inp.value.trim(); if(v!==(RESP[state.active]||'')){ RESP[state.active]=v; try{ await window.storage.set('mkt_resp', JSON.stringify(RESP)); }catch(e){} showToast('✓ Responsable guardado'); if(state.view==='ingreso'){ const x=$('#x_resp'); if(x) x.value=v; } } }; inp.addEventListener('blur',save); inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); inp.blur(); } }); })();
   function setNavActive(){ document.querySelectorAll('[data-view]').forEach(el=>el.classList.toggle('active', el.dataset.view===state.view)); }
-  function bindSave(){ const b=$('#btn-save'); if(b) b.onclick=async()=>{ const M=MODS[state.active]; if(!M.pval){alert('Elige periodo.');return;} M.records[M.pval]=M.read(); await saveRec(M); updatePill(); showToast('✓ Guardado · '+(M.period==='week'?M.pval:ymLabel(M.pval))); }; const c=$('#btn-clear'); if(c) c.onclick=()=>{ if(confirm('¿Limpiar el formulario? (no borra lo guardado)')) MODS[state.active].fill(null); }; }
+  function bindSave(){ const b=$('#btn-save'); if(b) b.onclick=async()=>{ const M=MODS[state.active]; if(!M.pval){alert('Elige periodo.');return;} if(!isPeriodEditable(M, M.pval)){ alert('Solo puedes guardar el periodo actual o el anterior.'); return; } M.records[M.pval]=M.read(); await saveRec(M); updatePill(); showToast('✓ Guardado · '+(M.period==='week'?M.pval:ymLabel(M.pval))); }; const c=$('#btn-clear'); if(c) c.onclick=()=>{ if(confirm('¿Limpiar el formulario? (no borra lo guardado)')) MODS[state.active].fill(null); }; }
   function renderResponsable(){ let h=`<div class="metas-hint">Escribe el responsable de cada reporte. Aparece junto al periodo y en el encabezado de cada reporte.</div><div class="card"><div class="card-head"><span class="dot" style="background:var(--meta)"></span><h3>Responsable del reporte</h3></div><div class="card-body"><div class="grid">`; ORDER.forEach(id=> h+=`<div class="field"><label>${MODS[id].name}</label><input type="text" id="resp_${id}" value="${(RESP[id]||'').replace(/"/g,'&quot;')}" placeholder="Nombre del responsable"></div>`); h+=`</div></div></div><div class="actions"><button class="btn-prim" id="btn-save-resp">Guardar responsables</button></div>`; $('#view-responsable').innerHTML=h; $('#btn-save-resp').onclick=async()=>{ ORDER.forEach(id=>RESP[id]=$('#resp_'+id).value.trim()); try{await window.storage.set('mkt_resp',JSON.stringify(RESP));}catch(e){} showToast('✓ Responsables guardados'); updatePill(); }; }
-  function renderBaseDatos(M){ const keys=Object.keys(M.records).sort().reverse(); let h=`<div class="metas-hint">Registros guardados de <b>${MODS[state.active].name}</b>. Abre, elimina o exporta tus datos.</div><div class="card"><div class="card-head"><span class="dot" style="background:var(--verde-prof)"></span><h3>Base de datos · ${keys.length} registro(s)</h3></div><div class="card-body">`;
-    if(!keys.length) h+=`<p style="color:var(--neutro)">Aún no hay registros guardados.</p>`; else { h+=`<table class="ctable"><tr><th class="l">Periodo</th><th class="l">Rango</th><th class="l">Acciones</th></tr>`; keys.forEach(k=>{ const rng=M.period==='week'?weekRange(k):''; h+=`<tr><td class="l">${M.period==='week'?k:ymLabel(k)}</td><td class="l">${rng}</td><td class="l"><button class="btn-ghost db-open" data-k="${k}" style="padding:6px 12px;font-size:12px">Abrir</button> <button class="btn-ghost db-del" data-k="${k}" style="padding:6px 12px;font-size:12px;color:var(--rojo-no-tx);border-color:var(--rojo-no-bg)">Eliminar</button></td></tr>`; }); h+=`</table>`; }
-    h+=`<div class="actions" style="justify-content:flex-start;margin-top:16px"><button class="btn-prim" id="db-export">Exportar JSON</button></div></div></div>`; $('#view-basedatos').innerHTML=h;
-    $('#view-basedatos').querySelectorAll('.db-open').forEach(b=>b.onclick=()=>{ M.pval=b.dataset.k; fillPeriodSelect(M); state.view='reporte'; renderView(); });
-    $('#view-basedatos').querySelectorAll('.db-del').forEach(b=>b.onclick=async()=>{ if(confirm('¿Eliminar el registro '+b.dataset.k+'? No se puede deshacer.')){ delete M.records[b.dataset.k]; await saveRec(M); renderBaseDatos(M); updatePill(); showToast('Registro eliminado'); } });
-    const ex=$('#db-export'); if(ex) ex.onclick=()=>{ const data=JSON.stringify({reporte:MODS[state.active].name,records:M.records,metas:M.metas,responsable:RESP[state.active]||''},null,2); const blob=new Blob([data],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='selvadentro_'+state.active+'.json'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000); };
+  function checkAdmin(){ try{ return !!(window.parent && window.parent !== window && typeof window.parent.isMktAdmin === 'function' && window.parent.isMktAdmin()); }catch(e){ return false; } }
+  function isPeriodEditable(M, pval){
+    if(checkAdmin()) return true;
+    const now = new Date();
+    if(M.period === 'week'){
+      const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      const prev = new Date(today.getTime() - 7*86400000);
+      return pval === isoWeekOf(today) || pval === isoWeekOf(prev);
+    } else {
+      const cur = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+      const prv = prevYM(cur);
+      return pval === cur || pval === prv;
+    }
+  }
+  function getModBDColumns(moduleId){
+    const kpis = (KPIS_BY_MOD[moduleId] || []).slice();
+    const M = MODS[moduleId];
+    (M.metas.__custom || []).forEach(c => kpis.push({ path: `__custom.${c.k}`, label: c.l || c.k, unit: '', custom: true }));
+    return kpis;
+  }
+  function renderBaseDatos(M){
+    const moduleId = state.active;
+    const adm = checkAdmin();
+    const kpis = getModBDColumns(moduleId);
+    const keys = Object.keys(M.records).sort().reverse();
+    let h = `<div class="metas-hint">Registros guardados de <b>${MODS[moduleId].name}</b>. <b>Admin</b>: Editar/Duplicar/Borrar cualquiera. <b>User</b>: solo Editar del periodo actual o el anterior.</div>
+      <div class="card"><div class="card-head"><span class="dot" style="background:var(--verde-prof)"></span><h3>Base de datos · ${keys.length} registro(s)</h3></div>
+      <div class="card-body" style="padding:0">`;
+    if(!keys.length){
+      h += `<p style="color:var(--neutro);padding:22px;text-align:center">Aún no hay registros guardados.</p>`;
+    } else {
+      h += `<div class="scroll" style="overflow-x:auto"><table class="ctable" style="min-width:900px;font-size:12px">
+        <thead><tr><th class="l">Periodo</th><th class="l">Rango</th><th class="l">Responsable</th>
+          ${kpis.map(k=>`<th class="right">${escHtmlSafe(k.label)}</th>`).join('')}
+          <th class="l">Notas</th><th class="l" style="min-width:200px">Acciones</th></tr></thead><tbody>`;
+      keys.forEach(k => {
+        const rec = M.records[k]; if(!rec) return;
+        const rng = M.period==='week' ? weekRange(k) : '';
+        const period = M.period==='week' ? k : ymLabel(k);
+        const notas = (rec.notas||'').slice(0,80) + ((rec.notas||'').length>80?'…':'');
+        const editable = isPeriodEditable(M, k);
+        let actions;
+        if(adm){
+          actions = `<button class="btn-ghost db-open" data-k="${k}" style="padding:5px 10px;font-size:11px">Editar</button> <button class="btn-ghost db-dup" data-k="${k}" style="padding:5px 10px;font-size:11px">Duplicar</button> <button class="btn-ghost db-del" data-k="${k}" style="padding:5px 10px;font-size:11px;color:var(--rojo-no-tx);border-color:var(--rojo-no-bg)">✕</button>`;
+        } else if(editable){
+          actions = `<button class="btn-ghost db-open" data-k="${k}" style="padding:5px 10px;font-size:11px">Editar</button>`;
+        } else {
+          actions = `<span style="color:var(--neutro);font-size:11px">—</span>`;
+        }
+        h += `<tr>
+          <td class="l"><b>${period}</b></td>
+          <td class="l" style="font-size:11px;color:var(--neutro)">${rng}</td>
+          <td class="l" style="font-size:11px">${escHtmlSafe(rec.responsable||'—')}</td>
+          ${kpis.map(kpi=>{
+            const v = Number(getPath(rec, kpi.path) || 0);
+            return `<td class="right">${kpi.unit==='MXN'?money(v):fmt(v)}</td>`;
+          }).join('')}
+          <td class="l" title="${escHtmlSafe(rec.notas||'')}" style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtmlSafe(notas)}</td>
+          <td class="l" style="white-space:nowrap">${actions}</td>
+        </tr>`;
+      });
+      h += `</tbody></table></div>`;
+    }
+    h += `<div class="actions" style="justify-content:flex-start;padding:16px 20px"><button class="btn-prim" id="db-export">Exportar JSON</button></div></div></div>`;
+    $('#view-basedatos').innerHTML = h;
+    $('#view-basedatos').querySelectorAll('.db-open').forEach(b => b.onclick = () => {
+      M.pval = b.dataset.k; fillPeriodSelect(M);
+      state.view = 'ingreso'; state.ingresoRendered = null; renderView(); showToast('Registro cargado en Ingreso ✓');
+    });
+    $('#view-basedatos').querySelectorAll('.db-dup').forEach(b => b.onclick = () => {
+      const rec = M.records[b.dataset.k]; if(!rec) return;
+      // Cambia pval a un periodo vacío editable para no sobrescribir el original
+      const now = new Date();
+      const target = M.period==='week' ? isoWeekOf(now) : (now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'));
+      if(!isPeriodEditable(M, target)){ alert('No hay un periodo editable disponible para duplicar.'); return; }
+      // Coloca el rec en el periodo actual si aún no existe; si existe, pide otro periodo
+      if(M.records[target]){ alert('Ya existe un registro en el periodo actual. Duplica manualmente cambiando el periodo desde Ingreso.'); }
+      M.pval = target; fillPeriodSelect(M);
+      // No guardamos aún; solo llenamos el form con los datos duplicados
+      state.view = 'ingreso'; state.ingresoRendered = null; renderView();
+      setTimeout(()=>{ MODS[moduleId].fill(rec); bindSave(); showToast('Duplicado. Guarda para persistir.'); }, 60);
+    });
+    $('#view-basedatos').querySelectorAll('.db-del').forEach(b => b.onclick = async () => {
+      if(!confirm('¿Eliminar el registro '+b.dataset.k+'? No se puede deshacer.')) return;
+      delete M.records[b.dataset.k]; await saveRec(M); renderBaseDatos(M); updatePill(); showToast('Registro eliminado');
+    });
+    const ex = $('#db-export'); if(ex) ex.onclick = () => {
+      const data = JSON.stringify({reporte:MODS[moduleId].name, records:M.records, metas:M.metas, responsable:RESP[moduleId]||''}, null, 2);
+      const blob = new Blob([data], {type:'application/json'}); const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'selvadentro_'+moduleId+'.json'; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 1000);
+    };
   }
   /* ===== ANALÍTICA ===== */
   function getPath(obj, path){ return path.split('.').reduce((o,k)=> (o!=null && o[k]!=null) ? o[k] : 0, obj); }
@@ -849,7 +937,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   $('#brand').onclick=()=>$('#logo-input').click();
   $('#logo-input').onchange=e=>{ const f=e.target.files[0]; if(!f)return; const rd=new FileReader(); rd.onload=async()=>{ setLogo(rd.result); try{await window.storage.set(LOGO_KEY,rd.result);}catch(err){} }; rd.readAsDataURL(f); };
 
-  (async function init(){ for(const id of ORDER){ await loadMod(MODS[id]); } try{ const r=await window.storage.get('mkt_resp'); if(r&&r.value) RESP=JSON.parse(r.value); }catch(e){} try{ const r=await window.storage.get(LOGO_KEY); if(r&&r.value) setLogo(r.value);}catch(e){} setActive('rrss'); })();
+  (async function init(){ for(const id of ORDER){ await loadMod(MODS[id]); } try{ const r=await window.storage.get('mkt_resp'); if(r&&r.value) RESP=JSON.parse(r.value); }catch(e){} try{ const r=await window.storage.get(LOGO_KEY); if(r&&r.value) setLogo(r.value);}catch(e){} const list=orderFiltered(); setActive(list[0]||'rrss'); })();
 })();
 </script>
 

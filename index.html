@@ -280,6 +280,15 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .meta-section h3 .section-title-input:hover{ border-color:rgba(255,255,255,.3); }
   .meta-section h3 .section-title-input:focus{ outline:none; border-color:#fff; background:rgba(255,255,255,.1); }
   .ch-pills{ display:flex; flex-wrap:wrap; gap:5px 6px; max-width:360px; }
+  .ch-groups{ display:flex; flex-direction:column; gap:6px; max-width:400px; }
+  .ch-group{ border:1px solid var(--linea); border-radius:8px; overflow:hidden; background:#fff; }
+  .ch-group[open]{ background:var(--crema); }
+  .ch-group summary{ padding:8px 12px; cursor:pointer; font-size:11px; letter-spacing:.5px; text-transform:uppercase; font-weight:700; color:var(--verde-prof); background:var(--crema-2); user-select:none; display:flex; align-items:center; gap:8px; list-style:none; }
+  .ch-group summary::-webkit-details-marker{ display:none; }
+  .ch-group summary::after{ content:'▾'; margin-left:auto; font-size:11px; color:var(--neutro); }
+  .ch-group[open] summary::after{ content:'▴'; }
+  .ch-group .ch-grp-count{ background:var(--olivo); color:#fff; font-size:10px; padding:2px 8px; border-radius:999px; font-weight:700; letter-spacing:.3px; }
+  .ch-group .ch-pills-inner{ padding:8px 10px; display:flex; flex-wrap:wrap; gap:4px 6px; }
   .ch-pill{ display:inline-flex; align-items:center; gap:5px; font-size:11px; padding:3px 8px; border-radius:14px; border:1px solid var(--linea); background:var(--crema); cursor:pointer; user-select:none; }
   .ch-pill input{ accent-color:var(--olivo); }
   .ch-pill.on{ background:var(--verde-ok-bg); border-color:var(--verde-ok-tx); color:var(--verde-ok-tx); font-weight:600; }
@@ -2599,8 +2608,18 @@ let ADMIN_PASS = null;    // password en memoria sólo (se pierde al recargar) �
 
 const DATA_CH_KEYS = ["brokers","paid_organico","seminarios","referidos","pd_leads","pd_brokers","rp_vip"];
 const DIR_TABS = { direccion_general:"resultados", direccion_comercial:"dircom", marketing:"marketing" };
-const ALL_CH_KEYS  = [...DATA_CH_KEYS, ...Object.keys(DIR_TABS)];
-const ALL_CH_NAMES = { brokers:"Brokers", paid_organico:"Paid Orgánico", seminarios:"Seminarios", referidos:"Referidos", pd_leads:"PD Leads", pd_brokers:"PD Brokers", rp_vip:"RP VIP", direccion_general:"Dir. General", direccion_comercial:"Dir. Comercial", marketing:"Marketing" };
+const MKT_CH_KEYS = ["mkt_rrss","mkt_ppc","mkt_crm","mkt_lq"];
+const VENTAS_CH_KEYS = [...DATA_CH_KEYS, "direccion_general", "direccion_comercial"];
+const ALL_CH_KEYS  = [...VENTAS_CH_KEYS, ...MKT_CH_KEYS];
+const ALL_CH_NAMES = { brokers:"Brokers", paid_organico:"Paid Orgánico", seminarios:"Seminarios", referidos:"Referidos", pd_leads:"PD Leads", pd_brokers:"PD Brokers", rp_vip:"RP VIP", direccion_general:"Dir. General", direccion_comercial:"Dir. Comercial", mkt_rrss:"Redes Sociales", mkt_ppc:"PPC Ads", mkt_crm:"CRM Manager", mkt_lq:"Calidad de Leads" };
+window.getMktAllowedModules = function(){
+  if(isAdmin()) return null;
+  if(!SESSION) return [];
+  const allowed = new Set(userChannelsOf(SESSION.email));
+  if(allowed.has('marketing')) return ['rrss','ppc','crm','lq'];
+  const map = { mkt_rrss:'rrss', mkt_ppc:'ppc', mkt_crm:'crm', mkt_lq:'lq' };
+  return Object.entries(map).filter(([k])=>allowed.has(k)).map(([,v])=>v);
+};
 
 function userChannelsOf(email){
   const u = USERS.find(x => x.email.toLowerCase() === (email||"").toLowerCase());
@@ -2618,7 +2637,13 @@ function applyChannelFilter(){
   // Tabs sintéticos (reportes consolidados de dirección)
   let activeHidden = false;
   for(const [chKey, tab] of Object.entries(DIR_TABS)){
-    if(!allowed.has(chKey)){
+    let visible;
+    if(chKey === 'marketing'){
+      visible = allowed.has('marketing') || MKT_CH_KEYS.some(k => allowed.has(k));
+    } else {
+      visible = allowed.has(chKey);
+    }
+    if(!visible){
       const el = document.querySelector(`.tab[data-tab="${tab}"]`);
       if(el){
         el.style.display = "none";
@@ -2651,6 +2676,7 @@ function showNoAccessScreen(){
 }
 
 const isAdmin = ()=> !!(SESSION && SESSION.role === "admin");
+window.isMktAdmin = ()=> isAdmin();
 
 function randomSalt(){
   const b = new Uint8Array(12); crypto.getRandomValues(b);
@@ -2817,14 +2843,24 @@ async function renderAdmin(){
 }
 
 function chPillsHtml(selected, disabled){
-  return `<div class="ch-pills">${ALL_CH_KEYS.map(k=>{
-    const on = (selected||[]).includes(k);
-    return `<label class="ch-pill ${on?'on':''} ${disabled?'disabled':''}"><input type="checkbox" value="${k}" ${on?'checked':''} ${disabled?'disabled':''}>${ALL_CH_NAMES[k]}</label>`;
-  }).join("")}</div>`;
+  const sel = new Set(selected || []);
+  const groupHtml = (keys, title) => {
+    const count = keys.filter(k => sel.has(k)).length;
+    const inner = keys.map(k => {
+      const on = sel.has(k);
+      return `<label class="ch-pill ${on?'on':''} ${disabled?'disabled':''}"><input type="checkbox" value="${k}" ${on?'checked':''} ${disabled?'disabled':''}>${ALL_CH_NAMES[k]}</label>`;
+    }).join("");
+    return `<details class="ch-group" ${count>0?'open':''}><summary><span class="ch-grp-title">${title}</span><span class="ch-grp-count">${count}/${keys.length}</span></summary><div class="ch-pills-inner">${inner}</div></details>`;
+  };
+  return `<div class="ch-pills ch-groups">${groupHtml(VENTAS_CH_KEYS, 'Ventas')}${groupHtml(MKT_CH_KEYS, 'Marketing')}</div>`;
 }
 function bindPillsBehavior(scope){
   scope.querySelectorAll(".ch-pill input").forEach(inp=>{
-    inp.onchange = ()=>inp.parentElement.classList.toggle("on", inp.checked);
+    inp.onchange = ()=>{
+      inp.parentElement.classList.toggle("on", inp.checked);
+      const det = inp.closest('details.ch-group');
+      if(det){ const c = det.querySelector('.ch-grp-count'); if(c){ const total = det.querySelectorAll('input[type=checkbox]').length; const on = det.querySelectorAll('input[type=checkbox]:checked').length; c.textContent = on+'/'+total; } }
+    };
   });
 }
 function readChannels(container){
