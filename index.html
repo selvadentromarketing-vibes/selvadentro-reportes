@@ -1207,11 +1207,23 @@ function setupLogoUpload(){
 /* ===================== UI ===================== */
 function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"),2200); }
 let VENTAS_SUBTAB = "reporte";
-document.querySelectorAll(".tab[data-tab]").forEach(el=>el.onclick=()=>{
-  document.querySelectorAll(".tab[data-tab]").forEach(t=>t.classList.remove("active"));
+function mktIsActive(){ return document.querySelector('.tab[data-tab="marketing"]').classList.contains("active"); }
+function mktFrameApi(){ const f=document.getElementById("mkt-frame"); return f && f.contentWindow ? f.contentWindow : null; }
+document.querySelectorAll("[data-tab]").forEach(el=>el.onclick=()=>{
+  const tab=el.dataset.tab;
+  const isSideBtn=el.classList.contains("side-btn");
+  // Ruteo context-aware: si Marketing está activo y clickean Metas o BD del sidebar,
+  // mantén Marketing activo y switchea la vista del iframe.
+  if(isSideBtn && mktIsActive() && (tab==="metas"||tab==="db")){
+    document.querySelectorAll(".side-btn").forEach(b=>b.classList.remove("active"));
+    el.classList.add("active");
+    const api=mktFrameApi();
+    if(api && typeof api.mktShowView==="function") api.mktShowView(tab==="metas"?"metas":"basedatos");
+    return;
+  }
+  document.querySelectorAll("[data-tab]").forEach(t=>t.classList.remove("active"));
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   el.classList.add("active");
-  const tab=el.dataset.tab;
   if(tab==="ventas"){
     document.getElementById("view-"+VENTAS_SUBTAB).classList.add("active");
     document.getElementById("ventas-subtabs").style.display="flex";
@@ -1223,12 +1235,19 @@ document.querySelectorAll(".tab[data-tab]").forEach(el=>el.onclick=()=>{
   document.querySelector(".canal-wrap").style.display = dir?"none":"flex";
   if(tab==="resultados") showResultados();
   if(tab==="dircom") showDirCom();
-  if(tab==="marketing") showMarketing();
+  if(tab==="marketing"){ showMarketing(); const api=mktFrameApi(); if(api && typeof api.mktGetView==="function") window.mktViewChanged(api.mktGetView()); }
   if(tab==="asesores") renderAdvisors();
   if(tab==="metas") renderMetas();
   if(tab==="db") renderDB();
   if(tab==="admin") renderAdmin();
 });
+// Sincroniza el estado visual del sidebar cuando el iframe de marketing cambia de vista
+window.mktViewChanged=function(v){
+  if(!mktIsActive()) return;
+  document.querySelectorAll(".side-btn").forEach(b=>b.classList.remove("active"));
+  if(v==="metas") document.querySelector('.side-btn[data-tab="metas"]')?.classList.add("active");
+  else if(v==="basedatos") document.querySelector('.side-btn[data-tab="db"]')?.classList.add("active");
+};
 document.querySelectorAll(".subtab[data-subtab]").forEach(el=>el.onclick=()=>{
   document.querySelectorAll(".subtab[data-subtab]").forEach(t=>t.classList.remove("active"));
   el.classList.add("active");

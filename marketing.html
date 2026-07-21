@@ -141,8 +141,6 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
       <div class="tabrow">
         <div class="ttab" data-view="reporte">Reporte</div>
         <div class="ttab" data-view="ingreso">Ingreso de datos</div>
-        <div class="ttab" data-view="metas">Metas</div>
-        <div class="ttab" data-view="basedatos">Base Datos</div>
         <div class="tabrow-right"><span class="canal-lbl">REPORTE</span><select id="report-select" class="sel-green"></select></div>
       </div>
       <div class="wrap">
@@ -377,8 +375,11 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     else if(state.view==='responsable'){ renderResponsable(); }
     else if(state.view==='basedatos'){ renderBaseDatos(M); }
     updatePill();
+    try{ if(window.parent && window.parent!==window && typeof window.parent.mktViewChanged==='function') window.parent.mktViewChanged(state.view); }catch(e){}
   }
   function setActive(id){ state.active=id; renderReportSelect(); fillPeriodSelect(MODS[id]); state.ingresoRendered=null; renderView(); }
+  window.mktShowView=function(v){ state.view=v; renderView(); };
+  window.mktGetView=function(){ return state.view; };
 
   document.querySelectorAll('[data-view]').forEach(el=>el.onclick=()=>{ state.view=el.dataset.view; renderView(); });
   function setLogo(d){ const i=$('#brand-logo'); i.src=d; i.style.display='block'; $('#brand-name').style.display='none'; $('#brand-sub').style.display='none'; }
