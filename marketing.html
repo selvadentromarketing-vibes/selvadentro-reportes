@@ -42,10 +42,10 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   .snav:hover{ background:rgba(255,255,255,.07); opacity:1; }
   .snav.active{ background:var(--cobre); color:#fff; opacity:1; }
   .main{ flex:1 1 auto; min-width:0; }
-  .tabrow{ display:flex; align-items:center; gap:4px; background:var(--crema-2); padding:0 22px; border-bottom:1px solid var(--linea); flex-wrap:wrap; }
-  .ttab{ padding:16px 18px; cursor:pointer; font-weight:600; font-size:14px; color:var(--neutro); border-bottom:4px solid transparent; margin-bottom:-1px; transition:.15s; }
+  .tabrow{ display:flex; align-items:center; gap:4px; background:var(--crema); padding:0 28px; border-bottom:1px solid var(--linea); flex-wrap:wrap; }
+  .ttab{ padding:10px 18px; cursor:pointer; font-weight:500; font-size:12px; letter-spacing:.3px; color:var(--neutro); border-bottom:2px solid transparent; user-select:none; transition:.15s; }
   .ttab:hover{ color:var(--verde-prof); }
-  .ttab.active{ color:var(--verde-prof); border-bottom-color:var(--cobre); background:#fff; font-weight:700; }
+  .ttab.active{ color:var(--verde-prof); border-bottom-color:var(--olivo); }
   .tabrow-right{ margin-left:auto; display:flex; align-items:center; gap:10px; padding:9px 0; }
   .canal-lbl{ font-size:11px; letter-spacing:2px; color:var(--neutro); font-weight:700; }
   .sel-green{ appearance:none; -webkit-appearance:none; background-color:var(--olivo); color:#fff; font-weight:600; font-family:var(--sans); border:none; border-radius:999px; padding:11px 42px 11px 20px; font-size:14px; cursor:pointer; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23ffffff' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 16px center; }
@@ -182,8 +182,8 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     </div>
     <div class="main">
       <div class="tabrow">
-        <div class="ttab" data-view="reporte">Reporte</div>
         <div class="ttab" data-view="ingreso">Ingreso de datos</div>
+        <div class="ttab" data-view="reporte">Reporte</div>
         <div class="ttab" data-view="analitica">Analítica</div>
         <div class="tabrow-right"><span class="canal-lbl">REPORTE</span><select id="report-select" class="sel-green"></select></div>
       </div>
