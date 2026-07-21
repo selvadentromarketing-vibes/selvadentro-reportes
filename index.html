@@ -1698,20 +1698,7 @@ function renderAdvisors(){
 
 /* ===================== METAS ===================== */
 let META_OVERRIDES = {};
-async function loadMetas(){ const saved=await sGet("selvadentro:metas"); if(saved && typeof saved==="object"){ META_OVERRIDES=saved; sanitizeProtectedFields(); applyMetas(); } }
-function sanitizeProtectedFields(){
-  let dirty = false;
-  for(const ch in META_OVERRIDES){
-    const prot = protectedFieldsOf(ch); if(!prot.size) continue;
-    const hidden = META_OVERRIDES[ch] && META_OVERRIDES[ch].__hidden_fields;
-    if(!hidden) continue;
-    for(const k of Object.keys(hidden)){
-      if(prot.has(k)){ delete hidden[k]; dirty = true; }
-    }
-    if(!Object.keys(hidden).length) delete META_OVERRIDES[ch].__hidden_fields;
-  }
-  if(dirty){ saveMetas(); }
-}
+async function loadMetas(){ const saved=await sGet("selvadentro:metas"); if(saved && typeof saved==="object"){ META_OVERRIDES=saved; applyMetas(); } }
 async function saveMetas(){ await sSet("selvadentro:metas", META_OVERRIDES); }
 
 // META_OVERRIDES[ch][fk] puede ser:
@@ -1852,18 +1839,27 @@ function renderMetas(){
   if(sel.value){ renderMetasBody(sel.value); }
 }
 function protectedFieldsOf(ch){ const map=METRIC_MAP[ch]||{}; return new Set(Object.values(map).filter(Boolean)); }
+const UNLOCKED_FIELDS = new Set();
+function fieldLockKey(ch,fk){ return ch+":"+fk; }
 function metaRowHtml(ch, fk, label, m, isCustom, money){
   const numV = m.meta_num != null ? m.meta_num : "";
   const pctV = m.meta_pct != null ? m.meta_pct : "";
   const isProt = !isCustom && protectedFieldsOf(ch).has(fk);
-  const lockIcon = isProt ? `<span title="Campo requerido por los reportes de Dirección — no se puede borrar" style="margin-right:4px;font-size:11px;color:var(--cobre)">🔒</span>` : "";
-  const delBtnHtml = isProt
-    ? `<button class="meta-del" type="button" disabled title="Requerido por Dirección" style="opacity:.35;cursor:not-allowed">Borrar</button>`
-    : `<button class="meta-del" type="button" title="Borrar KPI">Borrar</button>`;
-  return `<tr data-ch="${ch}" data-k="${fk}" data-custom="${isCustom?1:0}" data-protected="${isProt?1:0}" draggable="true">
-    <td><span class="meta-drag" title="Arrastra a otra sección">⠿</span>${lockIcon}<input class="meta-name" type="text" value="${escAttr(label)}${money?' ($)':''}" data-orig="${escAttr(label)}" style="width:calc(100% - ${isProt?46:28}px)"></td>
-    <td class="right"><input class="meta-num" type="number" step="${money?'0.01':'1'}" placeholder="—" value="${numV}"></td>
-    <td class="right"><span class="meta-pct-wrap"><input class="meta-pct" type="number" step="0.01" placeholder="—" value="${pctV}"><span>%</span></span></td>
+  const unlocked = isProt && UNLOCKED_FIELDS.has(fieldLockKey(ch,fk));
+  const showLock = isProt && !unlocked;
+  const showUnlock = isProt && unlocked;
+  const lockIcon = showLock
+    ? `<span class="meta-lock" data-lock-fk="${fk}" title="Requerido por Dirección · Click para permitir borrar" style="margin-right:4px;font-size:12px;cursor:pointer;user-select:none">🔒</span>`
+    : (showUnlock ? `<span class="meta-lock" data-lock-fk="${fk}" title="Desbloqueado · Click para volver a proteger" style="margin-right:4px;font-size:12px;cursor:pointer;user-select:none">🔓</span>` : "");
+  const canDelete = !isProt || unlocked;
+  const delBtnHtml = canDelete
+    ? `<button class="meta-del" type="button" title="Borrar KPI">Borrar</button>`
+    : `<button class="meta-del" type="button" disabled title="Requerido por Dirección — desbloquea el candado primero" style="opacity:.35;cursor:not-allowed">Borrar</button>`;
+  const leftPad = isProt ? 46 : 28;
+  return `<tr data-ch="${ch}" data-k="${fk}" data-custom="${isCustom?1:0}" data-protected="${isProt?1:0}" draggable="true" style="cursor:move">
+    <td><span class="meta-drag" title="Arrastra a otra sección" draggable="false" style="cursor:grab;padding:4px 6px;display:inline-block;font-size:14px;color:var(--neutro)">⠿</span>${lockIcon}<input class="meta-name" type="text" draggable="false" value="${escAttr(label)}${money?' ($)':''}" data-orig="${escAttr(label)}" style="width:calc(100% - ${leftPad}px)"></td>
+    <td class="right"><input class="meta-num" type="number" draggable="false" step="${money?'0.01':'1'}" placeholder="—" value="${numV}"></td>
+    <td class="right"><span class="meta-pct-wrap"><input class="meta-pct" type="number" draggable="false" step="0.01" placeholder="—" value="${pctV}"><span>%</span></span></td>
     <td class="right">${delBtnHtml}</td>
   </tr>`;
 }
@@ -2022,8 +2018,10 @@ function renderMetasBody(ch){
 
     if(delBtn){
       delBtn.onclick = async()=>{
-        if(!isCustom && protectedFieldsOf(chK).has(fk)){ alert("Este KPI es requerido por los reportes de Dirección y no puede borrarse."); return; }
-        if(!confirm(`¿Borrar el KPI "${nameInp.value}"? Los datos históricos quedan en kv pero el campo deja de aparecer.`)) return;
+        const isProt = !isCustom && protectedFieldsOf(chK).has(fk);
+        if(isProt && !UNLOCKED_FIELDS.has(fieldLockKey(chK,fk))){ alert("Este KPI es requerido por los reportes de Dirección. Desbloquea el candado primero si realmente quieres borrarlo."); return; }
+        const warn = isProt ? `⚠️ ATENCIÓN: "${nameInp.value}" alimenta los reportes de Dirección. Si lo borras, ese canal aparecerá con 0 en esa métrica para semanas futuras. ¿Continuar?` : `¿Borrar el KPI "${nameInp.value}"? Los datos históricos quedan en kv pero el campo deja de aparecer.`;
+        if(!confirm(warn)) return;
         if(isCustom){
           META_OVERRIDES[chK].__custom = (META_OVERRIDES[chK].__custom||[]).filter(x => x.k !== fk);
         } else {
@@ -2031,9 +2029,23 @@ function renderMetasBody(ch){
           META_OVERRIDES[chK].__hidden_fields = META_OVERRIDES[chK].__hidden_fields || {};
           META_OVERRIDES[chK].__hidden_fields[fk] = nameInp.value.trim() || fk;
         }
+        UNLOCKED_FIELDS.delete(fieldLockKey(chK,fk));
         applyMetas();
         await saveMetas();
         toast("KPI borrado");
+        renderMetasBody(chK);
+      };
+    }
+    const lockEl = tr.querySelector(".meta-lock");
+    if(lockEl){
+      lockEl.onclick = (e) => {
+        e.stopPropagation();
+        const key = fieldLockKey(chK,fk);
+        if(UNLOCKED_FIELDS.has(key)){ UNLOCKED_FIELDS.delete(key); }
+        else {
+          if(!confirm("Vas a desbloquear un KPI protegido. Podrás borrarlo, pero eso hará que los reportes de Dirección lo pierdan a futuro. ¿Continuar?")) return;
+          UNLOCKED_FIELDS.add(key);
+        }
         renderMetasBody(chK);
       };
     }
