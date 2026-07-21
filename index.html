@@ -285,7 +285,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
 <div id="login-screen">
   <div class="login-card">
     <div class="brand-block">
-      <img id="login-logo" alt="Selvadentro" src="https://assets.cdn.filesafe.space/crN2IhAuOBAl7D8324yI/media/68a8b604cfc34e61b85396bf.png" style="max-height:90px;max-width:240px;display:block;margin:0 auto 6px;" onerror="this.style.display='none';document.getElementById('login-brand-name').style.display='';document.getElementById('login-brand-sub').style.display='';">
+      <div id="login-logo" style="width:240px;height:90px;margin:0 auto 6px;background-color:var(--verde-prof);-webkit-mask:url('https://assets.cdn.filesafe.space/crN2IhAuOBAl7D8324yI/media/68a8b604cfc34e61b85396bf.png') no-repeat center/contain;mask:url('https://assets.cdn.filesafe.space/crN2IhAuOBAl7D8324yI/media/68a8b604cfc34e61b85396bf.png') no-repeat center/contain;"></div>
       <span class="name" id="login-brand-name" style="display:none">Selvadentro</span>
       <span class="sub" id="login-brand-sub" style="display:none">tierra de cenotes</span>
     </div>
@@ -451,6 +451,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
       <div class="canal-chips"><span class="cc-lbl">Canales</span><div id="res-canales"></div></div>
       <p class="hint">Elige el rango de semanas; los canales marcados alimentan el embudo de arriba (la tabla siempre muestra los 7).</p>
       <div class="dir-content" id="res-content"><div class="empty-rep">Genera el reporte para ver los resultados.</div></div>
+      <div id="res-analitica" style="margin-top:22px"></div>
     </div>
 
     <!-- ============ DIRECCIÓN COMERCIAL ============ -->
@@ -465,6 +466,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
       <div class="canal-chips"><span class="cc-lbl">Canales</span><div id="dc-canales"></div></div>
       <p class="hint">Elige el rango de semanas; los canales marcados alimentan el embudo de arriba (la tabla siempre muestra los 7).</p>
       <div class="dir-content" id="dc-content"><div class="empty-rep">Genera el reporte para ver los resultados.</div></div>
+      <div id="dc-analitica" style="margin-top:22px"></div>
     </div>
 
     <!-- ============ MARKETING (embebido) ============ -->
@@ -1377,6 +1379,8 @@ async function renderResultados(){
       <tbody>${rows}
         <tr class="total"><td class="lft">Total</td><td>${tot.leads}</td><td>${tot.zooms}</td><td>${tot.tours}</td><td>${tot.opp}</td><td>${tot.opp_zooms}</td><td>${tot.opp_tours}</td><td>${tot.apartados}</td><td>${tot.won}</td><td>${fmtMoney(tot.ingresos)}</td><td>${pctTxt(tot.won,tot.opp)}</td><td>${totMeta}</td><td>${estadoDot(tot.leads,tot.won,totMeta/4*nW)}</td></tr>
       </tbody></table></div>`;
+  ANAL_DIR.res.expanded=null;
+  renderDirAnalitica("res", chsSel, weekSet, "Dirección General");
 }
 
 async function renderDirCom(){
@@ -1441,6 +1445,8 @@ async function renderDirCom(){
       </tr></thead>
       <tbody>${rows}${totRow}</tbody>
     </table></div>`;
+  ANAL_DIR.dc.expanded=null;
+  renderDirAnalitica("dc", chsSel, weekSet, "Dirección Comercial");
 }
 
 async function showResultados(){
@@ -1451,6 +1457,89 @@ async function showDirCom(){
 }
 
 /* ===================== ANALÍTICA ===================== */
+const METRIC_LABELS = { leads:"Leads", zooms:"Zooms", tours:"Tours", opp:"OPP", opp_zooms:"OPP de zooms", opp_tours:"OPP de tours", opp_14:"OPP >14 días", apartados:"Apartados", won:"WON", ingresos:"Ingresos" };
+const ANAL_DIR = { res:{expanded:null,charts:{},cache:{}}, dc:{expanded:null,charts:{},cache:{}} };
+function dirWeeklySeries(chsSel, weekSet){
+  const wks = [...weekSet].sort();
+  const idx = {}; wks.forEach((w,i)=> idx[w]=i);
+  const series = {}; METRIC_KEYS.forEach(m => series[m] = wks.map(()=>0));
+  for(const ch of chsSel){
+    const map = METRIC_MAP[ch]; if(!map) continue;
+    const p = chPrefix(ch); const keys = recList(p);
+    for(const k of keys){
+      const wk = k.slice(p.length).split("__")[0];
+      const wi = idx[wk]; if(wi==null) continue;
+      const rec = recGet(k); if(!rec||!rec.valores) continue;
+      METRIC_KEYS.forEach(m => { const fk=map[m]; if(fk) series[m][wi] += Number(rec.valores[fk]||0); });
+    }
+  }
+  return { weeks: wks, byMetric: series };
+}
+function renderDirAnalitica(prefix, chsSel, weekSet, tabName){
+  const host = document.getElementById(`${prefix}-analitica`); if(!host) return;
+  if(!window.Chart){ host.innerHTML = '<div class="anal-empty">Cargando librería de gráficas…</div>'; setTimeout(()=>renderDirAnalitica(prefix,chsSel,weekSet,tabName), 300); return; }
+  if(!weekSet || !weekSet.size || !chsSel.length){ host.innerHTML = ''; return; }
+  const state = ANAL_DIR[prefix];
+  const { weeks, byMetric } = dirWeeklySeries(chsSel, weekSet);
+  if(!weeks.length){ host.innerHTML = ''; return; }
+  const html = [`<h3 style="font-family:var(--serif);color:var(--verde-prof);font-size:20px;margin:24px 0 6px">Analítica del embudo</h3><p class="hint" style="margin-top:0">Serie semanal agregada de los canales seleccionados. Clic para expandir y pedir conclusión con IA.</p><div class="anal-grid">`];
+  METRIC_KEYS.forEach((m, i) => {
+    const values = byMetric[m];
+    const total = values.reduce((a,b)=>a+b,0);
+    const canvasId = `${prefix}-anc-${m}`;
+    const expanded = state.expanded === m;
+    const isMoney = m === "ingresos";
+    const totalTxt = isMoney ? fmtMoney(total) : total;
+    const conc = state.cache[m];
+    html.push(`<div class="anal-card${expanded?' expanded':''}" data-metric="${m}">
+      <div class="ac-title">${METRIC_LABELS[m]}</div>
+      <div class="ac-total">Total: <b>${totalTxt}</b> · ${weeks.length} sem.</div>
+      <canvas id="${canvasId}"></canvas>
+      ${expanded ? `<div class="anal-actions"><button class="btn btn-olive" data-analyze="${m}">Analizar con IA</button></div>${conc?`<div class="anal-conc">${conc}</div>`:''}` : ''}
+    </div>`);
+  });
+  html.push('</div>');
+  host.innerHTML = html.join('');
+  METRIC_KEYS.forEach(m => {
+    const el = document.getElementById(`${prefix}-anc-${m}`); if(!el) return;
+    if(state.charts[m]) state.charts[m].destroy();
+    state.charts[m] = new Chart(el.getContext("2d"), {
+      type: "line",
+      data: { labels: weeks, datasets: [{ label: METRIC_LABELS[m], data: byMetric[m], borderColor: "#65713F", backgroundColor: "rgba(101,113,63,0.12)", tension: .3, fill: true, pointRadius: 2, borderWidth: 2 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { font: { size: 9 }, maxRotation: 0, autoSkipPadding: 12 }, grid: { display: false } }, y: { beginAtZero: true, ticks: { font: { size: 9 } }, grid: { color: "rgba(0,0,0,0.05)" } } } }
+    });
+  });
+  host.querySelectorAll(".anal-card").forEach(card => {
+    card.onclick = (e) => {
+      if(e.target.tagName === "BUTTON") return;
+      const m = card.dataset.metric;
+      state.expanded = (state.expanded === m) ? null : m;
+      renderDirAnalitica(prefix, chsSel, weekSet, tabName);
+    };
+  });
+  host.querySelectorAll("[data-analyze]").forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const m = btn.dataset.analyze;
+      const card = btn.closest(".anal-card");
+      let conc = card.querySelector(".anal-conc");
+      if(!conc){ conc = document.createElement("div"); conc.className = "anal-conc loading"; conc.textContent = "Analizando con IA…"; card.appendChild(conc); }
+      else { conc.classList.add("loading"); conc.textContent = "Analizando con IA…"; }
+      btn.disabled = true;
+      try {
+        const puntos = weeks.map((w,i)=>({ periodo: w, valor: byMetric[m][i] }));
+        const resp = await fetch("/.netlify/functions/kpi-analyze", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ canal: tabName, kpi: METRIC_LABELS[m], unidad: m==="ingresos"?"MXN":"", meta: null, puntos, periodicidad: "semanal" })
+        });
+        const data = await resp.json();
+        if(!resp.ok){ conc.classList.remove("loading"); conc.textContent = "Error: " + (data.error || resp.status); }
+        else { conc.classList.remove("loading"); conc.textContent = data.conclusion || "(sin conclusión)"; state.cache[m] = data.conclusion; }
+      } catch(err){ conc.classList.remove("loading"); conc.textContent = "Error de red: " + err.message; }
+      finally { btn.disabled = false; }
+    };
+  });
+}
 const ANAL_STATE = { expanded: null, charts: {}, cache: {} };
 function analSeriesForChannel(chKey){
   // Devuelve { weeks:[...], byField:{ [fk]: [values por week] } } sumado sobre asesores/ciudades
