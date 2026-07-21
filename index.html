@@ -73,9 +73,9 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .shell{ display:flex; align-items:stretch; min-height:calc(100vh - 90px); }
   .main{ flex:1; min-width:0; }
   .sidebar{ flex:0 0 70px; background:var(--verde-prof); display:flex; flex-direction:column; align-items:center; gap:6px; padding:16px 7px 0; border-right:1px solid rgba(0,0,0,.1); position:sticky; top:0; align-self:flex-start; height:100vh; overflow-y:auto; }
-  .nav-hist{ position:sticky; bottom:0; margin-top:auto; display:flex; gap:6px; padding:10px 0 12px; border-top:1px solid rgba(255,255,255,.12); width:100%; justify-content:center; background:var(--verde-prof); z-index:2; }
-  .nav-hist button{ background:transparent; border:1px solid rgba(255,255,255,.25); color:var(--logo); width:26px; height:26px; border-radius:6px; cursor:pointer; font-size:14px; line-height:1; display:flex; align-items:center; justify-content:center; padding:0; transition:.15s; }
-  .nav-hist button:not(:disabled):hover{ background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.4); color:#fff; }
+  .nav-hist{ display:flex; gap:4px; align-items:center; margin-right:6px; padding-right:10px; border-right:1px solid rgba(239,231,214,.18); }
+  .nav-hist button{ background:transparent; border:1px solid rgba(239,231,214,.35); color:var(--logo); width:26px; height:26px; border-radius:6px; cursor:pointer; font-size:13px; line-height:1; display:flex; align-items:center; justify-content:center; padding:0; transition:.15s; font-family:var(--sans); }
+  .nav-hist button:not(:disabled):hover{ background:rgba(239,231,214,.12); border-color:rgba(239,231,214,.55); color:#fff; }
   .nav-hist button:disabled{ opacity:.3; cursor:not-allowed; }
   .side-btn{ width:56px; height:56px; border:none; background:transparent; color:var(--logo); border-radius:11px; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-family:var(--sans); font-size:8.5px; font-weight:600; letter-spacing:.2px; text-transform:uppercase; opacity:.78; transition:.15s; }
   .side-btn svg{ width:21px; height:21px; }
@@ -354,9 +354,12 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
     </div>
     <div class="app-title">
       <div class="t1">Sistema de Reportes</div>
-      <div class="t2">Multicanal</div>
     </div>
     <div class="user-badge" id="user-badge" style="display:none">
+      <div class="nav-hist">
+        <button id="nav-back" type="button" title="Atrás" disabled>←</button>
+        <button id="nav-fwd" type="button" title="Adelante" disabled>→</button>
+      </div>
       <span class="email" id="user-email">—</span>
       <span class="role" id="user-role">user</span>
       <button type="button" class="logout" id="btn-logout">Salir</button>
@@ -381,10 +384,6 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M4 20c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/><circle cx="18" cy="6" r="1.4" fill="currentColor" stroke="none"/></svg>
         <span>Admin</span>
       </button>
-      <div class="nav-hist">
-        <button id="nav-back" type="button" title="Atrás" disabled>←</button>
-        <button id="nav-fwd" type="button" title="Adelante" disabled>→</button>
-      </div>
     </div>
     <div class="main">
   <div class="tabs">
