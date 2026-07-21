@@ -258,6 +258,37 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     <div class="nblock"><h5>3 aprendizajes</h5><p class="${rec.aprendizajes?'':'empty-note'}">${rec.aprendizajes||'Sin registro'}</p></div>
     <div class="nblock"><h5>3 cambios</h5><p class="${rec.cambios?'':'empty-note'}">${rec.cambios||'Sin registro'}</p></div></div></div></div>`; }
   function saveBar(){ return `<div class="actions"><button class="btn-ghost" id="btn-clear">Limpiar</button><button class="btn-prim" id="btn-save">Guardar</button></div>`; }
+  function customList(){ const M = MODS[state.active]; return (M && M.metas && M.metas.__custom) || []; }
+  function customIngresoBlock(){
+    const list = customList(); if(!list.length) return '';
+    let h = `<div class="card"><div class="card-head"><span class="dot" style="background:var(--arena)"></span><h3>KPIs personalizados</h3></div><div class="card-body"><div class="grid">`;
+    list.forEach(c => { h += `<div class="field"><label>${escHtmlSafe(c.l||c.k)}</label><input type="text" inputmode="numeric" id="cust_${c.k}" placeholder="0"></div>`; });
+    h += `</div></div></div>`;
+    return h;
+  }
+  function fillCustom(rec){
+    const list = customList(); const cust = (rec && rec.__custom) || {};
+    list.forEach(c => setV('cust_'+c.k, cust[c.k]));
+  }
+  function readCustom(rec){
+    const list = customList();
+    if(!list.length){ if(rec.__custom) delete rec.__custom; return; }
+    rec.__custom = {};
+    list.forEach(c => { const v = num(gv('cust_'+c.k)); if(v) rec.__custom[c.k] = v; });
+    if(!Object.keys(rec.__custom).length) delete rec.__custom;
+  }
+  function customReportSection(rec){
+    const list = customList(); if(!list.length) return '';
+    const cust = (rec && rec.__custom) || {};
+    let h = `<div class="card"><div class="card-head"><span class="dot" style="background:var(--arena)"></span><h3>KPIs personalizados</h3></div><div class="card-body"><table class="rtable">`;
+    list.forEach(c => {
+      const v = Number(cust[c.k] || 0);
+      const meta = c.meta_num;
+      h += `<tr><td class="kname">${escHtmlSafe(c.l||c.k)}</td><td class="kval">${fmt(v)}</td><td class="kmeta">${metaTxt(meta)}</td><td class="ccell">${meta?cpH(v,meta):''}</td></tr>`;
+    });
+    h += `</table></div></div>`;
+    return h;
+  }
   function respBlock(){ return `<div class="card"><div class="card-head"><span class="dot" style="background:var(--meta)"></span><h3>Responsable</h3></div><div class="card-body"><input type="text" id="x_resp" placeholder="Nombre del responsable" style="font-family:var(--sans);font-size:14px;padding:8px 10px;border:1px solid var(--linea);border-radius:8px;background:var(--crema);color:var(--texto);width:100%;max-width:420px;"></div></div>`; }
   function fillResp(rec){ const v = (rec && rec.responsable) || RESP[state.active] || ''; setV('x_resp', v); }
   function readResp(rec){ const v = gv('x_resp'); rec.responsable = v; if(v && v !== RESP[state.active]){ RESP[state.active] = v; try{ window.storage.set('mkt_resp', JSON.stringify(RESP)); }catch(e){} } }
@@ -280,9 +311,9 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     tt:{leads:0,totalSeg:0,segNuevos:0,posts:0,alcance:0,interacciones:0,top:[{desc:'',link:''},{desc:'',link:''},{desc:'',link:''}]},
     yt:{leads:0,totalSeg:2,segNuevos:2,videos:2,shorts:4,alcance:123,interacciones:11,top:[{desc:'Selvadentro llega a Madrid · Juan',link:'https://youtube.com/shorts/Dg5hf0mi1TE'},{desc:'Short lifestyle',link:'https://youtube.com/shorts/P6OrmHvswBU'},{desc:'Comunidad Selvadentro',link:'https://youtube.com/shorts/zVhxPD0oj3k'}]},
     notas:'',aprendizajes:'',cambios:'' } };
-  function rsIngreso(host){ let h=''; RS_PLAT.forEach(p=>{ h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${p.color}"></span><h3>${p.name}</h3></div><div class="card-body"><div class="grid">`; p.fields.forEach(([k,l])=>h+=`<div class="field"><label>${l}</label><input type="text" inputmode="numeric" id="rs_${p.key}_${k}" placeholder="0"></div>`); h+=`</div><div class="subhead" style="margin-top:14px">Top 3 publicaciones</div>`; for(let i=1;i<=3;i++) h+=`<div class="camp-top"><span class="badge">${i}</span><input class="cn" id="rs_${p.key}_top${i}_desc" placeholder="Descripción ${i}"><input class="cn" id="rs_${p.key}_top${i}_link" placeholder="Link"></div>`; h+=`</div></div>`; }); h+=respBlock()+notesBlock()+saveBar(); host.innerHTML=h; }
-  function rsFill(rec){ RS_PLAT.forEach(p=>{ const d=(rec&&rec[p.key])||{}; p.fields.forEach(([k])=>setV(`rs_${p.key}_${k}`,d[k])); const t=d.top||[]; for(let i=1;i<=3;i++){ setV(`rs_${p.key}_top${i}_desc`,(t[i-1]||{}).desc); setV(`rs_${p.key}_top${i}_link`,(t[i-1]||{}).link);} }); fillNotes(rec); fillResp(rec); }
-  function rsRead(){ const rec={}; RS_PLAT.forEach(p=>{ const d={}; p.fields.forEach(([k])=>d[k]=num(gv(`rs_${p.key}_${k}`))); d.top=[]; for(let i=1;i<=3;i++) d.top.push({desc:gv(`rs_${p.key}_top${i}_desc`),link:gv(`rs_${p.key}_top${i}_link`)}); rec[p.key]=d; }); readNotes(rec); readResp(rec); return rec; }
+  function rsIngreso(host){ let h=''; RS_PLAT.forEach(p=>{ h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${p.color}"></span><h3>${p.name}</h3></div><div class="card-body"><div class="grid">`; p.fields.forEach(([k,l])=>h+=`<div class="field"><label>${l}</label><input type="text" inputmode="numeric" id="rs_${p.key}_${k}" placeholder="0"></div>`); h+=`</div><div class="subhead" style="margin-top:14px">Top 3 publicaciones</div>`; for(let i=1;i<=3;i++) h+=`<div class="camp-top"><span class="badge">${i}</span><input class="cn" id="rs_${p.key}_top${i}_desc" placeholder="Descripción ${i}"><input class="cn" id="rs_${p.key}_top${i}_link" placeholder="Link"></div>`; h+=`</div></div>`; }); h+=customIngresoBlock()+respBlock()+notesBlock()+saveBar(); host.innerHTML=h; }
+  function rsFill(rec){ RS_PLAT.forEach(p=>{ const d=(rec&&rec[p.key])||{}; p.fields.forEach(([k])=>setV(`rs_${p.key}_${k}`,d[k])); const t=d.top||[]; for(let i=1;i<=3;i++){ setV(`rs_${p.key}_top${i}_desc`,(t[i-1]||{}).desc); setV(`rs_${p.key}_top${i}_link`,(t[i-1]||{}).link);} }); fillNotes(rec); fillResp(rec); fillCustom(rec); }
+  function rsRead(){ const rec={}; RS_PLAT.forEach(p=>{ const d={}; p.fields.forEach(([k])=>d[k]=num(gv(`rs_${p.key}_${k}`))); d.top=[]; for(let i=1;i<=3;i++) d.top.push({desc:gv(`rs_${p.key}_top${i}_desc`),link:gv(`rs_${p.key}_top${i}_link`)}); rec[p.key]=d; }); readNotes(rec); readResp(rec); readCustom(rec); return rec; }
   function escHtmlSafe(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
   function readMetaNum(M, scope, key){ const v = scope==='' ? M.metas[key] : M.metas[scope]?.[key]; if(v==null) return ''; if(typeof v==='object') return v.num ?? ''; return v; }
   function readMetaPct(M, scope, key){ const v = scope==='' ? M.metas.__pct?.[key] : M.metas.__pct?.[scope]?.[key]; return v==null ? '' : v; }
@@ -297,40 +328,198 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     else { M.metas.__pct[scope] = M.metas.__pct[scope] || {}; if(val==null||val==='') delete M.metas.__pct[scope][key]; else M.metas.__pct[scope][key] = Number(val); if(!Object.keys(M.metas.__pct[scope]).length) delete M.metas.__pct[scope]; }
     if(!Object.keys(M.metas.__pct).length) delete M.metas.__pct;
   }
-  function renderMktMetasTable(host, moduleId, sections, hintText){
+  function readMetaLabel(M, kpi){ return (M.metas.__labels?.[kpi.scope]?.[kpi.key]) || kpi.label; }
+  function writeMetaLabel(M, scope, key, label, origLabel){
+    if(!label || label === origLabel){
+      if(M.metas.__labels?.[scope]){ delete M.metas.__labels[scope][key]; if(!Object.keys(M.metas.__labels[scope]).length) delete M.metas.__labels[scope]; }
+      if(M.metas.__labels && !Object.keys(M.metas.__labels).length) delete M.metas.__labels;
+      return;
+    }
+    M.metas.__labels = M.metas.__labels || {};
+    M.metas.__labels[scope] = M.metas.__labels[scope] || {};
+    M.metas.__labels[scope][key] = label;
+  }
+  function mktCustomKPIs(M){ return (M.metas.__custom || []); }
+  function mktCustomSections(M){ return (M.metas.__custom_sections || []); }
+  function mktCustomKPIsFor(M, sectionId){ return mktCustomKPIs(M).filter(c => c.section === sectionId); }
+  function mktCustomKPIsUnassigned(M){ return mktCustomKPIs(M).filter(c => !c.section); }
+  function renderMktMetasTable(host, moduleId, nativeSections, hintText){
     const M = MODS[moduleId];
     const html = [`<div class="metas-hint">${hintText}</div>`];
-    sections.forEach(sec => {
-      html.push(`<div class="meta-section-mkt"><div class="msec-head"><span class="msec-dot"></span>${escHtmlSafe(sec.title)}</div>
+    const buildRow = (kpi, isCustom) => {
+      const numV = isCustom ? (kpi.meta_num ?? '') : readMetaNum(M, kpi.scope, kpi.key);
+      const pctV = isCustom ? (kpi.meta_pct ?? '') : readMetaPct(M, kpi.scope, kpi.key);
+      const displayLabel = isCustom ? kpi.l : readMetaLabel(M, kpi);
+      const origLabel = isCustom ? kpi.l : kpi.label;
+      return `<tr data-sec="${escHtmlSafe(kpi.scope||'')}" data-k="${escHtmlSafe(kpi.key||kpi.k)}" data-custom="${isCustom?1:0}" draggable="${isCustom?'true':'false'}" style="${isCustom?'cursor:move;':''}">
+        <td>${isCustom?`<span class="mt-drag" draggable="false" style="cursor:grab;padding:2px 6px;color:var(--neutro);user-select:none;font-size:14px">⠿</span>`:''}<input class="mt-name-inp" type="text" value="${escHtmlSafe(displayLabel)}" data-orig="${escHtmlSafe(origLabel)}" draggable="false" style="border:1px solid transparent;background:transparent;font:inherit;font-size:13.5px;color:var(--texto);padding:5px 8px;border-radius:6px;width:calc(100% - ${isCustom?26:0}px);">${(!isCustom && kpi.hint)?`<span class="mt-hint">${escHtmlSafe(kpi.hint)}</span>`:''}</td>
+        <td class="right"><input class="mt-num" type="number" draggable="false" step="${kpi.money?'0.01':'1'}" placeholder="—" value="${numV===''?'':numV}"></td>
+        <td class="right"><span class="mt-pct-wrap"><input class="mt-pct" type="number" draggable="false" step="0.01" placeholder="—" value="${pctV===''?'':pctV}"><span>%</span></span></td>
+        <td class="right"><button class="mt-del" type="button">Borrar</button></td>
+      </tr>`;
+    };
+    const renderSection = (sec, kpis, isCustomSec) => {
+      const secId = sec.scope || sec.id;
+      html.push(`<div class="meta-section-mkt" data-sec-id="${escHtmlSafe(secId)}">
+        <div class="msec-head"><span class="msec-dot"></span>
+          ${isCustomSec?`<input class="msec-title-inp" type="text" value="${escHtmlSafe(sec.title)}" data-orig="${escHtmlSafe(sec.title)}" data-sec-id="${escHtmlSafe(secId)}" style="background:transparent;border:1px solid transparent;color:#fff;font-family:var(--serif);font-size:16px;font-weight:700;padding:2px 8px;border-radius:6px;flex:1">`:`<span>${escHtmlSafe(sec.title)}</span>`}
+          ${isCustomSec?`<button class="msec-del" data-sec-id="${escHtmlSafe(secId)}" style="margin-left:auto;background:transparent;border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px">✕ Borrar sección</button>`:''}
+        </div>
         <table class="metas-table-mkt">
           <thead><tr><th>Nombre del KPI</th><th class="right">Meta numérica</th><th class="right">Meta %</th><th></th></tr></thead>
-          <tbody>`);
-      sec.kpis.forEach(kpi => {
-        const numV = readMetaNum(M, kpi.scope, kpi.key);
-        const pctV = readMetaPct(M, kpi.scope, kpi.key);
-        html.push(`<tr data-sec="${escHtmlSafe(kpi.scope)}" data-k="${escHtmlSafe(kpi.key)}">
-          <td><span class="mt-name">${escHtmlSafe(kpi.label)}${kpi.hint?`<span class="mt-hint">${escHtmlSafe(kpi.hint)}</span>`:''}</span></td>
-          <td class="right"><input class="mt-num" type="number" step="${kpi.money?'0.01':'1'}" placeholder="—" value="${numV===''?'':numV}"></td>
-          <td class="right"><span class="mt-pct-wrap"><input class="mt-pct" type="number" step="0.01" placeholder="—" value="${pctV===''?'':pctV}"><span>%</span></span></td>
-          <td class="right"><button class="mt-del" type="button">Borrar</button></td>
-        </tr>`);
-      });
+          <tbody data-drop-sec="${escHtmlSafe(secId)}">`);
+      kpis.forEach(kpi => html.push(buildRow(kpi, !!kpi.__custom)));
+      if(!kpis.length) html.push(`<tr class="msec-empty"><td colspan="4" style="text-align:center;color:var(--neutro);font-style:italic;padding:14px">Sin KPIs. Arrastra aquí o crea uno nuevo.</td></tr>`);
       html.push('</tbody></table></div>');
+    };
+    // 1) Secciones nativas con sus KPIs (nativos + custom asignados)
+    nativeSections.forEach(sec => {
+      const customs = mktCustomKPIsFor(M, sec.scope).map(c => ({ ...c, __custom: true, scope: sec.scope, key: c.k }));
+      renderSection(sec, [...sec.kpis, ...customs], false);
     });
+    // 2) Secciones custom
+    mktCustomSections(M).forEach(secId => {
+      const label = M.metas.__section_labels?.[secId] || secId;
+      const customs = mktCustomKPIsFor(M, secId).map(c => ({ ...c, __custom: true, scope: secId, key: c.k }));
+      renderSection({ id: secId, scope: secId, title: label }, customs, true);
+    });
+    // 3) KPIs personalizados sin sección
+    const unassigned = mktCustomKPIsUnassigned(M);
+    if(unassigned.length){
+      renderSection({ id: '__unassigned', scope: '', title: 'KPIs personalizados' }, unassigned.map(c => ({ ...c, __custom: true, scope: '', key: c.k })), false);
+    }
+    // 4) Crear nueva sección
+    html.push(`<div class="meta-section-mkt"><div class="msec-head"><span class="msec-dot"></span>Crear nueva sección</div>
+      <div style="padding:14px 20px 18px;background:#fff;display:flex;gap:10px;align-items:center;">
+        <input id="mkt-new-sec-name" type="text" placeholder="Nombre de la sección (ej. 'Eventos VIP')" style="flex:1;font-family:var(--sans);font-size:14px;padding:9px 12px;border:1px solid var(--linea);border-radius:8px;background:var(--crema);">
+        <button class="btn-prim" id="mkt-new-sec-save" type="button">Crear sección</button>
+      </div>
+      <p style="font-size:12.5px;color:var(--neutro);margin:0;padding:0 20px 14px;background:#fff;">Una sección custom es un grupo vacío. Aparece como destino para KPIs custom.</p>
+    </div>`);
+    // 5) Agregar KPI personalizado
+    const allSecs = [...nativeSections.map(s => ({id: s.scope, label: s.title})), ...mktCustomSections(M).map(id => ({id, label: M.metas.__section_labels?.[id] || id}))];
+    const secOptions = `<option value="">(KPIs personalizados — sin sección)</option>` + allSecs.map(s => `<option value="${escHtmlSafe(s.id)}">${escHtmlSafe(s.label)}</option>`).join('');
+    html.push(`<div class="meta-section-mkt"><div class="msec-head"><span class="msec-dot"></span>Agregar KPI personalizado</div>
+      <table class="metas-table-mkt">
+        <thead><tr><th>Nombre del KPI</th><th>Sección destino</th><th class="right">Meta numérica</th><th class="right">Meta %</th><th></th></tr></thead>
+        <tbody>
+          <tr class="add-kpi-row">
+            <td><input id="mkt-new-kpi-name" type="text" placeholder="Ej. Llamadas semanales" style="width:100%;font-family:var(--sans);font-size:13.5px;padding:7px 9px;border:1px solid var(--linea);border-radius:6px;background:#fff;"></td>
+            <td><select id="mkt-new-kpi-sec" style="width:100%;font-family:var(--sans);font-size:13.5px;padding:7px 9px;border:1px solid var(--linea);border-radius:6px;background:#fff;">${secOptions}</select></td>
+            <td class="right"><input id="mkt-new-kpi-num" type="number" placeholder="—" class="mt-num" style="background:#fff"></td>
+            <td class="right"><span class="mt-pct-wrap"><input id="mkt-new-kpi-pct" type="number" placeholder="—" class="mt-pct" style="background:#fff"><span>%</span></span></td>
+            <td class="right"><button class="btn-prim" id="mkt-new-kpi-save" type="button">Guardar KPI</button></td>
+          </tr>
+        </tbody>
+      </table>
+      <p style="font-size:12.5px;color:var(--neutro);margin:0;padding:12px 20px 14px;background:#fff;">Los KPIs personalizados aparecen en Ingreso de datos, Reportes y Base de datos del módulo activo.</p>
+    </div>`);
     host.innerHTML = html.join('');
-    host.querySelectorAll('tr[data-sec]').forEach(tr => {
-      const sec = tr.dataset.sec, key = tr.dataset.k;
+    // Bindings de filas
+    host.querySelectorAll('tr[data-k]').forEach(tr => {
+      const sec = tr.dataset.sec, key = tr.dataset.k, isCustom = tr.dataset.custom === '1';
+      const nameInp = tr.querySelector('.mt-name-inp');
       const numInp = tr.querySelector('.mt-num');
       const pctInp = tr.querySelector('.mt-pct');
       const delBtn = tr.querySelector('.mt-del');
-      numInp.onchange = async () => { writeMetaNum(M, sec, key, numInp.value.trim()); await saveMeta(M); showToast('✓ Meta guardada'); };
-      pctInp.onchange = async () => { writeMetaPct(M, sec, key, pctInp.value.trim()); await saveMeta(M); showToast('✓ Meta % guardada'); };
+      nameInp.onchange = async () => {
+        const v = nameInp.value.trim();
+        if(isCustom){
+          const item = mktCustomKPIs(M).find(c => c.k === key);
+          if(item){ item.l = v || item.l; }
+        } else {
+          writeMetaLabel(M, sec, key, v, nameInp.dataset.orig);
+        }
+        await saveMeta(M); showToast('✓ Nombre guardado');
+      };
+      numInp.onchange = async () => {
+        const v = numInp.value.trim();
+        if(isCustom){ const it = mktCustomKPIs(M).find(c => c.k === key); if(it) it.meta_num = v === '' ? null : Number(v); }
+        else writeMetaNum(M, sec, key, v);
+        await saveMeta(M); showToast('✓ Meta guardada');
+      };
+      pctInp.onchange = async () => {
+        const v = pctInp.value.trim();
+        if(isCustom){ const it = mktCustomKPIs(M).find(c => c.k === key); if(it) it.meta_pct = v === '' ? null : Number(v); }
+        else writeMetaPct(M, sec, key, v);
+        await saveMeta(M); showToast('✓ Meta % guardada');
+      };
       delBtn.onclick = async () => {
-        if(!confirm('¿Borrar las metas de este KPI?')) return;
-        writeMetaNum(M, sec, key, null); writeMetaPct(M, sec, key, null);
-        await saveMeta(M); renderMktMetasTable(host, moduleId, sections, hintText);
+        if(isCustom){
+          if(!confirm('¿Borrar este KPI personalizado?')) return;
+          M.metas.__custom = mktCustomKPIs(M).filter(c => c.k !== key);
+          if(!M.metas.__custom.length) delete M.metas.__custom;
+        } else {
+          if(!confirm('¿Borrar las metas de este KPI?')) return;
+          writeMetaNum(M, sec, key, null); writeMetaPct(M, sec, key, null);
+        }
+        await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText);
+      };
+      // Drag & drop para custom KPIs
+      if(isCustom){
+        tr.ondragstart = (e) => { e.dataTransfer.setData('text/plain', key); e.dataTransfer.effectAllowed = 'move'; tr.style.opacity='.4'; };
+        tr.ondragend = () => { tr.style.opacity='1'; };
+      }
+    });
+    // Drop targets: cada tbody
+    host.querySelectorAll('tbody[data-drop-sec]').forEach(tb => {
+      tb.ondragover = (e) => { e.preventDefault(); e.dataTransfer.dropEffect='move'; tb.style.background='rgba(207,133,67,.08)'; };
+      tb.ondragleave = () => { tb.style.background=''; };
+      tb.ondrop = async (e) => {
+        e.preventDefault(); tb.style.background='';
+        const key = e.dataTransfer.getData('text/plain'); if(!key) return;
+        const targetSec = tb.dataset.dropSec === '' ? null : tb.dataset.dropSec;
+        const item = mktCustomKPIs(M).find(c => c.k === key); if(!item) return;
+        if(item.section === targetSec) return;
+        item.section = targetSec;
+        await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); showToast('KPI movido ✓');
       };
     });
+    // Renombrar sección custom
+    host.querySelectorAll('.msec-title-inp').forEach(inp => {
+      inp.onchange = async () => {
+        const secId = inp.dataset.secId; const v = inp.value.trim() || secId;
+        M.metas.__section_labels = M.metas.__section_labels || {};
+        if(v === secId) delete M.metas.__section_labels[secId]; else M.metas.__section_labels[secId] = v;
+        if(!Object.keys(M.metas.__section_labels).length) delete M.metas.__section_labels;
+        await saveMeta(M); showToast('✓ Sección renombrada');
+      };
+    });
+    // Borrar sección custom
+    host.querySelectorAll('.msec-del').forEach(btn => {
+      btn.onclick = async () => {
+        const secId = btn.dataset.secId;
+        const inside = mktCustomKPIsFor(M, secId);
+        if(inside.length && !confirm(`La sección tiene ${inside.length} KPI(s). Se moverán a "KPIs personalizados" sin sección. ¿Continuar?`)) return;
+        if(!inside.length && !confirm('¿Borrar esta sección?')) return;
+        M.metas.__custom_sections = mktCustomSections(M).filter(id => id !== secId);
+        if(!M.metas.__custom_sections.length) delete M.metas.__custom_sections;
+        (M.metas.__custom || []).forEach(c => { if(c.section === secId) c.section = null; });
+        if(M.metas.__section_labels) delete M.metas.__section_labels[secId];
+        await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); showToast('Sección borrada');
+      };
+    });
+    // Crear sección
+    document.getElementById('mkt-new-sec-save').onclick = async () => {
+      const name = document.getElementById('mkt-new-sec-name').value.trim();
+      if(!name){ alert('Pon un nombre para la sección'); return; }
+      M.metas.__custom_sections = mktCustomSections(M).slice();
+      if(M.metas.__custom_sections.includes(name) || nativeSections.some(s => s.scope === name)){ alert('Ya existe una sección con ese nombre'); return; }
+      M.metas.__custom_sections.push(name);
+      await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); showToast(`✓ Sección "${name}" creada`);
+    };
+    // Crear KPI personalizado
+    document.getElementById('mkt-new-kpi-save').onclick = async () => {
+      const name = document.getElementById('mkt-new-kpi-name').value.trim();
+      if(!name){ alert('Pon un nombre para el KPI'); return; }
+      const secId = document.getElementById('mkt-new-kpi-sec').value || null;
+      const num = document.getElementById('mkt-new-kpi-num').value.trim();
+      const pct = document.getElementById('mkt-new-kpi-pct').value.trim();
+      const k = 'custom_' + name.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,40) + '_' + Math.random().toString(36).slice(2,6);
+      M.metas.__custom = mktCustomKPIs(M).slice();
+      M.metas.__custom.push({ k, l: name, meta_num: num === '' ? null : Number(num), meta_pct: pct === '' ? null : Number(pct), section: secId });
+      await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); showToast(`✓ KPI "${name}" agregado`);
+    };
   }
   function rsMetas(host,M){
     const sections = [];
@@ -346,7 +535,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     [['Leads orgánicos','leads'],['Alcance total','alcance'],['Interacciones','interacciones'],['Seguidores totales','totalSeg'],['Seguidores nuevos','segNuevos']].forEach(([l,f])=>{ const cur=sum(rec,f); let dt='sin dato previo',dc='var(--arena)'; if(prev){ const d=cur-sum(prev,f); if(d===0)dt='= vs mes anterior'; else{ const pv=sum(prev,f); const pc=pv?Math.round(Math.abs(d)/pv*100):null; dt=(d>0?'▲ +':'▼ −')+fmt(Math.abs(d))+(pc!==null?` (${pc}%)`:''); dc=d>0?'#CBDDC0':'#F2CFC9'; } } h+=`<div class="kpi"><div class="klabel">${l}</div><div class="kval">${fmt(cur)}</div><div class="kdelta" style="color:${dc}">${dt}</div></div>`; });
     h+=`</div></div>`;
     RS_PLAT.forEach(p=>{ const d=rec[p.key]||{}; const mp=M.metas[p.key]||{}; const pd=(prev&&prev[p.key])||null; h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${p.color}"></span><h3>${p.name}</h3></div><div class="card-body"><table class="rtable">`; p.fields.forEach(([k,l])=>{ const v=num(d[k]); const meta=mp[k]; h+=`<tr><td class="kname">${l}</td><td class="kval">${fmt(v)}</td><td class="kmeta">${metaTxt(meta)}</td><td class="ccell">${meta?cpH(v,meta):''}</td></tr>`; }); const alc=num(d.alcance),inter=num(d.interacciones); const eng=alc>0?inter/alc*100:null; h+=`<tr class="calc-row"><td class="kname">Engagement</td><td class="kval">${eng===null?'—':pct(eng)}</td><td class="kmeta"></td><td class="ccell"></td></tr>`; let base=null; if(p.key==='fb') base=num(d.segMesPasado); else if(pd) base=num(pd.totalSeg); const crec=(base&&base>0)?num(d.segNuevos)/base*100:null; h+=`<tr class="calc-row"><td class="kname">Crecimiento de red</td><td class="kval">${crec===null?'—':pct(crec)}</td><td class="kmeta">${metaTxt(M.metas._crec,{pct:1})}</td><td class="ccell">${crec===null?naP():cpH(crec,M.metas._crec)}</td></tr></table>`; const tops=(d.top||[]).filter(t=>t.desc||t.link); if(tops.length){ h+=`<div class="subhead" style="margin-top:14px">Top publicaciones</div>`; tops.forEach((t,i)=>{ h+=`<div style="padding:7px 0;border-top:1px dashed var(--linea)"><span class="rank">${i+1}</span> ${t.desc||'(sin descripción)'}`+(t.link?` · <a href="${t.link}" target="_blank" style="color:var(--olivo);font-size:12px;word-break:break-all">${t.link}</a>`:'')+`</div>`; }); } h+=`</div></div>`; });
-    h+=notesReport(rec); host.innerHTML=h;
+    h+=customReportSection(rec)+notesReport(rec); host.innerHTML=h;
   }
 
   /* ===== MÓDULO 2 · PPC ADS (semanal) ===== */
@@ -362,14 +551,14 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   function ppcIngreso(host){ let h=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--cobre)"></span><h3>Totales del periodo</h3></div><div class="card-body"><div class="grid">
     <div class="field"><label>Leads totales <span class="calc-tag">(auto)</span></label><input type="text" inputmode="numeric" id="ppc_tot_leads" class="auto" placeholder="0"></div>
     <div class="field"><label>Inversión total (${CUR}) <span class="calc-tag">(auto)</span></label><input type="text" inputmode="numeric" id="ppc_tot_inv" class="auto" placeholder="0"></div></div></div></div>`;
-    h+=ppcPlatCard('meta','Meta ADS','var(--meta)',5,false)+ppcPlatCard('google','Google ADS','var(--google)',2,true)+respBlock()+notesBlock()+saveBar(); host.innerHTML=h;
+    h+=ppcPlatCard('meta','Meta ADS','var(--meta)',5,false)+ppcPlatCard('google','Google ADS','var(--google)',2,true)+customIngresoBlock()+respBlock()+notesBlock()+saveBar(); host.innerHTML=h;
     const aw=(id,fn,deps)=>{ const t=$('#'+id); t.addEventListener('input',()=>t.dataset.auto='0'); deps.forEach(d=>{const e=$('#'+d); if(e)e.addEventListener('input',()=>{ if(t.dataset.auto!=='0'){ const v=fn(); t.value=(v===null?'':fmt(v)); t.dataset.auto='1'; } });}); };
     aw('ppc_tot_leads',()=>num($('#ppc_meta_leads').value)+num($('#ppc_google_leads').value),['ppc_meta_leads','ppc_google_leads']);
     aw('ppc_tot_inv',()=>num($('#ppc_meta_inv').value)+num($('#ppc_google_inv').value),['ppc_meta_inv','ppc_google_inv']);
     ['meta','google'].forEach(p=>{ aw('ppc_'+p+'_cpl',()=>{const l=num($('#ppc_'+p+'_leads').value);return l>0?num($('#ppc_'+p+'_inv').value)/l:null;},['ppc_'+p+'_inv','ppc_'+p+'_leads']); const nc=p==='meta'?5:2; for(let i=1;i<=nc;i++){(function(p,i){aw(`ppc_${p}_c${i}_ctr`,()=>{const a=num($(`#ppc_${p}_c${i}_alcance`).value);return a>0?num($(`#ppc_${p}_c${i}_clics`).value)/a*100:null;},[`ppc_${p}_c${i}_clics`,`ppc_${p}_c${i}_alcance`]);})(p,i);} });
   }
-  function ppcFill(rec){ setVAuto('ppc_tot_leads',rec&&rec.tot?rec.tot.leads:''); setVAuto('ppc_tot_inv',rec&&rec.tot?rec.tot.inv:''); ['meta','google'].forEach(p=>{ const d=(rec&&rec[p])||{}; setVAuto('ppc_'+p+'_leads',d.leads); setVAuto('ppc_'+p+'_inv',d.inv); setVAuto('ppc_'+p+'_cpl',d.cpl); setVAuto('ppc_'+p+'_campanas',d.campanas); const nc=p==='meta'?5:2; for(let i=1;i<=nc;i++){ const c=(d.camps&&d.camps[i-1])||{}; setV(`ppc_${p}_c${i}_name`,c.name); setV(`ppc_${p}_c${i}_id`,c.id); PPC_CF.forEach(([k])=>setVAuto(`ppc_${p}_c${i}_${k}`,c[k])); if(p==='google') setV(`ppc_${p}_c${i}_topkw`,c.topkw); } }); fillNotes(rec); fillResp(rec); }
-  function ppcRead(){ const rec={tot:{leads:num(gv('ppc_tot_leads')),inv:num(gv('ppc_tot_inv'))}}; ['meta','google'].forEach(p=>{ const d={leads:num(gv('ppc_'+p+'_leads')),inv:num(gv('ppc_'+p+'_inv')),cpl:num(gv('ppc_'+p+'_cpl')),campanas:num(gv('ppc_'+p+'_campanas')),camps:[]}; const nc=p==='meta'?5:2; for(let i=1;i<=nc;i++){ const c={name:gv(`ppc_${p}_c${i}_name`),id:gv(`ppc_${p}_c${i}_id`)}; PPC_CF.forEach(([k])=>c[k]=num(gv(`ppc_${p}_c${i}_${k}`))); if(p==='google')c.topkw=gv(`ppc_${p}_c${i}_topkw`); d.camps.push(c);} rec[p]=d; }); readNotes(rec); readResp(rec); return rec; }
+  function ppcFill(rec){ setVAuto('ppc_tot_leads',rec&&rec.tot?rec.tot.leads:''); setVAuto('ppc_tot_inv',rec&&rec.tot?rec.tot.inv:''); ['meta','google'].forEach(p=>{ const d=(rec&&rec[p])||{}; setVAuto('ppc_'+p+'_leads',d.leads); setVAuto('ppc_'+p+'_inv',d.inv); setVAuto('ppc_'+p+'_cpl',d.cpl); setVAuto('ppc_'+p+'_campanas',d.campanas); const nc=p==='meta'?5:2; for(let i=1;i<=nc;i++){ const c=(d.camps&&d.camps[i-1])||{}; setV(`ppc_${p}_c${i}_name`,c.name); setV(`ppc_${p}_c${i}_id`,c.id); PPC_CF.forEach(([k])=>setVAuto(`ppc_${p}_c${i}_${k}`,c[k])); if(p==='google') setV(`ppc_${p}_c${i}_topkw`,c.topkw); } }); fillNotes(rec); fillResp(rec); fillCustom(rec); }
+  function ppcRead(){ const rec={tot:{leads:num(gv('ppc_tot_leads')),inv:num(gv('ppc_tot_inv'))}}; ['meta','google'].forEach(p=>{ const d={leads:num(gv('ppc_'+p+'_leads')),inv:num(gv('ppc_'+p+'_inv')),cpl:num(gv('ppc_'+p+'_cpl')),campanas:num(gv('ppc_'+p+'_campanas')),camps:[]}; const nc=p==='meta'?5:2; for(let i=1;i<=nc;i++){ const c={name:gv(`ppc_${p}_c${i}_name`),id:gv(`ppc_${p}_c${i}_id`)}; PPC_CF.forEach(([k])=>c[k]=num(gv(`ppc_${p}_c${i}_${k}`))); if(p==='google')c.topkw=gv(`ppc_${p}_c${i}_topkw`); d.camps.push(c);} rec[p]=d; }); readNotes(rec); readResp(rec); readCustom(rec); return rec; }
   function ppcMetas(host,M){
     const scopeLabels = { global:'Totales', meta:'Meta ADS', google:'Google ADS' };
     const sections = ['global','meta','google'].map(sc => ({
@@ -395,7 +584,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
       const camps=(d.camps||[]).filter(x=>x.name||num(x.leads)||num(x.alcance)||num(x.clics)); const isG=plt==='google';
       if(camps.length){ h+=`<div class="scroll"><table class="ctable"><tr><th class="l">Campaña</th><th>Leads</th><th>CPL</th><th>Alcance</th><th>Clics</th><th>CTR</th><th>CPR</th>${isG?'<th class="l">Top KW</th>':''}</tr>`; camps.forEach(x=>{ const xc=num(x.ctr)||(num(x.alcance)>0?num(x.clics)/num(x.alcance)*100:0); h+=`<tr><td class="l">${x.name||'(sin nombre)'}</td><td>${fmt(num(x.leads))}</td><td>${money(num(x.cpl))}</td><td>${fmt(num(x.alcance))}</td><td>${fmt(num(x.clics))}</td><td>${xc?pct(xc):'—'}</td><td>${num(x.cpr)?money(num(x.cpr)):'—'}</td>${isG?`<td class="l kw">${x.topkw||'—'}</td>`:''}</tr>`; }); h+=`</table></div>`; }
       h+=`</div></div>`; });
-    h+=notesReport(rec); host.innerHTML=h;
+    h+=customReportSection(rec)+notesReport(rec); host.innerHTML=h;
   }
 
   /* ===== MÓDULO 3 · CRM MANAGER (semanal) ===== */
@@ -408,9 +597,9 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   const CRM_SEED_METAS={ funnel:{leadToCQL:35,cqlToMQL:40,mqlToSQL:50,sqlToSQLS:60}, leads:{totales:15}, web:{formConv:2}, email:{open:25,click:3,reply:5}, msg:{open:60,click:10} };
   const CRM_MF=[['funnel','leadToCQL','Lead → CQL','% mín'],['funnel','cqlToMQL','CQL → MQL','% mín'],['funnel','mqlToSQL','MQL → SQL','% mín'],['funnel','sqlToSQLS','SQL → SQL Selvadentro','% mín'],['leads','totales','Leads totales / semana','mín'],['web','formConv','Conversión de formulario','% mín'],['email','open','Email · Open rate','% mín'],['email','click','Email · Click rate','% mín'],['email','reply','Email · Reply rate','% mín'],['msg','open','Mensaje · Open rate','% mín'],['msg','click','Mensaje · Click rate','% mín']];
   const CRM_SEED={ '2026-W15':{ src:{totales:20,meta:12,google:5,brokers:2,referidos:1,otras:0}, funnels:{totales:{cql:8,mql:5,sql:3,sqls:1,corretaje:1,descal:6},meta:{cql:5,mql:3,sql:2,sqls:1,corretaje:0,descal:4},google:{cql:2,mql:1,sql:1,sqls:0,corretaje:0,descal:2},otras:{cql:1,mql:1,sql:0,sqls:0,corretaje:0,descal:1}}, web:{trafico:1240,registros:31,seo:3}, email:{enviadas:480,abiertas:134,click:17,respuesta:9}, msg:{enviadas:210,abiertas:145,click:25}, notas:'Semana de EJEMPLO precargada. Sobrescríbela con datos reales.',aprendizajes:'',cambios:'' } };
-  function crmIngreso(host){ let h=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--cobre)"></span><h3>Conteo de leads por fuente</h3></div><div class="card-body"><div class="grid">`; CRM_SRC.forEach(([k,l])=>{ const au=k==='totales'; h+=`<div class="field"><label>${l}${au?' <span class="calc-tag">(auto)</span>':''}</label><input type="text" inputmode="numeric" id="crm_src_${k}" class="${au?'auto':''}" placeholder="0"></div>`; }); h+=`</div></div></div>`; CRM_SEG.forEach(s=>{ h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${s.color}"></span><h3>Embudo · ${s.name}</h3></div><div class="card-body"><div class="grid">`; FUNNEL.forEach(([k,l])=>h+=`<div class="field"><label>${l}</label><input type="text" inputmode="numeric" id="crm_f_${s.key}_${k}" placeholder="0"></div>`); h+=`</div></div></div>`; }); h+=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--web)"></span><h3>Website</h3></div><div class="card-body"><div class="grid">`; CRM_WEB.forEach(([k,l])=>h+=`<div class="field"><label>${l}</label><input type="text" inputmode="numeric" id="crm_web_${k}" placeholder="0"></div>`); h+=`</div></div></div>`; h+=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--mail)"></span><h3>Email &amp; Chat MKT</h3></div><div class="card-body"><div class="subhead">Email</div><div class="grid">`; CRM_EM.forEach(([k,l])=>h+=`<div class="field"><label>${l}</label><input type="text" inputmode="numeric" id="crm_email_${k}" placeholder="0"></div>`); h+=`</div><div class="subhead" style="margin-top:16px">Mensaje / Chat</div><div class="grid">`; CRM_MS.forEach(([k,l])=>h+=`<div class="field"><label>${l}</label><input type="text" inputmode="numeric" id="crm_msg_${k}" placeholder="0"></div>`); h+=`</div></div></div>`; h+=respBlock()+notesBlock()+saveBar(); host.innerHTML=h; const t=$('#crm_src_totales'); t.addEventListener('input',()=>t.dataset.auto='0'); ['meta','google','brokers','referidos','otras'].forEach(k=>$('#crm_src_'+k).addEventListener('input',()=>{ if(t.dataset.auto!=='0'){ t.value=fmt(['meta','google','brokers','referidos','otras'].reduce((a,x)=>a+num($('#crm_src_'+x).value),0)); t.dataset.auto='1'; } })); }
-  function crmFill(rec){ CRM_SRC.forEach(([k])=>setVAuto('crm_src_'+k,rec&&rec.src?rec.src[k]:'')); CRM_SEG.forEach(s=>{ const f=(rec&&rec.funnels&&rec.funnels[s.key])||{}; FUNNEL.forEach(([k])=>setV(`crm_f_${s.key}_${k}`,f[k])); }); CRM_WEB.forEach(([k])=>setV('crm_web_'+k,rec&&rec.web?rec.web[k]:'')); CRM_EM.forEach(([k])=>setV('crm_email_'+k,rec&&rec.email?rec.email[k]:'')); CRM_MS.forEach(([k])=>setV('crm_msg_'+k,rec&&rec.msg?rec.msg[k]:'')); fillNotes(rec); fillResp(rec); }
-  function crmRead(){ const rec={src:{},funnels:{},web:{},email:{},msg:{}}; CRM_SRC.forEach(([k])=>rec.src[k]=num(gv('crm_src_'+k))); CRM_SEG.forEach(s=>{ rec.funnels[s.key]={}; FUNNEL.forEach(([k])=>rec.funnels[s.key][k]=num(gv(`crm_f_${s.key}_${k}`))); }); CRM_WEB.forEach(([k])=>rec.web[k]=num(gv('crm_web_'+k))); CRM_EM.forEach(([k])=>rec.email[k]=num(gv('crm_email_'+k))); CRM_MS.forEach(([k])=>rec.msg[k]=num(gv('crm_msg_'+k))); readNotes(rec); readResp(rec); return rec; }
+  function crmIngreso(host){ let h=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--cobre)"></span><h3>Conteo de leads por fuente</h3></div><div class="card-body"><div class="grid">`; CRM_SRC.forEach(([k,l])=>{ const au=k==='totales'; h+=`<div class="field"><label>${l}${au?' <span class="calc-tag">(auto)</span>':''}</label><input type="text" inputmode="numeric" id="crm_src_${k}" class="${au?'auto':''}" placeholder="0"></div>`; }); h+=`</div></div></div>`; CRM_SEG.forEach(s=>{ h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${s.color}"></span><h3>Embudo · ${s.name}</h3></div><div class="card-body"><div class="grid">`; FUNNEL.forEach(([k,l])=>h+=`<div class="field"><label>${l}</label><input type="text" inputmode="numeric" id="crm_f_${s.key}_${k}" placeholder="0"></div>`); h+=`</div></div></div>`; }); h+=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--web)"></span><h3>Website</h3></div><div class="card-body"><div class="grid">`; CRM_WEB.forEach(([k,l])=>h+=`<div class="field"><label>${l}</label><input type="text" inputmode="numeric" id="crm_web_${k}" placeholder="0"></div>`); h+=`</div></div></div>`; h+=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--mail)"></span><h3>Email &amp; Chat MKT</h3></div><div class="card-body"><div class="subhead">Email</div><div class="grid">`; CRM_EM.forEach(([k,l])=>h+=`<div class="field"><label>${l}</label><input type="text" inputmode="numeric" id="crm_email_${k}" placeholder="0"></div>`); h+=`</div><div class="subhead" style="margin-top:16px">Mensaje / Chat</div><div class="grid">`; CRM_MS.forEach(([k,l])=>h+=`<div class="field"><label>${l}</label><input type="text" inputmode="numeric" id="crm_msg_${k}" placeholder="0"></div>`); h+=`</div></div></div>`; h+=customIngresoBlock()+respBlock()+notesBlock()+saveBar(); host.innerHTML=h; const t=$('#crm_src_totales'); t.addEventListener('input',()=>t.dataset.auto='0'); ['meta','google','brokers','referidos','otras'].forEach(k=>$('#crm_src_'+k).addEventListener('input',()=>{ if(t.dataset.auto!=='0'){ t.value=fmt(['meta','google','brokers','referidos','otras'].reduce((a,x)=>a+num($('#crm_src_'+x).value),0)); t.dataset.auto='1'; } })); }
+  function crmFill(rec){ CRM_SRC.forEach(([k])=>setVAuto('crm_src_'+k,rec&&rec.src?rec.src[k]:'')); CRM_SEG.forEach(s=>{ const f=(rec&&rec.funnels&&rec.funnels[s.key])||{}; FUNNEL.forEach(([k])=>setV(`crm_f_${s.key}_${k}`,f[k])); }); CRM_WEB.forEach(([k])=>setV('crm_web_'+k,rec&&rec.web?rec.web[k]:'')); CRM_EM.forEach(([k])=>setV('crm_email_'+k,rec&&rec.email?rec.email[k]:'')); CRM_MS.forEach(([k])=>setV('crm_msg_'+k,rec&&rec.msg?rec.msg[k]:'')); fillNotes(rec); fillResp(rec); fillCustom(rec); }
+  function crmRead(){ const rec={src:{},funnels:{},web:{},email:{},msg:{}}; CRM_SRC.forEach(([k])=>rec.src[k]=num(gv('crm_src_'+k))); CRM_SEG.forEach(s=>{ rec.funnels[s.key]={}; FUNNEL.forEach(([k])=>rec.funnels[s.key][k]=num(gv(`crm_f_${s.key}_${k}`))); }); CRM_WEB.forEach(([k])=>rec.web[k]=num(gv('crm_web_'+k))); CRM_EM.forEach(([k])=>rec.email[k]=num(gv('crm_email_'+k))); CRM_MS.forEach(([k])=>rec.msg[k]=num(gv('crm_msg_'+k))); readNotes(rec); readResp(rec); readCustom(rec); return rec; }
   function crmMetas(host,M){
     const scopeLabels = { funnel:'Embudo de calificación · aplica a los 4 segmentos', leads:'Volumen', web:'Website', email:'Email MKT', msg:'Mensaje / Chat MKT' };
     const sections = ['funnel','leads','web','email','msg'].map(sc => ({
@@ -427,7 +616,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     const web=rec.web||{}; const fc=num(web.trafico)>0?num(web.registros)/num(web.trafico)*100:null; h+=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--web)"></span><h3>Website</h3></div><div class="card-body"><table class="rtable">`+cRow('Tráfico orgánico',num(web.trafico))+cRow('Registros en formularios',num(web.registros))+cRow('Artículos SEO (blog)',num(web.seo))+rRow('Conversión de formulario',fc,M.metas.web.formConv,false)+`</table></div></div>`;
     const em=rec.email||{},ms=rec.msg||{}; const eo=num(em.enviadas)>0?num(em.abiertas)/num(em.enviadas)*100:null,ec=num(em.enviadas)>0?num(em.click)/num(em.enviadas)*100:null,er=num(em.enviadas)>0?num(em.respuesta)/num(em.enviadas)*100:null; const mo=num(ms.enviadas)>0?num(ms.abiertas)/num(ms.enviadas)*100:null,mc=num(ms.enviadas)>0?num(ms.click)/num(ms.enviadas)*100:null;
     h+=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--mail)"></span><h3>Email &amp; Chat MKT</h3></div><div class="card-body"><div class="subhead">Email</div><table class="rtable">`+cRow('Enviadas',num(em.enviadas))+cRow('Abiertas',num(em.abiertas))+cRow('Click',num(em.click))+cRow('Con respuesta',num(em.respuesta))+rRow('Open rate',eo,M.metas.email.open,false)+rRow('Click rate',ec,M.metas.email.click,false)+rRow('Reply rate',er,M.metas.email.reply,false)+`</table><div class="subhead" style="margin-top:16px">Mensaje / Chat</div><table class="rtable">`+cRow('Enviadas',num(ms.enviadas))+cRow('Abiertas',num(ms.abiertas))+cRow('Click',num(ms.click))+rRow('Open rate',mo,M.metas.msg.open,false)+rRow('Click rate',mc,M.metas.msg.click,false)+`</table></div></div>`;
-    h+=notesReport(rec); host.innerHTML=h;
+    h+=customReportSection(rec)+notesReport(rec); host.innerHTML=h;
   }
 
   /* ===== MÓDULO 4 · CALIDAD DE LEADS POR AD (semanal) ===== */
@@ -436,9 +625,9 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   const LQ_SEED_METAS={ funnel:{cqlToMQL:40,mqlToSQL:50,sqlToSQLS:60}, quality:{endToEnd:12,descalRate:30}, leads:{totales:15} };
   const LQ_MF=[['funnel','cqlToMQL','CQL → MQL','% mín'],['funnel','mqlToSQL','MQL → SQL','% mín'],['funnel','sqlToSQLS','SQL → SQL Selvadentro','% mín'],['quality','endToEnd','Calidad (CQL → SQL Selvadentro)','% mín · más alto mejor'],['quality','descalRate','Tasa de descalificación','% máx · menos mejor'],['leads','totales','Leads totales / semana','mín']];
   const LQ_SEED={ '2026-W15':{ src:{totales:20,meta:12,google:5,otras:3}, names:{gesp:'Google ESP · Lotes inversión',geng:'Google ENG · Investors',m1:'Meta · Cenotes lifestyle',m2:'Meta · Retargeting web',m3:'Meta · Awareness Tulum',m4:'Meta · Broadcast frío',m5:'Campaña Meta ADS 5'}, funnels:{gesp:{cql:4,mql:2,sql:1,sqls:1,corretaje:0,descal:1},geng:{cql:3,mql:1,sql:1,sqls:0,corretaje:0,descal:2},m1:{cql:5,mql:3,sql:2,sqls:1,corretaje:1,descal:1},m2:{cql:4,mql:2,sql:1,sqls:0,corretaje:0,descal:3},m3:{cql:2,mql:1,sql:1,sqls:1,corretaje:0,descal:0},m4:{cql:3,mql:0,sql:0,sqls:0,corretaje:0,descal:3},m5:{cql:0,mql:0,sql:0,sqls:0,corretaje:0,descal:0}}, notas:'Semana de EJEMPLO precargada. Sobrescríbela con datos reales.',aprendizajes:'',cambios:'' } };
-  function lqIngreso(host){ let h=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--cobre)"></span><h3>Conteo de leads</h3></div><div class="card-body"><div class="grid">`; LQ_SRC.forEach(([k,l])=>{ const au=k==='totales'; h+=`<div class="field"><label>${l}${au?' <span class="calc-tag">(auto)</span>':''}</label><input type="text" inputmode="numeric" id="lq_src_${k}" class="${au?'auto':''}" placeholder="0"></div>`; }); h+=`</div></div></div>`; LQ_SEG.forEach(s=>{ h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${s.color}"></span><h3>${s.def}</h3></div><div class="card-body"><input class="camp-name" id="lq_name_${s.key}" placeholder="Nombre del anuncio / campaña"><div class="grid">`; FUNNEL.forEach(([k,l])=>h+=`<div class="field"><label>${l}</label><input type="text" inputmode="numeric" id="lq_f_${s.key}_${k}" placeholder="0"></div>`); h+=`</div></div></div>`; }); h+=respBlock()+notesBlock()+saveBar(); host.innerHTML=h; const t=$('#lq_src_totales'); t.addEventListener('input',()=>t.dataset.auto='0'); ['meta','google','otras'].forEach(k=>$('#lq_src_'+k).addEventListener('input',()=>{ if(t.dataset.auto!=='0'){ t.value=fmt(['meta','google','otras'].reduce((a,x)=>a+num($('#lq_src_'+x).value),0)); t.dataset.auto='1'; } })); }
-  function lqFill(rec){ LQ_SRC.forEach(([k])=>setVAuto('lq_src_'+k,rec&&rec.src?rec.src[k]:'')); LQ_SEG.forEach(s=>{ setV('lq_name_'+s.key,rec&&rec.names?rec.names[s.key]:''); const f=(rec&&rec.funnels&&rec.funnels[s.key])||{}; FUNNEL.forEach(([k])=>setV(`lq_f_${s.key}_${k}`,f[k])); }); fillNotes(rec); fillResp(rec); }
-  function lqRead(){ const rec={src:{},names:{},funnels:{}}; LQ_SRC.forEach(([k])=>rec.src[k]=num(gv('lq_src_'+k))); LQ_SEG.forEach(s=>{ rec.names[s.key]=gv('lq_name_'+s.key); rec.funnels[s.key]={}; FUNNEL.forEach(([k])=>rec.funnels[s.key][k]=num(gv(`lq_f_${s.key}_${k}`))); }); readNotes(rec); readResp(rec); return rec; }
+  function lqIngreso(host){ let h=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--cobre)"></span><h3>Conteo de leads</h3></div><div class="card-body"><div class="grid">`; LQ_SRC.forEach(([k,l])=>{ const au=k==='totales'; h+=`<div class="field"><label>${l}${au?' <span class="calc-tag">(auto)</span>':''}</label><input type="text" inputmode="numeric" id="lq_src_${k}" class="${au?'auto':''}" placeholder="0"></div>`; }); h+=`</div></div></div>`; LQ_SEG.forEach(s=>{ h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${s.color}"></span><h3>${s.def}</h3></div><div class="card-body"><input class="camp-name" id="lq_name_${s.key}" placeholder="Nombre del anuncio / campaña"><div class="grid">`; FUNNEL.forEach(([k,l])=>h+=`<div class="field"><label>${l}</label><input type="text" inputmode="numeric" id="lq_f_${s.key}_${k}" placeholder="0"></div>`); h+=`</div></div></div>`; }); h+=customIngresoBlock()+respBlock()+notesBlock()+saveBar(); host.innerHTML=h; const t=$('#lq_src_totales'); t.addEventListener('input',()=>t.dataset.auto='0'); ['meta','google','otras'].forEach(k=>$('#lq_src_'+k).addEventListener('input',()=>{ if(t.dataset.auto!=='0'){ t.value=fmt(['meta','google','otras'].reduce((a,x)=>a+num($('#lq_src_'+x).value),0)); t.dataset.auto='1'; } })); }
+  function lqFill(rec){ LQ_SRC.forEach(([k])=>setVAuto('lq_src_'+k,rec&&rec.src?rec.src[k]:'')); LQ_SEG.forEach(s=>{ setV('lq_name_'+s.key,rec&&rec.names?rec.names[s.key]:''); const f=(rec&&rec.funnels&&rec.funnels[s.key])||{}; FUNNEL.forEach(([k])=>setV(`lq_f_${s.key}_${k}`,f[k])); }); fillNotes(rec); fillResp(rec); fillCustom(rec); }
+  function lqRead(){ const rec={src:{},names:{},funnels:{}}; LQ_SRC.forEach(([k])=>rec.src[k]=num(gv('lq_src_'+k))); LQ_SEG.forEach(s=>{ rec.names[s.key]=gv('lq_name_'+s.key); rec.funnels[s.key]={}; FUNNEL.forEach(([k])=>rec.funnels[s.key][k]=num(gv(`lq_f_${s.key}_${k}`))); }); readNotes(rec); readResp(rec); readCustom(rec); return rec; }
   function lqMetas(host,M){
     const scopeLabels = { funnel:'Conversiones del embudo · aplica a todos los anuncios', quality:'Calidad por anuncio', leads:'Volumen' };
     const sections = ['funnel','quality','leads'].map(sc => ({
@@ -460,7 +649,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     ord.forEach((r,i)=>{ h+=`<tr class="${(i===0&&r.c.hasData)?'best':''}"><td class="l rank">${r.c.hasData?(i+1):'—'}</td><td class="l">${r.name}</td><td>${fmt(num(r.f.cql))}</td><td>${fmt(num(r.f.mql))}</td><td>${fmt(num(r.f.sql))}</td><td>${fmt(num(r.f.sqls))}</td><td>${fmt(num(r.f.corretaje))}</td><td>${fmt(num(r.f.descal))}</td><td>${chipH(r.c.endToEnd,M.metas.quality.endToEnd)}</td><td>${chipL(r.c.descalRate,M.metas.quality.descalRate)}</td></tr>`; });
     h+=`</table></div><div style="font-size:11.5px;color:var(--neutro);margin-top:10px">Calidad = SQL Selvadentro ÷ CQL · Descal % = Descalificados ÷ CQL · fila resaltada = mejor calidad.</div></div></div>`;
     LQ_SEG.forEach(s=>{ const f=rec.funnels[s.key]||{}; const c=lqCalc(f); const nm=(rec.names&&rec.names[s.key])||s.def; h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${s.color}"></span><h3>${nm}</h3></div><div class="card-body"><table class="rtable">`; FUNNEL.forEach(([k,l])=>h+=cRow(l,num(f[k]))); h+=rRow('CQL → MQL',c.cqlToMQL,M.metas.funnel.cqlToMQL,false)+rRow('MQL → SQL',c.mqlToSQL,M.metas.funnel.mqlToSQL,false)+rRow('SQL → SQL Selvadentro',c.sqlToSQLS,M.metas.funnel.sqlToSQLS,false)+rRow('Calidad (CQL → SQL Selvadentro)',c.endToEnd,M.metas.quality.endToEnd,false)+rRow('Tasa de descalificación',c.descalRate,M.metas.quality.descalRate,true); h+=`</table></div></div>`; });
-    h+=notesReport(rec); host.innerHTML=h;
+    h+=customReportSection(rec)+notesReport(rec); host.innerHTML=h;
   }
 
   /* ===== Registro de módulos + controlador ===== */
@@ -477,7 +666,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
 
   async function loadMod(M){ try{ const r=await window.storage.get(M.key); if(r&&r.value) M.records=JSON.parse(r.value); }catch(e){ M.records={}; } if((!M.records||Object.keys(M.records).length===0)&&Object.keys(M.seed).length){ M.records=JSON.parse(JSON.stringify(M.seed)); await saveRec(M); } try{ const m=await window.storage.get(M.mkey); if(m&&m.value) M.metas=JSON.parse(m.value); }catch(e){} if(!M.metas||Object.keys(M.metas).length===0){ M.metas=JSON.parse(JSON.stringify(M.seedMetas)); await saveMeta(M); } const ks=Object.keys(M.records).sort(); M.pval=ks.length?ks[ks.length-1]:(M.period==='week'?isoWeekOf(new Date()):'2026-05'); }
   async function saveRec(M){ try{ await window.storage.set(M.key,JSON.stringify(M.records)); }catch(e){console.error(e);} }
-  async function saveMeta(M){ try{ await window.storage.set(M.mkey,JSON.stringify(M.metas)); }catch(e){console.error(e);} }
+  async function saveMeta(M){ try{ await window.storage.set(M.mkey,JSON.stringify(M.metas)); }catch(e){console.error(e);} state.ingresoRendered=null; }
 
   function renderReportSelect(){ const s=$('#report-select'); s.innerHTML=ORDER.map(id=>`<option value="${id}" ${id===state.active?'selected':''}>${MODS[id].name}</option>`).join(''); s.onchange=()=>setActive(s.value); }
   function fillPeriodSelect(M){ $('#period-label').textContent = M.period==='week'?'Semana':'Mes'; const sel=$('#period'); let opts=[]; if(M.period==='week'){ for(let w=52;w>=1;w--){ const v='2026-W'+String(w).padStart(2,'0'); opts.push([v, v+' · '+weekRange(v)]); } } else { for(let m=12;m>=1;m--){ const v='2026-'+String(m).padStart(2,'0'); opts.push([v, ymLabel(v)]); } } if(!opts.some(o=>o[0]===M.pval)) opts.unshift([M.pval, M.period==='week'?(M.pval+' · '+weekRange(M.pval)):ymLabel(M.pval)]); sel.innerHTML=opts.map(o=>`<option value="${o[0]}" ${o[0]===M.pval?'selected':''}>${o[1]}</option>`).join(''); sel.onchange=()=>{ M.pval=sel.value; if(state.view==='ingreso'){ M.ingreso($('#view-ingreso')); M.fill(M.records[M.pval]||null); bindSave(); state.ingresoRendered=state.active; } else if(state.view==='reporte'){ M.reporte($('#view-reporte'),M.pval,M); } updatePill(); }; }
