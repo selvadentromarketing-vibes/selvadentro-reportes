@@ -1469,7 +1469,7 @@ async function populateRange(iniId, finId){
   const opts=weeks.map(w=>`<option value="${w}">${weekLabel(w)}</option>`).join("");
   const si=document.getElementById(iniId), sf=document.getElementById(finId);
   si.innerHTML=opts; sf.innerHTML=opts;
-  if(weeks.length){ si.value=weeks[0]; sf.value=weeks[weeks.length-1]; }
+  if(weeks.length){ si.value=weeks[weeks.length-1]; sf.value=weeks[weeks.length-1]; }
 }
 function weekSetFromRange(iniW, finW){
   const pw=s=>{ const m=s&&s.match(/^(\d{4})-W(\d+)$/); return m?dateOfIsoWeek(+m[1],+m[2]):null; };
