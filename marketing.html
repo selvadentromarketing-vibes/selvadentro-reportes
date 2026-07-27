@@ -191,8 +191,16 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
       </div>
       <div class="wrap">
         <div class="periodbar" id="periodbar">
-          <label id="period-label">Periodo</label>
-          <select id="period" class="sel-light"></select>
+          <span id="period-single-wrap" style="display:inline-flex;align-items:center;gap:8px;">
+            <label id="period-label">Periodo</label>
+            <select id="period" class="sel-light"></select>
+          </span>
+          <span id="period-range-wrap" style="display:none;align-items:center;gap:8px;">
+            <label id="period-label-ini">Semana inicio</label>
+            <select id="period-ini" class="sel-light"></select>
+            <label id="period-label-fin" style="margin-left:6px">Semana fin</label>
+            <select id="period-fin" class="sel-light"></select>
+          </span>
           <span class="pill" id="status-pill">—</span>
           <span class="pill" style="padding:0;background:transparent;border:none;display:inline-flex;align-items:center;gap:6px;"><span style="font-size:11px;color:var(--neutro);font-weight:700;text-transform:uppercase;letter-spacing:.6px;">Resp.</span><input id="resp-pill-input" type="text" placeholder="Responsable" style="border:1px solid var(--linea);background:var(--crema-2);border-radius:999px;padding:4px 12px;font-family:var(--sans);font-size:12px;color:var(--texto);min-width:180px;outline:none;"></span>
         </div>
@@ -592,7 +600,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     renderMktMetasTable(host, 'rrss', sections, 'Objetivos mensuales por plataforma. Total de seguidores, Engagement y Seguidores mes pasado no llevan meta.');
   }
   function rsReporte(host,ym,M){ const rec=M.records[ym]; if(!rec){ host.innerHTML=noData(ym,'month'); return; } const prev=M.records[prevYM(ym)]; const sum=(r,f)=>RS_PLAT.reduce((a,p)=>a+((r&&r[p.key]&&num(r[p.key][f]))||0),0);
-    let h=`<div class="summary"><div class="stitle">Consolidado Redes Sociales · ${ymLabel(ym)}</div>${respLine(rec)}<div class="summary-grid">`;
+    let h=`<div class="summary"><div class="stitle">Consolidado Redes Sociales · ${M._rangeLabel||ymLabel(ym)}</div>${respLine(rec)}<div class="summary-grid">`;
     [['Leads orgánicos','leads'],['Alcance total','alcance'],['Interacciones','interacciones'],['Seguidores totales','totalSeg'],['Seguidores nuevos','segNuevos']].forEach(([l,f])=>{ const cur=sum(rec,f); let dt='sin dato previo',dc='var(--arena)'; if(prev){ const d=cur-sum(prev,f); if(d===0)dt='= vs mes anterior'; else{ const pv=sum(prev,f); const pc=pv?Math.round(Math.abs(d)/pv*100):null; dt=(d>0?'▲ +':'▼ −')+fmt(Math.abs(d))+(pc!==null?` (${pc}%)`:''); dc=d>0?'#CBDDC0':'#F2CFC9'; } } h+=`<div class="kpi"><div class="klabel">${l}</div><div class="kval">${fmt(cur)}</div><div class="kdelta" style="color:${dc}">${dt}</div></div>`; });
     h+=`</div></div>`;
     RS_PLAT.forEach(p=>{ const d=rec[p.key]||{}; const mp=M.metas[p.key]||{}; const pd=(prev&&prev[p.key])||null; h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${p.color}"></span><h3>${p.name}</h3></div><div class="card-body"><table class="rtable">`; p.fields.forEach(([k,l])=>{ const v=num(d[k]); const meta=mp[k]; h+=`<tr><td class="kname">${l}</td><td class="kval">${fmt(v)}</td><td class="kmeta">${metaTxt(meta)}</td><td class="ccell">${meta?cpH(v,meta):''}</td></tr>`; }); const alc=num(d.alcance),inter=num(d.interacciones); const eng=alc>0?inter/alc*100:null; h+=`<tr class="calc-row"><td class="kname">Engagement</td><td class="kval">${eng===null?'—':pct(eng)}</td><td class="kmeta"></td><td class="ccell"></td></tr>`; let base=null; if(p.key==='fb') base=num(d.segMesPasado); else if(pd) base=num(pd.totalSeg); const crec=(base&&base>0)?num(d.segNuevos)/base*100:null; h+=`<tr class="calc-row"><td class="kname">Crecimiento de red</td><td class="kval">${crec===null?'—':pct(crec)}</td><td class="kmeta">${metaTxt(M.metas._crec,{pct:1})}</td><td class="ccell">${crec===null?naP():cpH(crec,M.metas._crec)}</td></tr></table>`; const tops=(d.top||[]).filter(t=>t.desc||t.link); if(tops.length){ h+=`<div class="subhead" style="margin-top:14px">Top publicaciones</div>`; tops.forEach((t,i)=>{ h+=`<div style="padding:7px 0;border-top:1px dashed var(--linea)"><span class="rank">${i+1}</span> ${t.desc||'(sin descripción)'}`+(t.link?` · <a href="${t.link}" target="_blank" style="color:var(--olivo);font-size:12px;word-break:break-all">${t.link}</a>`:'')+`</div>`; }); } h+=`</div></div>`; });
@@ -630,7 +638,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     renderMktMetasTable(host, 'ppc', sections, 'Objetivos semanales editables. En <b>CPL</b> la lógica es inversa (verde si el real ≤ meta). Precargados = benchmarks de bienes raíces.');
   }
   function ppcReporte(host,w,M){ const rec=M.records[w]; if(!rec){ host.innerHTML=noData(w,'week'); return; } const tl=num(rec.tot.leads),ti=num(rec.tot.inv); const cg=tl>0?ti/tl:0; const mg=M.metas.global;
-    let h=`<div class="summary"><div class="stitle">PPC Ads · ${w} · ${weekRange(w)}</div>${respLine(rec)}<div class="summary-grid">`;
+    let h=`<div class="summary"><div class="stitle">PPC Ads · ${M._rangeLabel||(w+' · '+weekRange(w))}</div>${respLine(rec)}<div class="summary-grid">`;
     h+=`<div class="kpi"><div class="klabel">Leads totales</div><div class="kval">${fmt(tl)}</div><div class="kcumpl">${cpH(tl,mg.leadsTotales)}</div></div>`;
     h+=`<div class="kpi"><div class="klabel">Inversión total</div><div class="kval">${money(ti)}</div><div class="kcumpl" style="color:var(--arena)">presupuesto</div></div>`;
     h+=`<div class="kpi"><div class="klabel">CPL global</div><div class="kval">${money(cg)}</div><div class="kcumpl">${cpL(cg||null,mg.cplGlobal)}</div></div></div></div>`;
@@ -670,7 +678,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     renderMktMetasTable(host, 'crm', sections, 'Objetivos editables. Las conversiones del embudo se comparan en los 4 segmentos.');
   }
   function crmReporte(host,w,M){ const rec=M.records[w]; if(!rec){ host.innerHTML=noData(w,'week'); return; } let h=''; if((rec.notas||'').indexOf('EJEMPLO')>=0) h+=`<div class="ex-banner">⚠️ ${w} trae <b>datos de ejemplo</b>. Sobrescríbelos en Ingreso.</div>`;
-    h+=`<div class="summary"><div class="stitle">CRM Manager · ${w} · ${weekRange(w)}</div>${respLine(rec)}<div class="summary-grid">`;
+    h+=`<div class="summary"><div class="stitle">CRM Manager · ${M._rangeLabel||(w+' · '+weekRange(w))}</div>${respLine(rec)}<div class="summary-grid">`;
     h+=`<div class="kpi"><div class="klabel">Leads totales</div><div class="kval">${fmt(num(rec.src.totales))}</div><div class="kcumpl">${M.metas.leads.totales?cpH(num(rec.src.totales),M.metas.leads.totales):'<span style="color:var(--arena)">—</span>'}</div></div>`;
     [['meta','Meta ADS'],['google','Google ADS'],['brokers','Brokers'],['referidos','Referidos'],['otras','Otras']].forEach(([k,l])=>h+=`<div class="kpi"><div class="klabel">${l}</div><div class="kval">${fmt(num(rec.src[k]))}</div></div>`); h+=`</div></div>`;
     CRM_SEG.forEach(s=>{ const lead=num(rec.src[s.key]); const f=rec.funnels[s.key]||{}; const mf=M.metas.funnel; h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${s.color}"></span><h3>Embudo · ${s.name}</h3></div><div class="card-body"><table class="rtable">`; FUNNEL.forEach(([k,l])=>h+=cRow(l,num(f[k]))); h+=rRow('Lead → CQL',lead>0?num(f.cql)/lead*100:null,mf.leadToCQL,false)+rRow('CQL → MQL',num(f.cql)>0?num(f.mql)/num(f.cql)*100:null,mf.cqlToMQL,false)+rRow('MQL → SQL',num(f.mql)>0?num(f.sql)/num(f.mql)*100:null,mf.mqlToSQL,false)+rRow('SQL → SQL Selvadentro',num(f.sql)>0?num(f.sqls)/num(f.sql)*100:null,mf.sqlToSQLS,false); h+=`</table></div></div>`; });
@@ -701,7 +709,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   function chipH(v,m){ if(v===null)return'<span class="chip na">—</span>'; const c=m?v/m*100:100; return `<span class="chip ${(!m||c>=100)?'ok':'no'}">${pct(v)}</span>`; }
   function chipL(v,m){ if(v===null)return'<span class="chip na">—</span>'; const ok=(!m)||v<=m; return `<span class="chip ${ok?'ok':'no'}">${pct(v)}</span>`; }
   function lqReporte(host,w,M){ const rec=M.records[w]; if(!rec){ host.innerHTML=noData(w,'week'); return; } let h=''; if((rec.notas||'').indexOf('EJEMPLO')>=0) h+=`<div class="ex-banner">⚠️ ${w} trae <b>datos de ejemplo</b>. Sobrescríbelos en Ingreso.</div>`;
-    h+=`<div class="summary"><div class="stitle">Calidad de Leads por Ad · ${w} · ${weekRange(w)}</div>${respLine(rec)}<div class="summary-grid">`;
+    h+=`<div class="summary"><div class="stitle">Calidad de Leads por Ad · ${M._rangeLabel||(w+' · '+weekRange(w))}</div>${respLine(rec)}<div class="summary-grid">`;
     h+=`<div class="kpi"><div class="klabel">Leads totales</div><div class="kval">${fmt(num(rec.src.totales))}</div><div class="kcumpl">${M.metas.leads.totales?cpH(num(rec.src.totales),M.metas.leads.totales):'<span style="color:var(--arena)">—</span>'}</div></div>`;
     [['meta','Meta ADS'],['google','Google ADS'],['otras','Otras']].forEach(([k,l])=>h+=`<div class="kpi"><div class="klabel">${l}</div><div class="kval">${fmt(num(rec.src[k]))}</div></div>`); h+=`</div></div>`;
     const rows=LQ_SEG.map(s=>{ const f=rec.funnels[s.key]||{}; return {name:(rec.names&&rec.names[s.key])||s.def,f,c:lqCalc(f),color:s.color}; });
@@ -733,7 +741,138 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   function orderFiltered(){ const a=getAllowedMods(); return a==null ? ORDER : ORDER.filter(id=>a.includes(id)); }
   function renderReportSelect(){ const list=orderFiltered(); const s=$('#report-select'); s.innerHTML=list.map(id=>`<option value="${id}" ${id===state.active?'selected':''}>${MODS[id].name}</option>`).join(''); s.onchange=()=>setActive(s.value); }
   function fillPeriodSelect(M){ $('#period-label').textContent = M.period==='week'?'Semana':'Mes'; const sel=$('#period'); let opts=[]; if(M.period==='week'){ for(let w=52;w>=1;w--){ const v='2026-W'+String(w).padStart(2,'0'); opts.push([v, v+' · '+weekRange(v)]); } } else { for(let m=12;m>=1;m--){ const v='2026-'+String(m).padStart(2,'0'); opts.push([v, ymLabel(v)]); } } if(!opts.some(o=>o[0]===M.pval)) opts.unshift([M.pval, M.period==='week'?(M.pval+' · '+weekRange(M.pval)):ymLabel(M.pval)]); sel.innerHTML=opts.map(o=>`<option value="${o[0]}" ${o[0]===M.pval?'selected':''}>${o[1]}</option>`).join(''); sel.onchange=()=>{ M.pval=sel.value; if(state.view==='ingreso'){ M.ingreso($('#view-ingreso')); M.fill(M.records[M.pval]||null); bindSave(); state.ingresoRendered=state.active; } else if(state.view==='reporte'){ M.reporte($('#view-reporte'),M.pval,M); } updatePill(); }; }
-  function updatePill(){ const M=MODS[state.active]; const lbl=M.period==='week'?M.pval:ymLabel(M.pval); $('#status-pill').textContent = M.records[M.pval]?('Guardado · '+lbl):('Sin datos · '+lbl); const inp=$('#resp-pill-input'); if(inp && document.activeElement!==inp){ inp.value = RESP[state.active] || ''; } }
+
+  /* ===== RANGO DE FECHAS PARA REPORTE ===== */
+  const AGG_TEXT = new Set(['notas','aprendizajes','cambios']);
+  const AGG_LAST = new Set(['responsable','totalSeg']);
+  const AGG_FIRST = new Set(['segMesPasado']);
+  const AGG_RESET = new Set(['cpl','ctr','cpr']);
+  function isPlainObj(v){ return v && typeof v==='object' && !Array.isArray(v); }
+  function mktDeepMerge(target, src, periodLabel){
+    for(const k in src){
+      const sv = src[k];
+      if(sv == null) continue;
+      if(Array.isArray(sv)){
+        if(!Array.isArray(target[k])) target[k] = [];
+        sv.forEach((el, i) => {
+          if(isPlainObj(el)){
+            if(!isPlainObj(target[k][i])) target[k][i] = {};
+            mktDeepMerge(target[k][i], el, periodLabel);
+          } else if(el != null && el !== ''){
+            target[k][i] = el;
+          }
+        });
+      } else if(isPlainObj(sv)){
+        if(!isPlainObj(target[k])) target[k] = {};
+        mktDeepMerge(target[k], sv, periodLabel);
+      } else if(typeof sv === 'number'){
+        if(AGG_RESET.has(k)) target[k] = 0;
+        else if(AGG_LAST.has(k)) target[k] = sv;
+        else if(AGG_FIRST.has(k)){ if(target[k]==null) target[k] = sv; }
+        else target[k] = (typeof target[k]==='number'?target[k]:0) + sv;
+      } else if(typeof sv === 'string'){
+        const s = sv.trim(); if(!s) continue;
+        if(AGG_TEXT.has(k)){
+          const chunk = periodLabel ? `[${periodLabel}] ${s}` : s;
+          target[k] = target[k] ? target[k]+'\n\n'+chunk : chunk;
+        } else if(AGG_LAST.has(k) || !AGG_FIRST.has(k)){
+          target[k] = s;
+        } else if(AGG_FIRST.has(k)){
+          if(!target[k]) target[k] = s;
+        }
+      }
+    }
+    return target;
+  }
+  function mktPeriodList(M){
+    const arr = [];
+    if(M.period==='week'){ for(let w=1;w<=52;w++) arr.push('2026-W'+String(w).padStart(2,'0')); }
+    else { for(let m=1;m<=12;m++) arr.push('2026-'+String(m).padStart(2,'0')); }
+    Object.keys(M.records).forEach(k => { if(!arr.includes(k)) arr.push(k); });
+    return arr.sort();
+  }
+  function mktAggregateRange(M, iniP, finP){
+    const list = mktPeriodList(M);
+    const iIni = list.indexOf(iniP), iFin = list.indexOf(finP);
+    if(iIni<0 || iFin<0) return null;
+    const keys = Object.keys(M.records).filter(k => { const i=list.indexOf(k); return i>=iIni && i<=iFin; }).sort();
+    if(!keys.length) return null;
+    if(keys.length===1) return M.records[keys[0]];
+    const acc = {};
+    keys.forEach(k => { const lbl = M.period==='week'?k:ymLabel(k); mktDeepMerge(acc, M.records[k], lbl); });
+    return acc;
+  }
+  function mktPrevRange(M, iniP, finP){
+    const list = mktPeriodList(M);
+    const iIni = list.indexOf(iniP), iFin = list.indexOf(finP);
+    if(iIni<0 || iFin<0) return null;
+    const len = iFin - iIni + 1;
+    const prevFinI = iIni - 1;
+    const prevIniI = prevFinI - len + 1;
+    if(prevFinI < 0 || prevIniI < 0) return null;
+    return { iniP: list[prevIniI], finP: list[prevFinI] };
+  }
+  function fillPeriodRangeSelect(M){
+    $('#period-label-ini').textContent = M.period==='week'?'Semana inicio':'Mes inicio';
+    $('#period-label-fin').textContent = M.period==='week'?'Semana fin':'Mes fin';
+    const list = mktPeriodList(M);
+    const defaultP = M.pval || list[list.length-1];
+    if(!M.rangeIni || !list.includes(M.rangeIni)) M.rangeIni = defaultP;
+    if(!M.rangeFin || !list.includes(M.rangeFin)) M.rangeFin = defaultP;
+    const opts = list.slice().reverse().map(v => {
+      const lbl = M.period==='week' ? (v+' · '+weekRange(v)) : ymLabel(v);
+      return {v, lbl};
+    });
+    const build = sel => opts.map(o => `<option value="${o.v}" ${o.v===sel?'selected':''}>${o.lbl}</option>`).join('');
+    const selIni = $('#period-ini'), selFin = $('#period-fin');
+    selIni.innerHTML = build(M.rangeIni);
+    selFin.innerHTML = build(M.rangeFin);
+    selIni.onchange = () => {
+      M.rangeIni = selIni.value;
+      if(list.indexOf(M.rangeIni) > list.indexOf(M.rangeFin)){ M.rangeFin = M.rangeIni; selFin.value = M.rangeFin; }
+      renderMktReporte(M); updatePill();
+    };
+    selFin.onchange = () => {
+      M.rangeFin = selFin.value;
+      if(list.indexOf(M.rangeFin) < list.indexOf(M.rangeIni)){ M.rangeIni = M.rangeFin; selIni.value = M.rangeIni; }
+      renderMktReporte(M); updatePill();
+    };
+  }
+  function renderMktReporte(M){
+    const host = $('#view-reporte');
+    const iniP = M.rangeIni || M.pval, finP = M.rangeFin || M.pval;
+    const list = mktPeriodList(M);
+    const iIni = list.indexOf(iniP), iFin = list.indexOf(finP);
+    const keys = Object.keys(M.records).filter(k => { const i=list.indexOf(k); return i>=iIni && i<=iFin; });
+    const isRange = iniP !== finP;
+    const rangeLbl = isRange
+      ? (M.period==='week' ? `${iniP} → ${finP}` : `${ymLabel(iniP)} → ${ymLabel(finP)}`)
+      : (M.period==='week' ? (finP+' · '+weekRange(finP)) : ymLabel(finP));
+    if(!keys.length){
+      host.innerHTML = `<div class="card"><div class="card-body" style="text-align:center;color:var(--neutro)">No hay datos para <b>${rangeLbl}</b>. Captúralos en <b>Ingreso de datos</b>.</div></div>`;
+      return;
+    }
+    const aggregated = mktAggregateRange(M, iniP, finP);
+    const prev = mktPrevRange(M, iniP, finP);
+    const prevAgg = prev ? mktAggregateRange(M, prev.iniP, prev.finP) : null;
+    const virtualM = Object.assign({}, M, { records: Object.assign({}, M.records), _rangeLabel: rangeLbl, _isRange: isRange });
+    if(aggregated) virtualM.records[finP] = aggregated;
+    if(prevAgg && M.period==='month'){ virtualM.records[prevYM(finP)] = prevAgg; }
+    M.reporte(host, finP, virtualM);
+  }
+  function updatePill(){ const M=MODS[state.active];
+    if(state.view==='reporte'){
+      const iniP=M.rangeIni||M.pval, finP=M.rangeFin||M.pval;
+      const list=mktPeriodList(M); const iIni=list.indexOf(iniP), iFin=list.indexOf(finP);
+      const keys=Object.keys(M.records).filter(k=>{const i=list.indexOf(k);return i>=iIni && i<=iFin;});
+      const lbl = iniP===finP ? (M.period==='week'?finP:ymLabel(finP)) : (M.period==='week'?`${iniP} → ${finP}`:`${ymLabel(iniP)} → ${ymLabel(finP)}`);
+      $('#status-pill').textContent = keys.length ? (keys.length+' periodo(s) · '+lbl) : ('Sin datos · '+lbl);
+    } else {
+      const lbl=M.period==='week'?M.pval:ymLabel(M.pval);
+      $('#status-pill').textContent = M.records[M.pval]?('Guardado · '+lbl):('Sin datos · '+lbl);
+    }
+    const inp=$('#resp-pill-input'); if(inp && document.activeElement!==inp){ inp.value = RESP[state.active] || ''; }
+  }
   (function(){ const inp=$('#resp-pill-input'); if(!inp) return; const save=async()=>{ const v=inp.value.trim(); if(v!==(RESP[state.active]||'')){ RESP[state.active]=v; try{ await window.storage.set('mkt_resp', JSON.stringify(RESP)); }catch(e){} showToast('✓ Responsable guardado'); if(state.view==='ingreso'){ const x=$('#x_resp'); if(x) x.value=v; } } }; inp.addEventListener('blur',save); inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); inp.blur(); } }); })();
   function setNavActive(){ document.querySelectorAll('[data-view]').forEach(el=>el.classList.toggle('active', el.dataset.view===state.view)); }
   function bindSave(){ const b=$('#btn-save'); if(b) b.onclick=async()=>{ const M=MODS[state.active]; if(!M.pval){alert('Elige periodo.');return;} if(!isPeriodEditable(M, M.pval)){ alert('Solo puedes guardar el periodo actual o el anterior.'); return; } M.records[M.pval]=M.read(); await saveRec(M); updatePill(); showToast('✓ Guardado · '+(M.period==='week'?M.pval:ymLabel(M.pval))); }; const c=$('#btn-clear'); if(c) c.onclick=()=>{ if(confirm('¿Limpiar el formulario? (no borra lo guardado)')) MODS[state.active].fill(null); }; }
@@ -1018,8 +1157,13 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   }
 
   function renderView(){ const M=MODS[state.active]; ['ingreso','reporte','analitica','metas','responsable','basedatos'].forEach(v=> $('#view-'+v).style.display = state.view===v?'block':'none'); $('#periodbar').style.display=(state.view==='ingreso'||state.view==='reporte')?'flex':'none'; setNavActive();
+    const singleWrap=$('#period-single-wrap'), rangeWrap=$('#period-range-wrap');
+    if(singleWrap && rangeWrap){
+      if(state.view==='reporte'){ singleWrap.style.display='none'; rangeWrap.style.display='inline-flex'; fillPeriodRangeSelect(M); }
+      else { singleWrap.style.display='inline-flex'; rangeWrap.style.display='none'; }
+    }
     if(state.view==='ingreso'){ if(state.ingresoRendered!==state.active){ M.ingreso($('#view-ingreso')); M.fill(M.records[M.pval]||null); state.ingresoRendered=state.active; bindSave(); } }
-    else if(state.view==='reporte'){ M.reporte($('#view-reporte'),M.pval,M); }
+    else if(state.view==='reporte'){ renderMktReporte(M); }
     else if(state.view==='analitica'){ ANAL_MKT.expanded=null; renderAnaliticaMkt(); }
     else if(state.view==='metas'){ M.metasView($('#view-metas'),M); }
     else if(state.view==='responsable'){ renderResponsable(); }
@@ -1027,7 +1171,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     updatePill();
     try{ if(window.parent && window.parent!==window && typeof window.parent.mktViewChanged==='function') window.parent.mktViewChanged(state.view); }catch(e){}
   }
-  function setActive(id){ state.active=id; renderReportSelect(); fillPeriodSelect(MODS[id]); state.ingresoRendered=null; renderView(); try{ if(window.parent && window.parent!==window && typeof window.parent.mktActiveChanged==='function') window.parent.mktActiveChanged(id); }catch(e){} }
+  function setActive(id){ state.active=id; renderReportSelect(); fillPeriodSelect(MODS[id]); MODS[id].rangeIni=MODS[id].pval; MODS[id].rangeFin=MODS[id].pval; state.ingresoRendered=null; renderView(); try{ if(window.parent && window.parent!==window && typeof window.parent.mktActiveChanged==='function') window.parent.mktActiveChanged(id); }catch(e){} }
   window.mktShowView=function(v){ state.view=v; renderView(); };
   window.mktGetView=function(){ return state.view; };
   window.mktSetActive=function(id){ if(MODS[id]) setActive(id); };
