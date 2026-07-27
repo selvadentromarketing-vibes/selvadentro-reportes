@@ -915,12 +915,22 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     const host = $('#view-analitica'); if(!host) return;
     if(!window.Chart){ host.innerHTML = '<div class="anal-empty">Cargando librería de gráficas…</div>'; setTimeout(renderAnaliticaMkt, 300); return; }
     const M = MODS[state.active]; const kpis = KPIS_BY_MOD[state.active] || [];
-    const allPeriodos = Object.keys(M.records).sort();
-    if(!allPeriodos.length){ host.innerHTML = '<p class="metas-hint">Dashboard de KPIs. Clic en una tarjeta para expandir y pedir conclusión con IA.</p><div class="anal-grid"><div class="anal-empty">Este módulo aún no tiene datos.</div></div>'; return; }
+    // Lista completa de periodos posibles (52 semanas o 12 meses del año), en orden ascendente,
+    // más cualquier periodo con registros que no esté en el rango base.
+    const basePeriodos = [];
+    if(M.period === 'week'){
+      for(let w=1; w<=52; w++) basePeriodos.push('2026-W'+String(w).padStart(2,'0'));
+    } else {
+      for(let m=1; m<=12; m++) basePeriodos.push('2026-'+String(m).padStart(2,'0'));
+    }
+    const recKeys = Object.keys(M.records);
+    const allPeriodos = [...new Set([...basePeriodos, ...recKeys])].sort();
+    const hayRegistros = recKeys.length > 0;
     // Reset range si cambió el módulo
     if(ANAL_MKT.modKey !== state.active){
-      ANAL_MKT.ini = allPeriodos[allPeriodos.length-1];
-      ANAL_MKT.fin = allPeriodos[allPeriodos.length-1];
+      const defaultP = hayRegistros ? recKeys.sort()[recKeys.length-1] : (M.pval || allPeriodos[allPeriodos.length-1]);
+      ANAL_MKT.ini = defaultP;
+      ANAL_MKT.fin = defaultP;
       ANAL_MKT.modKey = state.active;
     }
     if(!allPeriodos.includes(ANAL_MKT.ini)) ANAL_MKT.ini = allPeriodos[0];
@@ -942,7 +952,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
         <div class="grp" style="display:flex;flex-direction:column;gap:5px;"><label style="font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--neutro);font-weight:600;">${rangeLbl} fin</label><select id="anal-mkt-fin" style="font-family:var(--sans);font-size:13px;padding:8px 10px;border:1px solid var(--linea);border-radius:8px;background:var(--crema);color:var(--texto);">${optsFin}</select></div>
         <div class="grp" style="display:flex;flex-direction:column;gap:5px;"><label style="font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--neutro);font-weight:600;">Periodos evaluados</label><div style="font-size:13px;font-weight:600;color:var(--verde-prof);padding:8px 0;">${periodos.length}</div></div>
       </div>`,
-      '<div class="anal-grid">'
+      hayRegistros ? '<div class="anal-grid">' : '<div class="anal-empty" style="margin-bottom:14px">Este módulo aún no tiene datos capturados. El rango se puede seleccionar pero mostrará ceros.</div><div class="anal-grid">'
     ];
     kpis.forEach((k, i) => {
       const values = periodos.map(p => Number(getPath(M.records[p], k.path) || 0));
