@@ -469,6 +469,11 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
     <!-- ============ ANALÍTICA ============ -->
     <div class="view" id="view-analitica">
       <p class="hint">Dashboard de KPIs del canal. Clic en una tarjeta para expandir y pedir conclusión con IA.</p>
+      <div class="periodo" id="anal-periodo" style="margin-bottom:14px">
+        <div class="grp"><label>Semana inicio</label><select id="anal-semana-ini"></select></div>
+        <div class="grp"><label>Semana fin</label><select id="anal-semana-fin"></select></div>
+        <div class="grp"><label>Semanas evaluadas</label><div class="semana-badge" id="anal-semanas-eval">—</div></div>
+      </div>
       <div id="anal-grid" class="anal-grid"></div>
       <div id="anal-notes"></div>
     </div>
@@ -1665,7 +1670,7 @@ function renderDirAnalitica(prefix, chsSel, weekSet, tabName){
   if(!notesHost){ notesHost = document.createElement("div"); notesHost.id = `${prefix}-notes`; host.parentNode.insertBefore(notesHost, host.nextSibling); }
   renderNotesSection(notesHost, notes, tabName, NOTES_CACHE[prefix], "notes");
 }
-const ANAL_STATE = { expanded: null, charts: {}, cache: {}, notesCache: {} };
+const ANAL_STATE = { expanded: null, charts: {}, cache: {}, notesCache: {}, ini: null, fin: null, chKey: null };
 const NOTES_CACHE = { res:{}, dc:{}, ch:{} };
 function renderNotesSection(container, entradas, canalName, cacheKeyBucket, cacheKey){
   if(!container) return;
@@ -1782,8 +1787,40 @@ function renderAnalitica(){
   const grid = document.getElementById("anal-grid"); if(!grid) return;
   if(!window.Chart){ grid.innerHTML = '<div class="anal-empty">Cargando librería de gráficas…</div>'; setTimeout(renderAnalitica, 300); return; }
   const chKey = CH;
-  const { weeks, byField, fields } = analSeriesForChannel(chKey);
-  if(!weeks.length){ grid.innerHTML = '<div class="anal-empty">Este canal aún no tiene datos registrados.</div>'; return; }
+  const full = analSeriesForChannel(chKey);
+  const allWeeks = full.weeks;
+  const perBar = document.getElementById("anal-periodo");
+  const selIni = document.getElementById("anal-semana-ini");
+  const selFin = document.getElementById("anal-semana-fin");
+  const semBadge = document.getElementById("anal-semanas-eval");
+  if(!allWeeks.length){
+    if(perBar) perBar.style.display = "none";
+    grid.innerHTML = '<div class="anal-empty">Este canal aún no tiene datos registrados.</div>';
+    return;
+  }
+  if(perBar) perBar.style.display = "";
+  // Poblar selectores si cambió el canal o si están vacíos
+  if(ANAL_STATE.chKey !== chKey || !selIni.options.length){
+    const opts = allWeeks.map(w => `<option value="${w}">${weekLabel(w)}</option>`).join("");
+    selIni.innerHTML = opts; selFin.innerHTML = opts;
+    ANAL_STATE.ini = allWeeks[0];
+    ANAL_STATE.fin = allWeeks[allWeeks.length-1];
+    ANAL_STATE.chKey = chKey;
+    selIni.onchange = () => { ANAL_STATE.ini = selIni.value; if(ANAL_STATE.ini > ANAL_STATE.fin){ ANAL_STATE.fin = ANAL_STATE.ini; } renderAnalitica(); };
+    selFin.onchange = () => { ANAL_STATE.fin = selFin.value; if(ANAL_STATE.fin < ANAL_STATE.ini){ ANAL_STATE.ini = ANAL_STATE.fin; } renderAnalitica(); };
+  }
+  // Clamp por si los valores guardados no existen en el nuevo set
+  if(!allWeeks.includes(ANAL_STATE.ini)) ANAL_STATE.ini = allWeeks[0];
+  if(!allWeeks.includes(ANAL_STATE.fin)) ANAL_STATE.fin = allWeeks[allWeeks.length-1];
+  selIni.value = ANAL_STATE.ini; selFin.value = ANAL_STATE.fin;
+  // Filtrar al rango
+  const iIni = allWeeks.indexOf(ANAL_STATE.ini);
+  const iFin = allWeeks.indexOf(ANAL_STATE.fin);
+  const weeks = allWeeks.slice(iIni, iFin+1);
+  const byField = {};
+  for(const f of full.fields){ byField[f.k] = full.byField[f.k].slice(iIni, iFin+1); }
+  const fields = full.fields;
+  if(semBadge) semBadge.textContent = weeks.length;
   const cards = fields.map((f, i) => {
     const values = byField[f.k] || [];
     const total = values.reduce((a,b)=>a+b,0);
@@ -1793,7 +1830,7 @@ function renderAnalitica(){
     const conc = ANAL_STATE.cache[chKey+":"+f.k];
     return `<div class="anal-card${expanded?' expanded':''}" data-fk="${f.k}">
       <div class="ac-title">${f.l}</div>
-      <div class="ac-total">Total periodo: <b>${totalTxt}</b> · ${weeks.length} sem.</div>
+      <div class="ac-total">Total del rango: <b>${totalTxt}</b> · ${weeks.length} sem.</div>
       <canvas id="${canvasId}"></canvas>
       ${expanded ? `<div class="anal-actions"><button class="btn btn-olive" data-analyze="${f.k}">Analizar con IA</button>${f.meta!=null?`<span style="font-size:12px;color:var(--neutro)">Meta mensual: <b>${f.meta}</b></span>`:''}</div>${conc?`<div class="anal-conc">${conc}</div>`:''}` : ''}
     </div>`;
