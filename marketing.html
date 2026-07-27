@@ -919,7 +919,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     if(!allPeriodos.length){ host.innerHTML = '<p class="metas-hint">Dashboard de KPIs. Clic en una tarjeta para expandir y pedir conclusión con IA.</p><div class="anal-grid"><div class="anal-empty">Este módulo aún no tiene datos.</div></div>'; return; }
     // Reset range si cambió el módulo
     if(ANAL_MKT.modKey !== state.active){
-      ANAL_MKT.ini = allPeriodos[0];
+      ANAL_MKT.ini = allPeriodos[allPeriodos.length-1];
       ANAL_MKT.fin = allPeriodos[allPeriodos.length-1];
       ANAL_MKT.modKey = state.active;
     }

@@ -1803,7 +1803,7 @@ function renderAnalitica(){
   if(ANAL_STATE.chKey !== chKey || !selIni.options.length){
     const opts = allWeeks.map(w => `<option value="${w}">${weekLabel(w)}</option>`).join("");
     selIni.innerHTML = opts; selFin.innerHTML = opts;
-    ANAL_STATE.ini = allWeeks[0];
+    ANAL_STATE.ini = allWeeks[allWeeks.length-1];
     ANAL_STATE.fin = allWeeks[allWeeks.length-1];
     ANAL_STATE.chKey = chKey;
     selIni.onchange = () => { ANAL_STATE.ini = selIni.value; if(ANAL_STATE.ini > ANAL_STATE.fin){ ANAL_STATE.fin = ANAL_STATE.ini; } renderAnalitica(); };
@@ -2642,7 +2642,7 @@ async function switchChannel(ch){
   const si=document.getElementById("rep-semana-ini"), sf=document.getElementById("rep-semana-fin");
   const opts=weeks.map(w=>`<option value="${w}">${weekLabel(w)}</option>`).join("");
   si.innerHTML=opts; sf.innerHTML=opts;
-  if(weeks.length){ si.value=weeks[0]; sf.value=weeks[weeks.length-1]; if(!dims.length){ const rec=recGet(recKey(weeks[weeks.length-1])); if(rec) fillForm(rec); } }
+  if(weeks.length){ si.value=weeks[weeks.length-1]; sf.value=weeks[weeks.length-1]; if(!dims.length){ const rec=recGet(recKey(weeks[weeks.length-1])); if(rec) fillForm(rec); } }
   document.getElementById("rep-output").innerHTML='<div class="empty-rep">Selecciona un rango de semanas y genera el reporte.</div>';
   if(document.getElementById("view-analitica").classList.contains("active")){ ANAL_STATE.expanded=null; renderAnalitica(); }
 }
