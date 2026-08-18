@@ -302,6 +302,29 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .ch-pill input{ accent-color:var(--olivo); }
   .ch-pill.on{ background:var(--verde-ok-bg); border-color:var(--verde-ok-tx); color:var(--verde-ok-tx); font-weight:600; }
   .ch-pill.disabled{ opacity:.5; cursor:not-allowed; }
+
+  /* ---- CRM en vivo (GoHighLevel) ---- */
+  .crm-kpis{ display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:14px; margin-bottom:18px; }
+  .crm-kpi{ background:#fff; border:1px solid var(--linea); border-radius:12px; padding:16px 18px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .crm-kpi .k-val{ font-family:var(--serif); font-size:28px; color:var(--verde-prof); font-weight:700; line-height:1.1; }
+  .crm-kpi .k-lbl{ font-size:10.5px; text-transform:uppercase; letter-spacing:.8px; color:var(--neutro); font-weight:600; margin-top:5px; }
+  .crm-pipe{ background:#fff; border:1px solid var(--linea); border-radius:12px; margin-bottom:18px; overflow:hidden; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .crm-pipe h3{ margin:0; padding:12px 18px; background:var(--olivo); color:#fff; font-family:var(--serif); font-size:15.5px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .crm-pipe h3 .p-badge{ margin-left:auto; display:flex; gap:6px; flex-wrap:wrap; }
+  .crm-pipe h3 .p-badge span{ background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.28); font-family:var(--sans); font-size:10.5px; font-weight:600; letter-spacing:.4px; padding:3px 10px; border-radius:999px; }
+  .crm-stages{ padding:12px 18px 16px; }
+  .crm-srow{ display:flex; align-items:center; gap:12px; padding:4px 0; }
+  .crm-srow .s-name{ flex:0 0 240px; font-size:12.5px; text-align:right; color:var(--texto); }
+  .crm-srow .s-track{ flex:1; background:var(--crema-2); border-radius:6px; height:18px; position:relative; overflow:hidden; }
+  .crm-srow .s-bar{ position:absolute; inset:0 auto 0 0; background:var(--olivo); border-radius:6px; min-width:2px; opacity:.85; }
+  .crm-srow.won .s-bar{ background:var(--cobre); }
+  .crm-srow .s-count{ flex:0 0 60px; font-weight:600; font-size:13px; color:var(--verde-prof); }
+  .crm-tables{ display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:18px; margin-bottom:18px; }
+  .crm-progress{ background:#fff; border:1px solid var(--linea); border-radius:12px; padding:18px 22px; margin-bottom:18px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .crm-progress .cp-lbl{ font-size:12.5px; color:var(--neutro); margin-bottom:10px; }
+  .crm-progress .cp-track{ background:var(--crema-2); border-radius:999px; height:10px; overflow:hidden; }
+  .crm-progress .cp-bar{ height:100%; background:var(--cobre); border-radius:999px; width:0%; transition:width .4s ease; }
+  @media (max-width:680px){ .crm-srow .s-name{ flex-basis:130px; font-size:11px; } }
 </style>
 </head>
 <body>
@@ -393,6 +416,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
     <div class="tab active" data-tab="resultados">Dirección General</div>
     <div class="tab" data-tab="dircom">Dirección Comercial</div>
     <div class="tab" data-tab="ventas">Ventas</div>
+    <div class="tab" data-tab="crm">CRM en vivo</div>
     <div class="tab" data-tab="marketing">Marketing</div>
     <div class="canal-wrap">
       <span class="lbl">Reporte</span>
@@ -506,6 +530,24 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
       <p class="hint">Elige el rango de semanas; los canales marcados alimentan el embudo de arriba (la tabla siempre muestra los 7).</p>
       <div class="dir-content" id="dc-content"><div class="empty-rep">Genera el reporte para ver los resultados.</div></div>
       <div id="dc-analitica" style="margin-top:22px"></div>
+    </div>
+
+    <!-- ============ CRM EN VIVO (GoHighLevel) ============ -->
+    <div class="view" id="view-crm">
+      <div class="periodo">
+        <div class="grp"><label>Semana inicio</label><select id="crm-sem-ini"></select></div>
+        <div class="grp"><label>Semana fin</label><select id="crm-sem-fin"></select></div>
+        <div class="grp"><label>Semanas evaluadas</label><div class="semana-badge" id="crm-semanas-eval">—</div></div>
+        <div class="spacer"></div>
+        <div class="grp"><label>Última sincronización</label><div class="semana-badge" id="crm-last-sync">—</div></div>
+        <button class="btn btn-olive" id="crm-refresh">Sincronizar CRM</button>
+      </div>
+      <p class="hint">Datos en vivo del CRM (GoHighLevel). Las etapas muestran las oportunidades abiertas hoy; los leads nuevos, WON y fuentes se filtran por el rango de semanas. La sincronización guarda un resumen compartido para todo el equipo.</p>
+      <div class="crm-progress" id="crm-progress" style="display:none">
+        <div class="cp-lbl" id="crm-progress-lbl">Sincronizando CRM…</div>
+        <div class="cp-track"><div class="cp-bar" id="crm-progress-bar"></div></div>
+      </div>
+      <div id="crm-content"><div class="empty-rep">Sincroniza para ver los datos del CRM.</div></div>
     </div>
 
     <!-- ============ MARKETING (embebido) ============ -->
@@ -1363,11 +1405,12 @@ document.querySelectorAll("[data-tab]").forEach(el=>el.onclick=()=>{
     document.getElementById("view-"+tab).classList.add("active");
     document.getElementById("ventas-subtabs").style.display="none";
   }
-  const dir = ["resultados","dircom","marketing","asesores","metas","db","admin"].includes(tab);
+  const dir = ["resultados","dircom","crm","marketing","asesores","metas","db","admin"].includes(tab);
   document.querySelector(".canal-wrap").style.display = dir?"none":"flex";
   document.querySelector(".mkt-wrap").style.display = (tab==="marketing")?"flex":"none";
   if(tab==="resultados") showResultados();
   if(tab==="dircom") showDirCom();
+  if(tab==="crm") showCRM();
   if(tab==="marketing"){ showMarketing(); populateMktSelect(); const api=mktFrameApi(); if(api && typeof api.mktGetView==="function") window.mktViewChanged(api.mktGetView()); if(api && typeof api.mktGetActive==="function") { const cur=api.mktGetActive(); const sel=document.getElementById("mkt-select"); if(sel && cur) sel.value=cur; } }
   if(tab==="asesores") renderAdvisors();
   if(tab==="metas") renderMetas();
@@ -1579,6 +1622,178 @@ async function showResultados(){
 }
 async function showDirCom(){
   if(!dcState.built){ buildChannelChecks("dc-canales",dcState,renderDirCom); await populateRange("dc-sem-ini","dc-sem-fin"); document.getElementById("dc-generar").onclick=renderDirCom; dcState.built=true; await renderDirCom(); }
+}
+
+/* ===================== CRM EN VIVO (GoHighLevel) ===================== */
+// Sincroniza oportunidades desde GHL vía la Netlify Function ghl-report (el token vive
+// en el entorno del servidor). El resumen agregado se comparte por Supabase kv para que
+// el resto del equipo cargue al instante sin recorrer el CRM otra vez.
+const CRM_AGG_KEY = "crm:agg:v1";
+const CRM_STALE_MIN = 30;
+const crmState = { built:false, agg:null, syncing:false };
+const CRM_SRC_LABELS = { ig:"Instagram", fb:"Facebook", facebook:"Facebook", instagram:"Instagram", google:"Google", tiktok:"TikTok", yt:"YouTube", youtube:"YouTube", whatsapp:"WhatsApp", "(sin fuente)":"(Sin fuente)" };
+
+function crmWeekOf(iso){ const d = iso ? new Date(iso) : null; return (d && !isNaN(d)) ? isoWeekId(d) : null; }
+function crmAgo(ts){ const m=Math.round((Date.now()-ts)/60000); if(m<1) return "ahora mismo"; if(m<60) return `hace ${m} min`; const h=Math.floor(m/60); if(h<24) return `hace ${h} h`; return new Date(ts).toLocaleString("es-MX",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}); }
+
+async function crmFn(body){
+  const r = await fetch("/.netlify/functions/ghl-report", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) });
+  const d = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.error || ("HTTP "+r.status));
+  return d;
+}
+
+function buildCrmAgg(boot, opps){
+  const pipes = (boot.pipelines||[]).map(p=>({ id:p.id, name:p.name, stages:p.stages||[], open:{}, status:{open:0,won:0,lost:0,abandoned:0}, weekly:{} }));
+  const byId = {}; pipes.forEach(p=>byId[p.id]=p);
+  const wkb = (p,w)=> p.weekly[w] || (p.weekly[w]={cr:0,won:0,wv:0,src:{},asr:{}});
+  for(const o of opps){
+    const p = byId[o.p]; if(!p) continue;
+    p.status[o.st] = (p.status[o.st]||0)+1;
+    if(o.st==="open" && o.s) p.open[o.s] = (p.open[o.s]||0)+1;
+    const wc = crmWeekOf(o.c);
+    if(wc){ const b=wkb(p,wc); b.cr++; const s=o.src||"(sin fuente)"; b.src[s]=(b.src[s]||0)+1; if(o.u) b.asr[o.u]=(b.asr[o.u]||0)+1; }
+    if(o.st==="won"){ const ww=crmWeekOf(o.stc)||wc; if(ww){ const b=wkb(p,ww); b.won++; b.wv+=(o.v||0); } }
+  }
+  return { ts: Date.now(), total: opps.length, users: boot.users||{}, pipes };
+}
+
+function crmWeeks(){
+  const set = new Set();
+  (crmState.agg?.pipes||[]).forEach(p=>Object.keys(p.weekly).forEach(w=>set.add(w)));
+  set.add(isoWeekId(new Date()));
+  return [...set].sort();
+}
+function crmPopulateWeeks(){
+  const weeks = crmWeeks();
+  const opts = weeks.map(w=>`<option value="${w}">${weekLabel(w)}</option>`).join("");
+  const si=document.getElementById("crm-sem-ini"), sf=document.getElementById("crm-sem-fin");
+  const prevI=si.value, prevF=sf.value;
+  si.innerHTML=opts; sf.innerHTML=opts;
+  if(weeks.length){
+    si.value = weeks.includes(prevI) ? prevI : weeks[weeks.length-1];
+    sf.value = weeks.includes(prevF) ? prevF : weeks[weeks.length-1];
+  }
+}
+function crmRangeWeeks(){
+  const weeks = crmWeeks();
+  let i = weeks.indexOf(document.getElementById("crm-sem-ini").value);
+  let f = weeks.indexOf(document.getElementById("crm-sem-fin").value);
+  if(i<0) i=weeks.length-1; if(f<0) f=weeks.length-1;
+  if(i>f) [i,f]=[f,i];
+  return weeks.slice(i, f+1);
+}
+
+function crmRender(){
+  const agg = crmState.agg; if(!agg) return;
+  document.getElementById("crm-last-sync").textContent = crmAgo(agg.ts);
+  const rango = new Set(crmRangeWeeks());
+  document.getElementById("crm-semanas-eval").textContent = rango.size || "—";
+
+  let openTot=0, crTot=0, wonTot=0, wvTot=0;
+  const srcTot={}, asrTot={};
+  const pipeCards = [];
+
+  for(const p of agg.pipes){
+    const nOpps = (p.status.open||0)+(p.status.won||0)+(p.status.lost||0)+(p.status.abandoned||0);
+    if(!nOpps) continue;
+    openTot += p.status.open||0;
+    let cr=0, won=0, wv=0;
+    for(const [w,b] of Object.entries(p.weekly)){
+      if(!rango.has(w)) continue;
+      cr+=b.cr; won+=b.won; wv+=b.wv;
+      for(const [s,n] of Object.entries(b.src)) srcTot[s]=(srcTot[s]||0)+n;
+      for(const [u,n] of Object.entries(b.asr)) asrTot[u]=(asrTot[u]||0)+n;
+    }
+    crTot+=cr; wonTot+=won; wvTot+=wv;
+
+    const stagesOn = p.stages.filter(s=>(p.open[s.id]||0)>0);
+    const maxOpen = Math.max(1, ...stagesOn.map(s=>p.open[s.id]||0));
+    const rows = stagesOn.map(s=>{
+      const n=p.open[s.id]||0; const isWonStage=/won|ganado|cerrad/i.test(s.name);
+      return `<div class="crm-srow ${isWonStage?'won':''}">
+        <span class="s-name">${escAttr(s.name)}</span>
+        <span class="s-track"><span class="s-bar" style="width:${Math.max(2,Math.round(n/maxOpen*100))}%"></span></span>
+        <span class="s-count">${n.toLocaleString()}</span>
+      </div>`;
+    }).join("");
+    pipeCards.push(`<div class="crm-pipe">
+      <h3>${escAttr(p.name)}
+        <span class="p-badge">
+          <span>${(p.status.open||0).toLocaleString()} abiertas</span>
+          ${cr?`<span>+${cr.toLocaleString()} nuevas en el rango</span>`:""}
+          ${won?`<span>${won} WON en el rango</span>`:""}
+          ${p.status.won?`<span>${p.status.won} WON hist.</span>`:""}
+        </span>
+      </h3>
+      <div class="crm-stages">${rows || '<div class="empty-rep" style="padding:18px">Sin oportunidades abiertas.</div>'}</div>
+    </div>`);
+  }
+
+  const kpi = (v,l)=>`<div class="crm-kpi"><div class="k-val">${v}</div><div class="k-lbl">${l}</div></div>`;
+  const kpis = `<div class="crm-kpis">
+    ${kpi(crTot.toLocaleString(),"Leads nuevos en el rango")}
+    ${kpi(wonTot.toLocaleString(),"WON en el rango")}
+    ${kpi(fmtMoney(wvTot),"Valor WON en el rango")}
+    ${kpi(openTot.toLocaleString(),"Oportunidades abiertas hoy")}
+    ${kpi(agg.total.toLocaleString(),"Oportunidades totales en el CRM")}
+  </div>`;
+
+  const srcRows = Object.entries(srcTot).sort((a,b)=>b[1]-a[1]).slice(0,14)
+    .map(([s,n])=>`<tr><td class="lft">${escAttr(CRM_SRC_LABELS[s]||s)}</td><td class="val">${n.toLocaleString()}</td></tr>`).join("");
+  const asrRows = Object.entries(asrTot).sort((a,b)=>b[1]-a[1]).slice(0,14)
+    .map(([u,n])=>`<tr><td class="lft">${escAttr(agg.users[u]||"(sin nombre)")}</td><td class="val">${n.toLocaleString()}</td></tr>`).join("");
+  const tbl = (title, head, rows)=>`<div class="rep-section" style="margin-bottom:0"><h3>${title}</h3>
+    <table class="rep"><thead><tr><th class="lft">${head}</th><th>Leads</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="2" class="lft" style="color:var(--neutro);font-style:italic">Sin datos en el rango.</td></tr>'}</tbody></table></div>`;
+  const tables = `<div class="crm-tables">${tbl("Leads por fuente (rango)","Fuente",srcRows)}${tbl("Leads por asesor (rango)","Asesor",asrRows)}</div>`;
+
+  document.getElementById("crm-content").innerHTML = kpis + tables + pipeCards.join("");
+}
+
+async function crmSync(){
+  if(crmState.syncing) return;
+  crmState.syncing = true;
+  const btn=document.getElementById("crm-refresh"), prog=document.getElementById("crm-progress"),
+        bar=document.getElementById("crm-progress-bar"), lbl=document.getElementById("crm-progress-lbl");
+  btn.disabled=true; btn.textContent="Sincronizando…"; prog.style.display="block"; bar.style.width="3%";
+  try{
+    lbl.textContent="Conectando con el CRM…";
+    const boot = await crmFn({action:"bootstrap"});
+    const opps=[]; let cursor=null, total=0;
+    do{
+      const res = await crmFn({action:"crawl", ...(cursor||{})});
+      opps.push(...res.opps); total = res.total || total; cursor = res.cursor;
+      const pct = total ? Math.min(97, Math.round(opps.length/total*100)) : 50;
+      bar.style.width=pct+"%";
+      lbl.textContent=`Sincronizando oportunidades… ${opps.length.toLocaleString()}${total?(" de "+total.toLocaleString()):""}`;
+    }while(cursor);
+    bar.style.width="100%"; lbl.textContent="Procesando…";
+    crmState.agg = buildCrmAgg(boot, opps);
+    sSet(CRM_AGG_KEY, crmState.agg);
+    crmPopulateWeeks(); crmRender();
+    toast("CRM sincronizado ✓ "+opps.length.toLocaleString()+" oportunidades");
+  }catch(e){
+    toast("Error al sincronizar CRM: "+(e.message||e));
+  }finally{
+    crmState.syncing=false; btn.disabled=false; btn.textContent="Sincronizar CRM";
+    setTimeout(()=>{ prog.style.display="none"; bar.style.width="0%"; }, 600);
+  }
+}
+
+async function showCRM(){
+  if(!crmState.built){
+    crmState.built = true;
+    document.getElementById("crm-refresh").onclick = crmSync;
+    document.getElementById("crm-sem-ini").onchange = crmRender;
+    document.getElementById("crm-sem-fin").onchange = crmRender;
+  }
+  if(!crmState.agg){
+    const saved = await sGet(CRM_AGG_KEY);
+    if(saved && Array.isArray(saved.pipes)){ crmState.agg=saved; crmPopulateWeeks(); }
+  }
+  if(crmState.agg) crmRender();
+  if(!crmState.syncing && (!crmState.agg || Date.now()-crmState.agg.ts > CRM_STALE_MIN*60000)) crmSync();
 }
 
 /* ===================== ANALÍTICA ===================== */
@@ -2708,11 +2923,11 @@ let USERS = [];           // [{ email, salt, hash, role, channels, password? }]
 let ADMIN_PASS = null;    // password en memoria sólo (se pierde al recargar) — para llamar a la Netlify Function
 
 const DATA_CH_KEYS = ["brokers","paid_organico","seminarios","referidos","pd_leads","pd_brokers","rp_vip"];
-const DIR_TABS = { direccion_general:"resultados", direccion_comercial:"dircom", marketing:"marketing" };
+const DIR_TABS = { direccion_general:"resultados", direccion_comercial:"dircom", crm_live:"crm", marketing:"marketing" };
 const MKT_CH_KEYS = ["mkt_rrss","mkt_ppc","mkt_crm","mkt_lq"];
-const VENTAS_CH_KEYS = [...DATA_CH_KEYS, "direccion_general", "direccion_comercial"];
+const VENTAS_CH_KEYS = [...DATA_CH_KEYS, "direccion_general", "direccion_comercial", "crm_live"];
 const ALL_CH_KEYS  = [...VENTAS_CH_KEYS, ...MKT_CH_KEYS];
-const ALL_CH_NAMES = { brokers:"Brokers", paid_organico:"Paid Orgánico", seminarios:"Seminarios", referidos:"Referidos", pd_leads:"PD Leads", pd_brokers:"PD Brokers", rp_vip:"RP VIP", direccion_general:"Dir. General", direccion_comercial:"Dir. Comercial", mkt_rrss:"Redes Sociales", mkt_ppc:"PPC Ads", mkt_crm:"CRM Manager", mkt_lq:"Calidad de Leads" };
+const ALL_CH_NAMES = { brokers:"Brokers", paid_organico:"Paid Orgánico", seminarios:"Seminarios", referidos:"Referidos", pd_leads:"PD Leads", pd_brokers:"PD Brokers", rp_vip:"RP VIP", direccion_general:"Dir. General", direccion_comercial:"Dir. Comercial", crm_live:"CRM en vivo", mkt_rrss:"Redes Sociales", mkt_ppc:"PPC Ads", mkt_crm:"CRM Manager", mkt_lq:"Calidad de Leads" };
 window.getMktAllowedModules = function(){
   if(isAdmin()) return null;
   if(!SESSION) return [];
