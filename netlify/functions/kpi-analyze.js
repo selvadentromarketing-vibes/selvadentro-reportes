@@ -17,6 +17,8 @@
 //     periodicidad: "semanal"         // "semanal" | "mensual"
 //   }
 
+const S = require("./lib/shared.js");
+
 const API_KEY = process.env.ANTHROPIC_API_KEY;
 
 const json = (status, body) => ({
@@ -39,6 +41,7 @@ exports.handler = async (event) => {
   }
   if (event.httpMethod !== "POST") return json(405, { error: "Method not allowed" });
   if (!API_KEY) return json(500, { error: "ANTHROPIC_API_KEY no configurada en el entorno" });
+  if (!S.authFromEvent(event)) return json(401, { error: "Sesión inválida o expirada" });
 
   let payload;
   try {

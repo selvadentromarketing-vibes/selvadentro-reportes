@@ -217,18 +217,29 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
 <div class="toast" id="toast"></div>
 
 <script>
-/* ===================== BOOTSTRAP: window.storage (mismo Supabase que multicanal) ===================== */
+/* ===================== BOOTSTRAP: window.storage (kv autenticado, mismo backend que multicanal) ===================== */
+// Esta página vive embebida (iframe same-origin), así que comparte el token de sesión
+// del sistema principal vía localStorage. Sin token válido el backend rechaza todo.
 (function(){
-  const SUPABASE = {
-    url: "https://vsnggxcuznleuvoyoenn.supabase.co",
-    anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZzbmdneGN1em5sZXV2b3lvZW5uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0Mjk0NjQsImV4cCI6MjA5ODAwNTQ2NH0.gTKuAL7yqiLofNjyKwKsngtW8FYBmQ9zxtPtE0T_DR0"
+  const TOKEN_KEY = "slvd-token-v1";
+  window.slvdAuthHeaders = function(){
+    let t = null; try{ t = localStorage.getItem(TOKEN_KEY); }catch(e){}
+    return t ? { "Authorization":"Bearer "+t } : {};
   };
-  const H = ()=>({ "apikey":SUPABASE.anonKey, "Authorization":"Bearer "+SUPABASE.anonKey, "Content-Type":"application/json" });
+  async function kvCall(body){
+    const r = await fetch("/.netlify/functions/kv", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json", ...window.slvdAuthHeaders() },
+      body: JSON.stringify(body)
+    });
+    if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.error||("kv "+r.status)); }
+    return r.json();
+  }
   window.storage = {
-    async get(k){ const r=await fetch(`${SUPABASE.url}/rest/v1/kv?k=eq.${encodeURIComponent(k)}&select=v`,{headers:H()}); if(!r.ok) throw new Error("supa get "+r.status); const a=await r.json(); return (a&&a.length)?{value:a[0].v}:null; },
-    async set(k,valStr){ const r=await fetch(`${SUPABASE.url}/rest/v1/kv`,{method:"POST",headers:{...H(),"Prefer":"resolution=merge-duplicates,return=minimal"},body:JSON.stringify({k,v:valStr})}); if(!r.ok) throw new Error("supa set "+r.status); return true; },
-    async list(p){ const r=await fetch(`${SUPABASE.url}/rest/v1/kv?k=like.${encodeURIComponent(p+"*")}&select=k`,{headers:H()}); if(!r.ok) throw new Error("supa list "+r.status); const a=await r.json(); return {keys:a.map(x=>x.k)}; },
-    async delete(k){ const r=await fetch(`${SUPABASE.url}/rest/v1/kv?k=eq.${encodeURIComponent(k)}`,{method:"DELETE",headers:H()}); if(!r.ok) throw new Error("supa del "+r.status); return true; }
+    async get(k){ const d=await kvCall({op:"get",k}); return (d && d.v!=null) ? {value:d.v} : null; },
+    async set(k,valStr){ await kvCall({op:"set",k,v:valStr}); return true; },
+    async list(p){ const d=await kvCall({op:"list",prefix:p}); return {keys:(d&&d.keys)||[]}; },
+    async delete(k){ await kvCall({op:"del",k}); return true; }
   };
 })();
 </script>
@@ -1019,7 +1030,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
       else { conc.classList.add("loading"); conc.textContent = "Sintetizando con IA…"; }
       btn.disabled = true;
       try{
-        const resp = await fetch("/.netlify/functions/notes-analyze", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ canal: canalName, entradas }) });
+        const resp = await fetch("/.netlify/functions/notes-analyze", { method: "POST", headers: {"Content-Type":"application/json", ...window.slvdAuthHeaders()}, body: JSON.stringify({ canal: canalName, entradas }) });
         const data = await resp.json();
         if(!resp.ok){ conc.classList.remove("loading"); conc.textContent = "Error: " + (data.error || resp.status); }
         else { conc.classList.remove("loading"); conc.textContent = data.conclusion || "(sin conclusión)"; ANAL_MKT.notesCache[cacheKey] = data.conclusion; }
@@ -1138,7 +1149,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
         try {
           const puntos = periodos.map(p => ({ periodo: p, valor: Number(getPath(M.records[p], k.path) || 0) }));
           const resp = await fetch('/.netlify/functions/kpi-analyze', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: { 'Content-Type': 'application/json', ...window.slvdAuthHeaders() },
             body: JSON.stringify({ canal: MODS[state.active].name, kpi: k.label, unidad: k.unit, meta: null, puntos, periodicidad: M.period==='week'?'semanal':'mensual' })
           });
           const data = await resp.json();

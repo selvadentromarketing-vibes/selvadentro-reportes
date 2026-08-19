@@ -12,6 +12,8 @@
 //     Pagina /opportunities/search en bloques (default 6 páginas × 100) para no
 //     exceder el timeout de la función; el frontend repite con el cursor hasta terminar.
 
+const S = require("./lib/shared.js");
+
 const API_KEY = process.env.GHL_API_KEY;
 const LOCATION_ID = process.env.GHL_LOCATION_ID;
 const BASE = "https://services.leadconnectorhq.com";
@@ -112,6 +114,12 @@ exports.handler = async (event) => {
   }
   if (event.httpMethod !== "POST") return json(405, { error: "Method not allowed" });
   if (!API_KEY || !LOCATION_ID) return json(500, { error: "GHL_API_KEY / GHL_LOCATION_ID no configuradas en el entorno" });
+
+  const session = S.authFromEvent(event);
+  if (!session) return json(401, { error: "Sesión inválida o expirada" });
+  if (session.role !== "admin" && !(session.channels || []).includes("crm_live")) {
+    return json(403, { error: "Sin acceso al CRM en vivo" });
+  }
 
   let payload;
   try {

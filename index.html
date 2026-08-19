@@ -1089,24 +1089,41 @@ const recKey=(w,dimVals)=> hasDims()? `${CH}:rec:${w}__${(dimVals||[]).join("__"
 const recPrefix=()=> hasDims()? `${CH}:rec:` : `${CH}:week:`;
 function parseRecKey(k){ if(hasDims()){ const r=k.slice((CH+":rec:").length); const p=r.split("__"); return {w:p[0],dimVals:p.slice(1)}; } return {w:k.slice((CH+":week:").length),dimVals:[]}; }
 
-/* ===================== CONFIG: BACKEND COMPARTIDO (Supabase) ===================== */
-const SUPABASE = {
-  url: "https://vsnggxcuznleuvoyoenn.supabase.co",
-  anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZzbmdneGN1em5sZXV2b3lvZW5uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0Mjk0NjQsImV4cCI6MjA5ODAwNTQ2NH0.gTKuAL7yqiLofNjyKwKsngtW8FYBmQ9zxtPtE0T_DR0"
-};
+/* ===================== CONFIG: BACKEND (Netlify Functions con sesión firmada) ===================== */
+// Todo el acceso a datos pasa por /.netlify/functions/kv con un token firmado que
+// emite /.netlify/functions/auth al iniciar sesión. La tabla en Supabase tiene RLS
+// activado sin policies: el anon key público ya no puede leer ni escribir nada.
+const TOKEN_KEY = "slvd-token-v1";
+let AUTH_TOKEN = null;
+try{ AUTH_TOKEN = localStorage.getItem(TOKEN_KEY) || null; }catch(e){}
+function setAuthToken(t){ AUTH_TOKEN = t || null; try{ if(t) localStorage.setItem(TOKEN_KEY, t); else localStorage.removeItem(TOKEN_KEY); }catch(e){} }
+let AUTH_EXPIRED_HANDLED = false;
+function handleAuthExpired(){
+  if(AUTH_EXPIRED_HANDLED) return; AUTH_EXPIRED_HANDLED = true;
+  setAuthToken(null); writeSession(null); location.reload();
+}
+async function kvCall(body){
+  const r = await fetch("/.netlify/functions/kv", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json", ...(AUTH_TOKEN?{"Authorization":"Bearer "+AUTH_TOKEN}:{}) },
+    body: JSON.stringify(body)
+  });
+  if(r.status===401){ handleAuthExpired(); throw new Error("sesión expirada"); }
+  if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.error||("kv "+r.status)); }
+  return r.json();
+}
 
 /* ===================== STORAGE ===================== */
 const mem={};
-const supaOn = !!(SUPABASE.url && SUPABASE.anonKey);
-const supaHeaders = ()=>({ "apikey":SUPABASE.anonKey, "Authorization":"Bearer "+SUPABASE.anonKey, "Content-Type":"application/json" });
 const supaStore = {
-  async get(k){ const r=await fetch(`${SUPABASE.url}/rest/v1/kv?k=eq.${encodeURIComponent(k)}&select=v`,{headers:supaHeaders()}); if(!r.ok) throw new Error("supa get "+r.status); const a=await r.json(); return (a&&a.length)?{value:a[0].v}:null; },
-  async set(k,valStr){ const r=await fetch(`${SUPABASE.url}/rest/v1/kv`,{method:"POST",headers:{...supaHeaders(),"Prefer":"resolution=merge-duplicates,return=minimal"},body:JSON.stringify({k,v:valStr})}); if(!r.ok) throw new Error("supa set "+r.status); return true; },
-  async list(p){ const r=await fetch(`${SUPABASE.url}/rest/v1/kv?k=like.${encodeURIComponent(p+"*")}&select=k`,{headers:supaHeaders()}); if(!r.ok) throw new Error("supa list "+r.status); const a=await r.json(); return {keys:a.map(x=>x.k)}; },
-  async delete(k){ const r=await fetch(`${SUPABASE.url}/rest/v1/kv?k=eq.${encodeURIComponent(k)}`,{method:"DELETE",headers:supaHeaders()}); if(!r.ok) throw new Error("supa del "+r.status); return true; }
+  async get(k){ const d=await kvCall({op:"get",k}); return (d && d.v!=null) ? {value:d.v} : null; },
+  async set(k,valStr){ await kvCall({op:"set",k,v:valStr}); return true; },
+  async list(p){ const d=await kvCall({op:"list",prefix:p}); return {keys:(d&&d.keys)||[]}; },
+  async delete(k){ await kvCall({op:"del",k}); return true; },
+  async dump(p){ const d=await kvCall({op:"dump",prefix:p}); return (d&&d.rows)||[]; }
 };
-const STORE = supaOn ? supaStore : ((typeof window!=='undefined'&&window.storage&&typeof window.storage.set==='function') ? window.storage : null);
-const hasStore = !!STORE;
+const STORE = supaStore;
+const hasStore = true;
 async function sSet(k,v){ try{ if(hasStore) return await STORE.set(k,JSON.stringify(v)); }catch(e){} mem[k]=v; }
 async function sGet(k){ try{ if(hasStore){ const r=await STORE.get(k); return r?JSON.parse(r.value):null; } }catch(e){ return mem[k]??null; } return mem[k]??null; }
 async function sList(p){ try{ if(hasStore){ const r=await STORE.list(p); return r?r.keys:[]; } }catch(e){} return Object.keys(mem).filter(k=>k.startsWith(p)); }
@@ -1133,13 +1150,13 @@ async function getMany(keys, concurrency=4){
   return out;
 }
 const STORED_KEYS = new Set();
-// Carga TODOS los registros guardados al caché (autoridad sobre la semilla)
+// Carga TODOS los registros guardados al caché (autoridad sobre la semilla).
+// Usa dump: una sola llamada por canal en lugar de un get por clave.
 async function primeCache(){
   await Promise.all(Object.keys(CHANNELS).map(async chKey => {
-    const p=chPrefix(chKey); const keys=await sList(p);
-    if(!keys.length) return;
-    const map=await getMany(keys, 8);
-    for(const k of keys){ if(map[k]){ RECCACHE[k]=map[k]; STORED_KEYS.add(k); } }
+    const p=chPrefix(chKey);
+    let rows=[]; try{ rows = await STORE.dump(p); }catch(e){ return; }
+    for(const row of rows){ try{ RECCACHE[row.k]=JSON.parse(row.v); STORED_KEYS.add(row.k); }catch(e){} }
   }));
 }
 
@@ -1637,7 +1654,7 @@ function crmWeekOf(iso){ const d = iso ? new Date(iso) : null; return (d && !isN
 function crmAgo(ts){ const m=Math.round((Date.now()-ts)/60000); if(m<1) return "ahora mismo"; if(m<60) return `hace ${m} min`; const h=Math.floor(m/60); if(h<24) return `hace ${h} h`; return new Date(ts).toLocaleString("es-MX",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}); }
 
 async function crmFn(body){
-  const r = await fetch("/.netlify/functions/ghl-report", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) });
+  const r = await fetch("/.netlify/functions/ghl-report", { method:"POST", headers:{"Content-Type":"application/json", "Authorization":"Bearer "+AUTH_TOKEN}, body:JSON.stringify(body) });
   const d = await r.json().catch(()=>({}));
   if(!r.ok) throw new Error(d.error || ("HTTP "+r.status));
   return d;
@@ -1869,7 +1886,7 @@ function renderDirAnalitica(prefix, chsSel, weekSet, tabName){
       try {
         const puntos = weeks.map((w,i)=>({ periodo: w, valor: byMetric[m][i] }));
         const resp = await fetch("/.netlify/functions/kpi-analyze", {
-          method: "POST", headers: { "Content-Type": "application/json" },
+          method: "POST", headers: { "Content-Type": "application/json", "Authorization":"Bearer "+AUTH_TOKEN },
           body: JSON.stringify({ canal: tabName, kpi: METRIC_LABELS[m], unidad: m==="ingresos"?"MXN":"", meta: null, puntos, periodicidad: "semanal" })
         });
         const data = await resp.json();
@@ -1917,7 +1934,7 @@ function renderNotesSection(container, entradas, canalName, cacheKeyBucket, cach
     btn.disabled = true;
     try{
       const resp = await fetch("/.netlify/functions/notes-analyze", {
-        method: "POST", headers: {"Content-Type":"application/json"},
+        method: "POST", headers: {"Content-Type":"application/json", "Authorization":"Bearer "+AUTH_TOKEN},
         body: JSON.stringify({ canal: canalName, entradas })
       });
       const data = await resp.json();
@@ -2077,7 +2094,7 @@ function renderAnalitica(){
         const puntos = weeks.map((w,i)=>({ periodo: w, valor: byField[fk][i] }));
         const resp = await fetch("/.netlify/functions/kpi-analyze", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "Authorization":"Bearer "+AUTH_TOKEN },
           body: JSON.stringify({ canal: CHANNELS[chKey].name, kpi: field.l, unidad: field.money?"MXN":"", meta: field.meta, puntos, periodicidad: "semanal" })
         });
         const data = await resp.json();
@@ -2931,7 +2948,7 @@ const ALL_CH_NAMES = { brokers:"Brokers", paid_organico:"Paid Orgánico", semina
 window.getMktAllowedModules = function(){
   if(isAdmin()) return null;
   if(!SESSION) return [];
-  const allowed = new Set(userChannelsOf(SESSION.email));
+  const allowed = new Set(sessionChannels());
   if(allowed.has('marketing')) return ['rrss','ppc','crm','lq'];
   const map = { mkt_rrss:'rrss', mkt_ppc:'ppc', mkt_crm:'crm', mkt_lq:'lq' };
   return Object.entries(map).filter(([k])=>allowed.has(k)).map(([,v])=>v);
@@ -2943,7 +2960,7 @@ function userChannelsOf(email){
 }
 function applyChannelFilter(){
   if(isAdmin()) return;
-  const allowed = new Set(userChannelsOf(SESSION.email));
+  const allowed = new Set(sessionChannels());
   for(const k of Object.keys(CHANNELS)){
     if(!allowed.has(k)) delete CHANNELS[k];
   }
@@ -3044,9 +3061,28 @@ async function onAuthenticated(){
   applyUserBadge();
   applyChannelFilter();
   applyTabsVisibility();
-  if(!isAdmin() && userChannelsOf(SESSION.email).length === 0){ showNoAccessScreen(); return; }
+  if(!isAdmin() && sessionChannels().length === 0){ showNoAccessScreen(); return; }
   await init();
 }
+
+// Llama a la function de auth. El login ocurre 100% en el servidor: el cliente
+// nunca descarga la lista de usuarios ni los hashes.
+async function authCall(action, data){
+  const r = await fetch("/.netlify/functions/auth", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json", ...(AUTH_TOKEN?{"Authorization":"Bearer "+AUTH_TOKEN}:{}) },
+    body: JSON.stringify({ action, ...(data||{}) })
+  });
+  const d = await r.json().catch(()=>({}));
+  if(!r.ok){ const err=new Error(d.error||("auth "+r.status)); err.status=r.status; throw err; }
+  return d;
+}
+function applySessionResponse(d){
+  setAuthToken(d.token);
+  SESSION = { email: d.email, role: d.role, channels: d.channels || [] };
+  writeSession(SESSION);
+}
+function sessionChannels(){ return (SESSION && Array.isArray(SESSION.channels)) ? SESSION.channels : []; }
 
 async function signInHandler(e){
   e.preventDefault();
@@ -3056,17 +3092,12 @@ async function signInHandler(e){
   const btn   = document.getElementById("login-submit");
   btn.disabled = true; btn.textContent = "Entrando…";
   try{
-    await loadUsers();
-    const u = USERS.find(x => x.email.toLowerCase() === email);
-    if(!u){ showLoginError("Email o contraseña incorrectos"); return; }
-    const h = await hashPassword(pass, u.salt);
-    if(h !== u.hash){ showLoginError("Email o contraseña incorrectos"); return; }
-    SESSION = { email: u.email, role: u.role };
-    if(u.role === "admin") ADMIN_PASS = pass;
-    writeSession(SESSION);
+    const d = await authCall("login", { email, pass });
+    applySessionResponse(d);
+    if(d.role === "admin") ADMIN_PASS = pass;
     await onAuthenticated();
   }catch(err){
-    showLoginError(String(err.message||err));
+    showLoginError(err.status===401 ? "Email o contraseña incorrectos" : String(err.message||err));
   }finally{
     btn.disabled = false; btn.textContent = "Entrar";
   }
@@ -3081,29 +3112,20 @@ async function setupHandler(e){
   const btn = document.getElementById("setup-submit");
   btn.disabled = true; btn.textContent = "Creando…";
   try{
-    // Releemos por si otra pestaña ya creó el admin
-    await loadUsers();
-    if(USERS.length > 0){
-      showLoginStep("step-signin");
-      showLoginError("Ya existen usuarios. Inicia sesión normal.");
-      return;
-    }
-    const salt = randomSalt();
-    const hash = await hashPassword(pass, salt);
-    USERS = [{ email, salt, hash, password: pass, role: "admin", channels: ALL_CH_KEYS.slice() }];
-    await saveUsers();
-    SESSION = { email, role: "admin" };
+    const d = await authCall("setup", { email, pass });
+    applySessionResponse(d);
     ADMIN_PASS = pass;
-    writeSession(SESSION);
     await onAuthenticated();
   }catch(err){
-    showLoginError(String(err.message||err));
+    if(err.status===403){ showLoginStep("step-signin"); showLoginError("Ya existen usuarios. Inicia sesión normal."); }
+    else showLoginError(String(err.message||err));
   }finally{
     btn.disabled = false; btn.textContent = "Crear admin y entrar";
   }
 }
 
 function signOut(){
+  setAuthToken(null);
   writeSession(null);
   SESSION = null;
   location.reload();
@@ -3114,31 +3136,24 @@ async function bootAuth(){
   document.getElementById("step-setup").addEventListener("submit", setupHandler);
   document.getElementById("btn-logout").addEventListener("click", signOut);
 
-  // Sesión existente?
-  const saved = readSession();
-  if(saved){
-    // Validar contra USERS actuales (por si el admin lo borró desde otro lado)
+  // ¿Token guardado? Validarlo en el servidor (refresca rol/canales y el token).
+  if(AUTH_TOKEN){
     try{
-      await loadUsers();
-      const u = USERS.find(x => x.email.toLowerCase() === saved.email.toLowerCase());
-      if(u){
-        SESSION = { email: u.email, role: u.role };
-        writeSession(SESSION); // refresca role si cambió
-        await onAuthenticated();
-        return;
-      }
-      writeSession(null);
-    }catch(e){}
+      const d = await authCall("me");
+      applySessionResponse(d);
+      await onAuthenticated();
+      return;
+    }catch(e){
+      if(e.status===401){ setAuthToken(null); writeSession(null); }
+      // Error de red u otro: caemos al login sin borrar el token a ciegas.
+    }
   }
 
-  // No hay sesión: ¿hay users registrados?
+  // Sin sesión: ¿hay users registrados? (decide setup inicial vs login)
   try{
-    await loadUsers();
-    if(USERS.length === 0){
-      showLoginStep("step-setup");
-      return;
-    }
-  }catch(e){ /* si falla la lectura caemos a signin igual */ }
+    const st = await authCall("status");
+    if(!st.hasUsers){ showLoginStep("step-setup"); return; }
+  }catch(e){ /* si falla caemos a signin igual */ }
   showLoginStep("step-signin");
 }
 
@@ -3330,7 +3345,7 @@ function openNewUserRow(){
     try{
       const r = await fetch("/.netlify/functions/send-invite", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Authorization":"Bearer "+AUTH_TOKEN },
         body: JSON.stringify({
           adminEmail: SESSION.email,
           adminPassword: adminPw,
