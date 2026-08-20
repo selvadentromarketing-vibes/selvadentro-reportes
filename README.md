@@ -26,7 +26,7 @@ Producción: https://team.selvadentrotulum.com (Netlify site: `slvd-reportes`).
 
 | Variable | Usada por | Descripción |
 |---|---|---|
-| `SUPABASE_URL` | kv, auth, send-invite | URL del proyecto Supabase del backend (`https://ybydyeafnjduypzatpse.supabase.co`) |
+| `SUPABASE_URL` | kv, auth, send-invite | URL del proyecto Supabase del backend (`https://vsnggxcuznleuvoyoenn.supabase.co` — cuenta de Selvadentro) |
 | `SUPABASE_ANON_KEY` | kv, auth, send-invite | Anon key de ese proyecto (solo transporta la llamada al RPC) |
 | `KV_API_SECRET` | kv, auth, send-invite | Secreto que exige el RPC `slvd_kv_op` — **nunca en el cliente** |
 | `SESSION_SECRET` | todas | Llave HMAC de los tokens de sesión |
@@ -63,25 +63,17 @@ Pestaña **CRM en vivo** en la barra principal:
   volver a consultar el CRM. Las barras por etapa muestran las oportunidades abiertas hoy.
 - **Permisos**: canal `crm_live` en el panel de administración (grupo Ventas).
 
-## Migración desde el backend viejo (cutover)
+## Historial de la migración de seguridad (ago 2026)
 
-El proyecto Supabase original (`vsnggxcuznleuvoyoenn`, tabla `kv`) quedaba **público**
-con el anon key: cualquiera podía leer y escribir reportes y usuarios. El backend nuevo
-(`ybydyeafnjduypzatpse`, tabla `slvd_kv`) ya está creado, bloqueado con RLS y con los
-datos copiados.
+La tabla original `kv` de este mismo proyecto quedaba **pública** con el anon key
+(existía una policy `kv_anon_all` que permitía todo a `anon`): cualquiera podía leer
+y escribir reportes y usuarios. Se construyó el backend seguro (`slvd_kv` + RPC con
+secreto), se migraron los datos, y se eliminó la policy abierta de la tabla legacy —
+que conserva los datos históricos pero ya no es accesible desde fuera.
 
-Pasos para publicar:
-
-1. En el Netlify del sitio `slvd-reportes`, configurar TODAS las env vars de la tabla
-   de arriba (los valores nuevos de `SUPABASE_URL`/`SUPABASE_ANON_KEY` apuntan al
-   proyecto nuevo).
-2. `git push` (deploy).
-3. Re-correr `node scripts/migrate-kv.mjs` para copiar los datos capturados entre la
-   migración inicial y el deploy (es idempotente, upsert por clave).
-4. Todos los usuarios deben volver a iniciar sesión una vez (las sesiones viejas de
-   localStorage ya no valen).
-5. En el proyecto Supabase viejo (cuenta del creador original): borrar la tabla `kv` o
-   activar RLS, para cerrar el acceso público a los datos históricos.
+El backend vive en el proyecto Supabase de Selvadentro (`vsnggxcuznleuvoyoenn`),
+el mismo que usaba la app original. `scripts/migrate-kv.mjs` quedó obsoleto tras el
+cutover (la tabla legacy ya no es legible por REST); se conserva como referencia.
 
 ## Notas de seguridad restantes
 
