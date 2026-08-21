@@ -325,6 +325,24 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .crm-progress .cp-track{ background:var(--crema-2); border-radius:999px; height:10px; overflow:hidden; }
   .crm-progress .cp-bar{ height:100%; background:var(--cobre); border-radius:999px; width:0%; transition:width .4s ease; }
   @media (max-width:680px){ .crm-srow .s-name{ flex-basis:130px; font-size:11px; } }
+  /* ---- Calidad de Leads (en vivo) ---- */
+  .lq-badge{ display:inline-block; padding:3px 10px; border-radius:999px; font-size:10.5px; font-weight:700; letter-spacing:.4px; color:#fff; white-space:nowrap; }
+  .lq-group{ background:#fff; border:1px solid var(--linea); border-radius:12px; margin-bottom:18px; overflow:hidden; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .lq-group h3{ margin:0; padding:12px 18px; background:var(--olivo); color:#fff; font-family:var(--serif); font-size:15.5px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .lq-group h3 .p-badge{ margin-left:auto; display:flex; gap:6px; flex-wrap:wrap; }
+  .lq-group h3 .p-badge span{ background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.28); font-family:var(--sans); font-size:10.5px; font-weight:600; letter-spacing:.4px; padding:3px 10px; border-radius:999px; }
+  .lq-camp{ padding:12px 18px; border-bottom:1px solid var(--crema-2); }
+  .lq-camp:last-child{ border-bottom:none; }
+  .lq-camp .lc-head{ display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:7px; }
+  .lq-camp .lc-name{ font-weight:600; font-size:13px; color:var(--verde-prof); }
+  .lq-camp .lc-n{ font-size:11.5px; color:var(--neutro); }
+  .lq-mixbar{ display:flex; height:20px; border-radius:6px; overflow:hidden; background:var(--crema-2); }
+  .lq-mixbar span{ min-width:2px; }
+  .lq-legend{ display:flex; flex-wrap:wrap; gap:5px 14px; margin-top:7px; font-size:11.5px; color:var(--texto); }
+  .lq-legend i{ display:inline-block; width:9px; height:9px; border-radius:3px; margin-right:5px; }
+  .lq-tags{ font-size:11px; color:var(--neutro); max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .lq-meth{ background:var(--crema-2); border:1px solid var(--linea); border-radius:12px; padding:16px 20px; margin-bottom:18px; font-size:12px; color:var(--texto); line-height:1.55; }
+  .lq-meth b{ color:var(--verde-prof); }
 </style>
 </head>
 <body>
@@ -417,6 +435,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
     <div class="tab" data-tab="dircom">Dirección Comercial</div>
     <div class="tab" data-tab="ventas">Ventas</div>
     <div class="tab" data-tab="crm">CRM en vivo</div>
+    <div class="tab" data-tab="lq">Calidad de Leads</div>
     <div class="tab" data-tab="marketing">Marketing</div>
     <div class="canal-wrap">
       <span class="lbl">Reporte</span>
@@ -548,6 +567,23 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
         <div class="cp-track"><div class="cp-bar" id="crm-progress-bar"></div></div>
       </div>
       <div id="crm-content"><div class="empty-rep">Sincroniza para ver los datos del CRM.</div></div>
+    </div>
+
+    <!-- ============ CALIDAD DE LEADS (en vivo) ============ -->
+    <div class="view" id="view-lq">
+      <div class="periodo">
+        <div class="grp"><label>Semana inicio</label><select id="lq-sem-ini"></select></div>
+        <div class="grp"><label>Semana fin</label><select id="lq-sem-fin"></select></div>
+        <div class="grp"><label>Semanas evaluadas</label><div class="semana-badge" id="lq-semanas-eval">—</div></div>
+        <div class="spacer"></div>
+        <div class="grp"><label>Última sincronización</label><div class="semana-badge" id="lq-last-sync">—</div></div>
+        <button class="btn btn-olive" id="lq-refresh">Sincronizar leads</button>
+      </div>
+      <div class="crm-progress" id="lq-progress" style="display:none">
+        <div class="cp-lbl" id="lq-progress-lbl">Sincronizando leads…</div>
+        <div class="cp-track"><div class="cp-bar" id="lq-progress-bar"></div></div>
+      </div>
+      <div id="lq-content"><div class="empty-rep">Sincroniza para ver la calificación de leads del CRM.</div></div>
     </div>
 
     <!-- ============ MARKETING (embebido) ============ -->
@@ -1422,12 +1458,13 @@ document.querySelectorAll("[data-tab]").forEach(el=>el.onclick=()=>{
     document.getElementById("view-"+tab).classList.add("active");
     document.getElementById("ventas-subtabs").style.display="none";
   }
-  const dir = ["resultados","dircom","crm","marketing","asesores","metas","db","admin"].includes(tab);
+  const dir = ["resultados","dircom","crm","lq","marketing","asesores","metas","db","admin"].includes(tab);
   document.querySelector(".canal-wrap").style.display = dir?"none":"flex";
   document.querySelector(".mkt-wrap").style.display = (tab==="marketing")?"flex":"none";
   if(tab==="resultados") showResultados();
   if(tab==="dircom") showDirCom();
   if(tab==="crm") showCRM();
+  if(tab==="lq") showLQ();
   if(tab==="marketing"){ showMarketing(); populateMktSelect(); const api=mktFrameApi(); if(api && typeof api.mktGetView==="function") window.mktViewChanged(api.mktGetView()); if(api && typeof api.mktGetActive==="function") { const cur=api.mktGetActive(); const sel=document.getElementById("mkt-select"); if(sel && cur) sel.value=cur; } }
   if(tab==="asesores") renderAdvisors();
   if(tab==="metas") renderMetas();
@@ -1811,6 +1848,332 @@ async function showCRM(){
   }
   if(crmState.agg) crmRender();
   if(!crmState.syncing && (!crmState.agg || Date.now()-crmState.agg.ts > CRM_STALE_MIN*60000)) crmSync();
+}
+
+/* ===================== CALIDAD DE LEADS (en vivo) ===================== */
+// Réplica en vivo del reporte semanal de calificación: contactos de GoHighLevel
+// clasificados por el campo "Calificación del lead" + tags, agrupados por
+// fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
+// de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
+const LQ_AGG_KEY = "lq:agg:v1";
+const LQ_STALE_MIN = 30;
+const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
+const LQ_TZ = "-05:00";                 // Tulum (America/Cancun): UTC-5 fijo, sin DST
+const LQ_TZ_MS = 5 * 3600e3;
+const lqState = { built:false, agg:null, syncing:false };
+
+const LQ_LEVELS = [
+  { id:"sqls", name:"SQL Selvadentro", color:"var(--cobre)" },
+  { id:"sql",  name:"SQL",             color:"var(--verde-prof)" },
+  { id:"mql",  name:"MQL",             color:"var(--olivo)" },
+  { id:"cql",  name:"CQL",             color:"#b7ad91" },
+  { id:"desc", name:"Descalificado",   color:"#a94436" },
+  { id:"nc",   name:"Sin calificar",   color:"#d8d2c2" },
+];
+const LQ_LEVEL_BY_ID = Object.fromEntries(LQ_LEVELS.map(l=>[l.id,l]));
+const LQ_RANK = Object.fromEntries(LQ_LEVELS.map((l,i)=>[l.id,i]));
+
+function lqWeekOf(iso){ const d = iso ? new Date(new Date(iso).getTime() - LQ_TZ_MS) : null; return (d && !isNaN(d)) ? isoWeekId(d) : null; }
+function lqWeekBounds(weekId){
+  const m = weekId.match(/^(\d{4})-W(\d+)$/); if(!m) return null;
+  const mon = dateOfIsoWeek(+m[1], +m[2]), sun = sundayOf(mon);
+  const ymd = (d)=>`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}-${String(d.getUTCDate()).padStart(2,"0")}`;
+  return { startISO:`${ymd(mon)}T00:00:00${LQ_TZ}`, endISO:`${ymd(sun)}T23:59:59${LQ_TZ}`, startYMD:ymd(mon), endYMD:ymd(sun) };
+}
+
+async function lqFn(body){
+  const r = await fetch("/.netlify/functions/lead-quality", { method:"POST", headers:{"Content-Type":"application/json", "Authorization":"Bearer "+AUTH_TOKEN}, body:JSON.stringify(body) });
+  const d = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.error ? d.error + (d.detail ? " — "+d.detail : "") : ("HTTP "+r.status));
+  return d;
+}
+
+// Campo de calificación y campos de enriquecimiento, autodetectados por nombre.
+function lqDetectFields(fields){
+  const find = (re)=>{ const f=(fields||[]).find(f=>re.test(f.name||"")); return f ? {id:f.id, name:f.name} : null; };
+  return {
+    calif: find(/calificaci[oó]n.*lead|lead.*calificaci[oó]n/i) || find(/calificaci[oó]n/i),
+    pres:  find(/presupuesto|budget/i),
+    hor:   find(/horizonte|plazo|timeline/i),
+  };
+}
+
+function lqClassify(cfVal){
+  const raw = String(cfVal || "").toLowerCase();
+  if(!raw) return "nc";
+  if(raw.includes("selvadentro")) return "sqls";
+  if(raw.includes("descal") || raw.includes("no calif")) return "desc";
+  if(raw.includes("sql")) return "sql";
+  if(raw.includes("mql")) return "mql";
+  if(raw.includes("cql")) return "cql";
+  return "nc";
+}
+
+// Etapa derivada de calificación + tags (misma lógica que el reporte PDF).
+function lqStage(level, tagsLower){
+  const noAns = tagsLower.filter(t=>/^d\d+-no-a?n?swer/.test(t)).length; // cubre el typo real "d1-no-aswer"
+  if(level==="desc") return "Descalificado";
+  if(level==="sqls" || level==="sql") return "Interés identificado";
+  if(level==="mql") return "Contacto establecido";
+  if(noAns) return `Sin respuesta (${noAns} intento${noAns>1?"s":""})`;
+  if(tagsLower.includes("webinar-registered")) return "Nuevo lead (no contactado)";
+  return "1er toque";
+}
+
+// Fuente y campaña: primero la atribución utm del contacto; si falta, heurística
+// por tags de campaña (seguridad → Meta MX · premium/escape → Meta US/CA ·
+// accesibilidad/google → Google · webinar-registered → Webinar).
+function lqSourceCamp(lead){
+  const t = (lead.tags||[]).map(x=>String(x).toLowerCase());
+  const blob = ((lead.src||"")+" "+(lead.attr?.src||"")+" "+(lead.attr?.med||"")).toLowerCase();
+  const camp = lead.attr?.camp || "";
+  if(t.includes("webinar-registered")) return { fuente:"Webinar", camp: camp || "Registro a webinar · funnel MKT" };
+  if(/google|adwords|gclid|ppc/.test(blob) || t.includes("google") || t.includes("accesibilidad"))
+    return { fuente:"Google", camp: camp || "Google Ads · PPC" };
+  if(/facebook|instagram|meta|(^|\W)fb(\W|$)|(^|\W)ig(\W|$)/.test(blob) || t.includes("seguridad") || t.includes("premium") || t.includes("escape"))
+    return { fuente:"Meta", camp: camp || (t.includes("premium")||t.includes("escape") ? "INVESTORS_US/CA_ESCAPE" : t.includes("seguridad") ? "INVESTORS_MX_DYNAMIC" : "(campaña sin atribuir)") };
+  if(!blob.trim() && !camp) return { fuente:"Social orgánico / directo", camp:"Social orgánico · IG / WhatsApp" };
+  return { fuente: lead.src || "Otra fuente", camp: camp || lead.src || "(sin campaña)" };
+}
+
+function buildLqAgg(boot, rawLeads, spendRows){
+  const F = lqDetectFields(boot.fields);
+  const leads = rawLeads.map(l=>{
+    const tagsLower = (l.tags||[]).map(x=>String(x).toLowerCase());
+    const lv = lqClassify(F.calif ? l.cf[F.calif.id] : "");
+    const sc = lqSourceCamp(l);
+    return {
+      n:l.n, c:l.c, wk:lqWeekOf(l.c), lv, st:lqStage(lv, tagsLower),
+      fuente:sc.fuente, camp:sc.camp, u:l.u||"",
+      tags:(l.tags||[]).join(", ").slice(0,140),
+      pres: F.pres ? (l.cf[F.pres.id]||"") : "",
+      hor:  F.hor  ? (l.cf[F.hor.id] ||"") : "",
+    };
+  }).filter(l=>l.wk);
+  return { ts:Date.now(), users:boot.users||{}, califField:F.calif, windsor:!!boot.windsor,
+           spend:spendRows||[], leads };
+}
+
+function lqWeeks(){
+  const set = new Set((lqState.agg?.leads||[]).map(l=>l.wk));
+  set.add(isoWeekId(new Date(Date.now()-LQ_TZ_MS)));
+  return [...set].sort();
+}
+function lqPopulateWeeks(){
+  const weeks = lqWeeks();
+  const opts = weeks.map(w=>`<option value="${w}">${weekLabel(w)}</option>`).join("");
+  const si=document.getElementById("lq-sem-ini"), sf=document.getElementById("lq-sem-fin");
+  const prevI=si.value, prevF=sf.value;
+  si.innerHTML=opts; sf.innerHTML=opts;
+  if(weeks.length){
+    si.value = weeks.includes(prevI) ? prevI : weeks[weeks.length-1];
+    sf.value = weeks.includes(prevF) ? prevF : weeks[weeks.length-1];
+  }
+}
+function lqRangeWeeks(){
+  const weeks = lqWeeks();
+  let i = weeks.indexOf(document.getElementById("lq-sem-ini").value);
+  let f = weeks.indexOf(document.getElementById("lq-sem-fin").value);
+  if(i<0) i=weeks.length-1; if(f<0) f=weeks.length-1;
+  if(i>f) [i,f]=[f,i];
+  return weeks.slice(i, f+1);
+}
+
+const lqBadge = (lv)=>{ const L=LQ_LEVEL_BY_ID[lv]||LQ_LEVEL_BY_ID.nc; return `<span class="lq-badge" style="background:${L.color}">${L.name}</span>`; };
+function lqMixBar(counts, total){
+  const segs = LQ_LEVELS.filter(L=>counts[L.id]).map(L=>`<span style="background:${L.color};width:${Math.max(1.5, counts[L.id]/total*100)}%" title="${L.name} · ${counts[L.id]}"></span>`).join("");
+  const leg = LQ_LEVELS.filter(L=>counts[L.id]).map(L=>`<span><i style="background:${L.color}"></i>${L.name} · <b>${counts[L.id]}</b></span>`).join("");
+  return `<div class="lq-mixbar">${segs}</div><div class="lq-legend">${leg}</div>`;
+}
+const lqCount = (arr)=>{ const c={}; arr.forEach(l=>c[l.lv]=(c[l.lv]||0)+1); return c; };
+const lqHigh = (c)=>(c.sqls||0)+(c.sql||0)+(c.mql||0);
+
+// Empareja campañas de Windsor con las campañas de leads por nombre normalizado
+// (mayúsculas, sin separadores) buscando contención en ambos sentidos.
+function lqNormCamp(s){ return String(s||"").toUpperCase().replace(/[^A-Z0-9]+/g,""); }
+function lqMatchCamp(windsorCamp, leadCamps){
+  const w = lqNormCamp(windsorCamp); if(!w) return null;
+  let best=null, bestLen=0;
+  for(const lc of leadCamps){
+    const n = lqNormCamp(lc); if(!n) continue;
+    if((w.includes(n) || n.includes(w)) && n.length>bestLen){ best=lc; bestLen=n.length; }
+  }
+  return best;
+}
+
+function lqRender(){
+  const agg = lqState.agg; if(!agg) return;
+  document.getElementById("lq-last-sync").textContent = crmAgo(agg.ts);
+  const rango = lqRangeWeeks(); const rangoSet = new Set(rango);
+  document.getElementById("lq-semanas-eval").textContent = rango.length || "—";
+  const leads = agg.leads.filter(l=>rangoSet.has(l.wk));
+
+  // --- KPIs
+  const tot = lqCount(leads);
+  const kpi = (v,l)=>`<div class="crm-kpi"><div class="k-val">${v}</div><div class="k-lbl">${l}</div></div>`;
+  let html = `<div class="crm-kpis">
+    ${kpi(leads.length.toLocaleString(),"Leads en el rango")}
+    ${LQ_LEVELS.filter(L=>L.id!=="nc"||tot.nc).map(L=>kpi((tot[L.id]||0).toLocaleString(), L.name)).join("")}
+  </div>`;
+  if(!agg.califField){
+    html += `<div class="lq-meth">⚠ No se encontró el campo <b>"Calificación del lead"</b> en GoHighLevel; todos los leads aparecen como "Sin calificar". Verifica que el campo exista y que el token tenga el scope de campos personalizados.</div>`;
+  }
+
+  // --- Comparativa semanal por campaña
+  if(rango.length){
+    const byCamp = {};
+    leads.forEach(l=>{ const k=l.fuente+" · "+l.camp; (byCamp[k]=byCamp[k]||[]).push(l); });
+    const campKeys = Object.keys(byCamp).sort((a,b)=>byCamp[b].length-byCamp[a].length);
+    const wkCols = rango.map(w=>`<th>${w.replace(/^\d{4}-/,"")}</th>`).join("");
+    const rows = campKeys.map(k=>{
+      const arr = byCamp[k]; const c = lqCount(arr);
+      const cells = rango.map(w=>{ const n=arr.filter(l=>l.wk===w).length; return `<td>${n||"·"}</td>`; }).join("");
+      const descPct = arr.length ? Math.round((c.desc||0)/arr.length*100) : 0;
+      return `<tr><td class="name">${escAttr(k)}</td>${cells}<td><b>${arr.length}</b></td><td>${lqHigh(c)}</td><td class="pct">${descPct}%</td></tr>`;
+    }).join("");
+    const cTot = lqCount(leads);
+    const totCells = rango.map(w=>`<td><b>${leads.filter(l=>l.wk===w).length}</b></td>`).join("");
+    html += `<div class="table-scroll" style="margin-bottom:18px"><table class="cons">
+      <tr><th class="lft">Campaña</th>${wkCols}<th>Total</th><th>Alto valor</th><th>Descal %</th></tr>
+      ${rows}
+      <tr class="total"><td class="lft">Total</td>${totCells}<td><b>${leads.length}</b></td><td>${lqHigh(cTot)}</td><td class="pct">${leads.length?Math.round((cTot.desc||0)/leads.length*100):0}%</td></tr>
+    </table></div>
+    <p class="hint" style="margin-top:-10px">Alto valor = MQL + SQL + SQL Selvadentro · Descal % = descalificados ÷ leads de la campaña.</p>`;
+  }
+
+  // --- Inversión (Windsor) y costo por lead calificado
+  const spendRango = (agg.spend||[]).filter(r=>{ const w=r.d?lqWeekOf(r.d+"T12:00:00"+LQ_TZ):null; return w && rangoSet.has(w); });
+  if(spendRango.length){
+    const leadCampSet = [...new Set(leads.map(l=>l.camp))];
+    const bySpendCamp = {};
+    spendRango.forEach(r=>{ const k=r.camp; (bySpendCamp[k]=bySpendCamp[k]||{spend:0,clicks:0,src:r.src}); bySpendCamp[k].spend+=r.spend; bySpendCamp[k].clicks+=r.clicks; });
+    const rows = Object.entries(bySpendCamp).sort((a,b)=>b[1].spend-a[1].spend).map(([camp,s])=>{
+      const match = lqMatchCamp(camp, leadCampSet);
+      const arr = match ? leads.filter(l=>l.camp===match) : [];
+      const c = lqCount(arr); const hi = lqHigh(c);
+      const cpl = arr.length ? s.spend/arr.length : 0, cph = hi ? s.spend/hi : 0;
+      return `<tr><td class="name">${escAttr(camp)}</td><td class="lft">${escAttr(s.src||"")}</td><td>${fmtMoney(s.spend)}</td><td>${arr.length||(match?"0":"—")}</td><td>${hi||(match?"0":"—")}</td><td>${arr.length?fmtMoney(cpl):"—"}</td><td>${hi?fmtMoney(cph):"—"}</td></tr>`;
+    }).join("");
+    const totSpend = Object.values(bySpendCamp).reduce((a,s)=>a+s.spend,0);
+    const totHi = lqHigh(tot);
+    // Totales por plataforma: siempre calculables aunque los nombres de campaña no empaten
+    const platOf = (src)=> /facebook|instagram|meta/.test(src) ? "Meta" : /google|adwords/.test(src) ? "Google" : (src||"Otra");
+    const platSpend = {};
+    spendRango.forEach(r=>{ const p=platOf(r.src); platSpend[p]=(platSpend[p]||0)+r.spend; });
+    const platRows = Object.entries(platSpend).sort((a,b)=>b[1]-a[1]).map(([p,sp])=>{
+      const arr = leads.filter(l=>l.fuente===p);
+      const hi = lqHigh(lqCount(arr));
+      return `<tr style="background:var(--crema)"><td class="name">${escAttr(p)} · total plataforma</td><td class="lft"></td><td><b>${fmtMoney(sp)}</b></td><td>${arr.length}</td><td>${hi}</td><td>${arr.length?fmtMoney(sp/arr.length):"—"}</td><td>${hi?fmtMoney(sp/hi):"—"}</td></tr>`;
+    }).join("");
+    html += `<div class="table-scroll" style="margin-bottom:18px"><table class="cons">
+      <tr><th class="lft">Campaña (ads)</th><th class="lft">Plataforma</th><th>Inversión</th><th>Leads</th><th>Alto valor</th><th>Costo/lead</th><th>Costo/alto valor</th></tr>
+      ${rows}
+      ${platRows}
+      <tr class="total"><td class="lft">Total</td><td></td><td>${fmtMoney(totSpend)}</td><td>${leads.length}</td><td>${totHi}</td><td>${leads.length?fmtMoney(totSpend/leads.length):"—"}</td><td>${totHi?fmtMoney(totSpend/totHi):"—"}</td></tr>
+    </table></div>
+    <p class="hint" style="margin-top:-10px">Inversión desde Windsor.ai (Meta + Google). "—" = campaña de ads sin leads emparejados por nombre; el costo por lead usa solo los leads de campañas emparejadas.</p>`;
+  } else if(agg.windsor===false){
+    html += `<div class="lq-meth">💡 <b>Inversión publicitaria apagada.</b> Agrega <b>WINDSOR_API_KEY</b> en las variables de entorno del site de Netlify (cuenta de Selvadentro) para ver inversión y costo por lead calificado de Meta y Google.</div>`;
+  }
+
+  // --- Mezcla por fuente → campaña + detalle
+  const byFuente = {};
+  leads.forEach(l=>{ (byFuente[l.fuente]=byFuente[l.fuente]||{}); (byFuente[l.fuente][l.camp]=byFuente[l.fuente][l.camp]||[]).push(l); });
+  const fuentes = Object.keys(byFuente).sort((a,b)=>{
+    const na=Object.values(byFuente[a]).reduce((x,y)=>x+y.length,0), nb=Object.values(byFuente[b]).reduce((x,y)=>x+y.length,0);
+    return nb-na;
+  });
+  for(const f of fuentes){
+    const camps = Object.entries(byFuente[f]).sort((a,b)=>b[1].length-a[1].length);
+    const nF = camps.reduce((a,[,arr])=>a+arr.length,0);
+    const cF = lqCount(camps.flatMap(([,arr])=>arr));
+    const campBlocks = camps.map(([camp,arr])=>{
+      const sorted = arr.slice().sort((a,b)=>(LQ_RANK[a.lv]-LQ_RANK[b.lv]) || a.n.localeCompare(b.n));
+      const rows = sorted.map(l=>`<tr>
+        <td class="lft" style="font-weight:600">${escAttr(l.n)}</td>
+        <td class="lft">${lqBadge(l.lv)}</td>
+        <td class="lft">${escAttr(l.st)}</td>
+        <td class="lft"><span class="lq-tags" title="${escAttr(l.tags)}">${escAttr(l.tags)||"—"}</span></td>
+        <td class="lft">${escAttr(agg.users[l.u]||"—")}</td>
+        <td class="lft">${escAttr([l.pres,l.hor].filter(Boolean).join(" · ")||"—")}</td>
+      </tr>`).join("");
+      return `<div class="lq-camp">
+        <div class="lc-head"><span class="lc-name">${escAttr(camp)}</span><span class="lc-n">${arr.length} lead${arr.length!==1?"s":""}</span></div>
+        ${lqMixBar(lqCount(arr), arr.length)}
+        <div class="table-scroll" style="margin-top:10px;border:none;box-shadow:none"><table class="rep">
+          <thead><tr><th class="lft">Lead</th><th class="lft">Calif.</th><th class="lft">Etapa</th><th class="lft">Tags</th><th class="lft">Asesor</th><th class="lft">Presupuesto · Horizonte</th></tr></thead>
+          <tbody>${rows}</tbody></table></div>
+      </div>`;
+    }).join("");
+    html += `<div class="lq-group"><h3>${escAttr(f)}
+      <span class="p-badge"><span>${nF} leads</span><span>${lqHigh(cF)} alto valor</span>${cF.desc?`<span>${cF.desc} descal.</span>`:""}</span></h3>${campBlocks}</div>`;
+  }
+  if(!leads.length) html += `<div class="empty-rep">Sin leads en las semanas seleccionadas.</div>`;
+
+  // --- Metodología
+  html += `<div class="lq-meth"><b>Metodología de calificación</b> —
+    <b>SQL Selvadentro:</b> interés real + alineado al producto (terreno/inversión en Tulum) + señal fuerte (cita/cotización) o presupuesto ≥$100K USD con horizonte ≤6m y respuesta activa ·
+    <b>SQL:</b> interés real y activo pero con desalineación de producto o presupuesto/horizonte por debajo del perfil ·
+    <b>MQL:</b> respondió / mostró interés, aún sin calificar a fondo ·
+    <b>CQL:</b> lead capturado; primer alcance enviado o intentos sin respuesta sustancial ·
+    <b>Descalificado:</b> no pidió info, confundió el anuncio, número equivocado o sin fit.
+    Umbral de producto: $100K USD. Semana ISO lun–dom en hora Tulum. Fuente: campo "${escAttr(agg.califField?.name||"Calificación del lead")}" de GoHighLevel; etapa derivada de tags.</div>`;
+
+  document.getElementById("lq-content").innerHTML = html;
+}
+
+async function lqSync(){
+  if(lqState.syncing) return;
+  lqState.syncing = true;
+  const btn=document.getElementById("lq-refresh"), prog=document.getElementById("lq-progress"),
+        bar=document.getElementById("lq-progress-bar"), lbl=document.getElementById("lq-progress-lbl");
+  btn.disabled=true; btn.textContent="Sincronizando…"; prog.style.display="block"; bar.style.width="3%";
+  try{
+    lbl.textContent="Conectando con el CRM…";
+    const boot = await lqFn({action:"bootstrap"});
+    // Rango de crawl: últimas LQ_SYNC_WEEKS semanas ISO completas hasta hoy (hora Tulum)
+    const weeks=[]; { let d=new Date(Date.now()-LQ_TZ_MS); for(let i=0;i<LQ_SYNC_WEEKS;i++){ weeks.unshift(isoWeekId(d)); d=new Date(d.getTime()-7*86400e3); } }
+    const b0 = lqWeekBounds(weeks[0]), b1 = lqWeekBounds(weeks[weeks.length-1]);
+    const rawLeads=[]; let cursor=null, total=0;
+    do{
+      const res = await lqFn({action:"leads", start:b0.startISO, end:b1.endISO, ...(cursor?{searchAfter:cursor}:{})});
+      rawLeads.push(...res.leads); total = res.total || total; cursor = res.searchAfter;
+      const pct = total ? Math.min(90, Math.round(rawLeads.length/total*90)) : 45;
+      bar.style.width=pct+"%";
+      lbl.textContent=`Sincronizando contactos… ${rawLeads.length.toLocaleString()}${total?(" de "+total.toLocaleString()):""}`;
+    }while(cursor);
+    bar.style.width="92%"; lbl.textContent="Consultando inversión (Windsor)…";
+    let spendRows=[];
+    if(boot.windsor){
+      try{ const sp = await lqFn({action:"spend", start:b0.startYMD, end:b1.endYMD}); spendRows = sp.rows||[]; }
+      catch(e){ toast("Windsor no respondió: "+(e.message||e)); }
+    }
+    bar.style.width="100%"; lbl.textContent="Procesando…";
+    lqState.agg = buildLqAgg(boot, rawLeads, spendRows);
+    sSet(LQ_AGG_KEY, lqState.agg);
+    lqPopulateWeeks(); lqRender();
+    toast("Leads sincronizados ✓ "+rawLeads.length.toLocaleString()+" contactos");
+  }catch(e){
+    toast("Error al sincronizar leads: "+(e.message||e));
+  }finally{
+    lqState.syncing=false; btn.disabled=false; btn.textContent="Sincronizar leads";
+    setTimeout(()=>{ prog.style.display="none"; bar.style.width="0%"; }, 600);
+  }
+}
+
+async function showLQ(){
+  if(!lqState.built){
+    lqState.built = true;
+    document.getElementById("lq-refresh").onclick = lqSync;
+    document.getElementById("lq-sem-ini").onchange = lqRender;
+    document.getElementById("lq-sem-fin").onchange = lqRender;
+  }
+  if(!lqState.agg){
+    const saved = await sGet(LQ_AGG_KEY);
+    if(saved && Array.isArray(saved.leads)){ lqState.agg=saved; lqPopulateWeeks(); }
+  }
+  if(lqState.agg) lqRender();
+  if(!lqState.syncing && (!lqState.agg || Date.now()-lqState.agg.ts > LQ_STALE_MIN*60000)) lqSync();
 }
 
 /* ===================== ANALÍTICA ===================== */
@@ -2940,7 +3303,7 @@ let USERS = [];           // [{ email, salt, hash, role, channels, password? }]
 let ADMIN_PASS = null;    // password en memoria sólo (se pierde al recargar) — para llamar a la Netlify Function
 
 const DATA_CH_KEYS = ["brokers","paid_organico","seminarios","referidos","pd_leads","pd_brokers","rp_vip"];
-const DIR_TABS = { direccion_general:"resultados", direccion_comercial:"dircom", crm_live:"crm", marketing:"marketing" };
+const DIR_TABS = { direccion_general:"resultados", direccion_comercial:"dircom", crm_live:"crm", mkt_lq:"lq", marketing:"marketing" };
 const MKT_CH_KEYS = ["mkt_rrss","mkt_ppc","mkt_crm","mkt_lq"];
 const VENTAS_CH_KEYS = [...DATA_CH_KEYS, "direccion_general", "direccion_comercial", "crm_live"];
 const ALL_CH_KEYS  = [...VENTAS_CH_KEYS, ...MKT_CH_KEYS];
@@ -2973,6 +3336,9 @@ function applyChannelFilter(){
     let visible;
     if(chKey === 'marketing'){
       visible = allowed.has('marketing') || MKT_CH_KEYS.some(k => allowed.has(k));
+    } else if(chKey === 'mkt_lq'){
+      // El tab en vivo de Calidad de Leads abre con el canal mkt_lq o con marketing completo
+      visible = allowed.has('mkt_lq') || allowed.has('marketing');
     } else {
       visible = allowed.has(chKey);
     }

@@ -18,6 +18,8 @@ Producción: https://team.selvadentrotulum.com (Netlify site: `slvd-reportes`).
   - `auth` — login/sesión server-side (emite y valida tokens).
   - `kv` — proxy autenticado al almacenamiento (get/set/del/list/dump).
   - `ghl-report` — proxy a GoHighLevel para **CRM en vivo** (requiere canal `crm_live` o admin).
+  - `lead-quality` — proxy a GoHighLevel (contactos) y Windsor.ai (inversión) para
+    **Calidad de Leads** (requiere canal `mkt_lq`, `marketing` o admin).
   - `kpi-analyze` / `notes-analyze` — conclusiones ejecutivas con Claude (requieren sesión).
   - `send-invite` — alta de usuarios + email vía Resend (re-verifica la contraseña del admin).
   - `lib/shared.js` — acceso al kv, firma/verificación de tokens, helpers compartidos.
@@ -30,8 +32,9 @@ Producción: https://team.selvadentrotulum.com (Netlify site: `slvd-reportes`).
 | `SUPABASE_ANON_KEY` | kv, auth, send-invite | Anon key de ese proyecto (solo transporta la llamada al RPC) |
 | `KV_API_SECRET` | kv, auth, send-invite | Secreto que exige el RPC `slvd_kv_op` — **nunca en el cliente** |
 | `SESSION_SECRET` | todas | Llave HMAC de los tokens de sesión |
-| `GHL_API_KEY` | ghl-report | Private Integration Token de GoHighLevel (`pit-…`) |
-| `GHL_LOCATION_ID` | ghl-report | Location ID de la subcuenta GHL |
+| `GHL_API_KEY` | ghl-report, lead-quality | Private Integration Token de GoHighLevel (`pit-…`). Para Calidad de Leads necesita además el scope **contacts.readonly** |
+| `GHL_LOCATION_ID` | ghl-report, lead-quality | Location ID de la subcuenta GHL |
+| `WINDSOR_API_KEY` | lead-quality | Opcional; API key de Windsor.ai para inversión Meta/Google (sin ella la sección de inversión se apaga con aviso) |
 | `ANTHROPIC_API_KEY` | kpi-analyze, notes-analyze | API key de console.anthropic.com |
 | `RESEND_API_KEY` | send-invite | API key de Resend (emails) |
 | `FROM_EMAIL` | send-invite | Remitente verificado en Resend |
@@ -62,6 +65,29 @@ Pestaña **CRM en vivo** en la barra principal:
 - **Rango de semanas**: KPIs, fuentes y asesores se filtran por rango de semanas ISO sin
   volver a consultar el CRM. Las barras por etapa muestran las oportunidades abiertas hoy.
 - **Permisos**: canal `crm_live` en el panel de administración (grupo Ventas).
+
+## Calidad de Leads (GoHighLevel + Windsor.ai)
+
+Pestaña **Calidad de Leads** en la barra principal — versión en vivo del reporte
+semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
+
+- **Fuente de verdad**: contactos de GHL creados en las últimas 12 semanas ISO
+  (hora Tulum, UTC-5). La calificación se lee del campo personalizado
+  **"Calificación del lead"** (autodetectado por nombre); la etapa se deriva de los
+  tags (`d1-no-answer`, `webinar-registered`, …) con la misma lógica del reporte PDF.
+- **Fuente/campaña**: primero la atribución UTM del contacto; si falta, heurística
+  por tags (`seguridad` → Meta MX · `premium`/`escape` → Meta US/CA ·
+  `accesibilidad`/`google` → Google · `webinar-registered` → Webinar).
+- **Inversión**: si `WINDSOR_API_KEY` está configurada, se consulta Windsor.ai
+  (Meta + Google) y se muestra inversión y costo por lead / por lead de alto valor,
+  por campaña (empate por nombre) y por plataforma (siempre calculable).
+- **Cache compartido**: agregado en el kv (`lq:agg:v1`), staleness de 30 min, igual
+  que CRM en vivo.
+- **Permisos**: canal `mkt_lq` (o `marketing`, o admin). El módulo manual de
+  Calidad de Leads dentro de Marketing sigue existiendo tal cual.
+- **Requisito GHL**: el Private Integration Token necesita el scope
+  `contacts.readonly` (Settings → Private Integrations → editar → scopes). Sin él,
+  la sincronización falla con el detalle del error de GHL visible en pantalla.
 
 ## Historial de la migración de seguridad (ago 2026)
 
