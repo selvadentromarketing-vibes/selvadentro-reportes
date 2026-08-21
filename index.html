@@ -1628,7 +1628,7 @@ async function renderDirCom(){
       <td>${m.opp_14}</td>
       <td>${m.apartados}</td><td class="pct">${pctTxt(m.apartados,m.leads)}</td>
       <td>${m.won}</td><td>${fmtMoney(m.ingresos)}</td><td class="pct">${pctTxt(m.won,m.leads)}</td>
-      <td>${(meta.mix*100).toFixed(0)}%</td><td>${meta.won}</td><td class="pct">${pctTxt(m.won,meta.won)}</td>
+      <td>${(meta.mix*100).toFixed(0)}%</td><td>${meta.won}</td><td class="pct">${pctTxt(m.won,meta.won/4*nW)}</td>
       <td>${estadoDot(m.leads,m.won,meta.won/4*nW)}</td></tr>`;
   }
   const totRow=`<tr class="total"><td class="lft">Total</td>
@@ -1641,7 +1641,7 @@ async function renderDirCom(){
     <td>${tot.opp_14}</td>
     <td>${tot.apartados}</td><td class="pct">${pctTxt(tot.apartados,tot.leads)}</td>
     <td>${tot.won}</td><td>${fmtMoney(tot.ingresos)}</td><td class="pct">${pctTxt(tot.won,tot.leads)}</td>
-    <td>${(totMix*100).toFixed(0)}%</td><td>${totMetaWon}</td><td class="pct">${pctTxt(tot.won,totMetaWon)}</td>
+    <td>${(totMix*100).toFixed(0)}%</td><td>${totMetaWon}</td><td class="pct">${pctTxt(tot.won,totMetaWon/4*nW)}</td>
     <td>${estadoDot(tot.leads,tot.won,totMetaWon/4*nW)}</td></tr>`;
   cont.innerHTML=`
     <div class="rep-head"><div class="ttl">Reporte · Dirección Comercial</div>
@@ -1662,7 +1662,7 @@ async function renderDirCom(){
         <th>OPP &gt;14 días</th>
         <th>Apartado</th><th>Lead→APT</th>
         <th>WON</th><th>Ingresos</th><th>Lead→WON</th>
-        <th>Meta del mix</th><th>Meta WON mens.</th><th>Alcance meta WON</th>
+        <th>Meta del mix</th><th>Meta WON mens.</th><th>Alcance meta (periodo)</th>
         <th>Estado</th>
       </tr></thead>
       <tbody>${rows}${totRow}</tbody>
@@ -1786,7 +1786,7 @@ function crmRender(){
 
   const kpi = (v,l)=>`<div class="crm-kpi"><div class="k-val">${v}</div><div class="k-lbl">${l}</div></div>`;
   const kpis = `<div class="crm-kpis">
-    ${kpi(crTot.toLocaleString(),"Leads nuevos en el rango")}
+    ${kpi(crTot.toLocaleString(),"Oportunidades nuevas en el rango")}
     ${kpi(wonTot.toLocaleString(),"WON en el rango")}
     ${kpi(fmtMoney(wvTot),"Valor WON en el rango")}
     ${kpi(openTot.toLocaleString(),"Oportunidades abiertas hoy")}
@@ -1798,9 +1798,9 @@ function crmRender(){
   const asrRows = Object.entries(asrTot).sort((a,b)=>b[1]-a[1]).slice(0,14)
     .map(([u,n])=>`<tr><td class="lft">${escAttr(agg.users[u]||"(sin nombre)")}</td><td class="val">${n.toLocaleString()}</td></tr>`).join("");
   const tbl = (title, head, rows)=>`<div class="rep-section" style="margin-bottom:0"><h3>${title}</h3>
-    <table class="rep"><thead><tr><th class="lft">${head}</th><th>Leads</th></tr></thead>
+    <table class="rep"><thead><tr><th class="lft">${head}</th><th>Opps</th></tr></thead>
     <tbody>${rows || '<tr><td colspan="2" class="lft" style="color:var(--neutro);font-style:italic">Sin datos en el rango.</td></tr>'}</tbody></table></div>`;
-  const tables = `<div class="crm-tables">${tbl("Leads por fuente (rango)","Fuente",srcRows)}${tbl("Leads por asesor (rango)","Asesor",asrRows)}</div>`;
+  const tables = `<div class="crm-tables">${tbl("Oportunidades por fuente (rango)","Fuente",srcRows)}${tbl("Oportunidades por asesor (rango)","Asesor",asrRows)}</div>`;
 
   document.getElementById("crm-content").innerHTML = kpis + tables + pipeCards.join("");
 }
@@ -1936,7 +1936,7 @@ function lqSourceCamp(lead){
   return { fuente: lead.src || "Otra fuente", camp: camp || lead.src || "(sin campaña)" };
 }
 
-function buildLqAgg(boot, rawLeads, spendRows){
+function buildLqAgg(boot, rawLeads, spendRows, weeks){
   const F = lqDetectFields(boot.fields);
   const leads = rawLeads.map(l=>{
     const tagsLower = (l.tags||[]).map(x=>String(x).toLowerCase());
@@ -1951,11 +1951,13 @@ function buildLqAgg(boot, rawLeads, spendRows){
     };
   }).filter(l=>l.wk);
   return { ts:Date.now(), users:boot.users||{}, califField:F.calif, windsor:!!boot.windsor,
-           spend:spendRows||[], leads };
+           weeks:weeks||[], spend:spendRows||[], leads };
 }
 
 function lqWeeks(){
-  const set = new Set((lqState.agg?.leads||[]).map(l=>l.wk));
+  // Eje de semanas = ventana sincronizada ∪ semanas con leads, para que la inversión
+  // de semanas sin leads no desaparezca del rango
+  const set = new Set([...(lqState.agg?.weeks||[]), ...(lqState.agg?.leads||[]).map(l=>l.wk)]);
   set.add(isoWeekId(new Date(Date.now()-LQ_TZ_MS)));
   return [...set].sort();
 }
@@ -2047,15 +2049,23 @@ function lqRender(){
     const leadCampSet = [...new Set(leads.map(l=>l.camp))];
     const bySpendCamp = {};
     spendRango.forEach(r=>{ const k=r.camp; (bySpendCamp[k]=bySpendCamp[k]||{spend:0,clicks:0,src:r.src}); bySpendCamp[k].spend+=r.spend; bySpendCamp[k].clicks+=r.clicks; });
-    const rows = Object.entries(bySpendCamp).sort((a,b)=>b[1].spend-a[1].spend).map(([camp,s])=>{
+    // Agrupar la inversión por campaña de leads emparejada, sumando todas las campañas
+    // de ads que apuntan a la misma (p.ej. principal + retargeting) — así los mismos
+    // leads nunca se cuentan dos veces y el CPL divide la inversión completa
+    const buckets = {}; const unmatched = [];
+    for(const [camp,s] of Object.entries(bySpendCamp)){
       const match = lqMatchCamp(camp, leadCampSet);
-      const arr = match ? leads.filter(l=>l.camp===match) : [];
-      const c = lqCount(arr); const hi = lqHigh(c);
-      const cpl = arr.length ? s.spend/arr.length : 0, cph = hi ? s.spend/hi : 0;
-      return `<tr><td class="name">${escAttr(camp)}</td><td class="lft">${escAttr(s.src||"")}</td><td>${fmtMoney(s.spend)}</td><td>${arr.length||(match?"0":"—")}</td><td>${hi||(match?"0":"—")}</td><td>${arr.length?fmtMoney(cpl):"—"}</td><td>${hi?fmtMoney(cph):"—"}</td></tr>`;
-    }).join("");
+      if(match){ const b = buckets[match] = buckets[match]||{spend:0,ads:0,srcs:new Set()}; b.spend+=s.spend; b.ads++; s.src && b.srcs.add(s.src); }
+      else unmatched.push([camp,s]);
+    }
+    const rows = Object.entries(buckets).sort((a,b)=>b[1].spend-a[1].spend).map(([lc,b])=>{
+      const arr = leads.filter(l=>l.camp===lc);
+      const hi = lqHigh(lqCount(arr));
+      const adsNote = b.ads>1 ? ` <span style="color:var(--neutro);font-size:10px">(${b.ads} campañas de ads)</span>` : "";
+      return `<tr><td class="name">${escAttr(lc)}${adsNote}</td><td class="lft">${escAttr([...b.srcs].join(", "))}</td><td>${fmtMoney(b.spend)}</td><td>${arr.length}</td><td>${hi}</td><td>${arr.length?fmtMoney(b.spend/arr.length):"—"}</td><td>${hi?fmtMoney(b.spend/hi):"—"}</td></tr>`;
+    }).join("") + unmatched.sort((a,b)=>b[1].spend-a[1].spend).map(([camp,s])=>
+      `<tr><td class="name">${escAttr(camp)}</td><td class="lft">${escAttr(s.src||"")}</td><td>${fmtMoney(s.spend)}</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>`).join("");
     const totSpend = Object.values(bySpendCamp).reduce((a,s)=>a+s.spend,0);
-    const totHi = lqHigh(tot);
     // Totales por plataforma: siempre calculables aunque los nombres de campaña no empaten
     const platOf = (src)=> /facebook|instagram|meta/.test(src) ? "Meta" : /google|adwords/.test(src) ? "Google" : (src||"Otra");
     const platSpend = {};
@@ -2065,14 +2075,17 @@ function lqRender(){
       const hi = lqHigh(lqCount(arr));
       return `<tr style="background:var(--crema)"><td class="name">${escAttr(p)} · total plataforma</td><td class="lft"></td><td><b>${fmtMoney(sp)}</b></td><td>${arr.length}</td><td>${hi}</td><td>${arr.length?fmtMoney(sp/arr.length):"—"}</td><td>${hi?fmtMoney(sp/hi):"—"}</td></tr>`;
     }).join("");
+    // El costo por lead del total solo tiene sentido contra leads de plataformas de pago
+    const paidLeads = leads.filter(l=>l.fuente==="Meta"||l.fuente==="Google");
+    const paidHi = lqHigh(lqCount(paidLeads));
     html += `<div class="table-scroll" style="margin-bottom:18px"><table class="cons">
-      <tr><th class="lft">Campaña (ads)</th><th class="lft">Plataforma</th><th>Inversión</th><th>Leads</th><th>Alto valor</th><th>Costo/lead</th><th>Costo/alto valor</th></tr>
+      <tr><th class="lft">Campaña</th><th class="lft">Plataforma</th><th>Inversión</th><th>Leads</th><th>Alto valor</th><th>Costo/lead</th><th>Costo/alto valor</th></tr>
       ${rows}
       ${platRows}
-      <tr class="total"><td class="lft">Total</td><td></td><td>${fmtMoney(totSpend)}</td><td>${leads.length}</td><td>${totHi}</td><td>${leads.length?fmtMoney(totSpend/leads.length):"—"}</td><td>${totHi?fmtMoney(totSpend/totHi):"—"}</td></tr>
+      <tr class="total"><td class="lft">Total (leads de pago)</td><td></td><td>${fmtMoney(totSpend)}</td><td>${paidLeads.length}</td><td>${paidHi}</td><td>${paidLeads.length?fmtMoney(totSpend/paidLeads.length):"—"}</td><td>${paidHi?fmtMoney(totSpend/paidHi):"—"}</td></tr>
     </table></div>
-    <p class="hint" style="margin-top:-10px">Inversión desde Windsor.ai (Meta + Google). "—" = campaña de ads sin leads emparejados por nombre; el costo por lead usa solo los leads de campañas emparejadas.</p>`;
-  } else if(agg.windsor===false){
+    <p class="hint" style="margin-top:-10px">Inversión desde Windsor.ai (Meta + Google). "—" = campaña de ads sin leads emparejados por nombre (su inversión sí cuenta en los totales de plataforma). El total divide la inversión solo entre leads de Meta y Google — los leads de webinar/orgánico no tienen costo publicitario.</p>`;
+  } else if(!agg.windsor){
     html += `<div class="lq-meth">💡 <b>Inversión publicitaria apagada.</b> Agrega <b>WINDSOR_API_KEY</b> en las variables de entorno del site de Netlify (cuenta de Selvadentro) para ver inversión y costo por lead calificado de Meta y Google.</div>`;
   }
 
@@ -2149,7 +2162,7 @@ async function lqSync(){
       catch(e){ toast("Windsor no respondió: "+(e.message||e)); }
     }
     bar.style.width="100%"; lbl.textContent="Procesando…";
-    lqState.agg = buildLqAgg(boot, rawLeads, spendRows);
+    lqState.agg = buildLqAgg(boot, rawLeads, spendRows, weeks);
     sSet(LQ_AGG_KEY, lqState.agg);
     lqPopulateWeeks(); lqRender();
     toast("Leads sincronizados ✓ "+rawLeads.length.toLocaleString()+" contactos");
