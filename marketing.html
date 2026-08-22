@@ -275,9 +275,9 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     <div><label style="font-size:11px;color:var(--neutro);font-weight:600">3 aprendizajes</label><textarea id="x_aprendizajes"></textarea></div>
     <div><label style="font-size:11px;color:var(--neutro);font-weight:600">3 cambios</label><textarea id="x_cambios"></textarea></div></div></div></div>`; }
   function notesReport(rec){ return `<div class="card"><div class="card-head"><span class="dot" style="background:var(--olivo)"></span><h3>Cierre del periodo</h3></div><div class="card-body"><div class="rnotes">
-    <div class="nblock"><h5>Notas</h5><p class="${rec.notas?'':'empty-note'}">${rec.notas||'Sin notas'}</p></div>
-    <div class="nblock"><h5>3 aprendizajes</h5><p class="${rec.aprendizajes?'':'empty-note'}">${rec.aprendizajes||'Sin registro'}</p></div>
-    <div class="nblock"><h5>3 cambios</h5><p class="${rec.cambios?'':'empty-note'}">${rec.cambios||'Sin registro'}</p></div></div></div></div>`; }
+    <div class="nblock"><h5>Notas</h5><p class="${rec.notas?'':'empty-note'}">${escHtmlSafe(rec.notas)||'Sin notas'}</p></div>
+    <div class="nblock"><h5>3 aprendizajes</h5><p class="${rec.aprendizajes?'':'empty-note'}">${escHtmlSafe(rec.aprendizajes)||'Sin registro'}</p></div>
+    <div class="nblock"><h5>3 cambios</h5><p class="${rec.cambios?'':'empty-note'}">${escHtmlSafe(rec.cambios)||'Sin registro'}</p></div></div></div></div>`; }
   function saveBar(){ return `<div class="actions"><button class="btn-ghost" id="btn-clear">Limpiar</button><button class="btn-prim" id="btn-save">Guardar</button></div>`; }
   function customList(){ const M = MODS[state.active]; return (M && M.metas && M.metas.__custom) || []; }
   function customIngresoBlock(){
@@ -314,7 +314,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   function fillResp(rec){ const v = (rec && rec.responsable) || RESP[state.active] || ''; setV('x_resp', v); }
   function readResp(rec){ const v = gv('x_resp'); rec.responsable = v; if(v && v !== RESP[state.active]){ RESP[state.active] = v; try{ window.storage.set('mkt_resp', JSON.stringify(RESP)); }catch(e){} } }
   function noData(p,type){ const r=type==='week'?weekRange(p):ymLabel(p); return `<div class="card"><div class="card-body" style="text-align:center;color:var(--neutro)">No hay datos para <b>${type==='week'?p:r}</b>${type==='week'?' ('+r+')':''}. Captúralos en <b>Ingreso de datos</b>.</div></div>`; }
-  function respLine(rec){ const r=(rec&&rec.responsable)||RESP[state.active]||''; return `<div class="sresp">Responsable: ${r&&r.trim()?r:'sin asignar'}</div>`; }
+  function respLine(rec){ const r=(rec&&rec.responsable)||RESP[state.active]||''; return `<div class="sresp">Responsable: ${r&&r.trim()?escHtmlSafe(r):'sin asignar'}</div>`; }
   function cRow(n,v){ return `<tr><td class="kname">${n}</td><td class="kval">${fmt(v)}</td><td class="kmeta"></td><td class="ccell"></td></tr>`; }
   function rRow(n,v,meta,lower){ const vt=v===null?'—':pct(v); const mt=meta?`<span class="mlbl">Meta</span>${lower?'≤':'≥'}${fmt(meta)}%`:''; const cu=meta?(lower?cpL(v,meta):cpH(v,meta)):''; return `<tr class="calc-row"><td class="kname">${n}</td><td class="kval">${vt}</td><td class="kmeta">${mt}</td><td class="ccell">${cu}</td></tr>`; }
 
@@ -336,6 +336,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   function rsFill(rec){ RS_PLAT.forEach(p=>{ const d=(rec&&rec[p.key])||{}; p.fields.forEach(([k])=>setV(`rs_${p.key}_${k}`,d[k])); const t=d.top||[]; for(let i=1;i<=3;i++){ setV(`rs_${p.key}_top${i}_desc`,(t[i-1]||{}).desc); setV(`rs_${p.key}_top${i}_link`,(t[i-1]||{}).link);} }); fillNotes(rec); fillResp(rec); fillCustom(rec); }
   function rsRead(){ const rec={}; RS_PLAT.forEach(p=>{ const d={}; p.fields.forEach(([k])=>d[k]=num(gv(`rs_${p.key}_${k}`))); d.top=[]; for(let i=1;i<=3;i++) d.top.push({desc:gv(`rs_${p.key}_top${i}_desc`),link:gv(`rs_${p.key}_top${i}_link`)}); rec[p.key]=d; }); readNotes(rec); readResp(rec); readCustom(rec); return rec; }
   function escHtmlSafe(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  function safeUrl(u){ const s=String(u==null?"":u).trim(); return /^https?:\/\//i.test(s) ? s : ""; }
   function readMetaNum(M, scope, key){ const v = scope==='' ? M.metas[key] : M.metas[scope]?.[key]; if(v==null) return ''; if(typeof v==='object') return v.num ?? ''; return v; }
   function readMetaPct(M, scope, key){ const v = scope==='' ? M.metas.__pct?.[key] : M.metas.__pct?.[scope]?.[key]; return v==null ? '' : v; }
   function writeMetaNum(M, scope, key, val){
@@ -614,7 +615,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     let h=`<div class="summary"><div class="stitle">Consolidado Redes Sociales · ${M._rangeLabel||ymLabel(ym)}</div>${respLine(rec)}<div class="summary-grid">`;
     [['Leads orgánicos','leads'],['Alcance total','alcance'],['Interacciones','interacciones'],['Seguidores totales','totalSeg'],['Seguidores nuevos','segNuevos']].forEach(([l,f])=>{ const cur=sum(rec,f); let dt='sin dato previo',dc='var(--arena)'; if(prev){ const d=cur-sum(prev,f); if(d===0)dt='= vs mes anterior'; else{ const pv=sum(prev,f); const pc=pv?Math.round(Math.abs(d)/pv*100):null; dt=(d>0?'▲ +':'▼ −')+fmt(Math.abs(d))+(pc!==null?` (${pc}%)`:''); dc=d>0?'#CBDDC0':'#F2CFC9'; } } h+=`<div class="kpi"><div class="klabel">${l}</div><div class="kval">${fmt(cur)}</div><div class="kdelta" style="color:${dc}">${dt}</div></div>`; });
     h+=`</div></div>`;
-    RS_PLAT.forEach(p=>{ const d=rec[p.key]||{}; const mp=M.metas[p.key]||{}; const pd=(prev&&prev[p.key])||null; h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${p.color}"></span><h3>${p.name}</h3></div><div class="card-body"><table class="rtable">`; p.fields.forEach(([k,l])=>{ const v=num(d[k]); const meta=mp[k]; h+=`<tr><td class="kname">${l}</td><td class="kval">${fmt(v)}</td><td class="kmeta">${metaTxt(meta)}</td><td class="ccell">${meta?cpH(v,meta):''}</td></tr>`; }); const alc=num(d.alcance),inter=num(d.interacciones); const eng=alc>0?inter/alc*100:null; h+=`<tr class="calc-row"><td class="kname">Engagement</td><td class="kval">${eng===null?'—':pct(eng)}</td><td class="kmeta"></td><td class="ccell"></td></tr>`; let base=null; if(p.key==='fb') base=num(d.segMesPasado); else if(pd) base=num(pd.totalSeg); const crec=(base&&base>0)?num(d.segNuevos)/base*100:null; h+=`<tr class="calc-row"><td class="kname">Crecimiento de red</td><td class="kval">${crec===null?'—':pct(crec)}</td><td class="kmeta">${metaTxt(M.metas._crec,{pct:1})}</td><td class="ccell">${crec===null?naP():cpH(crec,M.metas._crec)}</td></tr></table>`; const tops=(d.top||[]).filter(t=>t.desc||t.link); if(tops.length){ h+=`<div class="subhead" style="margin-top:14px">Top publicaciones</div>`; tops.forEach((t,i)=>{ h+=`<div style="padding:7px 0;border-top:1px dashed var(--linea)"><span class="rank">${i+1}</span> ${t.desc||'(sin descripción)'}`+(t.link?` · <a href="${t.link}" target="_blank" style="color:var(--olivo);font-size:12px;word-break:break-all">${t.link}</a>`:'')+`</div>`; }); } h+=`</div></div>`; });
+    RS_PLAT.forEach(p=>{ const d=rec[p.key]||{}; const mp=M.metas[p.key]||{}; const pd=(prev&&prev[p.key])||null; h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${p.color}"></span><h3>${p.name}</h3></div><div class="card-body"><table class="rtable">`; p.fields.forEach(([k,l])=>{ const v=num(d[k]); const meta=mp[k]; h+=`<tr><td class="kname">${l}</td><td class="kval">${fmt(v)}</td><td class="kmeta">${metaTxt(meta)}</td><td class="ccell">${meta?cpH(v,meta):''}</td></tr>`; }); const alc=num(d.alcance),inter=num(d.interacciones); const eng=alc>0?inter/alc*100:null; h+=`<tr class="calc-row"><td class="kname">Engagement</td><td class="kval">${eng===null?'—':pct(eng)}</td><td class="kmeta"></td><td class="ccell"></td></tr>`; let base=null; if(p.key==='fb') base=num(d.segMesPasado); else if(pd) base=num(pd.totalSeg); const crec=(base&&base>0)?num(d.segNuevos)/base*100:null; h+=`<tr class="calc-row"><td class="kname">Crecimiento de red</td><td class="kval">${crec===null?'—':pct(crec)}</td><td class="kmeta">${metaTxt(M.metas._crec,{pct:1})}</td><td class="ccell">${crec===null?naP():cpH(crec,M.metas._crec)}</td></tr></table>`; const tops=(d.top||[]).filter(t=>t.desc||t.link); if(tops.length){ h+=`<div class="subhead" style="margin-top:14px">Top publicaciones</div>`; tops.forEach((t,i)=>{ h+=`<div style="padding:7px 0;border-top:1px dashed var(--linea)"><span class="rank">${i+1}</span> ${escHtmlSafe(t.desc)||'(sin descripción)'}`+(safeUrl(t.link)?` · <a href="${escHtmlSafe(safeUrl(t.link))}" target="_blank" rel="noopener" style="color:var(--olivo);font-size:12px;word-break:break-all">${escHtmlSafe(t.link)}</a>`:'')+`</div>`; }); } h+=`</div></div>`; });
     h+=customReportSection(rec)+notesReport(rec); host.innerHTML=h;
   }
 
@@ -662,7 +663,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
       h+=`<tr class="calc-row"><td class="kname">CTR ponderado</td><td class="kval">${ctr===null?'—':pct(ctr)}</td><td class="kmeta">${metaTxt(m.ctr,{pct:1})}</td><td class="ccell">${ctr===null?naP():cpH(ctr,m.ctr)}</td></tr>`;
       h+=`<tr class="calc-row"><td class="kname">Alcance / Clics</td><td class="kval">${fmt(a)} / ${fmt(c)}</td><td class="kmeta"></td><td class="ccell"></td></tr></table>`;
       const camps=(d.camps||[]).filter(x=>x.name||num(x.leads)||num(x.alcance)||num(x.clics)); const isG=plt==='google';
-      if(camps.length){ h+=`<div class="scroll"><table class="ctable"><tr><th class="l">Campaña</th><th>Leads</th><th>CPL</th><th>Alcance</th><th>Clics</th><th>CTR</th><th>CPR</th>${isG?'<th class="l">Top KW</th>':''}</tr>`; camps.forEach(x=>{ const xc=num(x.ctr)||(num(x.alcance)>0?num(x.clics)/num(x.alcance)*100:0); h+=`<tr><td class="l">${x.name||'(sin nombre)'}</td><td>${fmt(num(x.leads))}</td><td>${money(num(x.cpl))}</td><td>${fmt(num(x.alcance))}</td><td>${fmt(num(x.clics))}</td><td>${xc?pct(xc):'—'}</td><td>${num(x.cpr)?money(num(x.cpr)):'—'}</td>${isG?`<td class="l kw">${x.topkw||'—'}</td>`:''}</tr>`; }); h+=`</table></div>`; }
+      if(camps.length){ h+=`<div class="scroll"><table class="ctable"><tr><th class="l">Campaña</th><th>Leads</th><th>CPL</th><th>Alcance</th><th>Clics</th><th>CTR</th><th>CPR</th>${isG?'<th class="l">Top KW</th>':''}</tr>`; camps.forEach(x=>{ const xc=num(x.ctr)||(num(x.alcance)>0?num(x.clics)/num(x.alcance)*100:0); h+=`<tr><td class="l">${escHtmlSafe(x.name)||'(sin nombre)'}</td><td>${fmt(num(x.leads))}</td><td>${money(num(x.cpl))}</td><td>${fmt(num(x.alcance))}</td><td>${fmt(num(x.clics))}</td><td>${xc?pct(xc):'—'}</td><td>${num(x.cpr)?money(num(x.cpr)):'—'}</td>${isG?`<td class="l kw">${escHtmlSafe(x.topkw)||'—'}</td>`:''}</tr>`; }); h+=`</table></div>`; }
       h+=`</div></div>`; });
     h+=customReportSection(rec)+notesReport(rec); host.innerHTML=h;
   }
@@ -726,9 +727,9 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     const rows=LQ_SEG.map(s=>{ const f=rec.funnels[s.key]||{}; return {name:(rec.names&&rec.names[s.key])||s.def,f,c:lqCalc(f),color:s.color}; });
     const wd=rows.filter(r=>r.c.hasData).sort((a,b)=>{ const av=a.c.endToEnd===null?-1:a.c.endToEnd,bv=b.c.endToEnd===null?-1:b.c.endToEnd; return bv-av; }); const nd=rows.filter(r=>!r.c.hasData); const ord=wd.concat(nd);
     h+=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--cobre)"></span><h3>Comparativa por anuncio · rankeada por calidad</h3></div><div class="card-body"><div class="scroll"><table class="ctable wide"><tr><th class="l">#</th><th class="l">Anuncio</th><th>CQL</th><th>MQL</th><th>SQL</th><th>SQL Selv.</th><th>Corr.</th><th>Descal.</th><th>Calidad</th><th>Descal %</th></tr>`;
-    ord.forEach((r,i)=>{ h+=`<tr class="${(i===0&&r.c.hasData)?'best':''}"><td class="l rank">${r.c.hasData?(i+1):'—'}</td><td class="l">${r.name}</td><td>${fmt(num(r.f.cql))}</td><td>${fmt(num(r.f.mql))}</td><td>${fmt(num(r.f.sql))}</td><td>${fmt(num(r.f.sqls))}</td><td>${fmt(num(r.f.corretaje))}</td><td>${fmt(num(r.f.descal))}</td><td>${chipH(r.c.endToEnd,M.metas.quality.endToEnd)}</td><td>${chipL(r.c.descalRate,M.metas.quality.descalRate)}</td></tr>`; });
+    ord.forEach((r,i)=>{ h+=`<tr class="${(i===0&&r.c.hasData)?'best':''}"><td class="l rank">${r.c.hasData?(i+1):'—'}</td><td class="l">${escHtmlSafe(r.name)}</td><td>${fmt(num(r.f.cql))}</td><td>${fmt(num(r.f.mql))}</td><td>${fmt(num(r.f.sql))}</td><td>${fmt(num(r.f.sqls))}</td><td>${fmt(num(r.f.corretaje))}</td><td>${fmt(num(r.f.descal))}</td><td>${chipH(r.c.endToEnd,M.metas.quality.endToEnd)}</td><td>${chipL(r.c.descalRate,M.metas.quality.descalRate)}</td></tr>`; });
     h+=`</table></div><div style="font-size:11.5px;color:var(--neutro);margin-top:10px">Calidad = SQL Selvadentro ÷ CQL · Descal % = Descalificados ÷ CQL · fila resaltada = mejor calidad.</div></div></div>`;
-    LQ_SEG.forEach(s=>{ const f=rec.funnels[s.key]||{}; const c=lqCalc(f); const nm=(rec.names&&rec.names[s.key])||s.def; h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${s.color}"></span><h3>${nm}</h3></div><div class="card-body"><table class="rtable">`; FUNNEL.forEach(([k,l])=>h+=cRow(l,num(f[k]))); h+=rRow('CQL → MQL',c.cqlToMQL,M.metas.funnel.cqlToMQL,false)+rRow('MQL → SQL',c.mqlToSQL,M.metas.funnel.mqlToSQL,false)+rRow('SQL → SQL Selvadentro',c.sqlToSQLS,M.metas.funnel.sqlToSQLS,false)+rRow('Calidad (CQL → SQL Selvadentro)',c.endToEnd,M.metas.quality.endToEnd,false)+rRow('Tasa de descalificación',c.descalRate,M.metas.quality.descalRate,true); h+=`</table></div></div>`; });
+    LQ_SEG.forEach(s=>{ const f=rec.funnels[s.key]||{}; const c=lqCalc(f); const nm=(rec.names&&rec.names[s.key])||s.def; h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${s.color}"></span><h3>${escHtmlSafe(nm)}</h3></div><div class="card-body"><table class="rtable">`; FUNNEL.forEach(([k,l])=>h+=cRow(l,num(f[k]))); h+=rRow('CQL → MQL',c.cqlToMQL,M.metas.funnel.cqlToMQL,false)+rRow('MQL → SQL',c.mqlToSQL,M.metas.funnel.mqlToSQL,false)+rRow('SQL → SQL Selvadentro',c.sqlToSQLS,M.metas.funnel.sqlToSQLS,false)+rRow('Calidad (CQL → SQL Selvadentro)',c.endToEnd,M.metas.quality.endToEnd,false)+rRow('Tasa de descalificación',c.descalRate,M.metas.quality.descalRate,true); h+=`</table></div></div>`; });
     h+=customReportSection(rec)+notesReport(rec); host.innerHTML=h;
   }
 
@@ -744,14 +745,14 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   let RESP={};
   const state={ active:'rrss', view:'reporte', ingresoRendered:null };
 
-  async function loadMod(M){ try{ const r=await window.storage.get(M.key); if(r&&r.value) M.records=JSON.parse(r.value); }catch(e){ M.records={}; } if((!M.records||Object.keys(M.records).length===0)&&Object.keys(M.seed).length){ M.records=JSON.parse(JSON.stringify(M.seed)); await saveRec(M); } try{ const m=await window.storage.get(M.mkey); if(m&&m.value) M.metas=JSON.parse(m.value); }catch(e){} if(!M.metas||Object.keys(M.metas).length===0){ M.metas=JSON.parse(JSON.stringify(M.seedMetas)); await saveMeta(M); } const ks=Object.keys(M.records).sort(); M.pval=ks.length?ks[ks.length-1]:(M.period==='week'?isoWeekOf(new Date()):'2026-05'); }
+  async function loadMod(M){ try{ const r=await window.storage.get(M.key); if(r&&r.value) M.records=JSON.parse(r.value); }catch(e){ M.records={}; } if((!M.records||Object.keys(M.records).length===0)&&Object.keys(M.seed).length){ M.records=JSON.parse(JSON.stringify(M.seed)); await saveRec(M); } try{ const m=await window.storage.get(M.mkey); if(m&&m.value) M.metas=JSON.parse(m.value); }catch(e){} if(!M.metas||Object.keys(M.metas).length===0){ M.metas=JSON.parse(JSON.stringify(M.seedMetas)); await saveMeta(M); } const ks=Object.keys(M.records).sort(); M.pval=ks.length?ks[ks.length-1]:(M.period==='week'?isoWeekOf(new Date()):(new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0'))); }
   async function saveRec(M){ try{ await window.storage.set(M.key,JSON.stringify(M.records)); }catch(e){console.error(e);} }
   async function saveMeta(M){ try{ await window.storage.set(M.mkey,JSON.stringify(M.metas)); }catch(e){console.error(e);} state.ingresoRendered=null; }
 
   function getAllowedMods(){ try{ if(window.parent && window.parent!==window && typeof window.parent.getMktAllowedModules==='function'){ const r = window.parent.getMktAllowedModules(); return r==null ? null : r; } }catch(e){} return null; }
   function orderFiltered(){ const a=getAllowedMods(); return a==null ? ORDER : ORDER.filter(id=>a.includes(id)); }
   function renderReportSelect(){ const list=orderFiltered(); const s=$('#report-select'); s.innerHTML=list.map(id=>`<option value="${id}" ${id===state.active?'selected':''}>${MODS[id].name}</option>`).join(''); s.onchange=()=>setActive(s.value); }
-  function fillPeriodSelect(M){ $('#period-label').textContent = M.period==='week'?'Semana':'Mes'; const sel=$('#period'); let opts=[]; if(M.period==='week'){ for(let w=52;w>=1;w--){ const v='2026-W'+String(w).padStart(2,'0'); opts.push([v, v+' · '+weekRange(v)]); } } else { for(let m=12;m>=1;m--){ const v='2026-'+String(m).padStart(2,'0'); opts.push([v, ymLabel(v)]); } } if(!opts.some(o=>o[0]===M.pval)) opts.unshift([M.pval, M.period==='week'?(M.pval+' · '+weekRange(M.pval)):ymLabel(M.pval)]); sel.innerHTML=opts.map(o=>`<option value="${o[0]}" ${o[0]===M.pval?'selected':''}>${o[1]}</option>`).join(''); sel.onchange=()=>{ M.pval=sel.value; if(state.view==='ingreso'){ M.ingreso($('#view-ingreso')); M.fill(M.records[M.pval]||null); bindSave(); state.ingresoRendered=state.active; } else if(state.view==='reporte'){ M.reporte($('#view-reporte'),M.pval,M); } updatePill(); }; }
+  function fillPeriodSelect(M){ $('#period-label').textContent = M.period==='week'?'Semana':'Mes'; const sel=$('#period'); let opts=[]; const _y=new Date().getFullYear(); if(M.period==='week'){ for(let w=52;w>=1;w--){ const v=_y+'-W'+String(w).padStart(2,'0'); opts.push([v, v+' · '+weekRange(v)]); } } else { for(let m=12;m>=1;m--){ const v=_y+'-'+String(m).padStart(2,'0'); opts.push([v, ymLabel(v)]); } } if(!opts.some(o=>o[0]===M.pval)) opts.unshift([M.pval, M.period==='week'?(M.pval+' · '+weekRange(M.pval)):ymLabel(M.pval)]); sel.innerHTML=opts.map(o=>`<option value="${o[0]}" ${o[0]===M.pval?'selected':''}>${o[1]}</option>`).join(''); sel.onchange=()=>{ M.pval=sel.value; if(state.view==='ingreso'){ M.ingreso($('#view-ingreso')); M.fill(M.records[M.pval]||null); bindSave(); state.ingresoRendered=state.active; } else if(state.view==='reporte'){ M.reporte($('#view-reporte'),M.pval,M); } updatePill(); }; }
 
   /* ===== RANGO DE FECHAS PARA REPORTE ===== */
   const AGG_TEXT = new Set(['notas','aprendizajes','cambios']);
@@ -797,8 +798,8 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   }
   function mktPeriodList(M){
     const arr = [];
-    if(M.period==='week'){ for(let w=1;w<=52;w++) arr.push('2026-W'+String(w).padStart(2,'0')); }
-    else { for(let m=1;m<=12;m++) arr.push('2026-'+String(m).padStart(2,'0')); }
+    const _y=new Date().getFullYear(); if(M.period==='week'){ for(let w=1;w<=52;w++) arr.push(_y+'-W'+String(w).padStart(2,'0')); }
+    else { for(let m=1;m<=12;m++) arr.push(_y+'-'+String(m).padStart(2,'0')); }
     Object.keys(M.records).forEach(k => { if(!arr.includes(k)) arr.push(k); });
     return arr.sort();
   }
@@ -964,7 +965,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
       const target = M.period==='week' ? isoWeekOf(now) : (now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'));
       if(!isPeriodEditable(M, target)){ alert('No hay un periodo editable disponible para duplicar.'); return; }
       // Coloca el rec en el periodo actual si aún no existe; si existe, pide otro periodo
-      if(M.records[target]){ alert('Ya existe un registro en el periodo actual. Duplica manualmente cambiando el periodo desde Ingreso.'); }
+      if(M.records[target]){ alert('Ya existe un registro en el periodo actual. Duplica manualmente cambiando el periodo desde Ingreso.'); return; }
       M.pval = target; fillPeriodSelect(M);
       // No guardamos aún; solo llenamos el form con los datos duplicados
       state.view = 'ingreso'; state.ingresoRendered = null; renderView();
@@ -1062,6 +1063,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     return c;
   }
   function renderAnaliticaMkt(){
+    Object.keys(ANAL_MKT.charts).forEach(k=>{ try{ ANAL_MKT.charts[k].destroy(); }catch(e){} delete ANAL_MKT.charts[k]; });
     const host = $('#view-analitica'); if(!host) return;
     if(!window.Chart){ host.innerHTML = '<div class="anal-empty">Cargando librería de gráficas…</div>'; setTimeout(renderAnaliticaMkt, 300); return; }
     const M = MODS[state.active]; const kpis = KPIS_BY_MOD[state.active] || [];
@@ -1069,9 +1071,9 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     // más cualquier periodo con registros que no esté en el rango base.
     const basePeriodos = [];
     if(M.period === 'week'){
-      for(let w=1; w<=52; w++) basePeriodos.push('2026-W'+String(w).padStart(2,'0'));
+      for(let w=1; w<=52; w++) basePeriodos.push(new Date().getFullYear()+'-W'+String(w).padStart(2,'0'));
     } else {
-      for(let m=1; m<=12; m++) basePeriodos.push('2026-'+String(m).padStart(2,'0'));
+      for(let m=1; m<=12; m++) basePeriodos.push(new Date().getFullYear()+'-'+String(m).padStart(2,'0'));
     }
     const recKeys = Object.keys(M.records);
     const allPeriodos = [...new Set([...basePeriodos, ...recKeys])].sort();
@@ -1115,7 +1117,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
         <div class="ac-title">${k.label}</div>
         <div class="ac-total">Total del rango: <b>${totalTxt}</b> · ${periodos.length} periodo(s)</div>
         <canvas id="${canvasId}"></canvas>
-        ${expanded ? `<div class="anal-actions"><button class="btn-prim" data-analyze-mkt="${i}">Analizar con IA</button></div>${conc?`<div class="anal-conc">${conc}</div>`:''}` : ''}
+        ${expanded ? `<div class="anal-actions"><button class="btn-prim" data-analyze-mkt="${i}">Analizar con IA</button></div>${conc?`<div class="anal-conc">${escHtmlSafe(conc)}</div>`:''}` : ''}
       </div>`);
     });
     html.push('</div>');

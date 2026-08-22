@@ -2228,7 +2228,7 @@ function renderDirAnalitica(prefix, chsSel, weekSet, tabName){
       <div class="ac-title">${METRIC_LABELS[m]}</div>
       <div class="ac-total">Total: <b>${totalTxt}</b> · ${weeks.length} sem.</div>
       <canvas id="${canvasId}"></canvas>
-      ${expanded ? `<div class="anal-actions"><button class="btn btn-olive" data-analyze="${m}">Analizar con IA</button></div>${conc?`<div class="anal-conc">${conc}</div>`:''}` : ''}
+      ${expanded ? `<div class="anal-actions"><button class="btn btn-olive" data-analyze="${m}">Analizar con IA</button></div>${conc?`<div class="anal-conc">${escAttr(conc)}</div>`:''}` : ''}
     </div>`);
   });
   html.push('</div>');
@@ -2440,7 +2440,7 @@ function renderAnalitica(){
       <div class="ac-title">${f.l}</div>
       <div class="ac-total">Total del rango: <b>${totalTxt}</b> · ${weeks.length} sem.</div>
       <canvas id="${canvasId}"></canvas>
-      ${expanded ? `<div class="anal-actions"><button class="btn btn-olive" data-analyze="${f.k}">Analizar con IA</button>${f.meta!=null?`<span style="font-size:12px;color:var(--neutro)">Meta mensual: <b>${f.meta}</b></span>`:''}</div>${conc?`<div class="anal-conc">${conc}</div>`:''}` : ''}
+      ${expanded ? `<div class="anal-actions"><button class="btn btn-olive" data-analyze="${f.k}">Analizar con IA</button>${f.meta!=null?`<span style="font-size:12px;color:var(--neutro)">Meta mensual: <b>${f.meta}</b></span>`:''}</div>${conc?`<div class="anal-conc">${escAttr(conc)}</div>`:''}` : ''}
     </div>`;
   }).join("");
   grid.innerHTML = cards;
