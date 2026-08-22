@@ -18,8 +18,12 @@ Producción: https://team.selvadentrotulum.com (Netlify site: `slvd-reportes`).
   - `auth` — login/sesión server-side (emite y valida tokens).
   - `kv` — proxy autenticado al almacenamiento (get/set/del/list/dump).
   - `ghl-report` — proxy a GoHighLevel para **CRM en vivo** (requiere canal `crm_live` o admin).
-  - `lead-quality` — proxy a GoHighLevel (contactos) y Windsor.ai (inversión) para
-    **Calidad de Leads** (requiere canal `mkt_lq`, `marketing` o admin).
+  - `lead-quality` — proxy a GoHighLevel (contactos + oportunidades) y Windsor.ai
+    (inversión y detalle por anuncio) para **Calidad de Leads** y **Paid Media en
+    vivo** (requiere canal `mkt_lq`, `marketing` o admin).
+  - `sla-report` — proxy a GoHighLevel (contactos, conversaciones, citas,
+    oportunidades, usuarios) para **SLA y Seguimiento** (requiere canal
+    `crm_live`, `direccion_comercial` o admin).
   - `kpi-analyze` / `notes-analyze` — conclusiones ejecutivas con Claude (requieren sesión).
   - `send-invite` — alta de usuarios + email vía Resend (re-verifica la contraseña del admin).
   - `lib/shared.js` — acceso al kv, firma/verificación de tokens, helpers compartidos.
@@ -88,6 +92,30 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
 - **Requisito GHL**: el Private Integration Token necesita el scope
   `contacts.readonly` (Settings → Private Integrations → editar → scopes). Sin él,
   la sincronización falla con el detalle del error de GHL visible en pantalla.
+- **Extras del tab**: OPPs/WONs que produjo cada campaña (join de oportunidades por
+  contactId), comparativa mes anterior vs mes actual, monitor de integridad
+  (% con fuente/asesor/calificación + posibles duplicados por teléfono/email) y
+  sección **Paid Media en vivo** bajo demanda (estado activo/pausado por anuncio,
+  link de preview, inversión y resultados vía Windsor `/facebook` y `/google_ads`).
+
+## SLA y Seguimiento (Anexo 1 del proceso comercial)
+
+Pestaña **SLA y Seguimiento** — el reporte semanal de disciplina comercial, directo
+del CRM y con nombres:
+
+- **SLA de primera respuesta** por asesor y por canal: mediana, % ≤15 min, % ≤60 min,
+  medido del alta del lead al primer mensaje saliente (SMS/WhatsApp/email/llamada).
+- **Contactados efectivos** (el lead respondió) vs trabajados; **>7 días sin toque**
+  con lista nominal; **citas y show rate** (`showed` ÷ `showed`+`noshow`);
+  **OPPs y WONs por asesor** en el rango.
+- **Generación bajo demanda** (botón, 1–3 min): recorre conversaciones y citas de
+  cada lead del rango en lotes de 8 vía `sla-report`; el resultado se cachea en el
+  kv (`sla:agg:v1`) para todo el equipo. Acumulable dentro del mes eligiendo el
+  rango de semanas.
+- **Permisos**: canal `crm_live` o `direccion_comercial` (o admin) — mismo gate en
+  servidor y en el tab.
+- Requiere scopes de conversaciones y calendarios en el token (el token actual los
+  tiene todos); si faltan, esas columnas degradan a "—" sin romper el reporte.
 
 ## Historial de la migración de seguridad (ago 2026)
 

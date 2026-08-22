@@ -436,6 +436,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
     <div class="tab" data-tab="ventas">Ventas</div>
     <div class="tab" data-tab="crm">CRM en vivo</div>
     <div class="tab" data-tab="lq">Calidad de Leads</div>
+    <div class="tab" data-tab="sla">SLA y Seguimiento</div>
     <div class="tab" data-tab="marketing">Marketing</div>
     <div class="canal-wrap">
       <span class="lbl">Reporte</span>
@@ -584,6 +585,22 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
         <div class="cp-track"><div class="cp-bar" id="lq-progress-bar"></div></div>
       </div>
       <div id="lq-content"><div class="empty-rep">Sincroniza para ver la calificación de leads del CRM.</div></div>
+    </div>
+
+    <!-- ============ SLA Y SEGUIMIENTO (Anexo 1) ============ -->
+    <div class="view" id="view-sla">
+      <div class="periodo">
+        <div class="grp"><label>Semana inicio</label><select id="sla-sem-ini"></select></div>
+        <div class="grp"><label>Semana fin</label><select id="sla-sem-fin"></select></div>
+        <div class="spacer"></div>
+        <div class="grp"><label>Última generación</label><div class="semana-badge" id="sla-last-sync">—</div></div>
+        <button class="btn btn-olive" id="sla-refresh">Generar reporte</button>
+      </div>
+      <div class="crm-progress" id="sla-progress" style="display:none">
+        <div class="cp-lbl" id="sla-progress-lbl">Analizando conversaciones…</div>
+        <div class="cp-track"><div class="cp-bar" id="sla-progress-bar"></div></div>
+      </div>
+      <div id="sla-content"><div class="empty-rep">Elige el rango de semanas y pulsa Generar: el reporte recorre las conversaciones y citas de cada lead del CRM (toma 1–3 minutos).</div></div>
     </div>
 
     <!-- ============ MARKETING (embebido) ============ -->
@@ -1458,13 +1475,14 @@ document.querySelectorAll("[data-tab]").forEach(el=>el.onclick=()=>{
     document.getElementById("view-"+tab).classList.add("active");
     document.getElementById("ventas-subtabs").style.display="none";
   }
-  const dir = ["resultados","dircom","crm","lq","marketing","asesores","metas","db","admin"].includes(tab);
+  const dir = ["resultados","dircom","crm","lq","sla","marketing","asesores","metas","db","admin"].includes(tab);
   document.querySelector(".canal-wrap").style.display = dir?"none":"flex";
   document.querySelector(".mkt-wrap").style.display = (tab==="marketing")?"flex":"none";
   if(tab==="resultados") showResultados();
   if(tab==="dircom") showDirCom();
   if(tab==="crm") showCRM();
   if(tab==="lq") showLQ();
+  if(tab==="sla") showSLA();
   if(tab==="marketing"){ showMarketing(); populateMktSelect(); const api=mktFrameApi(); if(api && typeof api.mktGetView==="function") window.mktViewChanged(api.mktGetView()); if(api && typeof api.mktGetActive==="function") { const cur=api.mktGetActive(); const sel=document.getElementById("mkt-select"); if(sel && cur) sel.value=cur; } }
   if(tab==="asesores") renderAdvisors();
   if(tab==="metas") renderMetas();
@@ -2334,6 +2352,227 @@ async function showLQ(){
   }
   if(lqState.agg) lqRender();
   if(!lqState.syncing && (!lqState.agg || Date.now()-lqState.agg.ts > LQ_STALE_MIN*60000)) lqSync();
+}
+
+/* ===================== SLA Y SEGUIMIENTO (Anexo 1) ===================== */
+// Reporte de disciplina comercial directo del CRM: SLA de primera respuesta por
+// asesor y canal, leads >7 días sin toque, trabajados vs contactados efectivos,
+// citas y show rate, y OPPs/WONs por asesor. Con nombres, acumulable por semanas.
+const SLA_AGG_KEY = "sla:agg:v1";
+const SLA_STALE_MS = 7*86400e3; // "sin toque" = 7 días sin mensaje
+const slaState = { built:false, agg:null, syncing:false };
+
+async function slaFn(body){
+  const r = await fetch("/.netlify/functions/sla-report", { method:"POST", headers:{"Content-Type":"application/json", "Authorization":"Bearer "+AUTH_TOKEN}, body:JSON.stringify(body) });
+  const d = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.error ? d.error + (d.detail ? " — "+d.detail : "") : ("HTTP "+r.status));
+  return d;
+}
+
+function slaWeeksAll(){
+  const set = new Set(lqWeeks());               // mismas 12 semanas que Calidad de Leads
+  (slaState.agg?.rango||[]).forEach(w=>set.add(w));
+  return [...set].sort();
+}
+function slaPopulateWeeks(){
+  const weeks = slaWeeksAll();
+  const opts = weeks.map(w=>`<option value="${w}">${weekLabel(w)}</option>`).join("");
+  const si=document.getElementById("sla-sem-ini"), sf=document.getElementById("sla-sem-fin");
+  const prevI=si.value, prevF=sf.value;
+  si.innerHTML=opts; sf.innerHTML=opts;
+  if(weeks.length){
+    si.value = weeks.includes(prevI) ? prevI : weeks[weeks.length-1];
+    sf.value = weeks.includes(prevF) ? prevF : weeks[weeks.length-1];
+  }
+}
+function slaRangeWeeks(){
+  const weeks = slaWeeksAll();
+  let i = weeks.indexOf(document.getElementById("sla-sem-ini").value);
+  let f = weeks.indexOf(document.getElementById("sla-sem-fin").value);
+  if(i<0) i=weeks.length-1; if(f<0) f=weeks.length-1;
+  if(i>f) [i,f]=[f,i];
+  return weeks.slice(i, f+1);
+}
+
+const slaMedian = (arr)=>{ if(!arr.length) return null; const s=arr.slice().sort((a,b)=>a-b); const m=Math.floor(s.length/2); return s.length%2 ? s[m] : (s[m-1]+s[m])/2; };
+function fmtDur(ms){
+  if(ms==null) return "—";
+  const m = ms/60000;
+  if(m < 90) return Math.round(m)+" min";
+  const h = m/60;
+  if(h < 48) return (Math.round(h*10)/10)+" h";
+  return (Math.round(h/24*10)/10)+" d";
+}
+
+function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap){
+  const rangoSet = new Set(rango);
+  const leads = contactsArr.map(c=>{
+    const wk = lqWeekOf(c.c); if(!wk || !rangoSet.has(wk)) return null;
+    const sw = sweepMap[c.id] || {};
+    const created = new Date(c.c).getTime();
+    const sla = (sw.fo && sw.fo>=created) ? sw.fo-created : null;
+    const canal = lqSourceCamp({tags:c.tags, src:c.src, attr:c.attr}).fuente;
+    return { n:c.n, wk, canal, u:c.u||"", created,
+             fo:sw.fo||null, fi:sw.fi||null, lm:sw.lm||null, sla,
+             ap: sw.ap || {tot:0,sh:0,ns:0,fut:0} };
+  }).filter(Boolean);
+  // OPPs (cotizaciones) y WONs por asesor dentro del rango
+  const byRepOpp = {};
+  for(const o of (oppsArr||[])){
+    const wc = lqWeekOf(o.c), ww = o.st==="won" ? lqWeekOf(o.stc) : null;
+    const u = o.u || "";
+    const b = byRepOpp[u] = byRepOpp[u] || {opp:0, won:0, wv:0};
+    if(wc && rangoSet.has(wc)) b.opp++;
+    if(ww && rangoSet.has(ww)){ b.won++; b.wv += (o.v||0); }
+  }
+  Object.keys(byRepOpp).forEach(u=>{ const b=byRepOpp[u]; if(!b.opp && !b.won) delete byRepOpp[u]; });
+  return { ts:Date.now(), rango, users:usersMap||{}, leads, byRepOpp };
+}
+
+function slaRender(){
+  const agg = slaState.agg; if(!agg) return;
+  document.getElementById("sla-last-sync").textContent = crmAgo(agg.ts);
+  const leads = agg.leads, now = Date.now();
+  const name = (u)=> agg.users[u] || (u ? "(sin nombre)" : "(sin asesor)");
+  const pcti = (n,d)=> d ? Math.round(n/d*100)+"%" : "—";
+
+  const conFo = leads.filter(l=>l.fo).length;
+  const conFi = leads.filter(l=>l.fi).length;
+  const slas = leads.map(l=>l.sla).filter(x=>x!=null);
+  const und = (mins)=> slas.length ? Math.round(slas.filter(x=>x<=mins*60000).length/slas.length*100)+"%" : "—";
+  const apTot = leads.reduce((a,l)=>a+l.ap.tot,0), apSh = leads.reduce((a,l)=>a+l.ap.sh,0), apNs = leads.reduce((a,l)=>a+l.ap.ns,0);
+
+  const kpi = (v,l)=>`<div class="crm-kpi"><div class="k-val">${v}</div><div class="k-lbl">${l}</div></div>`;
+  let html = `<div class="crm-kpis">
+    ${kpi(leads.length.toLocaleString(),"Leads en el rango")}
+    ${kpi(pcti(conFo,leads.length),"Con primer toque")}
+    ${kpi(pcti(conFi,leads.length),"Contactados efectivos")}
+    ${kpi(fmtDur(slaMedian(slas)),"SLA mediana (1a respuesta)")}
+    ${kpi(und(15),"≤ 15 min")}
+    ${kpi(und(60),"≤ 60 min")}
+    ${kpi((apSh+apNs)?pcti(apSh,apSh+apNs):"—","Show rate de citas")}
+  </div>`;
+
+  // --- SLA por asesor y por canal
+  const groupTbl = (title, keyFn, labelFn)=>{
+    const groups = {};
+    leads.forEach(l=>{ const k=keyFn(l); (groups[k]=groups[k]||[]).push(l); });
+    const rows = Object.entries(groups).sort((a,b)=>b[1].length-a[1].length).map(([k,arr])=>{
+      const ss = arr.map(l=>l.sla).filter(x=>x!=null);
+      const u15 = ss.length ? Math.round(ss.filter(x=>x<=15*60000).length/ss.length*100)+"%" : "—";
+      const u60 = ss.length ? Math.round(ss.filter(x=>x<=60*60000).length/ss.length*100)+"%" : "—";
+      const sh = arr.reduce((a,l)=>a+l.ap.sh,0), ns = arr.reduce((a,l)=>a+l.ap.ns,0);
+      return `<tr><td class="name">${escAttr(labelFn(k))}</td><td>${arr.length}</td>
+        <td class="pct">${pcti(arr.filter(l=>l.fo).length,arr.length)}</td>
+        <td class="pct">${pcti(arr.filter(l=>l.fi).length,arr.length)}</td>
+        <td>${fmtDur(slaMedian(ss))}</td><td class="pct">${u15}</td><td class="pct">${u60}</td>
+        <td>${arr.reduce((a,l)=>a+l.ap.tot,0)}</td><td class="pct">${(sh+ns)?pcti(sh,sh+ns):"—"}</td></tr>`;
+    }).join("");
+    return `<div class="table-scroll" style="margin-bottom:18px"><table class="cons">
+      <tr><th class="lft">${title}</th><th>Leads</th><th>1er toque</th><th>Efectivos</th><th>SLA mediana</th><th>≤15m</th><th>≤60m</th><th>Citas</th><th>Show</th></tr>
+      ${rows || `<tr><td colspan="9" class="lft" style="color:var(--neutro);font-style:italic">Sin datos.</td></tr>`}
+    </table></div>`;
+  };
+  html += groupTbl("Asesor", l=>l.u, name);
+  html += groupTbl("Canal", l=>l.canal, k=>k);
+
+  // --- Leads >7 días sin toque (la fuga silenciosa del funnel)
+  const stale = leads.filter(l=>{
+    const last = l.lm || null;
+    if(last) return (now-last) > SLA_STALE_MS;
+    return (now-l.created) > SLA_STALE_MS;   // nunca tocado y ya viejo
+  }).sort((a,b)=>(a.lm||a.created)-(b.lm||b.created));
+  const staleRows = stale.slice(0,40).map(l=>{
+    const days = Math.floor((now-(l.lm||l.created))/86400e3);
+    return `<tr><td class="lft" style="font-weight:600">${escAttr(l.n)}</td><td class="lft">${escAttr(name(l.u))}</td><td class="lft">${escAttr(l.canal)}</td><td class="lft">${l.lm?"último mensaje":"nunca contactado"}</td><td style="color:#a94436;font-weight:700">${days} días</td></tr>`;
+  }).join("");
+  html += `<div class="rep-section" style="margin-bottom:18px"><h3>Más de 7 días sin toque · ${stale.length} lead${stale.length!==1?"s":""}</h3>
+    <table class="rep"><thead><tr><th class="lft">Lead</th><th class="lft">Asesor</th><th class="lft">Canal</th><th class="lft">Estado</th><th class="lft">Sin toque</th></tr></thead>
+    <tbody>${staleRows || `<tr><td colspan="5" class="lft" style="color:var(--neutro);font-style:italic">Ninguno — todos los leads del rango tienen un toque en los últimos 7 días.</td></tr>`}</tbody></table>
+    ${stale.length>40?`<p class="hint">…y ${stale.length-40} más.</p>`:""}</div>`;
+
+  // --- OPPs y WONs por asesor (rango)
+  const oppRows = Object.entries(agg.byRepOpp).sort((a,b)=>b[1].opp-a[1].opp).map(([u,b])=>
+    `<tr><td class="name">${escAttr(name(u))}</td><td>${b.opp}</td><td>${b.won}</td><td>${fmtMoney(b.wv)}</td></tr>`).join("");
+  html += `<div class="table-scroll" style="margin-bottom:18px"><table class="cons">
+    <tr><th class="lft">Asesor</th><th>Oportunidades creadas</th><th>WONs</th><th>Valor WON</th></tr>
+    ${oppRows || `<tr><td colspan="4" class="lft" style="color:var(--neutro);font-style:italic">Sin oportunidades en el rango.</td></tr>`}
+  </table></div>`;
+
+  html += `<div class="lq-meth"><b>Definiciones</b> —
+    <b>1er toque:</b> primer mensaje saliente (SMS/WhatsApp/email/llamada) registrado en el CRM; el SLA mide desde que el lead entró hasta ese mensaje ·
+    <b>Contacto efectivo:</b> el lead respondió (mensaje entrante) ·
+    <b>Sin toque:</b> más de 7 días sin ningún mensaje ·
+    <b>Show rate:</b> citas con estatus showed ÷ (showed + no-show) ·
+    <b>Oportunidades:</b> registros del pipeline creados en el rango, por asesor asignado.
+    Acumulable dentro del mes seleccionando desde la semana 1. Pendiente v2: integridad de pipeline (OPPs sin next step con fecha) y SLA de 60 segundos del Ejecutivo de Primer Contacto (aplica desde la calibración de septiembre).</div>`;
+
+  document.getElementById("sla-content").innerHTML = html;
+}
+
+async function slaSync(){
+  if(slaState.syncing) return;
+  slaState.syncing = true;
+  const btn=document.getElementById("sla-refresh"), prog=document.getElementById("sla-progress"),
+        bar=document.getElementById("sla-progress-bar"), lbl=document.getElementById("sla-progress-lbl");
+  btn.disabled=true; btn.textContent="Generando…"; prog.style.display="block"; bar.style.width="2%";
+  try{
+    const rango = slaRangeWeeks();
+    const b0 = lqWeekBounds(rango[0]), b1 = lqWeekBounds(rango[rango.length-1]);
+    lbl.textContent="Trayendo leads del rango…";
+    const contactsArr=[]; let cursor=null;
+    do{
+      const res = await slaFn({action:"contacts", start:b0.startISO, end:b1.endISO, ...(cursor?{searchAfter:cursor}:{})});
+      contactsArr.push(...res.contacts); cursor = res.searchAfter;
+      lbl.textContent=`Trayendo leads del rango… ${contactsArr.length}`;
+    }while(cursor);
+    bar.style.width="10%";
+    // Barrido de conversaciones y citas, en lotes de 8
+    const sweepMap={};
+    for(let i=0;i<contactsArr.length;i+=8){
+      const ids = contactsArr.slice(i,i+8).map(c=>c.id);
+      try{
+        const res = await slaFn({action:"sweep", ids});
+        (res.results||[]).forEach(r=>{ sweepMap[r.id]=r; });
+      }catch(e){ /* lote fallido: los leads quedan sin datos de conversación */ }
+      const done=Math.min(i+8,contactsArr.length);
+      bar.style.width=(10+Math.round(done/Math.max(1,contactsArr.length)*70))+"%";
+      lbl.textContent=`Analizando conversaciones y citas… ${done} de ${contactsArr.length}`;
+    }
+    bar.style.width="84%"; lbl.textContent="Trayendo oportunidades…";
+    const oppsArr=[]; let oc=null;
+    do{
+      const res = await slaFn({action:"opps", ...(oc||{})});
+      oppsArr.push(...res.opps); oc = res.cursor;
+    }while(oc);
+    bar.style.width="94%"; lbl.textContent="Resolviendo asesores…";
+    let usersMap={};
+    try{ usersMap = (await slaFn({action:"users"})).users || {}; }catch(e){}
+    bar.style.width="100%"; lbl.textContent="Procesando…";
+    slaState.agg = buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap);
+    sSet(SLA_AGG_KEY, slaState.agg);
+    slaPopulateWeeks(); slaRender();
+    toast("Reporte SLA generado ✓ "+contactsArr.length+" leads analizados");
+  }catch(e){
+    toast("Error al generar el reporte SLA: "+(e.message||e));
+  }finally{
+    slaState.syncing=false; btn.disabled=false; btn.textContent="Generar reporte";
+    setTimeout(()=>{ prog.style.display="none"; bar.style.width="0%"; }, 600);
+  }
+}
+
+async function showSLA(){
+  if(!slaState.built){
+    slaState.built = true;
+    document.getElementById("sla-refresh").onclick = slaSync;
+    slaPopulateWeeks();
+  }
+  if(!slaState.agg){
+    const saved = await sGet(SLA_AGG_KEY);
+    if(saved && Array.isArray(saved.leads)){ slaState.agg=saved; slaPopulateWeeks(); slaRender(); }
+  } else {
+    slaRender();
+  }
 }
 
 /* ===================== ANALÍTICA ===================== */
@@ -3463,7 +3702,7 @@ let USERS = [];           // [{ email, salt, hash, role, channels, password? }]
 let ADMIN_PASS = null;    // password en memoria sólo (se pierde al recargar) — para llamar a la Netlify Function
 
 const DATA_CH_KEYS = ["brokers","paid_organico","seminarios","referidos","pd_leads","pd_brokers","rp_vip"];
-const DIR_TABS = { direccion_general:"resultados", direccion_comercial:"dircom", crm_live:"crm", mkt_lq:"lq", marketing:"marketing" };
+const DIR_TABS = { direccion_general:"resultados", direccion_comercial:"dircom", crm_live:"crm", mkt_lq:"lq", sla_view:"sla", marketing:"marketing" };
 const MKT_CH_KEYS = ["mkt_rrss","mkt_ppc","mkt_crm","mkt_lq"];
 const VENTAS_CH_KEYS = [...DATA_CH_KEYS, "direccion_general", "direccion_comercial", "crm_live"];
 const ALL_CH_KEYS  = [...VENTAS_CH_KEYS, ...MKT_CH_KEYS];
@@ -3499,6 +3738,9 @@ function applyChannelFilter(){
     } else if(chKey === 'mkt_lq'){
       // El tab en vivo de Calidad de Leads abre con el canal mkt_lq o con marketing completo
       visible = allowed.has('mkt_lq') || allowed.has('marketing');
+    } else if(chKey === 'sla_view'){
+      // SLA y Seguimiento: mismo gate que la function sla-report (crm_live o dirección comercial)
+      visible = allowed.has('crm_live') || allowed.has('direccion_comercial');
     } else {
       visible = allowed.has(chKey);
     }
