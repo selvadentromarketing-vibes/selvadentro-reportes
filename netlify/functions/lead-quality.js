@@ -15,8 +15,15 @@
 //   { action:"leads", start, end, searchAfter? }
 //     → { leads:[...], total, fetched, searchAfter|null }
 //     Pagina /contacts/search en bloques; el frontend repite con searchAfter.
+//   { action:"opps", startAfter?, startAfterId? }
+//     → { opps:[{ct,st,c,v}], cursor|null, total, fetched }
+//     Recorre todas las oportunidades (con contactId) para unirlas a los leads
+//     por campaña: OPPs y WONs que produjo cada campaña.
 //   { action:"spend", start, end }   (fechas YYYY-MM-DD)
 //     → { configured:bool, rows:[{d,src,camp,spend,clicks,impr}] }
+//   { action:"ads", start, end }     (fechas YYYY-MM-DD)
+//     → { configured:bool, ads:[...] }  Detalle por anuncio (Meta + Google) vía
+//     Windsor: estado activo/pausado, link de preview, resultados.
 
 const S = require("./lib/shared.js");
 
@@ -63,6 +70,8 @@ function attrOf(c) {
 const slim = (c) => ({
   id: c.id,
   n: c.contactName || [c.firstName, c.lastName].filter(Boolean).join(" ") || c.email || c.phone || "(sin nombre)",
+  em: (c.email || "").trim().toLowerCase(),
+  ph: String(c.phone || "").replace(/[^\d]/g, "").slice(-10), // últimos 10 dígitos p/ detectar duplicados
   c: c.dateAdded || "",
   src: (c.source || "").trim(),
   u: c.assignedTo || "",
@@ -115,6 +124,31 @@ async function leads({ start, end, searchAfter }) {
   return { leads: out, total, fetched: out.length, searchAfter: cursor };
 }
 
+// Todas las oportunidades del CRM, adelgazadas al mínimo para el join con leads:
+// contactId, estatus, fecha de creación y valor. Mismo patrón de cursor que ghl-report.
+async function opps({ startAfter, startAfterId }) {
+  const out = [];
+  let cursor = startAfter && startAfterId ? { startAfter, startAfterId } : null;
+  let total = 0;
+  for (let i = 0; i < 6; i++) {
+    let qs = `location_id=${LOCATION_ID}&limit=100`;
+    if (cursor) qs += `&startAfter=${encodeURIComponent(cursor.startAfter)}&startAfterId=${encodeURIComponent(cursor.startAfterId)}`;
+    const data = await ghl(`/opportunities/search?${qs}`);
+    const batch = data.opportunities || [];
+    batch.forEach((o) => out.push({
+      ct: o.contactId || (o.contact && o.contact.id) || "",
+      st: o.status || "open",
+      c: o.createdAt || "",
+      v: Number(o.monetaryValue) || 0,
+    }));
+    total = (data.meta && data.meta.total) || total;
+    const meta = data.meta || {};
+    if (batch.length < 100 || !meta.startAfterId) { cursor = null; break; }
+    cursor = { startAfter: meta.startAfter, startAfterId: meta.startAfterId };
+  }
+  return { opps: out, cursor, total, fetched: out.length };
+}
+
 // Inversión por día × campaña desde Windsor.ai (todas las fuentes conectadas de la
 // cuenta; el frontend filtra/agrupa). Fechas en YYYY-MM-DD.
 async function spend({ start, end }) {
@@ -144,6 +178,59 @@ async function spend({ start, end }) {
   return { configured: true, rows };
 }
 
+async function windsorGet(connector, params) {
+  const url = `https://connectors.windsor.ai/${connector}?api_key=${encodeURIComponent(WINDSOR_KEY)}&${params}`;
+  const resp = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!resp.ok) {
+    const detail = await resp.text();
+    const err = new Error(`Windsor ${connector} ${resp.status}`);
+    err.status = resp.status;
+    err.detail = detail.slice(0, 400);
+    throw err;
+  }
+  const data = await resp.json();
+  return Array.isArray(data.data) ? data.data : [];
+}
+
+// Detalle por anuncio para "Paid Media en vivo": estado, links y resultados.
+// Conectores por separado ( /facebook y /google_ads ) porque los campos ad-level
+// no son homogéneos en el super-conector /all.
+async function ads({ start, end }) {
+  if (!WINDSOR_KEY) return { configured: false, ads: [] };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(start)) || !/^\d{4}-\d{2}-\d{2}$/.test(String(end))) {
+    throw Object.assign(new Error("start y end requeridos (YYYY-MM-DD)"), { status: 400 });
+  }
+  const range = `date_from=${start}&date_to=${end}`;
+  const num = (x) => Number(x) || 0;
+  const [fb, gg] = await Promise.all([
+    windsorGet("facebook", `${range}&fields=campaign,adset_name,ad_id,ad_name,effective_status,ad_preview_shareable_link,spend,impressions,clicks,actions_leadgen_grouped`)
+      // si el campo de leads no está disponible en la cuenta, degradar sin resultados
+      .catch(() => windsorGet("facebook", `${range}&fields=campaign,adset_name,ad_id,ad_name,effective_status,ad_preview_shareable_link,spend,impressions,clicks`).catch(() => [])),
+    windsorGet("google_ads", `${range}&fields=campaign,ad_group_name,ad_id,ad_name,ad_group_ad_status,ad_final_urls,spend,impressions,clicks,conversions`).catch(() => []),
+  ]);
+  const rows = [];
+  fb.forEach((r) => rows.push({
+    plat: "Meta", camp: r.campaign || "", grp: r.adset_name || "", id: String(r.ad_id || ""),
+    name: r.ad_name || "", status: r.effective_status || "", link: r.ad_preview_shareable_link || "",
+    spend: num(r.spend), impr: num(r.impressions), clicks: num(r.clicks), results: num(r.actions_leadgen_grouped),
+  }));
+  gg.forEach((r) => rows.push({
+    plat: "Google", camp: r.campaign || "", grp: r.ad_group_name || "", id: String(r.ad_id || ""),
+    name: r.ad_name || "", status: r.ad_group_ad_status || "", link: String(r.ad_final_urls || "").split(",")[0] || "",
+    spend: num(r.spend), impr: num(r.impressions), clicks: num(r.clicks), results: num(r.conversions),
+  }));
+  // Agregar por anuncio (Windsor puede devolver una fila por día)
+  const byAd = {};
+  for (const r of rows) {
+    const k = r.plat + "|" + (r.id || r.name);
+    const b = byAd[k] = byAd[k] || { ...r, spend: 0, impr: 0, clicks: 0, results: 0 };
+    b.spend += r.spend; b.impr += r.impr; b.clicks += r.clicks; b.results += r.results;
+    if (r.status) b.status = r.status;
+    if (r.link) b.link = r.link;
+  }
+  return { configured: true, ads: Object.values(byAd) };
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return S.corsPreflight();
   if (event.httpMethod !== "POST") return json(405, { error: "Method not allowed" });
@@ -163,8 +250,10 @@ exports.handler = async (event) => {
   try {
     if (payload.action === "bootstrap") return json(200, await bootstrap());
     if (payload.action === "leads") return json(200, await leads(payload));
+    if (payload.action === "opps") return json(200, await opps(payload));
     if (payload.action === "spend") return json(200, await spend(payload));
-    return json(400, { error: "action debe ser 'bootstrap', 'leads' o 'spend'" });
+    if (payload.action === "ads") return json(200, await ads(payload));
+    return json(400, { error: "action debe ser 'bootstrap', 'leads', 'opps', 'spend' o 'ads'" });
   } catch (e) {
     const status = e.status === 429 ? 429 : e.status === 400 ? 400 : 502;
     return json(status, { error: String(e.message || e), detail: e.detail });
