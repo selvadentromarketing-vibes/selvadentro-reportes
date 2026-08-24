@@ -8,7 +8,8 @@
 //   { action:"contacts", start, end, searchAfter? }
 //     → { contacts:[{id,n,c,src,u,tags,attr}], total, searchAfter|null }
 //   { action:"sweep", ids:[contactId,...] }   (máx 8 por llamada)
-//     → { results:[{id, fo, fi, lm, ap:{tot,sh,ns,fut}}] }
+//     → { results:[{id, fo, fi, lm, cerr, aerr, ap:{tot,sh,ns,fut}}] }
+//     cerr/aerr = no se pudieron leer conversaciones/citas (≠ "no hubo")
 //     fo = primer mensaje SALIENTE (ts) · fi = primer mensaje ENTRANTE (ts)
 //     lm = último mensaje (ts) · ap = citas: total, showed, noshow, futuras
 //   { action:"opps", startAfter?, startAfterId? }
@@ -105,7 +106,7 @@ async function allMessages(convId) {
 }
 
 async function sweepOne(id) {
-  const out = { id, fo: null, fi: null, lm: null, ap: { tot: 0, sh: 0, ns: 0, fut: 0 } };
+  const out = { id, fo: null, fi: null, lm: null, cerr: false, aerr: false, ap: { tot: 0, sh: 0, ns: 0, fut: 0 } };
   // Conversaciones del contacto
   try {
     const cs = await ghl(`/conversations/search?locationId=${LOCATION_ID}&contactId=${encodeURIComponent(id)}&limit=20`);
@@ -121,7 +122,7 @@ async function sweepOne(id) {
         if (!out.lm || t > out.lm) out.lm = t;
       }
     }
-  } catch (e) { /* sin scope de conversaciones: degradar */ }
+  } catch (e) { out.cerr = true; /* conversaciones no disponibles: se marca, no se asume "sin contacto" */ }
   // Citas del contacto
   try {
     const ap = await ghl(`/contacts/${encodeURIComponent(id)}/appointments`);
@@ -134,7 +135,7 @@ async function sweepOne(id) {
       else if (st === "noshow") out.ap.ns++;
       else if (ts(ev.startTime) > now) out.ap.fut++;
     }
-  } catch (e) { /* sin scope de calendarios: degradar */ }
+  } catch (e) { out.aerr = true; /* citas no disponibles */ }
   return out;
 }
 

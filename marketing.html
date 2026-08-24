@@ -752,7 +752,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   function getAllowedMods(){ try{ if(window.parent && window.parent!==window && typeof window.parent.getMktAllowedModules==='function'){ const r = window.parent.getMktAllowedModules(); return r==null ? null : r; } }catch(e){} return null; }
   function orderFiltered(){ const a=getAllowedMods(); return a==null ? ORDER : ORDER.filter(id=>a.includes(id)); }
   function renderReportSelect(){ const list=orderFiltered(); const s=$('#report-select'); s.innerHTML=list.map(id=>`<option value="${id}" ${id===state.active?'selected':''}>${MODS[id].name}</option>`).join(''); s.onchange=()=>setActive(s.value); }
-  function fillPeriodSelect(M){ $('#period-label').textContent = M.period==='week'?'Semana':'Mes'; const sel=$('#period'); let opts=[]; const _y=new Date().getFullYear(); if(M.period==='week'){ for(let w=52;w>=1;w--){ const v=_y+'-W'+String(w).padStart(2,'0'); opts.push([v, v+' · '+weekRange(v)]); } } else { for(let m=12;m>=1;m--){ const v=_y+'-'+String(m).padStart(2,'0'); opts.push([v, ymLabel(v)]); } } if(!opts.some(o=>o[0]===M.pval)) opts.unshift([M.pval, M.period==='week'?(M.pval+' · '+weekRange(M.pval)):ymLabel(M.pval)]); sel.innerHTML=opts.map(o=>`<option value="${o[0]}" ${o[0]===M.pval?'selected':''}>${o[1]}</option>`).join(''); sel.onchange=()=>{ M.pval=sel.value; if(state.view==='ingreso'){ M.ingreso($('#view-ingreso')); M.fill(M.records[M.pval]||null); bindSave(); state.ingresoRendered=state.active; } else if(state.view==='reporte'){ M.reporte($('#view-reporte'),M.pval,M); } updatePill(); }; }
+  function fillPeriodSelect(M){ $('#period-label').textContent = M.period==='week'?'Semana':'Mes'; const sel=$('#period'); let opts=[]; const _yrs=[...new Set([new Date().getFullYear(), ...Object.keys(M.records).map(k=>parseInt(k,10)).filter(y=>y>2000)])].sort((a,b)=>b-a); if(M.period==='week'){ _yrs.forEach(_y=>{ for(let w=52;w>=1;w--){ const v=_y+'-W'+String(w).padStart(2,'0'); opts.push([v, v+' · '+weekRange(v)]); } }); } else { _yrs.forEach(_y=>{ for(let m=12;m>=1;m--){ const v=_y+'-'+String(m).padStart(2,'0'); opts.push([v, ymLabel(v)]); } }); } if(!opts.some(o=>o[0]===M.pval)) opts.unshift([M.pval, M.period==='week'?(M.pval+' · '+weekRange(M.pval)):ymLabel(M.pval)]); sel.innerHTML=opts.map(o=>`<option value="${o[0]}" ${o[0]===M.pval?'selected':''}>${o[1]}</option>`).join(''); sel.onchange=()=>{ M.pval=sel.value; if(state.view==='ingreso'){ M.ingreso($('#view-ingreso')); M.fill(M.records[M.pval]||null); bindSave(); state.ingresoRendered=state.active; } else if(state.view==='reporte'){ M.reporte($('#view-reporte'),M.pval,M); } updatePill(); }; }
 
   /* ===== RANGO DE FECHAS PARA REPORTE ===== */
   const AGG_TEXT = new Set(['notas','aprendizajes','cambios']);
@@ -798,8 +798,9 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   }
   function mktPeriodList(M){
     const arr = [];
-    const _y=new Date().getFullYear(); if(M.period==='week'){ for(let w=1;w<=52;w++) arr.push(_y+'-W'+String(w).padStart(2,'0')); }
-    else { for(let m=1;m<=12;m++) arr.push(_y+'-'+String(m).padStart(2,'0')); }
+    const _yrs=[...new Set([new Date().getFullYear(), ...Object.keys(M.records).map(k=>parseInt(k,10)).filter(y=>y>2000)])];
+    if(M.period==='week'){ _yrs.forEach(_y=>{ for(let w=1;w<=52;w++) arr.push(_y+'-W'+String(w).padStart(2,'0')); }); }
+    else { _yrs.forEach(_y=>{ for(let m=1;m<=12;m++) arr.push(_y+'-'+String(m).padStart(2,'0')); }); }
     Object.keys(M.records).forEach(k => { if(!arr.includes(k)) arr.push(k); });
     return arr.sort();
   }

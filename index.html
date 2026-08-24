@@ -1880,7 +1880,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v1";
+const LQ_AGG_KEY = "lq:agg:v3";   // v3: etapa real, anuncios, calificación automática
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 const LQ_TZ = "-05:00";                 // Tulum (America/Cancun): UTC-5 fijo, sin DST
@@ -1943,7 +1943,7 @@ function lqParseMoney(s){
   if(!isFinite(n)) return null;
   const u = m[2]||"";
   if(u==="k"||u==="mil") n*=1000;
-  else if(/^(millones?|mill|m)$/.test(u)) n*=1000000;
+  else if(/^(millones?|mill|m|mdp)$/.test(u)) n*=1000000;
   // Rango tipo "100,000 - 200,000": toma el extremo bajo (criterio conservador)
   if(/mxn|pesos|mdp/.test(t) && !/usd|dls|d[oó]lar/.test(t)) n = n/18;  // aprox MXN→USD
   return n;
@@ -2177,7 +2177,8 @@ function lqLevelKey(l, level, adIdx){
   return l.ad || "(sin anuncio atribuido)";
 }
 // Inversión del rango agrupada al nivel elegido, emparejada por nombre normalizado
-function lqSpendByLevel(agg, rangoSet, level, keys){
+function lqSpendByLevel(agg, rangoSet, level, keys, leadCount){
+  leadCount = leadCount || {};
   const out = {};
   if(level==="camp"){
     const rows = (agg.spend||[]).filter(r=>{ const w=r.d?lqWeekOf(r.d+"T12:00:00"+LQ_TZ):null; return w && rangoSet.has(w); });
@@ -2187,8 +2188,10 @@ function lqSpendByLevel(agg, rangoSet, level, keys){
     for(const [camp, sp] of Object.entries(byCamp)){
       const match = lqMatchCamp(camp, leadCamps);
       if(!match) continue;
-      const key = keys[leadCamps.indexOf(match)];
-      out[key] = (out[key]||0) + sp;
+      // La misma campaña puede existir bajo varias fuentes: repartir a prorrata de leads
+      const hits = keys.filter((k,i)=>leadCamps[i]===match);
+      const tot = hits.reduce((a,k)=>a+(leadCount[k]||0),0);
+      hits.forEach(k=>{ out[k] = (out[k]||0) + (tot ? sp*(leadCount[k]||0)/tot : sp/hits.length); });
     }
     return out;
   }
@@ -2261,7 +2264,7 @@ function lqLevelSection(agg, leadsAll, rango, rangoSet){
   const groups = {};
   leads.forEach(l=>{ const k=lqLevelKey(l, level, adIdx); (groups[k]=groups[k]||[]).push(l); });
   const keys = Object.keys(groups).sort((a,b)=>groups[b].length-groups[a].length);
-  const spendBy = lqSpendByLevel(agg, rangoSet, level, keys);
+  const spendBy = lqSpendByLevel(agg, rangoSet, level, keys, Object.fromEntries(keys.map(k=>[k, groups[k].length])));
   const sumO=(arr)=>arr.reduce((a,l)=>a+(l.o||0),0), sumW=(arr)=>arr.reduce((a,l)=>a+(l.w||0),0);
   const pct=(n,d)=>d?Math.round(n/d*100)+"%":"—";
 
@@ -2609,12 +2612,14 @@ function lqAdsSection(agg, rangoSet){
   const byAd = {};
   for(const a of rows){
     const k = a.plat+"|"+(a.id||a.name);
-    const b = byAd[k] = byAd[k] || { ...a, spend:0, impr:0, clicks:0, results:0 };
+    const b = byAd[k] = byAd[k] || { ...a, spend:0, impr:0, clicks:0, results:0, _wk:"" };
     b.spend+=a.spend; b.impr+=a.impr; b.clicks+=a.clicks; b.results+=a.results;
-    if(a.status) b.status=a.status;
+    if(a.status && a.wk >= b._wk){ b.status=a.status; b._wk=a.wk; }   // estado de la semana más reciente
   }
   const byPlat = {};
-  Object.values(byAd).forEach(r=>{ if(plat!=="all" && plat!=="otras" && r.plat!==plat) return; (byPlat[r.plat]=byPlat[r.plat]||[]).push(r); });
+  if(plat!=="otras"){   // "Otras fuentes" = orgánico/webinar: no hay anuncios que mostrar
+    Object.values(byAd).forEach(r=>{ if(plat!=="all" && r.plat!==plat) return; (byPlat[r.plat]=byPlat[r.plat]||[]).push(r); });
+  }
   let out = head;
   for(const [p, list] of Object.entries(byPlat)){
     const tRows = list.sort((x,y)=>y.spend-x.spend).map(r=>`<tr>
@@ -2744,7 +2749,11 @@ async function slaFn(body){
 }
 
 function slaWeeksAll(){
-  const set = new Set(lqWeeks());               // mismas 12 semanas que Calidad de Leads
+  // Independiente del tab de Calidad de Leads: un usuario de Dirección Comercial
+  // puede no tener ese tab visible y aun así necesita el histórico de semanas.
+  const set = new Set();
+  let d = new Date(Date.now()-LQ_TZ_MS);
+  for(let i=0;i<LQ_SYNC_WEEKS;i++){ set.add(isoWeekId(d)); d = new Date(d.getTime()-7*86400e3); }
   (slaState.agg?.rango||[]).forEach(w=>set.add(w));
   return [...set].sort();
 }
@@ -2782,12 +2791,14 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap){
   const rangoSet = new Set(rango);
   const leads = contactsArr.map(c=>{
     const wk = lqWeekOf(c.c); if(!wk || !rangoSet.has(wk)) return null;
-    const sw = sweepMap[c.id] || {};
+    const sw = sweepMap[c.id] || {sin:true};
     const created = new Date(c.c).getTime();
     const sla = (sw.fo && sw.fo>=created) ? sw.fo-created : null;
     const canal = lqSourceCamp({tags:c.tags, src:c.src, attr:c.attr}).fuente;
     return { n:c.n, wk, canal, u:c.u||"", created,
              fo:sw.fo||null, fi:sw.fi||null, lm:sw.lm||null, sla,
+             // sd = sin datos de conversación (lote fallido o sin permisos): no es "sin contacto"
+             sd: !!(sw.sin || sw.cerr),
              ap: sw.ap || {tot:0,sh:0,ns:0,fut:0} };
   }).filter(Boolean);
   // OPPs (cotizaciones) y WONs por asesor dentro del rango
@@ -2817,10 +2828,12 @@ function slaRender(){
   const apTot = leads.reduce((a,l)=>a+l.ap.tot,0), apSh = leads.reduce((a,l)=>a+l.ap.sh,0), apNs = leads.reduce((a,l)=>a+l.ap.ns,0);
 
   const kpi = (v,l)=>`<div class="crm-kpi"><div class="k-val">${v}</div><div class="k-lbl">${l}</div></div>`;
+  const conDatos = leads.filter(l=>!l.sd);
+  const sinDatos = leads.length - conDatos.length;
   let html = `<div class="crm-kpis">
     ${kpi(leads.length.toLocaleString(),"Leads en el rango")}
-    ${kpi(pcti(conFo,leads.length),"Con primer toque")}
-    ${kpi(pcti(conFi,leads.length),"Contactados efectivos")}
+    ${kpi(pcti(conDatos.filter(l=>l.fo).length,conDatos.length),"Con primer toque")}
+    ${kpi(pcti(conDatos.filter(l=>l.fi).length,conDatos.length),"Contactados efectivos")}
     ${kpi(fmtDur(slaMedian(slas)),"SLA mediana (1a respuesta)")}
     ${kpi(und(15),"≤ 15 min")}
     ${kpi(und(60),"≤ 60 min")}
@@ -2832,13 +2845,14 @@ function slaRender(){
     const groups = {};
     leads.forEach(l=>{ const k=keyFn(l); (groups[k]=groups[k]||[]).push(l); });
     const rows = Object.entries(groups).sort((a,b)=>b[1].length-a[1].length).map(([k,arr])=>{
+      const cd = arr.filter(l=>!l.sd);
       const ss = arr.map(l=>l.sla).filter(x=>x!=null);
       const u15 = ss.length ? Math.round(ss.filter(x=>x<=15*60000).length/ss.length*100)+"%" : "—";
       const u60 = ss.length ? Math.round(ss.filter(x=>x<=60*60000).length/ss.length*100)+"%" : "—";
       const sh = arr.reduce((a,l)=>a+l.ap.sh,0), ns = arr.reduce((a,l)=>a+l.ap.ns,0);
-      return `<tr><td class="name">${escAttr(labelFn(k))}</td><td>${arr.length}</td>
-        <td class="pct">${pcti(arr.filter(l=>l.fo).length,arr.length)}</td>
-        <td class="pct">${pcti(arr.filter(l=>l.fi).length,arr.length)}</td>
+      return `<tr><td class="name">${escAttr(labelFn(k))}</td><td>${arr.length}${arr.length-cd.length?`<span style="color:var(--neutro);font-size:10px"> (${arr.length-cd.length} s/d)</span>`:""}</td>
+        <td class="pct">${pcti(cd.filter(l=>l.fo).length,cd.length)}</td>
+        <td class="pct">${pcti(cd.filter(l=>l.fi).length,cd.length)}</td>
         <td>${fmtDur(slaMedian(ss))}</td><td class="pct">${u15}</td><td class="pct">${u60}</td>
         <td>${arr.reduce((a,l)=>a+l.ap.tot,0)}</td><td class="pct">${(sh+ns)?pcti(sh,sh+ns):"—"}</td></tr>`;
     }).join("");
@@ -2847,11 +2861,15 @@ function slaRender(){
       ${rows || `<tr><td colspan="9" class="lft" style="color:var(--neutro);font-style:italic">Sin datos.</td></tr>`}
     </table></div>`;
   };
+  if(sinDatos){
+    html += `<div class="lq-meth">⚠ <b>${sinDatos}</b> de ${leads.length} leads quedaron <b>sin datos de conversación</b> (lote fallido o permisos del token) y están excluidos de los porcentajes de SLA y de la lista de "sin toque" — no se asume que no fueron contactados. Vuelve a generar el reporte para reintentarlos.</div>`;
+  }
   html += groupTbl("Asesor", l=>l.u, name);
   html += groupTbl("Canal", l=>l.canal, k=>k);
 
   // --- Leads >7 días sin toque (la fuga silenciosa del funnel)
   const stale = leads.filter(l=>{
+    if(l.sd) return false;                   // sin datos de conversación: no se puede afirmar nada
     const last = l.lm || null;
     if(last) return (now-last) > SLA_STALE_MS;
     return (now-l.created) > SLA_STALE_MS;   // nunca tocado y ya viejo
@@ -3060,7 +3078,7 @@ function renderNotesSection(container, entradas, canalName, cacheKeyBucket, cach
     <div class="anal-notes-sub">${entradas.length} registro(s) con texto · ${canalName}</div>
     <div class="anal-notes-list">${entriesHtml}</div>
     <div class="anal-actions" style="margin-top:14px"><button class="btn btn-olive" data-analyze-notes>Generar conclusión con IA</button></div>
-    ${cache?`<div class="anal-conc">${cache}</div>`:``}
+    ${cache?`<div class="anal-conc">${escAttr(cache)}</div>`:``}
   </div>`;
   const btn = container.querySelector("[data-analyze-notes]");
   btn.onclick = async ()=>{
