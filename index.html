@@ -2710,8 +2710,17 @@ function lqConclusionesSection(){
 async function lqAnalizar(){
   const btn=document.getElementById("lq-ia-btn"); if(btn){ btn.disabled=true; btn.textContent="Analizando…"; }
   try{
-    const d = lqState._combo || {};
     const rango = lqRangeWeeks();
+    // El cruce vive en la pestaña Reporte Combinado; si aún no se ha visitado, se
+    // calcula aquí para no mandar un payload vacío al análisis.
+    if(!lqState._combo){
+      const agg = lqState.agg;
+      const rangoSet = new Set(rango);
+      const qual = lqState.qual || "auto";
+      const swap = (l)=> qual==="auto" ? { ...l, lv: l.alv || "cql", crmLv: l.lv } : { ...l, crmLv: l.lv };
+      lqComboSection(agg, agg.leads.filter(l=>rangoSet.has(l.wk)).map(swap), rango, rangoSet);
+    }
+    const d = lqState._combo || {};
     const mix=(arr)=>{ const c=lqCount(arr); const o={}; LQ_COLS.forEach(L=>{ if(c[L.id]) o[L.name]=c[L.id]; }); return o; };
     const familias = (d.keys||[]).map(k=>{ const f=d.fams[k], n=f.leads.length, cal=lqCalif(f.leads);
       return { nombre:k, inv:Math.round(f.inv), resultAds:f.resultAds, leads:n, calif:cal,
@@ -2738,7 +2747,8 @@ async function lqAnalizar(){
       integridad: { fuente:pc((d.leads||[]).filter(l=>l.hs).length,(d.leads||[]).length),
                     asesor:pc((d.leads||[]).filter(l=>l.u).length,(d.leads||[]).length),
                     calificacion:pc((d.leads||[]).filter(l=>l.crmLv&&l.crmLv!=="nc").length,(d.leads||[]).length),
-                    duplicados: 0 },
+                    duplicados: (()=>{ const g={}; (lqState.agg.leads||[]).forEach(l=>{ if(l.ph&&l.ph.length>=10)(g["p:"+l.ph]=g["p:"+l.ph]||[]).push(l); if(l.em)(g["e:"+l.em]=g["e:"+l.em]||[]).push(l); });
+                      const seen=new Set(); let n=0; Object.values(g).filter(x=>x.length>1).forEach(x=>{ const k=x.map(y=>y.n).sort().join("|"); if(!seen.has(k)){ seen.add(k); n++; } }); return n; })() },
     };
     const res = await lqFn2("/.netlify/functions/lq-analyze", payload);
     lqState.ia = { ...res, ts: Date.now() };
