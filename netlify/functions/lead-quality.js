@@ -64,6 +64,7 @@ function attrOf(c) {
     src: pick(last, "utmSource", "sessionSource") || pick(first, "utmSource", "sessionSource"),
     med: pick(last, "utmMedium", "medium") || pick(first, "utmMedium", "medium"),
     ad: pick(last, "adName", "utmContent") || pick(first, "adName", "utmContent"),
+    grp: pick(last, "adGroupName", "adGroupId", "utmTerm") || pick(first, "adGroupName", "adGroupId", "utmTerm"),
   };
 }
 
@@ -203,32 +204,24 @@ async function ads({ start, end }) {
   const range = `date_from=${start}&date_to=${end}`;
   const num = (x) => Number(x) || 0;
   const [fb, gg] = await Promise.all([
-    windsorGet("facebook", `${range}&fields=campaign,adset_name,ad_id,ad_name,effective_status,ad_preview_shareable_link,spend,impressions,clicks,actions_leadgen_grouped`)
+    windsorGet("facebook", `${range}&fields=date,campaign,adset_name,ad_id,ad_name,effective_status,ad_preview_shareable_link,spend,impressions,clicks,actions_leadgen_grouped`)
       // si el campo de leads no está disponible en la cuenta, degradar sin resultados
-      .catch(() => windsorGet("facebook", `${range}&fields=campaign,adset_name,ad_id,ad_name,effective_status,ad_preview_shareable_link,spend,impressions,clicks`).catch(() => [])),
-    windsorGet("google_ads", `${range}&fields=campaign,ad_group_name,ad_id,ad_name,ad_group_ad_status,ad_final_urls,spend,impressions,clicks,conversions`).catch(() => []),
+      .catch(() => windsorGet("facebook", `${range}&fields=date,campaign,adset_name,ad_id,ad_name,effective_status,ad_preview_shareable_link,spend,impressions,clicks`).catch(() => [])),
+    windsorGet("google_ads", `${range}&fields=date,campaign,ad_group_name,ad_id,ad_name,ad_group_ad_status,ad_final_urls,spend,impressions,clicks,conversions`).catch(() => []),
   ]);
+  // Filas por día × anuncio: el frontend las agrupa por semana/rango seleccionado
   const rows = [];
   fb.forEach((r) => rows.push({
-    plat: "Meta", camp: r.campaign || "", grp: r.adset_name || "", id: String(r.ad_id || ""),
+    d: r.date || "", plat: "Meta", camp: r.campaign || "", grp: r.adset_name || "", id: String(r.ad_id || ""),
     name: r.ad_name || "", status: r.effective_status || "", link: r.ad_preview_shareable_link || "",
     spend: num(r.spend), impr: num(r.impressions), clicks: num(r.clicks), results: num(r.actions_leadgen_grouped),
   }));
   gg.forEach((r) => rows.push({
-    plat: "Google", camp: r.campaign || "", grp: r.ad_group_name || "", id: String(r.ad_id || ""),
+    d: r.date || "", plat: "Google", camp: r.campaign || "", grp: r.ad_group_name || "", id: String(r.ad_id || ""),
     name: r.ad_name || "", status: r.ad_group_ad_status || "", link: String(r.ad_final_urls || "").split(",")[0] || "",
     spend: num(r.spend), impr: num(r.impressions), clicks: num(r.clicks), results: num(r.conversions),
   }));
-  // Agregar por anuncio (Windsor puede devolver una fila por día)
-  const byAd = {};
-  for (const r of rows) {
-    const k = r.plat + "|" + (r.id || r.name);
-    const b = byAd[k] = byAd[k] || { ...r, spend: 0, impr: 0, clicks: 0, results: 0 };
-    b.spend += r.spend; b.impr += r.impr; b.clicks += r.clicks; b.results += r.results;
-    if (r.status) b.status = r.status;
-    if (r.link) b.link = r.link;
-  }
-  return { configured: true, ads: Object.values(byAd) };
+  return { configured: true, ads: rows.filter((r) => r.spend || r.clicks || r.impr || r.results) };
 }
 
 exports.handler = async (event) => {

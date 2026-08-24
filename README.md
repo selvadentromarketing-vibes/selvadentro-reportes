@@ -92,11 +92,20 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
 - **Requisito GHL**: el Private Integration Token necesita el scope
   `contacts.readonly` (Settings → Private Integrations → editar → scopes). Sin él,
   la sincronización falla con el detalle del error de GHL visible en pantalla.
+- **Desglose con toggles**: la mezcla completa de calificación (SQL Selvadentro,
+  SQL, MQL, CQL, descalificados, sin calificar) más % alto valor, % SQL+,
+  % descalificación, OPPs, WONs, inversión y costo por lead / por lead de alto
+  valor, con dos interruptores: **nivel** (campaña · conjunto/grupo · anuncio) y
+  **plataforma** (todas · Meta · Google · otras fuentes). Incluye tendencia
+  semana a semana al nivel elegido.
+- **Atribución de anuncio y conjunto**: del `adName`/`utm_content` y
+  `adGroupName`/`utm_term` del contacto en GHL; si el conjunto no viene, se deriva
+  cruzando el nombre del anuncio contra el catálogo de Windsor (anuncio → conjunto).
 - **Extras del tab**: OPPs/WONs que produjo cada campaña (join de oportunidades por
   contactId), comparativa mes anterior vs mes actual, monitor de integridad
   (% con fuente/asesor/calificación + posibles duplicados por teléfono/email) y
-  sección **Paid Media en vivo** bajo demanda (estado activo/pausado por anuncio,
-  link de preview, inversión y resultados vía Windsor `/facebook` y `/google_ads`).
+  sección **Paid Media en vivo** (estado activo/pausado por anuncio, link de
+  preview, inversión y resultados vía Windsor `/facebook` y `/google_ads`).
 
 ## SLA y Seguimiento (Anexo 1 del proceso comercial)
 
