@@ -85,10 +85,16 @@ const slim = (c) => ({
 });
 
 async function bootstrap() {
-  const [fieldsResp, usersResp] = await Promise.all([
+  const [fieldsResp, usersResp, pipesResp] = await Promise.all([
     ghl(`/locations/${LOCATION_ID}/customFields`).catch(() => null), // scope opcional: degradar sin romper
     ghl(`/users/?locationId=${LOCATION_ID}`).catch(() => null),
+    ghl(`/opportunities/pipelines?locationId=${LOCATION_ID}`).catch(() => null),
   ]);
+  // Mapa etapa → { pipeline, etapa } para mostrar la etapa REAL del CRM en cada lead
+  const stages = {};
+  ((pipesResp && pipesResp.pipelines) || []).forEach((p) => {
+    (p.stages || []).forEach((s, i) => { if (s.id) stages[s.id] = { p: p.name || "", s: s.name || "", i: s.position ?? i }; });
+  });
   const users = {};
   if (usersResp && Array.isArray(usersResp.users)) {
     usersResp.users.forEach((u) => { if (u.id && !u.deleted) users[u.id] = u.name || u.email || u.id; });
@@ -98,7 +104,7 @@ async function bootstrap() {
     name: f.name || f.fieldKey || "",
     options: (f.picklistOptions || f.options || []).map((o) => (typeof o === "string" ? o : o?.name || o?.value || "")).filter(Boolean),
   }));
-  return { users, fields, windsor: !!WINDSOR_KEY };
+  return { users, fields, stages, windsor: !!WINDSOR_KEY };
 }
 
 async function leads({ start, end, searchAfter }) {
@@ -141,6 +147,8 @@ async function opps({ startAfter, startAfterId }) {
       st: o.status || "open",
       c: o.createdAt || "",
       v: Number(o.monetaryValue) || 0,
+      s: o.pipelineStageId || "",                                        // etapa real del pipeline
+      sc: o.lastStageChangeAt || o.lastStatusChangeAt || o.updatedAt || o.createdAt || "",
     }));
     total = (data.meta && data.meta.total) || total;
     const meta = data.meta || {};

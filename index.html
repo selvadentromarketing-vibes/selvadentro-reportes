@@ -1984,7 +1984,11 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
     const lv = lqClassify(F.calif ? l.cf[F.calif.id] : "");
     const sc = lqSourceCamp(l);
     const op = O[l.id] || null;
+    const stg = op && op.s ? (boot.stages||{})[op.s] : null;
     return {
+      // Etapa REAL del pipeline de GoHighLevel (si el lead tiene oportunidad);
+      // pst = etiqueta de tags, que solo se usa cuando no hay oportunidad.
+      pipe: stg ? stg.p : "", pstage: stg ? stg.s : "", ost: op ? op.st : "",
       n:l.n, c:l.c, wk:lqWeekOf(l.c), mo:lqMonthOf(l.c), lv, st:lqStage(lv, tagsLower),
       fuente:sc.fuente, camp:sc.camp, ad:(l.attr && l.attr.ad) || "", grp:(l.attr && l.attr.grp) || "", u:l.u||"",
       em:l.em||"", ph:l.ph||"",
@@ -2251,6 +2255,33 @@ function lqRender(){
   // --- Desglose de calidad por campaña / conjunto / anuncio (toggle)
   html += lqLevelSection(agg, leads, rango, rangoSet);
 
+  // --- Distribución por etapa real del pipeline (progresión)
+  {
+    const withOpp = leads.filter(l=>l.pstage);
+    if(withOpp.length){
+      const byPipe = {};
+      withOpp.forEach(l=>{ ((byPipe[l.pipe||"(sin pipeline)"] = byPipe[l.pipe||"(sin pipeline)"] || {})[l.pstage] ||= []).push(l); });
+      let blocks = "";
+      for(const [pipe, stages] of Object.entries(byPipe)){
+        const entries = Object.entries(stages).sort((a,b)=>b[1].length-a[1].length);
+        const max = Math.max(1, ...entries.map(([,a])=>a.length));
+        const rows = entries.map(([st,arr])=>{
+          const hi = lqHigh(lqCount(arr));
+          return `<div class="crm-srow">
+            <span class="s-name">${escAttr(st)}</span>
+            <span class="s-track"><span class="s-bar" style="width:${Math.max(2,Math.round(arr.length/max*100))}%"></span></span>
+            <span class="s-count">${arr.length}<span style="color:var(--neutro);font-size:10.5px;font-weight:400"> · ${hi} AV</span></span>
+          </div>`;
+        }).join("");
+        blocks += `<div class="crm-pipe"><h3>${escAttr(pipe)}<span class="p-badge"><span>${Object.values(stages).reduce((a,x)=>a+x.length,0)} leads con oportunidad</span></span></h3>
+          <div class="crm-stages">${rows}</div></div>`;
+      }
+      html += `<h3 style="font-family:var(--serif);color:var(--verde-prof);font-size:20px;margin:22px 0 6px">Etapa actual en el pipeline</h3>
+        <p class="hint" style="margin-top:0">Dónde está hoy cada lead del rango dentro del CRM (etapa real de su oportunidad más reciente). AV = leads de alto valor. ${leads.length-withOpp.length} de ${leads.length} leads aún no tienen oportunidad creada.</p>
+        ${blocks}`;
+    }
+  }
+
   // --- Inversión (Windsor) y costo por lead calificado
   const spendRango = (agg.spend||[]).filter(r=>{ const w=r.d?lqWeekOf(r.d+"T12:00:00"+LQ_TZ):null; return w && rangoSet.has(w); });
   if(spendRango.length){
@@ -2313,7 +2344,9 @@ function lqRender(){
       const rows = sorted.map(l=>`<tr>
         <td class="lft" style="font-weight:600">${escAttr(l.n)}</td>
         <td class="lft">${lqBadge(l.lv)}</td>
-        <td class="lft">${escAttr(l.st)}</td>
+        <td class="lft">${l.pstage
+          ? `<b>${escAttr(l.pstage)}</b>${l.ost&&l.ost!=="open"?` <span style="font-size:10px;color:var(--neutro)">(${escAttr(l.ost)})</span>`:""}<div style="font-size:10px;color:var(--neutro)">${escAttr(l.pipe)}</div>`
+          : `<span style="color:var(--neutro)">${escAttr(l.st)}</span><div style="font-size:10px;color:var(--neutro)">sin oportunidad · señal de tags</div>`}</td>
         <td class="lft"><span class="lq-tags" title="${escAttr(l.ad||"")}">${escAttr(l.ad)||"—"}</span>${l.grp?`<div style="font-size:10px;color:var(--neutro)">${escAttr(l.grp)}</div>`:""}</td>
         <td class="lft"><span class="lq-tags" title="${escAttr(l.tags)}">${escAttr(l.tags)||"—"}</span></td>
         <td class="lft">${escAttr(agg.users[l.u]||"—")}</td>
@@ -2323,7 +2356,7 @@ function lqRender(){
         <div class="lc-head"><span class="lc-name">${escAttr(camp)}</span><span class="lc-n">${arr.length} lead${arr.length!==1?"s":""}</span></div>
         ${lqMixBar(lqCount(arr), arr.length)}
         <div class="table-scroll" style="margin-top:10px;border:none;box-shadow:none"><table class="rep">
-          <thead><tr><th class="lft">Lead</th><th class="lft">Calif.</th><th class="lft">Etapa</th><th class="lft">Anuncio / conjunto</th><th class="lft">Tags</th><th class="lft">Asesor</th><th class="lft">Presupuesto · Horizonte</th></tr></thead>
+          <thead><tr><th class="lft">Lead</th><th class="lft">Calif.</th><th class="lft">Etapa del pipeline (CRM)</th><th class="lft">Anuncio / conjunto</th><th class="lft">Tags</th><th class="lft">Asesor</th><th class="lft">Presupuesto · Horizonte</th></tr></thead>
           <tbody>${rows}</tbody></table></div>
       </div>`;
     }).join("");
@@ -2333,7 +2366,12 @@ function lqRender(){
   if(!leads.length) html += `<div class="empty-rep">Sin leads en las semanas seleccionadas.</div>`;
 
   // --- Metodología
-  html += `<div class="lq-meth"><b>Metodología de calificación</b> —
+  html += `<div class="lq-meth"><b>De dónde sale cada dato</b> — la <b>calificación</b> NO la calcula la app: se lee tal cual del campo
+    "${escAttr(agg.califField?.name||"Calificación del lead")}" que el equipo llena en GoHighLevel (si está vacío, el lead aparece como "Sin calificar", nunca se adivina).
+    La <b>etapa</b> es la etapa real de la oportunidad en el pipeline del CRM; si el lead todavía no tiene oportunidad, se muestra en gris una señal derivada de sus tags.
+    Los <b>OPPs y WONs</b> son las oportunidades de ese lead en el CRM. La <b>inversión</b> viene de Windsor.ai (Meta + Google).
+    Los datos se refrescan solos cada 30 minutos; para verlos al instante usa <b>Sincronizar leads</b>.</div>
+    <div class="lq-meth"><b>Metodología de calificación</b> (criterio del equipo al llenar el campo) —
     <b>SQL Selvadentro:</b> interés real + alineado al producto (terreno/inversión en Tulum) + señal fuerte (cita/cotización) o presupuesto ≥$100K USD con horizonte ≤6m y respuesta activa ·
     <b>SQL:</b> interés real y activo pero con desalineación de producto o presupuesto/horizonte por debajo del perfil ·
     <b>MQL:</b> respondió / mostró interés, aún sin calificar a fondo ·
@@ -2438,8 +2476,11 @@ async function lqSync(){
         const res = await lqFn({action:"opps", ...(oc||{})});
         for(const o of res.opps){
           if(!o.ct) continue;
-          const b = oppsByContact[o.ct] = oppsByContact[o.ct] || {o:0,w:0,v:0};
+          const b = oppsByContact[o.ct] = oppsByContact[o.ct] || {o:0,w:0,v:0,s:"",sc:0,st:""};
           b.o++; if(o.st==="won"){ b.w++; b.v+=(o.v||0); }
+          // Etapa real: la de la oportunidad movida más recientemente
+          const t = new Date(o.sc||o.c||0).getTime()||0;
+          if(o.s && t >= b.sc){ b.sc=t; b.s=o.s; b.st=o.st; }
         }
         seen += res.fetched; oc = res.cursor;
         lbl.textContent=`Sincronizando oportunidades… ${seen.toLocaleString()}`;
