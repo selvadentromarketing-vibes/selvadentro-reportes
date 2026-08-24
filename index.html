@@ -350,6 +350,50 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .lt-btn.active{ background:var(--olivo); border-color:var(--olivo); color:#fff; }
   .lq-dot{ display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:7px; vertical-align:middle; flex:none; }
   .lq-legend-dots{ display:flex; gap:14px; align-items:center; font-size:11px; color:var(--neutro); margin:-4px 0 10px; }
+  /* ---- Tablas desplegables (campaña → conjunto → anuncio) ---- */
+  .lq-toolbar{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 10px; }
+  .lq-search{ font-family:var(--sans); font-size:12.5px; padding:7px 13px; border:1px solid var(--linea); border-radius:999px; background:#fff; min-width:280px; color:var(--texto); }
+  .lq-search:focus{ outline:none; border-color:var(--olivo); }
+  table.lq-tree tr.lq-row.clickable{ cursor:pointer; }
+  table.lq-tree tr.lq-row.clickable:hover{ background:var(--crema); }
+  table.lq-tree tr.d0 > td{ font-weight:600; }
+  table.lq-tree tr.d1 > td:first-child, table.lq-tree tr.d2 > td:first-child{ font-weight:500; }
+  table.lq-tree tr.d1{ background:rgba(245,241,232,.45); }
+  table.lq-tree tr.d2{ background:rgba(245,241,232,.75); }
+  .lq-caret{ display:inline-block; width:14px; color:var(--cobre); font-size:10px; }
+  .lq-sub{ font-size:10.5px; color:var(--neutro); font-weight:400; }
+  .lq-orig{ display:inline-block; font-size:9.5px; font-weight:700; letter-spacing:.5px; padding:2px 8px; border-radius:4px; }
+  .lq-orig.meta{ background:#e3ecf5; color:#2a4f7c; }
+  .lq-orig.google{ background:#f6e7e0; color:#a2542c; }
+  /* ---- Sub-pestañas de Calidad de Leads ---- */
+  .lq-subtabs{ display:flex; gap:10px; flex-wrap:wrap; margin:2px 0 18px; }
+  .lq-subtab{ display:flex; align-items:center; gap:10px; background:var(--crema-2); border:1px solid var(--linea); border-radius:12px; padding:10px 16px; cursor:pointer; transition:.15s; min-width:190px; }
+  .lq-subtab:hover{ border-color:var(--cobre); }
+  .lq-subtab.active{ background:#fff; border-color:var(--cobre); box-shadow:0 2px 6px rgba(70,82,65,.08); }
+  .lq-subtab .ls-n{ display:flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:var(--arena,#e0d8c6); color:var(--verde-prof); font-size:11px; font-weight:700; flex:none; }
+  .lq-subtab.active .ls-n{ background:var(--cobre); color:#fff; }
+  .lq-subtab b{ display:block; font-size:13px; color:var(--verde-prof); font-weight:600; line-height:1.25; }
+  .lq-subtab i{ display:block; font-size:10.5px; color:var(--neutro); font-style:normal; }
+  /* ---- Reporte combinado ---- */
+  .lq-lectura{ background:#fff; border:1px solid var(--linea); border-left:4px solid var(--cobre); border-radius:12px; padding:16px 20px; margin-bottom:18px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .lq-lectura h4{ margin:0 0 8px; font-family:var(--serif); font-size:17px; color:var(--verde-prof); }
+  .lq-lectura p{ margin:5px 0; font-size:13px; line-height:1.6; color:var(--texto); }
+  .lq-lectura p.ok{ color:var(--verde-prof); } .lq-lectura p.warn{ color:#a94436; }
+  .lq-charts{ display:grid; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); gap:18px; margin-bottom:18px; }
+  .lq-card{ background:#fff; border:1px solid var(--linea); border-radius:12px; padding:16px 18px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .lq-card h4{ margin:0 0 12px; font-family:var(--serif); font-size:16px; color:var(--verde-prof); }
+  .lq-card canvas{ max-height:190px; }
+  .lq-qbar{ display:flex; height:11px; border-radius:999px; overflow:hidden; background:#e8e4da; }
+  .lq-qbar span{ min-width:2px; }
+  /* ---- Acciones de la IA ---- */
+  .lq-actions{ display:flex; flex-direction:column; gap:10px; margin-bottom:18px; }
+  .lq-action{ background:#fff; border:1px solid var(--linea); border-radius:12px; padding:13px 16px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .la-head{ display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
+  .la-num{ display:flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; background:var(--crema-2); color:var(--verde-prof); font-size:11px; font-weight:700; flex:none; }
+  .la-prio{ font-size:9.5px; font-weight:700; letter-spacing:.6px; color:#fff; padding:2px 8px; border-radius:999px; }
+  .la-title{ font-size:13.5px; font-weight:600; color:var(--verde-prof); }
+  .la-resp{ margin-left:auto; font-size:10.5px; color:var(--neutro); border:1px solid var(--linea); border-radius:999px; padding:2px 9px; }
+  .la-detail{ font-size:12.5px; color:var(--texto); line-height:1.55; margin-top:6px; padding-left:29px; }
 </style>
 </head>
 <body>
@@ -1885,16 +1929,25 @@ const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 const LQ_TZ = "-05:00";                 // Tulum (America/Cancun): UTC-5 fijo, sin DST
 const LQ_TZ_MS = 5 * 3600e3;
-const lqState = { built:false, agg:null, syncing:false };
+const lqState = { built:false, agg:null, syncing:false, sub:"datos", exp:{} };
+const LQ_SUBS = [
+  { id:"datos",        n:"1", name:"Datos de Campañas", sub:"Meta + Google · auto" },
+  { id:"calidad",      n:"2", name:"Calidad de Lead",   sub:"CRM · GHL auto" },
+  { id:"combinado",    n:"3", name:"Reporte Combinado", sub:"Dirección Comercial" },
+  { id:"conclusiones", n:"4", name:"Conclusiones",      sub:"IA · qué hacer" },
+];
 
 const LQ_LEVELS = [
-  { id:"sqls", name:"SQL Selvadentro", color:"var(--cobre)" },
-  { id:"sql",  name:"SQL",             color:"var(--verde-prof)" },
-  { id:"mql",  name:"MQL",             color:"var(--olivo)" },
-  { id:"cql",  name:"CQL",             color:"#b7ad91" },
-  { id:"desc", name:"Descalificado",   color:"#a94436" },
-  { id:"nc",   name:"Sin calificar",   color:"#d8d2c2" },
+  { id:"sqls",  name:"SQL Selvadentro", short:"SQL SD",   color:"var(--cobre)" },
+  { id:"sql",   name:"SQL",             short:"SQL",      color:"var(--verde-prof)" },
+  { id:"mql",   name:"MQL",             short:"MQL",      color:"var(--olivo)" },
+  { id:"cql",   name:"CQL",             short:"CQL",      color:"#b7ad91" },
+  { id:"nuevo", name:"Nuevo",           short:"Nuevo",    color:"#8fa3b0" },
+  { id:"desc",  name:"Descalificado",   short:"Descal.",  color:"#a94436" },
+  { id:"nc",    name:"Sin calificar",   short:"S/Calif",  color:"#d8d2c2" },
 ];
+// Orden de columnas del reporte: embudo ascendente, luego descartes
+const LQ_COLS = ["cql","mql","sql","sqls","desc","nuevo","nc"].map(id=>LQ_LEVELS.find(l=>l.id===id));
 const LQ_LEVEL_BY_ID = Object.fromEntries(LQ_LEVELS.map(l=>[l.id,l]));
 const LQ_RANK = Object.fromEntries(LQ_LEVELS.map((l,i)=>[l.id,i]));
 
@@ -1968,6 +2021,7 @@ const LQ_RX = {
   fuerte:  /interes\s*identificad|inter[eé]s\s*identificad|cotiza|propuesta|negocia|apartad|contrat|cierre|ganad|won|tour|visita|zoom\s*(realizad|complet)/i,
   contacto:/contacto\s*establecid|conversaci|respondi|calific|discovery|seguimiento/i,
   frio:    /nuevo\s*lead|sin\s*contact|1(er|°)?\s*toque|primer\s*toque|sin\s*respuesta|no\s*contest/i,
+  nuevo:   /nuevo\s*lead|no\s*contactad|sin\s*contactar|nuevo$/i,
 };
 const LQ_TAGS_DESC = /descalificad|no-?califica|numero-?(equivocado|invalido)|wrong-?number|spam|duplicad|no-?interes/i;
 const LQ_TAGS_RESP = /respondi|replied|another-device-replied|contest|interesad/i;
@@ -2017,10 +2071,15 @@ function lqAutoQualify(l){
   }
   if(l.o>0 && !LQ_RX.frio.test(stage)){ why.push("oportunidad creada y movida del arranque"); return {lv:"mql", why}; }
 
-  // 6) CQL — capturado, con alcance enviado o sin respuesta sustancial
+  // 6) Nuevo — capturado y todavía sin ningún toque registrado
+  if(!noAns && (LQ_RX.nuevo.test(stage) || (!stage && !l.o))){
+    why.push(stage ? `etapa: "${stage}"` : "capturado; sin toque registrado todavía");
+    return {lv:"nuevo", why};
+  }
+  // 7) CQL — capturado, con alcance enviado o sin respuesta sustancial
   if(noAns) why.push(`${noAns} intento${noAns>1?"s":""} sin respuesta`);
   else if(stage) why.push(`etapa: "${stage}"`);
-  else why.push("capturado; sin señales de respuesta todavía");
+  else why.push("primer alcance enviado; sin respuesta sustancial");
   return {lv:"cql", why};
 }
 
@@ -2032,6 +2091,7 @@ function lqClassify(cfVal){
   if(raw.includes("sql")) return "sql";
   if(raw.includes("mql")) return "mql";
   if(raw.includes("cql")) return "cql";
+  if(raw.includes("nuevo")) return "nuevo";
   return "nc";
 }
 
@@ -2070,8 +2130,8 @@ function lqBucketAds(adRows){
   const by = {};
   for(const r of (adRows||[])){
     const wk = r.d ? lqWeekOf(r.d+"T12:00:00"+LQ_TZ) : null; if(!wk) continue;
-    const k = r.plat+"|"+(r.id||r.name)+"|"+wk;
-    const b = by[k] = by[k] || { wk, plat:r.plat, camp:r.camp, grp:r.grp, id:r.id, name:r.name, status:r.status, link:r.link, spend:0, impr:0, clicks:0, results:0 };
+    const k = r.plat+"|"+(r.id||r.name)+"|"+(r.pp||"")+"|"+wk;
+    const b = by[k] = by[k] || { wk, plat:r.plat, camp:r.camp, grp:r.grp, id:r.id, name:r.name, pp:r.pp||"", status:r.status, link:r.link, spend:0, impr:0, clicks:0, results:0 };
     b.spend+=r.spend; b.impr+=r.impr; b.clicks+=r.clicks; b.results+=r.results;
     if(r.status) b.status=r.status;
     if(r.link) b.link=r.link;
@@ -2256,6 +2316,171 @@ function lqStatusOf(key, level, idx, adIdx){
 const LQ_PLATS_UI = [{id:"all",name:"Todas"},{id:"Meta",name:"Meta"},{id:"Google",name:"Google"},{id:"otras",name:"Otras fuentes"}];
 const lqPlatMatch = (l, p)=> p==="all" ? true : p==="otras" ? (l.fuente!=="Meta" && l.fuente!=="Google") : l.fuente===p;
 
+// Familia de campaña: agrupa campañas hermanas ignorando fechas y sufijos de test.
+function lqFamilia(camp){
+  let t = String(camp||"").replace(/^INVESTORS[_\s-]*/i,"").replace(/[_-]?\d{6,8}$/,"");
+  t = t.replace(/[_-]?(TEST|COPY|V\d+|NEWLPS|TOPLPS)\b/gi,"");
+  const parts = t.split(/[_\-–\s]+/).filter(Boolean);
+  if(!parts.length) return "—";
+  return parts.slice(0,3).map(w=> w.length<=3 ? w.toUpperCase() : w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(" / ");
+}
+const lqExpKey = (s)=> "e"+lqNormCamp(s).slice(0,60);
+const lqIsExp  = (k)=> !!(lqState.exp && lqState.exp[k]);
+const lqCaret  = (k, has)=> has ? `<span class="lq-caret">${lqIsExp(k)?"▾":"▸"}</span>` : `<span class="lq-caret" style="opacity:0"></span>`;
+
+// Agrupa los leads del rango en campaña → conjunto → anuncio
+function lqHierarchy(leads, adIdx){
+  const tree = {};
+  for(const l of leads){
+    const c = l.fuente+" · "+l.camp;
+    const hit = adIdx[lqNormCamp(l.ad)] || null;
+    const g = l.grp || (hit && hit.grp) || (l.ad ? "(conjunto no identificado)" : "(sin conjunto)");
+    const a = l.ad || "(sin anuncio atribuido)";
+    const C = tree[c] = tree[c] || { leads:[], grps:{} };
+    C.leads.push(l);
+    const G = C.grps[g] = C.grps[g] || { leads:[], ads:{} };
+    G.leads.push(l);
+    (G.ads[a] = G.ads[a] || []).push(l);
+  }
+  return tree;
+}
+
+function lqTierCells(arr){
+  const c = lqCount(arr);
+  return LQ_COLS.map(L=>{
+    const n = c[L.id]||0;
+    const em = (L.id==="sqls"&&n) ? ' style="font-weight:700;color:var(--cobre)"' : (L.id==="desc"&&n) ? ' style="color:#a94436"' : "";
+    return `<td${em}>${n||"·"}</td>`;
+  }).join("");
+}
+const lqCalif = (arr)=> lqHigh(lqCount(arr));   // Calificados = MQL + SQL + SQL Selvadentro
+
+// Fila de la tabla de calidad, a cualquier profundidad
+function lqQRow(label, sub, arr, depth, expKey, hasKids, extra){
+  const califN = lqCalif(arr), pct = arr.length ? Math.round(califN/arr.length*100) : 0;
+  const pad = depth*22;
+  return `<tr class="lq-row d${depth}${hasKids?" clickable":""}"${hasKids?` data-lq-exp="${expKey}"`:""}>
+    <td class="name" style="padding-left:${10+pad}px">${hasKids?lqCaret(expKey,true):""}${extra&&extra.dot!==undefined?lqDot(extra.dot):""}${escAttr(label)}${extra&&extra.count?` <span class="lq-sub">${extra.count}</span>`:""}
+      ${sub?`<div class="lq-sub" style="padding-left:${hasKids?16:0}px">${escAttr(sub)}</div>`:""}</td>
+    <td class="lft lq-sub">${extra&&extra.fam?escAttr(extra.fam):""}</td>
+    ${lqTierCells(arr)}
+    <td><b>${arr.length}</b></td><td>${califN||"·"}</td><td class="pct">${arr.length?pct+"%":"—"}</td>
+    <td>${arr.reduce((a,l)=>a+(l.o||0),0)||"·"}</td><td>${arr.reduce((a,l)=>a+(l.w||0),0)||"·"}</td>
+    <td>${extra&&extra.spend?fmtMoney(extra.spend):"—"}</td>
+    <td>${extra&&extra.spend&&arr.length?fmtMoney(extra.spend/arr.length):"—"}</td>
+  </tr>`;
+}
+
+// Tabla de calidad jerárquica: campaña → conjunto → anuncio, con clic para desplegar
+function lqQualityTree(agg, leads, rangoSet){
+  const adIdx = lqAdIndex(agg);
+  const stIdx = lqStatusIndex(agg);
+  const tree = lqHierarchy(leads, adIdx);
+  const campKeys = Object.keys(tree).sort((a,b)=>tree[b].leads.length-tree[a].leads.length);
+  const spCamp = lqSpendByLevel(agg, rangoSet, "camp", campKeys, Object.fromEntries(campKeys.map(k=>[k,tree[k].leads.length])));
+  const q = (lqState.q||"").trim().toLowerCase();
+  const hit = (s)=> !q || String(s||"").toLowerCase().includes(q);
+
+  let body = "";
+  for(const ck of campKeys){
+    const C = tree[ck];
+    const gKeys = Object.keys(C.grps).sort((a,b)=>C.grps[b].leads.length-C.grps[a].leads.length);
+    const adNames = Object.keys(C.grps).flatMap(g=>Object.keys(C.grps[g].ads));
+    if(!(hit(ck) || gKeys.some(hit) || adNames.some(hit))) continue;
+    const ek = lqExpKey(ck);
+    const camp = ck.split(" · ").slice(1).join(" · ");
+    body += lqQRow(ck, "", C.leads, 0, ek, gKeys.length>0,
+      { dot: lqStatusOf(ck,"camp",stIdx,adIdx), fam: lqFamilia(camp), spend: spCamp[ck]||0,
+        count: `${gKeys.length} conjunto${gKeys.length===1?"":"s"}` });
+    if(!lqIsExp(ek)) continue;
+    const spGrp = lqSpendByLevel(agg, rangoSet, "grp", gKeys, Object.fromEntries(gKeys.map(k=>[k,C.grps[k].leads.length])));
+    for(const gk of gKeys){
+      const G = C.grps[gk];
+      const aKeys = Object.keys(G.ads).sort((a,b)=>G.ads[b].length-G.ads[a].length);
+      const gek = lqExpKey(ck+"|"+gk);
+      body += lqQRow(gk, "", G.leads, 1, gek, aKeys.length>0,
+        { dot: lqStatusOf(gk,"grp",stIdx,adIdx), spend: spGrp[gk]||0,
+          count: `${aKeys.length} anuncio${aKeys.length===1?"":"s"}` });
+      if(!lqIsExp(gek)) continue;
+      const spAd = lqSpendByLevel(agg, rangoSet, "ad", aKeys, Object.fromEntries(aKeys.map(k=>[k,G.ads[k].length])));
+      for(const ak of aKeys){
+        body += lqQRow(ak, "", G.ads[ak], 2, "", false,
+          { dot: lqStatusOf(ak,"ad",stIdx,adIdx), spend: spAd[ak]||0 });
+      }
+    }
+  }
+  const spT = Object.values(spCamp).reduce((a,b)=>a+b,0);
+  const califT = lqCalif(leads);
+  const totRow = `<tr class="total"><td class="lft">Total</td><td></td>${lqTierCells(leads)}
+    <td><b>${leads.length}</b></td><td>${califT}</td><td class="pct">${leads.length?Math.round(califT/leads.length*100)+"%":"—"}</td>
+    <td>${leads.reduce((a,l)=>a+(l.o||0),0)}</td><td>${leads.reduce((a,l)=>a+(l.w||0),0)}</td>
+    <td>${spT?fmtMoney(spT):"—"}</td><td>—</td></tr>`;
+  return `<div class="table-scroll" style="margin-bottom:8px"><table class="cons lq-tree">
+    <tr><th class="lft">Campaña / conjunto / anuncio</th><th class="lft">Familia</th>
+      ${LQ_COLS.map(L=>`<th title="${L.name}">${L.short}</th>`).join("")}
+      <th>Total</th><th>Calif.</th><th>%</th><th>OPPs</th><th>WONs</th><th>Inversión</th><th>Costo/lead</th></tr>
+    ${body || `<tr><td colspan="18" class="lft" style="color:var(--neutro);font-style:italic">Sin leads que coincidan.</td></tr>`}
+    ${totRow}
+  </table></div>`;
+}
+
+// Tabla de datos de campañas (inversión y desempeño), campaña → anuncio × plataforma
+function lqAdsTree(agg, rangoSet){
+  const rows = (agg.adw||[]).filter(a=>rangoSet.has(a.wk));
+  if(!rows.length) return "";
+  const plat = lqState.plat || "all";
+  if(plat==="otras") return `<div class="empty-rep">"Otras fuentes" no tiene anuncios pagados.</div>`;
+  const q = (lqState.q||"").trim().toLowerCase();
+  const hit = (s)=> !q || String(s||"").toLowerCase().includes(q);
+  const camps = {};
+  for(const a of rows){
+    if(plat!=="all" && a.plat!==plat) continue;
+    const C = camps[a.camp||"(sin campaña)"] = camps[a.camp||"(sin campaña)"] || { plat:a.plat, spend:0, impr:0, clicks:0, results:0, ads:{}, pps:new Set() };
+    C.spend+=a.spend; C.impr+=a.impr; C.clicks+=a.clicks; C.results+=a.results;
+    if(a.pp) C.pps.add(a.pp);
+    const k = (a.name||a.id||"(sin nombre)")+"||"+(a.pp||"");
+    const A = C.ads[k] = C.ads[k] || { name:a.name||a.id||"(sin nombre)", grp:a.grp, pp:a.pp, plat:a.plat, status:a.status, link:a.link, spend:0, impr:0, clicks:0, results:0, _wk:"" };
+    A.spend+=a.spend; A.impr+=a.impr; A.clicks+=a.clicks; A.results+=a.results;
+    if(a.status && a.wk>=A._wk){ A.status=a.status; A._wk=a.wk; }
+  }
+  const origen = (p)=>`<span class="lq-orig ${p==="Meta"?"meta":"google"}">${escAttr(p==="Meta"?"META":"GOOGLE")}</span>`;
+  const cpl=(s,r)=> r?fmtMoney(s/r):"—";
+  const ctr=(c,i)=> i?((c/i*100).toFixed(2)+"%"):"—";
+  const cpc=(s,c)=> c?fmtMoney(s/c):"—";
+  let body="";
+  const ckeys = Object.keys(camps).sort((a,b)=>camps[b].spend-camps[a].spend);
+  for(const ck of ckeys){
+    const C = camps[ck];
+    const adList = Object.values(C.ads).sort((a,b)=>b.spend-a.spend);
+    if(!(hit(ck) || adList.some(a=>hit(a.name)||hit(a.grp)))) continue;
+    const ek = lqExpKey("ads|"+ck);
+    body += `<tr class="lq-row d0 clickable" data-lq-exp="${ek}">
+      <td class="name" style="padding-left:10px">${lqCaret(ek,true)}${escAttr(ck)} <span class="lq-sub">${adList.length} anuncio(s)</span></td>
+      <td class="lft">${origen(C.plat)}</td><td class="lft">${escAttr([...C.pps].join(", ")||C.plat)}</td>
+      <td>${fmtMoney(C.spend)}</td><td>${C.impr.toLocaleString()}</td><td>${C.clicks.toLocaleString()}</td>
+      <td>${C.results||"—"}</td><td>${cpl(C.spend,C.results)}</td><td>${ctr(C.clicks,C.impr)}</td><td>${cpc(C.spend,C.clicks)}</td></tr>`;
+    if(!lqIsExp(ek)) continue;
+    for(const a of adList){
+      body += `<tr class="lq-row d1">
+        <td class="name" style="padding-left:44px">${lqDot(lqIsOn(a.status)?true:lqIsOff(a.status)?false:undefined)}${escAttr(a.name)}
+          ${a.grp?`<div class="lq-sub">${escAttr(a.grp)}</div>`:""}</td>
+        <td class="lft">${origen(a.plat)}</td><td class="lft">${escAttr(a.pp||a.plat)}</td>
+        <td>${fmtMoney(a.spend)}</td><td>${a.impr.toLocaleString()}</td><td>${a.clicks.toLocaleString()}</td>
+        <td>${a.results||"—"}</td><td>${cpl(a.spend,a.results)}</td><td>${ctr(a.clicks,a.impr)}</td><td>${cpc(a.spend,a.clicks)}</td>
+        <td style="display:none"></td></tr>`;
+    }
+  }
+  const T = Object.values(camps).reduce((t,c)=>({spend:t.spend+c.spend,impr:t.impr+c.impr,clicks:t.clicks+c.clicks,results:t.results+c.results}),{spend:0,impr:0,clicks:0,results:0});
+  return `<div class="table-scroll" style="margin-bottom:8px"><table class="cons lq-tree">
+    <tr><th class="lft">Campaña / anuncio</th><th class="lft">Origen</th><th class="lft">Plataforma</th>
+      <th>Inversión</th><th>Impres.</th><th>Clics</th><th>Resultados</th><th>CPL</th><th>CTR</th><th>CPC</th></tr>
+    ${body || `<tr><td colspan="10" class="lft" style="color:var(--neutro);font-style:italic">Sin anuncios que coincidan.</td></tr>`}
+    <tr class="total"><td class="lft">Total (campañas del rango)</td><td></td><td></td>
+      <td>${fmtMoney(T.spend)}</td><td>${T.impr.toLocaleString()}</td><td>${T.clicks.toLocaleString()}</td>
+      <td>${T.results||"—"}</td><td>${cpl(T.spend,T.results)}</td><td>${ctr(T.clicks,T.impr)}</td><td>${cpc(T.spend,T.clicks)}</td></tr>
+  </table></div>`;
+}
+
 function lqLevelSection(agg, leadsAll, rango, rangoSet){
   const level = lqState.level || "camp";
   const plat = lqState.plat || "all";
@@ -2324,12 +2549,210 @@ function lqLevelSection(agg, leadsAll, rango, rangoSet){
   const hint = `<p class="hint" style="margin-top:-4px">Alto valor = MQL + SQL + SQL Selvadentro · SQL+ = SQL + SQL Selvadentro · OPPs/WONs = oportunidades del CRM de esos leads · la inversión se empareja por nombre con Windsor (—  = sin empate).
     ${level!=="camp"&&noAd?` <b>${noAd}</b> de ${leads.length} leads no traen anuncio en su atribución (UTM) y caen en "(sin anuncio atribuido)".`:""}</p>`;
 
+  const tree = level==="camp" ? lqQualityTree(agg, leads, rangoSet) : "";
   const legend = `<div class="lq-legend-dots">
     <span>${lqDot(true)} Activo hoy</span><span>${lqDot(false)} Pausado o detenido</span><span>${lqDot(undefined)} Sin datos de plataforma</span>
     <span style="margin-left:auto">Estado tomado de la última semana reportada por Windsor · un conjunto o campaña cuenta como activo si al menos un anuncio suyo lo está.</span>
   </div>`;
+  const buscador = `<div class="lq-toolbar">
+    <input type="text" id="lq-q" class="lq-search" placeholder="Buscar campaña, conjunto o anuncio…" value="${escAttr(lqState.q||"")}">
+    <button class="lt-btn" id="lq-expand-all">Expandir / colapsar todo</button>
+  </div>`;
   return `<h3 style="font-family:var(--serif);color:var(--verde-prof);font-size:20px;margin:22px 0 6px">Calidad por ${LQ_LEVELS_UI.find(o=>o.id===level).name.toLowerCase()}</h3>
-    ${toggle}${legend}${mainTable}${trend}${hint}`;
+    ${toggle}${buscador}${legend}${level==="camp" ? tree + `<p class="hint" style="margin-top:-4px">Haz clic en una campaña para ver sus conjuntos, y en un conjunto para ver sus anuncios. Calif. = MQL + SQL + SQL Selvadentro.</p>` : mainTable+trend}${hint}`;
+}
+
+/* ---- Reporte combinado: cruce de inversión (Meta+Google) con calidad (GHL) ---- */
+// Agrupa por FAMILIA de campaña porque los nombres exactos difieren entre plataforma y CRM.
+function lqFamiliaData(agg, leads, rangoSet){
+  const fams = {};
+  const F = (name)=> fams[name] = fams[name] || { inv:0, resultAds:0, leads:[], impr:0, clicks:0 };
+  // Inversión y resultados que reporta la plataforma
+  for(const a of (agg.adw||[])){
+    if(!rangoSet.has(a.wk)) continue;
+    const f = F(lqFamilia(a.camp));
+    f.inv += a.spend; f.resultAds += a.results; f.impr += a.impr; f.clicks += a.clicks;
+  }
+  // Leads del CRM
+  for(const l of leads){
+    const name = (l.camp && l.camp!=="(campaña sin atribuir)") ? lqFamilia(l.camp) : "(Sin campaña / directo)";
+    F(name).leads.push(l);
+  }
+  return fams;
+}
+
+function lqComboSection(agg, leadsAll, rango, rangoSet){
+  const plat = lqState.plat || "all";
+  const leads = leadsAll.filter(l=>lqPlatMatch(l, plat));
+  const fams = lqFamiliaData(agg, leads, rangoSet);
+  const keys = Object.keys(fams).sort((a,b)=>(fams[b].inv-fams[a].inv) || (fams[b].leads.length-fams[a].leads.length));
+  const invT = keys.reduce((a,k)=>a+fams[k].inv,0);
+  const resT = keys.reduce((a,k)=>a+fams[k].resultAds,0);
+  const califT = lqCalif(leads);
+  const cplT = leads.length ? invT/leads.length : null;
+  const ccT = califT ? invT/califT : null;
+
+  const kpi=(v,l,accent)=>`<div class="crm-kpi"${accent?` style="border-color:${accent}"`:""}><div class="k-val">${v}</div><div class="k-lbl">${l}</div></div>`;
+  let html = `<div class="crm-kpis">
+    ${kpi(fmtMoney(invT),"Inversión total")}
+    ${kpi(leads.length.toLocaleString(),"Leads CRM (GHL)")}
+    ${kpi(cplT!=null?fmtMoney(cplT):"—","CPL")}
+    ${kpi(califT.toLocaleString(),"Calificados")}
+    ${kpi(leads.length?Math.round(califT/leads.length*100)+"%":"—","% calificados")}
+    ${kpi(ccT!=null?fmtMoney(ccT):"—","Costo / calificado")}
+  </div>`;
+
+  // Lectura automática (determinista, sin IA): lo que el dato dice por sí solo
+  const conCalif = keys.filter(k=>lqCalif(fams[k].leads)>0).sort((a,b)=>lqCalif(fams[b].leads)-lqCalif(fams[a].leads));
+  const quemado = keys.filter(k=>fams[k].inv>0 && lqCalif(fams[k].leads)===0).sort((a,b)=>fams[b].inv-fams[a].inv);
+  html += `<div class="lq-lectura">
+    <h4>Lectura automática — cantidad vs. calidad</h4>
+    <p>Inversión <b>${fmtMoney(invT)}</b> · <b>${leads.length} leads</b> en CRM · <b>${califT} calificados</b> (${leads.length?Math.round(califT/leads.length*100):0}%)${ccT!=null?` · <b>${fmtMoney(ccT)}</b> por calificado`:""}.</p>
+    ${conCalif.length?`<p class="ok"><b>Mejor calidad:</b> ${conCalif.slice(0,3).map(k=>`${escAttr(k)} (${lqCalif(fams[k].leads)} calif.)`).join(" · ")}.</p>`:""}
+    ${quemado.length?`<p class="warn">⚠ <b>Inversión sin calificados:</b> ${quemado.slice(0,3).map(k=>`${escAttr(k)} (${fmtMoney(fams[k].inv)})`).join(" · ")}.</p>`:""}
+    ${leads.length<20?`<p class="warn">⚠ Volumen bajo (${leads.length} leads): las proporciones de este periodo son indicativas, no concluyentes.</p>`:""}
+  </div>`;
+
+  // Gráficas
+  html += `<div class="lq-charts">
+    <div class="lq-card"><h4>Inversión vs. leads calificados por familia</h4><canvas id="lq-ch-fam" height="150"></canvas></div>
+    <div class="lq-card"><h4>Distribución de calificación</h4><canvas id="lq-ch-mix" height="150"></canvas></div>
+  </div>`;
+
+  // Tabla por familia con barra de calidad
+  const barra=(arr)=>{
+    if(!arr.length) return `<div class="lq-qbar"><span style="background:#e8e4da;width:100%"></span></div>`;
+    const c=lqCount(arr);
+    return `<div class="lq-qbar">${LQ_COLS.filter(L=>c[L.id]).map(L=>`<span style="background:${L.color};width:${c[L.id]/arr.length*100}%" title="${L.name}: ${c[L.id]}"></span>`).join("")}</div>`;
+  };
+  const rows = keys.map(k=>{
+    const f=fams[k], n=f.leads.length, cal=lqCalif(f.leads);
+    return `<tr><td class="name">${escAttr(k)}</td>
+      <td>${f.inv?fmtMoney(f.inv):"—"}</td><td>${f.resultAds||"—"}</td><td>${n||"—"}</td>
+      <td style="min-width:150px">${barra(f.leads)}</td>
+      <td><b>${cal}</b></td>
+      <td>${f.inv&&n?fmtMoney(f.inv/n):"—"}</td>
+      <td style="${f.inv&&!cal?"color:#a94436":cal?"color:var(--cobre);font-weight:600":""}">${f.inv&&cal?fmtMoney(f.inv/cal):"—"}</td></tr>`;
+  }).join("");
+  html += `<div class="table-scroll" style="margin-bottom:8px"><table class="cons">
+    <tr><th class="lft">Familia de campaña</th><th>Inversión</th><th>Result. ads</th><th>Leads CRM</th><th class="lft">Calidad</th><th>Calif.</th><th>CPL</th><th>Costo/calif.</th></tr>
+    ${rows || `<tr><td colspan="8" class="lft" style="color:var(--neutro);font-style:italic">Sin datos en el rango.</td></tr>`}
+    <tr class="total"><td class="lft">Total</td><td>${fmtMoney(invT)}</td><td>${resT||"—"}</td><td>${leads.length}</td><td>${barra(leads)}</td><td><b>${califT}</b></td><td>${cplT!=null?fmtMoney(cplT):"—"}</td><td>${ccT!=null?fmtMoney(ccT):"—"}</td></tr>
+  </table></div>
+  <p class="hint">Result. ads = leads/conversiones que reporta la plataforma · Leads CRM = contactos en GoHighLevel · CPL = inversión ÷ leads CRM · Costo/calif. = inversión ÷ calificados. Las familias normalizan los nombres, que difieren entre plataforma y CRM.</p>`;
+
+  lqState._combo = { keys, fams, invT, califT, cplT, ccT, leads };
+  return html;
+}
+
+// Dibuja las dos gráficas del reporte combinado (Chart.js ya está cargado en la página)
+function lqDrawCharts(){
+  const d = lqState._combo; if(!d || !window.Chart) return;
+  lqState._charts = lqState._charts || {};
+  Object.values(lqState._charts).forEach(c=>{ try{ c.destroy(); }catch(e){} });
+  lqState._charts = {};
+  const el1 = document.getElementById("lq-ch-fam");
+  if(el1){
+    const labels = d.keys.slice(0,6);
+    lqState._charts.fam = new Chart(el1.getContext("2d"), {
+      data:{ labels, datasets:[
+        { type:"bar", label:"Inversión", data:labels.map(k=>Math.round(d.fams[k].inv)), backgroundColor:"#C6893F", yAxisID:"y", borderRadius:4 },
+        { type:"line", label:"Calificados", data:labels.map(k=>lqCalif(d.fams[k].leads)), borderColor:"#2E3B2A", backgroundColor:"#2E3B2A", yAxisID:"y1", tension:.25, pointRadius:4, borderWidth:2 },
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false,
+        scales:{ y:{ position:"left", title:{display:true,text:"Inversión"}, ticks:{ callback:(v)=>"$"+Number(v).toLocaleString() } },
+                 y1:{ position:"right", title:{display:true,text:"Calificados"}, grid:{drawOnChartArea:false}, ticks:{precision:0} },
+                 x:{ ticks:{ maxRotation:0, autoSkip:false, callback:function(v){ const s=String(this.getLabelForValue(v)); return s.length>16?s.slice(0,15)+"…":s; } } } },
+        plugins:{ legend:{ position:"bottom", labels:{boxWidth:12} } } }
+    });
+  }
+  const el2 = document.getElementById("lq-ch-mix");
+  if(el2){
+    const c = lqCount(d.leads);
+    const cols = LQ_COLS.filter(L=>c[L.id]);
+    lqState._charts.mix = new Chart(el2.getContext("2d"), {
+      type:"doughnut",
+      data:{ labels: cols.map(L=>L.name), datasets:[{ data: cols.map(L=>c[L.id]), backgroundColor: cols.map(L=>L.color), borderColor:"#fff", borderWidth:2 }] },
+      options:{ responsive:true, maintainAspectRatio:false, cutout:"58%", plugins:{ legend:{ position:"right", labels:{boxWidth:12} } } }
+    });
+  }
+}
+
+/* ---- Conclusiones con IA ---- */
+function lqConclusionesSection(){
+  const a = lqState.ia;
+  let html = `<h3 style="font-family:var(--serif);color:var(--verde-prof);font-size:20px;margin:6px 0">Conclusiones y acciones</h3>
+    <p class="hint" style="margin-top:0">Analiza el cruce de inversión y calidad del rango seleccionado y propone acciones concretas. Los datos van agregados: no se envía información personal de ningún lead.</p>
+    <div style="margin-bottom:16px"><button class="btn btn-olive" id="lq-ia-btn">${a?"Volver a analizar":"Analizar con IA"}</button>
+      ${a&&a.ts?`<span class="hint" style="margin-left:12px">Generado ${crmAgo(a.ts)}</span>`:""}</div>`;
+  if(!a) return html + `<div class="empty-rep">Pulsa <b>Analizar con IA</b> para obtener el diagnóstico y las acciones recomendadas del periodo.</div>`;
+  if(a.texto) return html + `<div class="lq-meth" style="white-space:pre-wrap">${escAttr(a.texto)}</div>`;
+  const A = a.analisis || {};
+  const prio = (p)=> p==="alta" ? "#a94436" : p==="media" ? "var(--cobre)" : "var(--olivo)";
+  html += `<div class="lq-lectura"><h4>Lectura</h4><p>${escAttr(A.lectura||"")}</p></div>`;
+  if(Array.isArray(A.acciones) && A.acciones.length){
+    html += `<div class="lq-actions">${A.acciones.map((x,i)=>`
+      <div class="lq-action">
+        <div class="la-head"><span class="la-num">${i+1}</span>
+          <span class="la-prio" style="background:${prio(x.prioridad)}">${escAttr(String(x.prioridad||"").toUpperCase())}</span>
+          <span class="la-title">${escAttr(x.titulo||"")}</span>
+          ${x.responsable?`<span class="la-resp">${escAttr(x.responsable)}</span>`:""}</div>
+        <div class="la-detail">${escAttr(x.detalle||"")}</div>
+      </div>`).join("")}</div>`;
+  }
+  const lista=(t,arr,cls)=> Array.isArray(arr)&&arr.length ? `<div class="lq-meth ${cls||""}"><b>${t}</b><ul style="margin:6px 0 0;padding-left:18px">${arr.map(x=>`<li>${escAttr(x)}</li>`).join("")}</ul></div>` : "";
+  html += lista("Riesgos y datos que no cuadran", A.riesgos);
+  html += lista("Preguntas a verificar en la fuente", A.preguntas);
+  html += `<p class="hint">Generado con IA a partir de los agregados del periodo. Verifica cualquier cifra antes de accionar sobre presupuesto.</p>`;
+  return html;
+}
+
+async function lqAnalizar(){
+  const btn=document.getElementById("lq-ia-btn"); if(btn){ btn.disabled=true; btn.textContent="Analizando…"; }
+  try{
+    const d = lqState._combo || {};
+    const rango = lqRangeWeeks();
+    const mix=(arr)=>{ const c=lqCount(arr); const o={}; LQ_COLS.forEach(L=>{ if(c[L.id]) o[L.name]=c[L.id]; }); return o; };
+    const familias = (d.keys||[]).map(k=>{ const f=d.fams[k], n=f.leads.length, cal=lqCalif(f.leads);
+      return { nombre:k, inv:Math.round(f.inv), resultAds:f.resultAds, leads:n, calif:cal,
+               cpl:n?f.inv/n:0, costoCalif:cal?f.inv/cal:0, mezcla:mix(f.leads) }; });
+    // Anuncios de mayor inversión, con los leads que produjeron
+    const adIdx = lqAdIndex(lqState.agg);
+    const porAnuncio = {};
+    (lqState.agg.adw||[]).filter(a=>new Set(rango).has(a.wk)).forEach(a=>{
+      const k=a.name||a.id; if(!k) return;
+      const b=porAnuncio[k]=porAnuncio[k]||{inv:0,estado:a.status};
+      b.inv+=a.spend; if(a.status) b.estado=a.status;
+    });
+    const anuncios = Object.entries(porAnuncio).sort((x,y)=>y[1].inv-x[1].inv).slice(0,15).map(([nombre,v])=>{
+      const arr=(d.leads||[]).filter(l=>lqNormCamp(l.ad)===lqNormCamp(nombre));
+      return { nombre, estado: lqIsOn(v.estado)?"activo":lqIsOff(v.estado)?"pausado":"?", inv:Math.round(v.inv), leads:arr.length, calif:lqCalif(arr) };
+    });
+    const all=lqState.agg.leads||[];
+    const pc=(n,t)=>t?Math.round(n/t*100)+"%":"—";
+    const payload = {
+      rango: rango.length ? `${rango[0]} → ${rango[rango.length-1]}` : "—",
+      totales: { inv:Math.round(d.invT||0), leads:(d.leads||[]).length, calif:d.califT||0,
+                 cpl:d.cplT||0, costoCalif:d.ccT||0 },
+      familias, anuncios,
+      integridad: { fuente:pc((d.leads||[]).filter(l=>l.hs).length,(d.leads||[]).length),
+                    asesor:pc((d.leads||[]).filter(l=>l.u).length,(d.leads||[]).length),
+                    calificacion:pc((d.leads||[]).filter(l=>l.crmLv&&l.crmLv!=="nc").length,(d.leads||[]).length),
+                    duplicados: 0 },
+    };
+    const res = await lqFn2("/.netlify/functions/lq-analyze", payload);
+    lqState.ia = { ...res, ts: Date.now() };
+    lqRender();
+  }catch(e){
+    toast("No se pudo analizar: "+(e.message||e));
+    if(btn){ btn.disabled=false; btn.textContent="Analizar con IA"; }
+  }
+}
+async function lqFn2(url, body){
+  const r = await fetch(url, { method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer "+AUTH_TOKEN}, body:JSON.stringify(body) });
+  const d = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.error ? d.error + (d.detail?" — "+d.detail:"") : ("HTTP "+r.status));
+  return d;
 }
 
 function lqRender(){
@@ -2353,6 +2776,8 @@ function lqRender(){
     ${kpi(oppTot.toLocaleString(),"OPPs de estos leads")}
     ${kpi(wonTot.toLocaleString(),"WONs de estos leads")}
   </div>`;
+  const SUB = lqState.sub || "datos";
+  const subBar = `<div class="lq-subtabs">${LQ_SUBS.map(t=>`<div class="lq-subtab${SUB===t.id?" active":""}" data-lq-sub="${t.id}"><span class="ls-n">${t.n}</span><span><b>${t.name}</b><i>${t.sub}</i></span></div>`).join("")}</div>`;
   if(!agg.califField){
     html += `<div class="lq-meth">⚠ No se encontró el campo <b>"Calificación del lead"</b> en GoHighLevel; todos los leads aparecen como "Sin calificar". Verifica que el campo exista y que el token tenga el scope de campos personalizados.</div>`;
   }
@@ -2587,13 +3012,49 @@ function lqRender(){
     <b>Descalificado:</b> no pidió info, confundió el anuncio, número equivocado o sin fit.
     Umbral de producto: $100K USD. Semana ISO lun–dom en hora Tulum. Fuente: campo "${escAttr(agg.califField?.name||"Calificación del lead")}" de GoHighLevel; etapa derivada de tags.</div>`;
 
-  // --- Paid Media en vivo (detalle por anuncio del rango)
-  html += lqAdsSection(agg, rangoSet);
+  // html acumulado arriba = pestaña "Calidad de Lead"
+  const calidadHtml = html;
+  let out = subBar;
+  if(SUB==="datos"){
+    out += `<div class="lq-toolbar">
+      <input type="text" id="lq-q" class="lq-search" placeholder="Buscar campaña o anuncio…" value="${escAttr(lqState.q||"")}">
+      <button class="lt-btn" id="lq-expand-all">Expandir / colapsar todo</button>
+      ${LQ_PLATS_UI.filter(o=>o.id!=="otras").map(o=>`<button class="lt-btn${(lqState.plat||"all")===o.id?" active":""}" data-lq-plat="${o.id}">${o.name}</button>`).join("")}
+    </div>` + (lqAdsSection(agg, rangoSet) || `<div class="empty-rep">Sin datos de anuncios en el rango. Requiere WINDSOR_API_KEY configurada.</div>`);
+  } else if(SUB==="calidad"){
+    out += calidadHtml;
+  } else if(SUB==="combinado"){
+    out += lqComboSection(agg, agg.leads.filter(l=>rangoSet.has(l.wk)).map(swap), rango, rangoSet);
+  } else {
+    out += lqConclusionesSection();
+  }
 
-  document.getElementById("lq-content").innerHTML = html;
+  document.getElementById("lq-content").innerHTML = out;
+  if(SUB==="combinado") setTimeout(lqDrawCharts, 30);
+  const iaBtn=document.getElementById("lq-ia-btn"); if(iaBtn) iaBtn.onclick=lqAnalizar;
+  document.querySelectorAll("[data-lq-sub]").forEach(el=>el.onclick=()=>{ lqState.sub=el.dataset.lqSub; lqRender(); });
   document.querySelectorAll("[data-lq-level]").forEach(b=>b.onclick=()=>{ lqState.level=b.dataset.lqLevel; lqRender(); });
   document.querySelectorAll("[data-lq-plat]").forEach(b=>b.onclick=()=>{ lqState.plat=b.dataset.lqPlat; lqRender(); });
   document.querySelectorAll("[data-lq-qual]").forEach(b=>b.onclick=()=>{ lqState.qual=b.dataset.lqQual; lqRender(); });
+  // Desplegar / plegar filas del árbol
+  lqState.exp = lqState.exp || {};
+  document.querySelectorAll("[data-lq-exp]").forEach(tr=>tr.onclick=()=>{
+    const k = tr.dataset.lqExp;
+    if(lqState.exp[k]) delete lqState.exp[k]; else lqState.exp[k]=true;
+    lqRender();
+  });
+  const expAll = document.getElementById("lq-expand-all");
+  if(expAll) expAll.onclick=()=>{
+    const keys=[...document.querySelectorAll("[data-lq-exp]")].map(t=>t.dataset.lqExp);
+    const algunoCerrado = keys.some(k=>!lqState.exp[k]);
+    if(algunoCerrado) keys.forEach(k=>lqState.exp[k]=true); else lqState.exp={};
+    lqRender();
+  };
+  const q = document.getElementById("lq-q");
+  if(q){
+    q.oninput = ()=>{ clearTimeout(lqState._qt); const v=q.value; lqState._qt=setTimeout(()=>{ lqState.q=v; lqRender();
+      const el=document.getElementById("lq-q"); if(el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 280); };
+  }
 }
 
 // Paid Media en vivo: anuncios del rango con estado, links, inversión y resultados.
@@ -2601,43 +3062,9 @@ function lqRender(){
 function lqAdsSection(agg, rangoSet){
   const rows = (agg.adw||[]).filter(a=>rangoSet.has(a.wk));
   if(!rows.length) return "";
-  const plat = lqState.plat || "all";
-  const head = `<h3 style="font-family:var(--serif);color:var(--verde-prof);font-size:20px;margin:24px 0 6px">Paid Media en vivo</h3>
-    <p class="hint" style="margin-top:0">Cada anuncio de Meta y Google en el rango: estado actual, link, inversión y resultados (Windsor.ai).</p>`;
-  const stBadge = (st)=>{
-    const on = lqIsOn(st), off = lqIsOff(st);
-    return `${lqDot(on?true:off?false:undefined)}<span class="lq-badge" style="background:${on?'var(--olivo)':off?'#a94436':'#b7ad91'}">${escAttr(on?"Activo":off?"Pausado":String(st||"?"))}</span>`;
-  };
-  // Consolidar las semanas del rango en una fila por anuncio
-  const byAd = {};
-  for(const a of rows){
-    const k = a.plat+"|"+(a.id||a.name);
-    const b = byAd[k] = byAd[k] || { ...a, spend:0, impr:0, clicks:0, results:0, _wk:"" };
-    b.spend+=a.spend; b.impr+=a.impr; b.clicks+=a.clicks; b.results+=a.results;
-    if(a.status && a.wk >= b._wk){ b.status=a.status; b._wk=a.wk; }   // estado de la semana más reciente
-  }
-  const byPlat = {};
-  if(plat!=="otras"){   // "Otras fuentes" = orgánico/webinar: no hay anuncios que mostrar
-    Object.values(byAd).forEach(r=>{ if(plat!=="all" && r.plat!==plat) return; (byPlat[r.plat]=byPlat[r.plat]||[]).push(r); });
-  }
-  let out = head;
-  for(const [p, list] of Object.entries(byPlat)){
-    const tRows = list.sort((x,y)=>y.spend-x.spend).map(r=>`<tr>
-      <td class="name">${escAttr(r.name||r.id||"(sin nombre)")}</td>
-      <td class="lft">${escAttr(r.camp)}${r.grp?`<div style="font-size:10.5px;color:var(--neutro)">${escAttr(r.grp)}</div>`:""}</td>
-      <td class="lft">${stBadge(r.status)}</td>
-      <td>${fmtMoney(r.spend)}</td><td>${r.impr.toLocaleString()}</td><td>${r.clicks.toLocaleString()}</td>
-      <td>${r.results?r.results.toLocaleString():"—"}</td>
-      <td>${r.results?fmtMoney(r.spend/r.results):"—"}</td>
-      <td class="lft">${/^https?:\/\//i.test(r.link||"")?`<a href="${escAttr(r.link)}" target="_blank" rel="noopener" style="color:var(--olivo)">Ver</a>`:"—"}</td>
-    </tr>`).join("");
-    out += `<div class="table-scroll" style="margin-bottom:18px"><table class="cons">
-      <tr><th class="lft">Anuncio · ${escAttr(p)}</th><th class="lft">Campaña / conjunto</th><th class="lft">Estado</th><th>Inversión</th><th>Impres.</th><th>Clics</th><th>Resultados</th><th>Costo/result.</th><th class="lft">Link</th></tr>
-      ${tRows}
-    </table></div>`;
-  }
-  if(!Object.keys(byPlat).length) out += `<div class="empty-rep">Sin anuncios de esa plataforma en el rango.</div>`;
-  return out;
+  return `<h3 style="font-family:var(--serif);color:var(--verde-prof);font-size:20px;margin:24px 0 6px">Datos de campañas</h3>
+    <p class="hint" style="margin-top:0">Inversión y desempeño por campaña desde Windsor.ai. Haz clic en una campaña para desplegar sus anuncios por plataforma. Respeta el rango de semanas, el filtro de plataforma y el buscador de arriba.</p>
+    ${lqAdsTree(agg, rangoSet)}`;
 }
 
 // El kv rechaza valores >512KB; si el agregado crece, se guarda una versión sin el

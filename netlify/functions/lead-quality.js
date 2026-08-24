@@ -224,21 +224,21 @@ async function ads({ start, end }) {
   const range = `date_from=${start}&date_to=${end}`;
   const num = (x) => Number(x) || 0;
   const [fb, gg] = await Promise.all([
-    windsorGet("facebook", `${range}&fields=date,campaign,adset_name,ad_id,ad_name,effective_status,ad_preview_shareable_link,spend,impressions,clicks,actions_leadgen_grouped`)
+    windsorGet("facebook", `${range}&fields=date,campaign,adset_name,ad_id,ad_name,publisher_platform,effective_status,ad_preview_shareable_link,spend,impressions,clicks,actions_leadgen_grouped`)
       // si el campo de leads no está disponible en la cuenta, degradar sin resultados
-      .catch(() => windsorGet("facebook", `${range}&fields=date,campaign,adset_name,ad_id,ad_name,effective_status,ad_preview_shareable_link,spend,impressions,clicks`).catch(() => [])),
+      .catch(() => windsorGet("facebook", `${range}&fields=date,campaign,adset_name,ad_id,ad_name,publisher_platform,effective_status,ad_preview_shareable_link,spend,impressions,clicks`).catch(() => [])),
     windsorGet("google_ads", `${range}&fields=date,campaign,ad_group_name,ad_id,ad_name,ad_group_ad_status,ad_final_urls,spend,impressions,clicks,conversions`).catch(() => []),
   ]);
   // Filas por día × anuncio: el frontend las agrupa por semana/rango seleccionado
   const rows = [];
   fb.forEach((r) => rows.push({
     d: r.date || "", plat: "Meta", camp: r.campaign || "", grp: r.adset_name || "", id: String(r.ad_id || ""),
-    name: r.ad_name || "", status: r.effective_status || "", link: r.ad_preview_shareable_link || "",
+    name: r.ad_name || "", pp: r.publisher_platform || "", status: r.effective_status || "", link: r.ad_preview_shareable_link || "",
     spend: num(r.spend), impr: num(r.impressions), clicks: num(r.clicks), results: num(r.actions_leadgen_grouped),
   }));
   gg.forEach((r) => rows.push({
     d: r.date || "", plat: "Google", camp: r.campaign || "", grp: r.ad_group_name || "", id: String(r.ad_id || ""),
-    name: r.ad_name || "", status: r.ad_group_ad_status || "", link: String(r.ad_final_urls || "").split(",")[0] || "",
+    name: r.ad_name || "", pp: "Google Ads", status: r.ad_group_ad_status || "", link: String(r.ad_final_urls || "").split(",")[0] || "",
     spend: num(r.spend), impr: num(r.impressions), clicks: num(r.clicks), results: num(r.conversions),
   }));
   return { configured: true, ads: rows.filter((r) => r.spend || r.clicks || r.impr || r.results) };

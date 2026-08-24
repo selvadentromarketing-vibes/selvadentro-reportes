@@ -21,6 +21,8 @@ Producción: https://team.selvadentrotulum.com (Netlify site: `slvd-reportes`).
   - `lead-quality` — proxy a GoHighLevel (contactos + oportunidades) y Windsor.ai
     (inversión y detalle por anuncio) para **Calidad de Leads** y **Paid Media en
     vivo** (requiere canal `mkt_lq`, `marketing` o admin).
+  - `lq-analyze` — conclusiones y acciones recomendadas de Calidad de Leads con
+    Claude (`claude-opus-5`, esfuerzo bajo para caber en el timeout de Netlify).
   - `sla-report` — proxy a GoHighLevel (contactos, conversaciones, citas,
     oportunidades, usuarios) para **SLA y Seguimiento** (requiere canal
     `crm_live`, `direccion_comercial` o admin).
@@ -39,7 +41,7 @@ Producción: https://team.selvadentrotulum.com (Netlify site: `slvd-reportes`).
 | `GHL_API_KEY` | ghl-report, lead-quality | Private Integration Token de GoHighLevel (`pit-…`). Para Calidad de Leads necesita además el scope **contacts.readonly** |
 | `GHL_LOCATION_ID` | ghl-report, lead-quality | Location ID de la subcuenta GHL |
 | `WINDSOR_API_KEY` | lead-quality | Opcional; API key de Windsor.ai para inversión Meta/Google (sin ella la sección de inversión se apaga con aviso) |
-| `ANTHROPIC_API_KEY` | kpi-analyze, notes-analyze | API key de console.anthropic.com |
+| `ANTHROPIC_API_KEY` | kpi-analyze, notes-analyze, lq-analyze | API key de console.anthropic.com (sin ella, la pestaña Conclusiones avisa y el resto funciona) |
 | `RESEND_API_KEY` | send-invite | API key de Resend (emails) |
 | `FROM_EMAIL` | send-invite | Remitente verificado en Resend |
 | `SITE_URL` | send-invite | Opcional; default `https://team.selvadentrotulum.com` |
@@ -104,6 +106,15 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
 - **Punto de estado activo/pausado** (verde/rojo/gris) en campaña, conjunto y
   anuncio, tomado del último estado que reporta Windsor; un conjunto o campaña
   cuenta como activo si al menos uno de sus anuncios lo está.
+- **Cuatro sub-pestañas**: (1) **Datos de Campañas** — inversión y desempeño por
+  campaña desde Windsor, desplegable a anuncios por plataforma; (2) **Calidad de
+  Lead** — mezcla de calificación desplegable de campaña → conjunto → anuncio;
+  (3) **Reporte Combinado** — cruce de inversión y calidad por *familia* de campaña
+  (nombres normalizados porque difieren entre plataforma y CRM), con KPIs, lectura
+  automática, gráfica de inversión vs. calificados y dona de distribución;
+  (4) **Conclusiones** — diagnóstico y acciones priorizadas con IA
+  (`lq-analyze`, requiere `ANTHROPIC_API_KEY`; envía solo agregados, nunca datos
+  personales de leads).
 - **Desglose con toggles**: la mezcla completa de calificación (SQL Selvadentro,
   SQL, MQL, CQL, descalificados, sin calificar) más % alto valor, % SQL+,
   % descalificación, OPPs, WONs, inversión y costo por lead / por lead de alto
