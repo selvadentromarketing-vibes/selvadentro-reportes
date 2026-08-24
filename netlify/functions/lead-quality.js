@@ -138,18 +138,30 @@ async function opps({ startAfter, startAfterId }) {
   let cursor = startAfter && startAfterId ? { startAfter, startAfterId } : null;
   let total = 0;
   for (let i = 0; i < 6; i++) {
-    let qs = `location_id=${LOCATION_ID}&limit=100`;
+    let qs = `location_id=${LOCATION_ID}&limit=100&getCalendarEvents=true`;
     if (cursor) qs += `&startAfter=${encodeURIComponent(cursor.startAfter)}&startAfterId=${encodeURIComponent(cursor.startAfterId)}`;
     const data = await ghl(`/opportunities/search?${qs}`);
     const batch = data.opportunities || [];
-    batch.forEach((o) => out.push({
-      ct: o.contactId || (o.contact && o.contact.id) || "",
-      st: o.status || "open",
-      c: o.createdAt || "",
-      v: Number(o.monetaryValue) || 0,
-      s: o.pipelineStageId || "",                                        // etapa real del pipeline
-      sc: o.lastStageChangeAt || o.lastStatusChangeAt || o.updatedAt || o.createdAt || "",
-    }));
+    batch.forEach((o) => {
+      // Citas embebidas (si el API las devuelve): señal fuerte de calificación
+      const evs = Array.isArray(o.calendarEvents) ? o.calendarEvents : [];
+      const ap = { tot: 0, sh: 0, ns: 0 };
+      evs.forEach((e) => {
+        ap.tot++;
+        const st = String(e.appointmentStatus || e.status || "").toLowerCase();
+        if (st === "showed" || st === "completed") ap.sh++;
+        else if (st === "noshow") ap.ns++;
+      });
+      out.push({
+        ct: o.contactId || (o.contact && o.contact.id) || "",
+        st: o.status || "open",
+        c: o.createdAt || "",
+        v: Number(o.monetaryValue) || 0,
+        s: o.pipelineStageId || "",                                        // etapa real del pipeline
+        sc: o.lastStageChangeAt || o.lastStatusChangeAt || o.updatedAt || o.createdAt || "",
+        ap,
+      });
+    });
     total = (data.meta && data.meta.total) || total;
     const meta = data.meta || {};
     if (batch.length < 100 || !meta.startAfterId) { cursor = null; break; }

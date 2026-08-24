@@ -92,6 +92,18 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
 - **Requisito GHL**: el Private Integration Token necesita el scope
   `contacts.readonly` (Settings → Private Integrations → editar → scopes). Sin él,
   la sincronización falla con el detalle del error de GHL visible en pantalla.
+- **Calificación automática por reglas** (default) o el campo manual del CRM,
+  con interruptor. Las reglas usan solo señales objetivas del CRM — etapa real del
+  pipeline, estatus y valor de la oportunidad, citas asistidas/agendadas, campos de
+  presupuesto y horizonte, tags — y se evalúan en orden: descalificado → SQL
+  Selvadentro (señal fuerte + perfil ≥$100K USD y ≤6 meses) → SQL (señal fuerte sin
+  perfil) → MQL (respondió / mostró interés) → CQL (capturado). Cada lead muestra en
+  la columna **Por qué** la evidencia que disparó su regla, y una matriz compara
+  reglas vs. captura del equipo para auditar discrepancias. **Solo lectura**: nunca
+  escribe en GoHighLevel.
+- **Punto de estado activo/pausado** (verde/rojo/gris) en campaña, conjunto y
+  anuncio, tomado del último estado que reporta Windsor; un conjunto o campaña
+  cuenta como activo si al menos uno de sus anuncios lo está.
 - **Desglose con toggles**: la mezcla completa de calificación (SQL Selvadentro,
   SQL, MQL, CQL, descalificados, sin calificar) más % alto valor, % SQL+,
   % descalificación, OPPs, WONs, inversión y costo por lead / por lead de alto
