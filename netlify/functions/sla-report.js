@@ -11,7 +11,7 @@
 //     → { results:[{id, fo, fi, lm, cerr, aerr, ap:{tot,sh,ns,fut}}] }
 //     cerr/aerr = no se pudieron leer conversaciones/citas (≠ "no hubo")
 //     fo = primer mensaje SALIENTE (ts) · fi = primer mensaje ENTRANTE (ts)
-//     lm = último mensaje (ts) · ap = citas: total, showed, noshow, futuras
+//     lm = último mensaje (ts) · ap = citas: total, showed, noshow, futuras, f = cita más temprana (ts)
 //   { action:"opps", startAfter?, startAfterId? }
 //     → { opps:[{u,st,c,stc,v}], cursor|null, total, fetched }
 
@@ -106,7 +106,7 @@ async function allMessages(convId) {
 }
 
 async function sweepOne(id) {
-  const out = { id, fo: null, fi: null, lm: null, cerr: false, aerr: false, ap: { tot: 0, sh: 0, ns: 0, fut: 0 } };
+  const out = { id, fo: null, fi: null, lm: null, cerr: false, aerr: false, ap: { tot: 0, sh: 0, ns: 0, fut: 0, f: null } };
   // Conversaciones del contacto
   try {
     const cs = await ghl(`/conversations/search?locationId=${LOCATION_ID}&contactId=${encodeURIComponent(id)}&limit=20`);
@@ -134,6 +134,9 @@ async function sweepOne(id) {
       if (st === "showed" || st === "completed") out.ap.sh++;
       else if (st === "noshow") out.ap.ns++;
       else if (ts(ev.startTime) > now) out.ap.fut++;
+      // Cita más temprana: base del SLA de agendamiento (40% a Zoom en 48 h)
+      const stt = ts(ev.startTime);
+      if (stt && (!out.ap.f || stt < out.ap.f)) out.ap.f = stt;
     }
   } catch (e) { out.aerr = true; /* citas no disponibles */ }
   return out;

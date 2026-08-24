@@ -124,8 +124,13 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
 Pestaña **SLA y Seguimiento** — el reporte semanal de disciplina comercial, directo
 del CRM y con nombres:
 
-- **SLA de primera respuesta** por asesor y por canal: mediana, % ≤15 min, % ≤60 min,
-  medido del alta del lead al primer mensaje saliente (SMS/WhatsApp/email/llamada).
+- **SLA de primera respuesta** por asesor y por canal, con la definición del Anexo 1:
+  se mide del alta del lead hasta el **contacto efectivo** (el lead respondió), no
+  hasta el intento. La mediana del primer intento se reporta aparte para separar
+  rapidez de conectividad. Umbrales: **15 min** (transferencia en caliente) y
+  **60 min** (handoff por WhatsApp).
+- **Agendamiento**: % de leads con una cita dentro de **48 horas**, contra la meta
+  del 40% (verde si se cumple, rojo si no).
 - **Contactados efectivos** (el lead respondió) vs trabajados; **>7 días sin toque**
   con lista nominal; **citas y show rate** (`showed` ÷ `showed`+`noshow`);
   **OPPs y WONs por asesor** en el rango.

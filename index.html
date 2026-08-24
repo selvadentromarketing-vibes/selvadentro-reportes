@@ -2793,10 +2793,14 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap){
     const wk = lqWeekOf(c.c); if(!wk || !rangoSet.has(wk)) return null;
     const sw = sweepMap[c.id] || {sin:true};
     const created = new Date(c.c).getTime();
-    const sla = (sw.fo && sw.fo>=created) ? sw.fo-created : null;
+    // El Anexo 1 define el SLA de primera respuesta contra el CONTACTO EFECTIVO
+    // (el lead respondió), no contra el intento. Se miden los dos por separado.
+    const slaAt = (sw.fo && sw.fo>=created) ? sw.fo-created : null;   // hasta el 1er intento
+    const slaEf = (sw.fi && sw.fi>=created) ? sw.fi-created : null;   // hasta la respuesta del lead
+    const z48 = (sw.ap && sw.ap.f && sw.ap.f>=created) ? (sw.ap.f-created) <= 48*3600e3 : false;
     const canal = lqSourceCamp({tags:c.tags, src:c.src, attr:c.attr}).fuente;
     return { n:c.n, wk, canal, u:c.u||"", created,
-             fo:sw.fo||null, fi:sw.fi||null, lm:sw.lm||null, sla,
+             fo:sw.fo||null, fi:sw.fi||null, lm:sw.lm||null, slaAt, slaEf, z48,
              // sd = sin datos de conversación (lote fallido o sin permisos): no es "sin contacto"
              sd: !!(sw.sin || sw.cerr),
              ap: sw.ap || {tot:0,sh:0,ns:0,fut:0} };
@@ -2821,10 +2825,9 @@ function slaRender(){
   const name = (u)=> agg.users[u] || (u ? "(sin nombre)" : "(sin asesor)");
   const pcti = (n,d)=> d ? Math.round(n/d*100)+"%" : "—";
 
-  const conFo = leads.filter(l=>l.fo).length;
-  const conFi = leads.filter(l=>l.fi).length;
-  const slas = leads.map(l=>l.sla).filter(x=>x!=null);
-  const und = (mins)=> slas.length ? Math.round(slas.filter(x=>x<=mins*60000).length/slas.length*100)+"%" : "—";
+  const slasEf = leads.map(l=>l.slaEf).filter(x=>x!=null);   // contacto efectivo (definición del Anexo 1)
+  const slasAt = leads.map(l=>l.slaAt).filter(x=>x!=null);   // primer intento
+  const und = (mins)=> slasEf.length ? Math.round(slasEf.filter(x=>x<=mins*60000).length/slasEf.length*100)+"%" : "—";
   const apTot = leads.reduce((a,l)=>a+l.ap.tot,0), apSh = leads.reduce((a,l)=>a+l.ap.sh,0), apNs = leads.reduce((a,l)=>a+l.ap.ns,0);
 
   const kpi = (v,l)=>`<div class="crm-kpi"><div class="k-val">${v}</div><div class="k-lbl">${l}</div></div>`;
@@ -2834,9 +2837,12 @@ function slaRender(){
     ${kpi(leads.length.toLocaleString(),"Leads en el rango")}
     ${kpi(pcti(conDatos.filter(l=>l.fo).length,conDatos.length),"Con primer toque")}
     ${kpi(pcti(conDatos.filter(l=>l.fi).length,conDatos.length),"Contactados efectivos")}
-    ${kpi(fmtDur(slaMedian(slas)),"SLA mediana (1a respuesta)")}
-    ${kpi(und(15),"≤ 15 min")}
-    ${kpi(und(60),"≤ 60 min")}
+    ${kpi(fmtDur(slaMedian(slasEf)),"SLA mediana · contacto efectivo")}
+    ${kpi(und(15),"≤ 15 min (transferencia)")}
+    ${kpi(und(60),"≤ 60 min (WhatsApp)")}
+    ${kpi(fmtDur(slaMedian(slasAt)),"Mediana del 1er intento")}
+    ${(()=>{ const n=conDatos.filter(l=>l.z48).length, p=conDatos.length?Math.round(n/conDatos.length*100):0;
+      return `<div class="crm-kpi"><div class="k-val" style="color:${p>=40?'var(--verde-prof)':'#a94436'}">${conDatos.length?p+"%":"—"}</div><div class="k-lbl">Cita en ≤48 h · meta 40%</div></div>`; })()}
     ${kpi((apSh+apNs)?pcti(apSh,apSh+apNs):"—","Show rate de citas")}
   </div>`;
 
@@ -2846,18 +2852,21 @@ function slaRender(){
     leads.forEach(l=>{ const k=keyFn(l); (groups[k]=groups[k]||[]).push(l); });
     const rows = Object.entries(groups).sort((a,b)=>b[1].length-a[1].length).map(([k,arr])=>{
       const cd = arr.filter(l=>!l.sd);
-      const ss = arr.map(l=>l.sla).filter(x=>x!=null);
+      const ss = arr.map(l=>l.slaEf).filter(x=>x!=null);
+      const sa = arr.map(l=>l.slaAt).filter(x=>x!=null);
       const u15 = ss.length ? Math.round(ss.filter(x=>x<=15*60000).length/ss.length*100)+"%" : "—";
       const u60 = ss.length ? Math.round(ss.filter(x=>x<=60*60000).length/ss.length*100)+"%" : "—";
+      const z = cd.length ? Math.round(cd.filter(l=>l.z48).length/cd.length*100) : null;
       const sh = arr.reduce((a,l)=>a+l.ap.sh,0), ns = arr.reduce((a,l)=>a+l.ap.ns,0);
       return `<tr><td class="name">${escAttr(labelFn(k))}</td><td>${arr.length}${arr.length-cd.length?`<span style="color:var(--neutro);font-size:10px"> (${arr.length-cd.length} s/d)</span>`:""}</td>
         <td class="pct">${pcti(cd.filter(l=>l.fo).length,cd.length)}</td>
         <td class="pct">${pcti(cd.filter(l=>l.fi).length,cd.length)}</td>
-        <td>${fmtDur(slaMedian(ss))}</td><td class="pct">${u15}</td><td class="pct">${u60}</td>
+        <td>${fmtDur(slaMedian(sa))}</td><td>${fmtDur(slaMedian(ss))}</td><td class="pct">${u15}</td><td class="pct">${u60}</td>
+        <td class="pct" style="${z!=null?(z>=40?"color:var(--verde-prof);font-weight:600":"color:#a94436"):""}">${z==null?"—":z+"%"}</td>
         <td>${arr.reduce((a,l)=>a+l.ap.tot,0)}</td><td class="pct">${(sh+ns)?pcti(sh,sh+ns):"—"}</td></tr>`;
     }).join("");
     return `<div class="table-scroll" style="margin-bottom:18px"><table class="cons">
-      <tr><th class="lft">${title}</th><th>Leads</th><th>1er toque</th><th>Efectivos</th><th>SLA mediana</th><th>≤15m</th><th>≤60m</th><th>Citas</th><th>Show</th></tr>
+      <tr><th class="lft">${title}</th><th>Leads</th><th>1er toque</th><th>Efectivos</th><th>Med. intento</th><th>Med. efectivo</th><th>≤15m</th><th>≤60m</th><th>Cita ≤48h</th><th>Citas</th><th>Show</th></tr>
       ${rows || `<tr><td colspan="9" class="lft" style="color:var(--neutro);font-style:italic">Sin datos.</td></tr>`}
     </table></div>`;
   };
@@ -2891,13 +2900,21 @@ function slaRender(){
     ${oppRows || `<tr><td colspan="4" class="lft" style="color:var(--neutro);font-style:italic">Sin oportunidades en el rango.</td></tr>`}
   </table></div>`;
 
-  html += `<div class="lq-meth"><b>Definiciones</b> —
-    <b>1er toque:</b> primer mensaje saliente (SMS/WhatsApp/email/llamada) registrado en el CRM; el SLA mide desde que el lead entró hasta ese mensaje ·
-    <b>Contacto efectivo:</b> el lead respondió (mensaje entrante) ·
+  html += `<div class="lq-meth"><b>Definiciones</b> (Anexo 1) —
+    <b>1er toque / intento:</b> primer mensaje saliente (SMS/WhatsApp/email/llamada) registrado en el CRM ·
+    <b>Contacto efectivo:</b> el lead respondió — hubo conversación, no solo un intento ·
+    <b>SLA de primera respuesta:</b> del alta del lead hasta el <b>contacto efectivo</b>, que es la definición del Anexo 1;
+    la mediana del intento se muestra aparte para separar rapidez de conectividad ·
     <b>Sin toque:</b> más de 7 días sin ningún mensaje ·
     <b>Show rate:</b> citas con estatus showed ÷ (showed + no-show) ·
-    <b>Oportunidades:</b> registros del pipeline creados en el rango, por asesor asignado.
-    Acumulable dentro del mes seleccionando desde la semana 1. Pendiente v2: integridad de pipeline (OPPs sin next step con fecha) y SLA de 60 segundos del Ejecutivo de Primer Contacto (aplica desde la calibración de septiembre).</div>`;
+    <b>Oportunidades:</b> registros del pipeline creados en el rango, por asesor asignado.</div>
+    <div class="lq-meth"><b>SLAs contra los que se mide</b> —
+    transferencia en caliente a un asesor <b>15 minutos</b> · handoff por WhatsApp <b>60 minutos</b> ·
+    agendamiento <b>40% de los leads a una cita en 48 horas</b> (verde si se cumple, rojo si no) ·
+    seguimiento: <b>ningún lead vivo más de 7 días</b> sin un toque registrado.
+    Acumulable dentro del mes seleccionando desde la primera semana.
+    <br><b>Pendiente:</b> confirmación de Zoom el mismo día, integridad de pipeline (OPPs sin next step con fecha) y el SLA de
+    <b>60 segundos</b> del Ejecutivo de Primer Contacto, que aplica desde la calibración de septiembre.</div>`;
 
   document.getElementById("sla-content").innerHTML = html;
 }
