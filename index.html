@@ -1924,7 +1924,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v3";   // v3: etapa real, anuncios, calificación automática
+const LQ_AGG_KEY = "lq:agg:v4";   // v4: OPP = cotización enviada (antes contaba todo registro del pipeline)
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 const LQ_TZ = "-05:00";                 // Tulum (America/Cancun): UTC-5 fijo, sin DST
@@ -2069,7 +2069,7 @@ function lqAutoQualify(l){
     if(!why.length || !why.some(w=>/respuesta|etapa|asisti/.test(w))) why.push("respuesta o interés registrado en el CRM");
     return {lv:"mql", why};
   }
-  if(l.o>0 && !LQ_RX.frio.test(stage)){ why.push("oportunidad creada y movida del arranque"); return {lv:"mql", why}; }
+  if((l.pr||l.o)>0 && !LQ_RX.frio.test(stage)){ why.push("oportunidad creada y movida del arranque"); return {lv:"mql", why}; }
 
   // 6) Nuevo — capturado y todavía sin ningún toque registrado
   if(!noAns && (LQ_RX.nuevo.test(stage) || (!stage && !l.o))){
@@ -2122,6 +2122,29 @@ function lqSourceCamp(lead){
   return { fuente: lead.src || "Otra fuente", camp: camp || lead.src || "(sin campaña)" };
 }
 
+// OPP = COTIZACIÓN ENVIADA (Anexo 2), no cualquier registro del pipeline.
+// Para cada pipeline se busca la primera etapa de cotización/propuesta; una
+// oportunidad cuenta como OPP si está en esa etapa o en una posterior.
+const LQ_RX_OPP = /cotiza|propuesta|quote|proposal|apartad|contrat|negocia|cierre|ganad|won|deposit/i;
+function lqOppThresholds(stages){
+  const byPipe = {};
+  for(const [id, st] of Object.entries(stages||{})){
+    (byPipe[st.p||""] = byPipe[st.p||""] || []).push({ id, name:st.s||"", i:st.i??0 });
+  }
+  const th = {};
+  for(const [pipe, arr] of Object.entries(byPipe)){
+    arr.sort((a,b)=>a.i-b.i);
+    const hit = arr.find(x=>LQ_RX_OPP.test(x.name));
+    th[pipe] = hit ? hit.i : null;      // null = ese pipeline no tiene etapa de cotización
+  }
+  return th;
+}
+function lqIsOppStage(stageId, stages, th){
+  const st = (stages||{})[stageId]; if(!st) return false;
+  const t = th[st.p||""];
+  return t == null ? LQ_RX_OPP.test(st.s||"") : (st.i ?? 0) >= t;
+}
+
 function lqMonthOf(iso){ const d = iso ? new Date(new Date(iso).getTime() - LQ_TZ_MS) : null; return (d && !isNaN(d)) ? `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}` : null; }
 
 // Filas diarias de anuncios (Windsor) → una fila por anuncio y semana ISO, para que
@@ -2156,7 +2179,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
       fuente:sc.fuente, camp:sc.camp, ad:(l.attr && l.attr.ad) || "", grp:(l.attr && l.attr.grp) || "", u:l.u||"",
       em:l.em||"", ph:l.ph||"",
       hs: !!(l.src || (l.attr && (l.attr.camp||l.attr.src))),   // fuente identificada
-      o: op ? op.o : 0, w: op ? op.w : 0, wv: op ? op.v : 0,    // OPPs / WONs / valor WON del contacto
+      o: op ? op.o : 0, pr: op ? op.pr : 0, w: op ? op.w : 0, wv: op ? op.v : 0,   // OPP (cotización) / registros de pipeline / WONs / valor
       ov: op ? op.ov : 0, ap: op ? op.ap : {tot:0,sh:0,ns:0},   // valor máximo de oportunidad y citas
       tags:(l.tags||[]).join(", ").slice(0,140),
       pres: F.pres ? (l.cf[F.pres.id]||"") : "",
@@ -2418,7 +2441,7 @@ function lqQualityTree(agg, leads, rangoSet){
   return `<div class="table-scroll" style="margin-bottom:8px"><table class="cons lq-tree">
     <tr><th class="lft">Campaña / conjunto / anuncio</th><th class="lft">Familia</th>
       ${LQ_COLS.map(L=>`<th title="${L.name}">${L.short}</th>`).join("")}
-      <th>Total</th><th>Calif.</th><th>%</th><th>OPPs</th><th>WONs</th><th>Inversión</th><th>Costo/lead</th></tr>
+      <th>Total</th><th>Calif.</th><th>%</th><th title="OPP = cotización enviada (Anexo 2)">OPPs</th><th title="WON = venta cerrada">WONs</th><th>Inversión</th><th>Costo/lead</th></tr>
     ${body || `<tr><td colspan="18" class="lft" style="color:var(--neutro);font-style:italic">Sin leads que coincidan.</td></tr>`}
     ${totRow}
   </table></div>`;
@@ -2524,7 +2547,7 @@ function lqLevelSection(agg, leadsAll, rango, rangoSet){
   const tierTot = LQ_LEVELS.map(L=>`<td><b>${cT[L.id]||0}</b></td>`).join("");
   const mainTable = `<div class="table-scroll" style="margin-bottom:10px"><table class="cons">
     <tr><th class="lft">${LQ_LEVELS_UI.find(o=>o.id===level).name}</th><th>Leads</th>${tierCols}
-      <th>% Alto valor</th><th>% SQL+</th><th>% Descal.</th><th>OPPs</th><th>WONs</th><th>Inversión</th><th>Costo/lead</th><th>Costo/alto valor</th></tr>
+      <th>% Alto valor</th><th>% SQL+</th><th>% Descal.</th><th title="OPP = cotización enviada">OPPs</th><th title="WON = venta cerrada">WONs</th><th>Inversión</th><th>Costo/lead</th><th>Costo/alto valor</th></tr>
     ${rows || `<tr><td colspan="16" class="lft" style="color:var(--neutro);font-style:italic">Sin leads en el rango.</td></tr>`}
     <tr class="total"><td class="lft">Total</td><td><b>${leads.length}</b></td>${tierTot}
       <td class="pct">${pct(hiT,leads.length)}</td><td class="pct">${pct(sqlPlusT,leads.length)}</td><td class="pct">${pct(cT.desc||0,leads.length)}</td>
@@ -2783,7 +2806,7 @@ function lqRender(){
   let html = `<div class="crm-kpis">
     ${kpi(leads.length.toLocaleString(),"Leads en el rango")}
     ${LQ_LEVELS.filter(L=>L.id!=="nc"||tot.nc).map(L=>kpi((tot[L.id]||0).toLocaleString(), L.name)).join("")}
-    ${kpi(oppTot.toLocaleString(),"OPPs de estos leads")}
+    ${kpi(oppTot.toLocaleString(),"OPPs · cotizaciones enviadas")}
     ${kpi(wonTot.toLocaleString(),"WONs de estos leads")}
   </div>`;
   const SUB = lqState.sub || "datos";
@@ -3000,7 +3023,7 @@ function lqRender(){
     la app con señales objetivas del CRM (ver reglas abajo), sin depender de que un asesor califique su propio lead. Con el interruptor en
     <b>Campo del CRM</b> se lee tal cual el campo "${escAttr(agg.califField?.name||"Calificación del lead")}" (vacío = "Sin calificar", nunca se adivina).
     La <b>etapa</b> es la etapa real de la oportunidad en el pipeline; si el lead todavía no tiene oportunidad, se muestra en gris una señal derivada de tags.
-    Los <b>OPPs y WONs</b> son las oportunidades de ese lead en el CRM. La <b>inversión</b> viene de Windsor.ai (Meta + Google).
+    <b>OPP</b> = cotización enviada: una oportunidad que alcanzó la etapa de cotización/propuesta o una posterior, no cualquier registro del pipeline. <b>WON</b> = venta cerrada. La <b>inversión</b> viene de Windsor.ai (Meta + Google).
     Los datos se refrescan solos cada 30 minutos; para verlos al instante usa <b>Sincronizar leads</b>.</div>
     <div class="lq-meth"><b>Reglas de calificación automática</b> — se evalúan en orden y la primera que se cumple manda. Umbral de producto
     <b>${fmtMoney(LQ_UMBRAL_USD)} USD</b>, horizonte del perfil <b>≤${LQ_HORIZONTE_M} meses</b>.
@@ -3116,14 +3139,17 @@ async function lqSync(){
     // Oportunidades del CRM (con contactId) para atribuir OPPs y WONs por campaña
     bar.style.width="82%"; lbl.textContent="Sincronizando oportunidades…";
     const oppsByContact = {};
+    const oppTh = lqOppThresholds(boot.stages);
     try{
       let oc=null, seen=0;
       do{
         const res = await lqFn({action:"opps", ...(oc||{})});
         for(const o of res.opps){
           if(!o.ct) continue;
-          const b = oppsByContact[o.ct] = oppsByContact[o.ct] || {o:0,w:0,v:0,ov:0,s:"",sc:0,st:"",ap:{tot:0,sh:0,ns:0}};
-          b.o++; if(o.st==="won"){ b.w++; b.v+=(o.v||0); }
+          const b = oppsByContact[o.ct] = oppsByContact[o.ct] || {o:0,pr:0,w:0,v:0,ov:0,s:"",sc:0,st:"",ap:{tot:0,sh:0,ns:0}};
+          b.pr++;                                            // registro del pipeline (no es un OPP)
+          if(lqIsOppStage(o.s, boot.stages, oppTh)) b.o++;    // OPP = cotización enviada o posterior
+          if(o.st==="won"){ b.w++; b.v+=(o.v||0); }
           b.ov = Math.max(b.ov, o.v||0);
           if(o.ap){ b.ap.tot+=o.ap.tot; b.ap.sh+=o.ap.sh; b.ap.ns+=o.ap.ns; }
           // Etapa real: la de la oportunidad movida más recientemente
@@ -3344,7 +3370,7 @@ function slaRender(){
     la mediana del intento se muestra aparte para separar rapidez de conectividad ·
     <b>Sin toque:</b> más de 7 días sin ningún mensaje ·
     <b>Show rate:</b> citas con estatus showed ÷ (showed + no-show) ·
-    <b>Oportunidades:</b> registros del pipeline creados en el rango, por asesor asignado.</div>
+    <b>Oportunidades creadas:</b> registros del pipeline creados en el rango, por asesor asignado (no son OPPs: OPP = cotización enviada).</div>
     <div class="lq-meth"><b>SLAs contra los que se mide</b> —
     transferencia en caliente a un asesor <b>15 minutos</b> · handoff por WhatsApp <b>60 minutos</b> ·
     agendamiento <b>40% de los leads a una cita en 48 horas</b> (verde si se cumple, rojo si no) ·

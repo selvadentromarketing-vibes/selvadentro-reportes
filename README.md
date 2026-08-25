@@ -106,6 +106,11 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
 - **Punto de estado activo/pausado** (verde/rojo/gris) en campaña, conjunto y
   anuncio, tomado del último estado que reporta Windsor; un conjunto o campaña
   cuenta como activo si al menos uno de sus anuncios lo está.
+- **OPP = cotización enviada** (Anexo 2), no cualquier registro del pipeline: se
+  detecta la primera etapa de cotización/propuesta de cada pipeline y solo cuentan
+  las oportunidades que llegaron a esa etapa o a una posterior. Los registros del
+  pipeline se guardan aparte (`pr`) y alimentan las reglas de calificación.
+  **WON = venta cerrada.**
 - **Cuatro sub-pestañas**: (1) **Datos de Campañas** — inversión y desempeño por
   campaña desde Windsor, desplegable a anuncios por plataforma; (2) **Calidad de
   Lead** — mezcla de calificación desplegable de campaña → conjunto → anuncio;
