@@ -30,7 +30,10 @@ retiraron el 2026-08-26: los sustituyen Windsor y el motor en vivo de index.html
   .sidebar{ display:none !important; }
   body.iframed .tabrow-right{ display:none !important; }
   body.embed .tabrow{ display:none !important; }
-  body.embed .periodbar{ display:none !important; }
+  /* La fila de pestañas del iframe duplicaba las tres etiquetas del padre; se oculta
+     siempre en modo embebido. La barra de periodo NO sobra en Ingreso/Reporte/Analítica,
+     solo en las vistas que no tienen periodo. */
+  body.embed.sin-periodo .periodbar{ display:none !important; }
   body.embed .wrap{ padding:0 4px 40px; max-width:none; }
   .brand{ display:flex; flex-direction:column; align-items:flex-start; line-height:1; cursor:pointer; }
   #brand-logo{ height:50px; display:none; }
@@ -80,6 +83,18 @@ retiraron el 2026-08-26: los sustituyen Windsor y el motor en vivo de index.html
   button{ font-family:var(--sans); cursor:pointer; border:none; border-radius:9px; padding:11px 24px; font-size:14px; font-weight:600; }
   .btn-prim{ background:var(--cobre); color:#fff; } .btn-prim:hover{ background:#bb7536; }
   .btn-ghost{ background:transparent; color:var(--neutro); border:1px solid var(--linea); } .btn-ghost:hover{ background:var(--crema-2); }
+  /* El sistema de botones no tenia estado deshabilitado: durante un guardado el boton se veia
+     igual de pulsable que siempre. cursor:progress dice "trabajando", no "no puedes". */
+  button:disabled{ opacity:.55; cursor:progress; pointer-events:none; }
+  .btn-peligro{ background:var(--rojo-no-tx); color:#fff; } .btn-peligro:hover{ background:#83301f; }
+  /* Diálogo propio — copia de index.html; los dos deben moverse juntos. */
+  .modal-fondo{ position:fixed; inset:0; z-index:400; background:rgba(46,51,43,.45);
+                display:flex; align-items:safe center; justify-content:center; padding:24px; overflow-y:auto; }
+  .modal-caja{ background:var(--crema); border:1px solid var(--linea); border-radius:14px;
+               font-family:var(--sans); padding:26px 28px; max-width:440px; width:100%; box-shadow:0 20px 60px rgba(0,0,0,.3); }
+  .modal-caja h3{ font-family:var(--serif); font-size:19px; color:var(--verde-prof); margin:0 0 10px; }
+  .modal-caja p{ margin:0; font-size:14px; line-height:1.55; color:var(--texto); }
+  .modal-btns{ display:flex; gap:10px; justify-content:flex-end; margin-top:22px; flex-wrap:wrap; }
   .summary{ background:var(--verde-prof); color:var(--crema); border-radius:14px; padding:20px 22px; margin-bottom:22px; }
   .summary .stitle{ font-family:var(--serif); font-size:15px; color:var(--arena); margin-bottom:6px; }
   .summary .sresp{ font-size:12px; color:var(--logo); opacity:.85; margin-bottom:14px; }
@@ -331,6 +346,41 @@ retiraron el 2026-08-26: los sustituyen Windsor y el motor en vivo de index.html
   function rsFill(rec){ RS_PLAT.forEach(p=>{ const d=(rec&&rec[p.key])||{}; p.fields.forEach(([k])=>setV(`rs_${p.key}_${k}`,d[k])); const t=d.top||[]; for(let i=1;i<=3;i++){ setV(`rs_${p.key}_top${i}_desc`,(t[i-1]||{}).desc); setV(`rs_${p.key}_top${i}_link`,(t[i-1]||{}).link);} }); fillNotes(rec); fillResp(rec); fillCustom(rec); }
   function rsRead(){ const rec={}; RS_PLAT.forEach(p=>{ const d={}; p.fields.forEach(([k])=>d[k]=num(gv(`rs_${p.key}_${k}`))); d.top=[]; for(let i=1;i<=3;i++) d.top.push({desc:gv(`rs_${p.key}_top${i}_desc`),link:gv(`rs_${p.key}_top${i}_link`)}); rec[p.key]=d; }); readNotes(rec); readResp(rec); readCustom(rec); return rec; }
   function escHtmlSafe(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  /* Diálogos propios en lugar de los alert/confirm nativos del navegador. Copia de las
+     funciones de index.html: mientras no haya build compartido, las dos deben moverse
+     juntas. El nativo queda de respaldo si algo fallara al construir el diálogo. */
+  function dialogo({ titulo="", mensaje="", botones=[], respaldo=()=>undefined }){
+    return new Promise((resolve)=>{
+      try{
+        const fondo = document.createElement("div");
+        fondo.className = "modal-fondo";
+        fondo.innerHTML = `<div class="modal-caja" role="dialog" aria-modal="true">
+          ${titulo?`<h3>${escHtmlSafe(titulo)}</h3>`:""}
+          <p>${escHtmlSafe(mensaje).replace(/\n/g,"<br>")}</p>
+          <div class="modal-btns">${botones.join("")}</div></div>`;
+        const cerrar = (v)=>{ document.removeEventListener("keydown", tecla); fondo.remove(); resolve(v); };
+        const tecla = (e)=>{ if(e.key==="Escape") cerrar(false); };
+        fondo.addEventListener("click",(e)=>{
+          if(e.target===fondo) return cerrar(false);
+          const b=e.target.closest("[data-r]"); if(b) cerrar(b.dataset.r==="1");
+        });
+        document.addEventListener("keydown", tecla);
+        document.body.appendChild(fondo);
+        const f = fondo.querySelector('[data-r="1"]'); if(f) f.focus();
+      }catch(e){ resolve(respaldo()); }
+    });
+  }
+  function confirmar(mensaje, { ok="Continuar", cancelar="Cancelar", peligro=false, titulo="" } = {}){
+    return dialogo({ titulo, mensaje, respaldo:()=>window.confirm(mensaje), botones:[
+      `<button type="button" class="btn-ghost" data-r="0">${escHtmlSafe(cancelar)}</button>`,
+      `<button type="button" class="${peligro?"btn-peligro":"btn-prim"}" data-r="1">${escHtmlSafe(ok)}</button>`,
+    ]});
+  }
+  function avisar(mensaje, { titulo="", ok="Entendido" } = {}){
+    return dialogo({ titulo, mensaje, respaldo:()=>{ window.alert(mensaje); return true; }, botones:[
+      `<button type="button" class="btn-prim" data-r="1">${escHtmlSafe(ok)}</button>`,
+    ]});
+  }
   function safeUrl(u){ const s=String(u==null?"":u).trim(); return /^https?:\/\//i.test(s) ? s : ""; }
   function readMetaNum(M, scope, key){ const v = scope==='' ? M.metas[key] : M.metas[scope]?.[key]; if(v==null) return ''; if(typeof v==='object') return v.num ?? ''; return v; }
   function readMetaPct(M, scope, key){ const v = scope==='' ? M.metas.__pct?.[key] : M.metas.__pct?.[scope]?.[key]; return v==null ? '' : v; }
@@ -479,11 +529,11 @@ retiraron el 2026-08-26: los sustituyen Windsor y el motor en vivo de index.html
       };
       delBtn.onclick = async () => {
         if(isCustom){
-          if(!confirm('¿Borrar este KPI personalizado?')) return;
+          if(!await confirmar('No se puede deshacer.', { titulo:'¿Borrar este KPI personalizado?', ok:'Borrar', peligro:true })) return;
           M.metas.__custom = mktCustomKPIs(M).filter(c => c.k !== key);
           if(!M.metas.__custom.length) delete M.metas.__custom;
         } else {
-          if(!confirm('¿Borrar las metas de este KPI?')) return;
+          if(!await confirmar('El KPI se queda; solo se borran sus metas.', { titulo:'¿Borrar las metas de este KPI?', ok:'Borrar', peligro:true })) return;
           writeMetaNum(M, sec, key, null); writeMetaPct(M, sec, key, null);
         }
         await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText);
@@ -566,8 +616,8 @@ retiraron el 2026-08-26: los sustituyen Windsor y el motor en vivo de index.html
       btn.onclick = async () => {
         const secId = btn.dataset.secId;
         const inside = mktCustomKPIsFor(M, secId);
-        if(inside.length && !confirm(`La sección tiene ${inside.length} KPI(s). Se moverán a "KPIs personalizados" sin sección. ¿Continuar?`)) return;
-        if(!inside.length && !confirm('¿Borrar esta sección?')) return;
+        if(inside.length && !await confirmar(`Tiene ${inside.length} KPI(s). Se moverán a "KPIs personalizados", sin sección.`, { titulo:'Borrar la sección', ok:'Borrar', peligro:true })) return;
+        if(!inside.length && !await confirmar('Está vacía.', { titulo:'¿Borrar esta sección?', ok:'Borrar', peligro:true })) return;
         M.metas.__custom_sections = mktCustomSections(M).filter(id => id !== secId);
         if(!M.metas.__custom_sections.length) delete M.metas.__custom_sections;
         (M.metas.__custom || []).forEach(c => { if(c.section === secId) c.section = null; });
@@ -578,16 +628,16 @@ retiraron el 2026-08-26: los sustituyen Windsor y el motor en vivo de index.html
     // Crear sección
     document.getElementById('mkt-new-sec-save').onclick = async () => {
       const name = document.getElementById('mkt-new-sec-name').value.trim();
-      if(!name){ alert('Pon un nombre para la sección'); return; }
+      if(!name){ avisar('Pon un nombre para la sección'); return; }
       M.metas.__custom_sections = mktCustomSections(M).slice();
-      if(M.metas.__custom_sections.includes(name) || nativeSections.some(s => s.scope === name)){ alert('Ya existe una sección con ese nombre'); return; }
+      if(M.metas.__custom_sections.includes(name) || nativeSections.some(s => s.scope === name)){ avisar('Ya existe una sección con ese nombre'); return; }
       M.metas.__custom_sections.push(name);
       { const ok=await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); if(ok) showToast(`✓ Sección "${name}" creada`); }
     };
     // Crear KPI personalizado
     document.getElementById('mkt-new-kpi-save').onclick = async () => {
       const name = document.getElementById('mkt-new-kpi-name').value.trim();
-      if(!name){ alert('Pon un nombre para el KPI'); return; }
+      if(!name){ avisar('Pon un nombre para el KPI'); return; }
       const secId = document.getElementById('mkt-new-kpi-sec').value || null;
       const num = document.getElementById('mkt-new-kpi-num').value.trim();
       const pct = document.getElementById('mkt-new-kpi-pct').value.trim();
@@ -662,7 +712,7 @@ retiraron el 2026-08-26: los sustituyen Windsor y el motor en vivo de index.html
 
     if(!leyoOk || !leyoMetas){
       M._lecturaFallida = true;
-      try{ alert("No se pudieron leer los datos guardados de "+M.name+".\n\nNo se escribió nada para no pisar la información real. Recarga la página cuando vuelva la conexión."); }catch(_){}
+      try{ avisar("No se escribió nada para no pisar la información real. Recarga la página cuando vuelva la conexión.", { titulo:"No se pudieron leer los datos de "+M.name }); }catch(_){}
     } else { M._lecturaFallida = false; }
 
     const ks = Object.keys(M.records).sort();
@@ -681,9 +731,8 @@ retiraron el 2026-08-26: los sustituyen Windsor y el motor en vivo de index.html
     console.error('No se pudo guardar ' + queEs, e);
     showToast('⚠ No se guardó — revisa tu conexión');
     try{
-      alert('NO se guardó ' + queEs + ' en el servidor.\n\n' + detalle +
-        '\n\nLo que capturaste sigue en pantalla: revisa tu conexión y vuelve a guardar. ' +
-        'Si recargas la página ahora, se pierde.');
+      avisar(detalle + '\n\nLo que capturaste sigue en pantalla: revisa tu conexión y vuelve a guardar. ' +
+        'Si recargas la página ahora, se pierde.', { titulo:'NO se guardó ' + queEs + ' en el servidor' });
     }catch(_){}
   }
   async function saveRec(M){
@@ -834,7 +883,7 @@ retiraron el 2026-08-26: los sustituyen Windsor y el motor en vivo de index.html
   }
   (function(){ const inp=$('#resp-pill-input'); if(!inp) return; const save=async()=>{ const v=inp.value.trim(); if(v!==(RESP[state.active]||'')){ RESP[state.active]=v; let ok=true; try{ await window.storage.set('mkt_resp', JSON.stringify(RESP)); }catch(e){ ok=false; avisarFalloGuardado(e, 'el responsable'); } if(ok) showToast('✓ Responsable guardado'); if(state.view==='ingreso'){ const x=$('#x_resp'); if(x) x.value=v; } } }; inp.addEventListener('blur',save); inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); inp.blur(); } }); })();
   function setNavActive(){ document.querySelectorAll('[data-view]').forEach(el=>el.classList.toggle('active', el.dataset.view===state.view)); }
-  function bindSave(){ const b=$('#btn-save'); if(b) b.onclick=async()=>{ const M=MODS[state.active]; if(!M.pval){alert('Elige periodo.');return;} if(!isPeriodEditable(M, M.pval)){ alert('Solo puedes guardar el periodo actual o el anterior.'); return; } M.records[M.pval]=M.read(); const ok=await saveRec(M); updatePill(); if(ok) showToast('✓ Guardado · '+(M.period==='week'?M.pval:ymLabel(M.pval))); }; const c=$('#btn-clear'); if(c) c.onclick=()=>{ if(confirm('¿Limpiar el formulario? (no borra lo guardado)')) MODS[state.active].fill(null); }; }
+  function bindSave(){ const b=$('#btn-save'); if(b) b.onclick=async()=>{ const M=MODS[state.active]; if(!M.pval){avisar('Elige periodo.');return;} if(!isPeriodEditable(M, M.pval)){ avisar('Solo puedes guardar el periodo actual o el anterior.'); return; } M.records[M.pval]=M.read(); const ok=await saveRec(M); updatePill(); if(ok) showToast('✓ Guardado · '+(M.period==='week'?M.pval:ymLabel(M.pval))); }; const c=$('#btn-clear'); if(c) c.onclick=async()=>{ if(await confirmar('Se borra lo que está en pantalla. Lo que ya guardaste no se toca.', { titulo:'¿Limpiar el formulario?', ok:'Limpiar', peligro:true })) MODS[state.active].fill(null); }; }
   function renderResponsable(){ let h=`<div class="metas-hint">Escribe el responsable de cada reporte. Aparece junto al periodo y en el encabezado de cada reporte.</div><div class="card"><div class="card-head"><span class="dot" style="background:var(--meta)"></span><h3>Responsable del reporte</h3></div><div class="card-body"><div class="grid">`; ORDER.forEach(id=> h+=`<div class="field"><label>${MODS[id].name}</label><input type="text" id="resp_${id}" value="${(RESP[id]||'').replace(/"/g,'&quot;')}" placeholder="Nombre del responsable"></div>`); h+=`</div></div></div><div class="actions"><button class="btn-prim" id="btn-save-resp">Guardar responsables</button></div>`; $('#view-responsable').innerHTML=h; $('#btn-save-resp').onclick=async()=>{ ORDER.forEach(id=>RESP[id]=$('#resp_'+id).value.trim()); let ok=true; try{await window.storage.set('mkt_resp',JSON.stringify(RESP));}catch(e){ ok=false; avisarFalloGuardado(e, 'los responsables'); } if(ok) showToast('✓ Responsables guardados'); updatePill(); }; }
   function checkAdmin(){ try{ return !!(window.parent && window.parent !== window && typeof window.parent.isMktAdmin === 'function' && window.parent.isMktAdmin()); }catch(e){ return false; } }
   function isPeriodEditable(M, pval){
@@ -910,16 +959,16 @@ retiraron el 2026-08-26: los sustituyen Windsor y el motor en vivo de index.html
       // Cambia pval a un periodo vacío editable para no sobrescribir el original
       const now = new Date();
       const target = M.period==='week' ? isoWeekOf(now) : (now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'));
-      if(!isPeriodEditable(M, target)){ alert('No hay un periodo editable disponible para duplicar.'); return; }
+      if(!isPeriodEditable(M, target)){ avisar('No hay un periodo editable disponible para duplicar.'); return; }
       // Coloca el rec en el periodo actual si aún no existe; si existe, pide otro periodo
-      if(M.records[target]){ alert('Ya existe un registro en el periodo actual. Duplica manualmente cambiando el periodo desde Ingreso.'); return; }
+      if(M.records[target]){ avisar('Ya existe un registro en el periodo actual. Duplica manualmente cambiando el periodo desde Ingreso.'); return; }
       M.pval = target; fillPeriodSelect(M);
       // No guardamos aún; solo llenamos el form con los datos duplicados
       state.view = 'ingreso'; state.ingresoRendered = null; renderView();
       setTimeout(()=>{ MODS[moduleId].fill(rec); bindSave(); showToast('Duplicado. Guarda para persistir.'); }, 60);
     });
     $('#view-basedatos').querySelectorAll('.db-del').forEach(b => b.onclick = async () => {
-      if(!confirm('¿Eliminar el registro '+b.dataset.k+'? No se puede deshacer.')) return;
+      if(!await confirmar('No se puede deshacer.', { titulo:'¿Eliminar el registro '+b.dataset.k+'?', ok:'Eliminar', peligro:true })) return;
       { delete M.records[b.dataset.k]; const ok=await saveRec(M); renderBaseDatos(M); updatePill(); if(ok) showToast('Registro eliminado'); }
     });
     const ex = $('#db-export'); if(ex) ex.onclick = () => {
@@ -1117,6 +1166,7 @@ retiraron el 2026-08-26: los sustituyen Windsor y el motor en vivo de index.html
     else if(state.view==='metas'){ M.metasView($('#view-metas'),M); }
     else if(state.view==='responsable'){ renderResponsable(); }
     else if(state.view==='basedatos'){ renderBaseDatos(M); }
+    document.body.classList.toggle('sin-periodo', ['metas','responsable','basedatos'].includes(state.view));
     updatePill();
     try{ if(window.parent && window.parent!==window && typeof window.parent.mktViewChanged==='function') window.parent.mktViewChanged(state.view); }catch(e){}
   }
