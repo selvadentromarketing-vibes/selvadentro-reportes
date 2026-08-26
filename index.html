@@ -15,17 +15,26 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
 <style>
   :root{
     --verde-prof:#465241; --olivo:#65713F; --cobre:#CF8543; --arena:#D9B37E;
+    /* El cobre de marca (#CF8543) da 2.96:1 con texto blanco encima — reprueba el mínimo
+       de 4.5:1. --cobre-tx es el mismo color oscurecido (4.6:1) y se usa SOLO donde hay
+       texto encima; --cobre se queda tal cual para bordes, puntos y barras. */
+    --cobre-tx:#A65F22; --cobre-tx-hover:#8E4F1B;
     --crema:#FAF8F3; --crema-2:#F1ECE1; --linea:#E3DBCC; --texto:#2E332B; --gris-input:#ECECEC;
-    --verde-ok-bg:#CBDDC0; --verde-ok-tx:#3C5A2E; --rojo-no-bg:#F2CFC9; --rojo-no-tx:#9B3B2E; --neutro:#6F7468; --logo:#EFE7D6;
+    --verde-ok-bg:#CBDDC0; --verde-ok-tx:#3C5A2E; --rojo-no-bg:#F2CFC9; --rojo-no-tx:#9B3B2E; --neutro:#5F6459; --logo:#EFE7D6;
     --serif:"Cardo",Georgia,serif; --sans:"Lexend",system-ui,-apple-system,"Segoe UI",sans-serif;
   }
   *{ box-sizing:border-box; } body{ margin:0; }
+  /* Estado de foco para TODA la app. Las reglas de más abajo quitan el outline de los
+     campos y lo cambian por un borde de bajo contraste; esta lo devuelve, y llega
+     también a botones, pestañas y selects, que no tenían ninguno. */
+  :focus-visible{ outline:2px solid var(--verde-prof); outline-offset:2px; border-radius:3px; }
+  .topbar :focus-visible, .sidebar :focus-visible{ outline-color:var(--arena); }
   #app{ font-family:var(--sans); color:var(--texto); background:var(--crema); min-height:100vh; font-size:14px; line-height:1.45; }
   .topbar{ background:var(--verde-prof); color:var(--crema); padding:12px 32px; display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:24px; border-bottom:3px solid var(--cobre); }
   .topbar .brand{ justify-self:start; }
   .topbar .app-title{ justify-self:center; text-align:center; }
   .topbar .app-title .t1{ font-family:var(--serif); font-size:19px; line-height:1.1; color:var(--crema); font-weight:400; }
-  .topbar .app-title .t2{ font-size:10px; letter-spacing:3.5px; text-transform:uppercase; color:var(--arena); margin-top:4px; font-weight:600; }
+  .topbar .app-title .t2{ font-size:11px; letter-spacing:3.5px; text-transform:uppercase; color:var(--logo); margin-top:4px; font-weight:600; }
   .topbar .user-badge{ justify-self:end; margin-left:0; padding-left:0; }
   .brand{ display:flex; flex-direction:column; align-items:flex-start; line-height:1; cursor:pointer; }
   #brand-logo{ height:54px; display:none; }
@@ -35,7 +44,11 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .app-title .t1{ font-family:var(--serif); font-size:18px; }
   .app-title .t2{ font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--arena); }
 
-  .tabs{ display:flex; align-items:center; background:var(--crema-2); padding:0 28px; border-bottom:1px solid var(--linea); }  .tab{ padding:14px 22px; cursor:pointer; font-weight:500; font-size:13px; letter-spacing:.4px; color:var(--neutro); border-bottom:3px solid transparent; user-select:none; transition:.15s; }
+  .tabs{ display:flex; align-items:center; background:var(--crema-2); padding:0 28px; border-bottom:1px solid var(--linea); }
+  /* .tab y .subtab son <button> para que el teclado pueda llegar a ellos: antes eran
+     <div> sin tabindex, así que la navegación principal era inalcanzable. */
+  .tab, .subtab{ font-family:var(--sans); background:none; border:none; margin:0; }
+  .tab{ padding:14px 22px; cursor:pointer; font-weight:500; font-size:13px; letter-spacing:.4px; color:var(--neutro); border-bottom:3px solid transparent; user-select:none; transition:.15s; }
   .tab:hover{ color:var(--verde-prof); }
   .tab.active{ color:var(--verde-prof); border-bottom-color:var(--cobre); background:var(--crema); }
   .subtabs{ display:flex; align-items:center; background:var(--crema); padding:0 28px; border-bottom:1px solid var(--linea); }
@@ -82,7 +95,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .side-btn{ width:56px; height:56px; border:none; background:transparent; color:var(--logo); border-radius:11px; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-family:var(--sans); font-size:8.5px; font-weight:600; letter-spacing:.2px; text-transform:uppercase; opacity:.78; transition:.15s; }
   .side-btn svg{ width:21px; height:21px; }
   .side-btn:hover{ background:rgba(255,255,255,.09); opacity:1; }
-  .side-btn.active{ background:var(--cobre); opacity:1; color:#fff; }
+  .side-btn.active{ background:var(--cobre-tx); opacity:1; color:#fff; }
   .view{ display:none; } .view.active{ display:block; }
 
   .placeholder-card{ background:#fff; border:1px dashed var(--arena); border-radius:14px; padding:46px 30px; text-align:center; max-width:560px; margin:34px auto; box-shadow:0 1px 2px rgba(70,82,65,.05); }
@@ -99,9 +112,23 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .periodo .spacer{ flex:1; }
   .hint{ font-size:11.5px; color:var(--neutro); margin:0 0 22px 4px; font-style:italic; }
   .btn{ font-family:var(--sans); font-weight:600; font-size:13px; letter-spacing:.4px; cursor:pointer; border:none; border-radius:9px; padding:11px 22px; transition:.15s; }
-  .btn-primary{ background:var(--cobre); color:#fff; } .btn-primary:hover{ background:#bb7536; }
+  .btn-primary{ background:var(--cobre-tx); color:#fff; } .btn-primary:hover{ background:var(--cobre-tx-hover); }
   .btn-ghost{ background:transparent; color:var(--neutro); border:1px solid var(--linea); } .btn-ghost:hover{ background:var(--crema-2); color:var(--verde-prof); }
   .btn-olive{ background:var(--olivo); color:#fff; } .btn-olive:hover{ background:#566034; }
+  /* Durante las sincronizaciones largas el botón cambiaba de texto pero seguía
+     viéndose pulsable: mismo color, mismo cursor de mano, mismo hover. */
+  .btn:disabled{ opacity:.55; cursor:progress; pointer-events:none; }
+  /* Sin total conocido no se inventa un porcentaje: la barra se mueve sin prometer avance. */
+  .cp-bar.indet{ width:35%!important; animation:cpslide 1.1s ease-in-out infinite alternate; }
+  @keyframes cpslide{ from{ margin-left:0 } to{ margin-left:65% } }
+  @media(prefers-reduced-motion:reduce){ .cp-bar.indet{ animation:none; width:100%!important; opacity:.5 } }
+  .btn.btn-cancel{ background:transparent; color:#a94436; border:1px solid #a94436; }
+  .btn.btn-cancel:hover{ background:#F2CFC9; }
+  /* Alternativa táctil al arrastre: los eventos de drag de HTML5 no se disparan con el dedo,
+     así que desde un celular no había forma de mover un KPI de sección ni ninguna otra vía. */
+  .kpi-sec{ font-family:var(--sans); font-size:11px; padding:2px 4px; border:1px solid var(--linea);
+            background:var(--crema); color:var(--neutro); border-radius:4px; max-width:130px; }
+  .kpi-sec:hover{ border-color:var(--cobre); }
 
   .section{ background:#fff; border:1px solid var(--linea); border-radius:12px; margin-bottom:20px; overflow:hidden; box-shadow:0 1px 2px rgba(70,82,65,.05); }
   .section h3{ margin:0; padding:13px 20px; background:var(--olivo); color:#fff; font-family:var(--serif); font-size:16px; font-weight:700; display:flex; align-items:center; gap:9px; }
@@ -148,6 +175,50 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .toast{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(80px); background:var(--verde-prof); color:#fff; padding:12px 24px; border-radius:30px; font-size:13px; box-shadow:0 6px 20px rgba(0,0,0,.2); opacity:0; transition:.3s; z-index:50; border:1px solid var(--cobre); }
   .toast.show{ transform:translateX(-50%) translateY(0); opacity:1; }
   @media (max-width:680px){ .conv{ flex-basis:100%; border-left:none; border-top:1px solid var(--linea); } .frow input{ width:110px; } }
+
+  /* --- Layout para pantallas chicas -------------------------------------------------
+     El equipo comercial revisa números desde el celular y la app no tenía layout móvil:
+     tres @media en 6.000 líneas, todas retoques. La barra lateral fija se comía 70px,
+     la barra de pestañas desbordaba ya en tablet, y varias tablas quedaban RECORTADAS
+     (no scrolleables) porque están dentro de contenedores con overflow:hidden.
+     marketing.html ya tenía el patrón del shell en columna: es el mismo de aquí. */
+  @media (max-width:900px){
+    .shell{ flex-direction:column; min-height:auto; }
+    .sidebar{ flex:none; width:auto; height:auto; position:static; flex-direction:row;
+              justify-content:flex-start; gap:2px; padding:6px 8px; overflow-x:auto; }
+    .side-btn{ width:auto; min-width:62px; height:auto; padding:8px 10px; flex:0 0 auto; }
+    .tabs, .subtabs{ overflow-x:auto; -webkit-overflow-scrolling:touch; padding:0 14px; }
+    .tab, .subtab{ white-space:nowrap; flex:0 0 auto; }
+    .canal-wrap, .mkt-wrap{ margin-left:12px; }
+    .wrap{ padding:18px 14px 48px; }
+    .topbar{ padding:10px 14px; gap:12px; }
+    .brand .name{ font-size:28px; } #brand-logo{ height:40px; }
+    /* El borde redondeado recortaba las columnas de la derecha sin dejar barra: el eje
+       vertical se sigue recortando, el horizontal ahora se puede desplazar. */
+    .section, .rep-section, .anal-card{ overflow-x:auto; overflow-y:hidden; }
+    .lq-subtab{ min-width:0; flex:1 1 140px; }
+    .lq-search{ min-width:0; width:100%; }
+    table.usr-table td.ch-col{ min-width:0; }
+    .periodo{ gap:12px; padding:12px 14px; }
+    .periodo .grp{ flex:1 1 140px; }
+  }
+  @media (max-width:700px){
+    /* iOS Safari acerca la pantalla al enfocar un campo de menos de 16px y no vuelve a
+       alejarla. La pestaña principal se llama "Ingreso de datos" y son decenas de campos. */
+    /* Selectores específicos: las reglas de cada campo (.periodo input[type=date], .frow
+       input, .meta-num…) ganan por especificidad a un `input` pelón. */
+    input, select, textarea,
+    .periodo input[type=date], .periodo select, .frow input, .textareas textarea,
+    .login-field input, .adv-add input, .adv-name, .lq-search,
+    .meta-name, .meta-num, .meta-pct, .usr-fld input, .usr-fld select,
+    table.usr-table select, table.usr-table input, #canal-select, #mkt-select,
+    #ing-responsable{ font-size:16px; }
+    .frow{ flex-direction:column; align-items:stretch; gap:4px; }
+    .frow label{ padding-right:0; }
+    .frow input{ width:100%; text-align:left; }
+    .actions{ flex-direction:column-reverse; }
+    .actions .btn{ width:100%; }
+  }
 
   /* ---- Reportes de dirección (consolidados) ---- */
   .canal-chips{ display:flex; align-items:center; flex-wrap:wrap; gap:6px 16px; background:#fff; border:1px solid var(--linea); border-radius:12px; padding:12px 16px; margin:8px 0; box-shadow:0 1px 2px rgba(70,82,65,.05); }
@@ -210,7 +281,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   #db-table td.note{ max-width:220px; overflow:hidden; text-overflow:ellipsis; }
 
   /* ---- Login overlay ---- */
-  #login-screen{ position:fixed; inset:0; z-index:200; background:var(--verde-prof); display:flex; align-items:center; justify-content:center; padding:24px; }
+  #login-screen{ position:fixed; inset:0; z-index:200; background:var(--verde-prof); display:flex; align-items:safe center; justify-content:center; padding:24px; overflow-y:auto; }
   #login-screen.hidden{ display:none; }
   .login-card{ background:var(--crema); border:1px solid var(--cobre); border-radius:16px; padding:38px 42px; max-width:400px; width:100%; box-shadow:0 8px 30px rgba(0,0,0,.25); }
   .login-card .brand-block{ text-align:center; margin-bottom:22px; }
@@ -396,7 +467,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .lq-orig.google{ background:#f6e7e0; color:#a2542c; }
   /* ---- Sub-pestañas de Calidad de Leads ---- */
   .lq-subtabs{ display:flex; gap:10px; flex-wrap:wrap; margin:2px 0 18px; }
-  .lq-subtab{ display:flex; align-items:center; gap:10px; background:var(--crema-2); border:1px solid var(--linea); border-radius:12px; padding:10px 16px; cursor:pointer; transition:.15s; min-width:190px; }
+  .lq-subtab{ font-family:var(--sans); text-align:left; display:flex; align-items:center; gap:10px; background:var(--crema-2); border:1px solid var(--linea); border-radius:12px; padding:10px 16px; cursor:pointer; transition:.15s; min-width:190px; }
   .lq-subtab:hover{ border-color:var(--cobre); }
   .lq-subtab.active{ background:#fff; border-color:var(--cobre); box-shadow:0 2px 6px rgba(70,82,65,.08); }
   .lq-subtab .ls-n{ display:flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:var(--arena,#e0d8c6); color:var(--verde-prof); font-size:11px; font-weight:700; flex:none; }
@@ -528,12 +599,12 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
       </button>
     </div>
     <div class="main">
-  <div class="tabs">
-    <div class="tab active" data-tab="resultados">Dirección General</div>
-    <div class="tab" data-tab="dircom">Dirección Comercial</div>
-    <div class="tab" data-tab="ventas">Ventas</div>
-    <div class="tab" data-tab="crm">CRM en vivo</div>
-    <div class="tab" data-tab="marketing">Marketing</div>
+  <div class="tabs" role="tablist" aria-label="Secciones">
+    <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="resultados">Dirección General</button>
+    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="dircom">Dirección Comercial</button>
+    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="ventas">Ventas</button>
+    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="crm">CRM en vivo</button>
+    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="marketing">Marketing</button>
     <div class="canal-wrap">
       <span class="lbl">Reporte</span>
       <select id="canal-select"></select>
@@ -543,10 +614,10 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
       <select id="mkt-select"></select>
     </div>
   </div>
-  <div class="subtabs" id="ventas-subtabs" style="display:none">
-    <div class="subtab" data-subtab="ingreso">Ingreso de datos</div>
-    <div class="subtab active" data-subtab="reporte">Reporte</div>
-    <div class="subtab" data-subtab="analitica">Analítica</div>
+  <div class="subtabs" id="ventas-subtabs" role="tablist" aria-label="Sub-secciones de Ventas" style="display:none">
+    <button type="button" class="subtab" role="tab" aria-selected="false" data-subtab="ingreso">Ingreso de datos</button>
+    <button type="button" class="subtab active" role="tab" aria-selected="true" data-subtab="reporte">Reporte</button>
+    <button type="button" class="subtab" role="tab" aria-selected="false" data-subtab="analitica">Analítica</button>
   </div>
 
   <div class="wrap">
@@ -561,8 +632,9 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
           <div id="ing-dims"></div>
           <div class="grp"><label>Responsable</label><input type="text" id="ing-responsable" placeholder="Nombre del responsable" style="min-width:200px;padding:8px 10px;border:1px solid var(--linea);border-radius:8px;font-family:var(--sans);font-size:14px;background:var(--crema)"></div>
           <div class="spacer"></div>
-          <button class="btn btn-ghost" id="btn-limpiar">Limpiar</button>
-          <button class="btn btn-primary" id="btn-guardar">Guardar</button>
+          <!-- La barra de acciones vive al final del formulario, que es donde termina la
+               captura. Antes había dos pares con etiquetas distintas ("Guardar" arriba,
+               "Guardar semana" abajo) para exactamente la misma función. -->
         </div>
         <p class="hint">El rango se ajusta automáticamente a semanas completas de lunes a domingo (estándar ISO).</p>
 
@@ -1421,7 +1493,7 @@ function renderIngresoForm(){
   document.getElementById("ing-sections").innerHTML = sections().map(s=>`
     <div class="section"><h3><span class="dot"></span>${s.title}</h3><div class="fields">
       ${s.fields.map(f=>`<div class="frow"><label>${f.l}</label>
-        <input type="number" step="${f.money?'0.01':'1'}" id="in_${f.k}" placeholder="0"></div>`).join("")}
+        <input type="text" inputmode="decimal" id="in_${f.k}" placeholder="0" data-money="${f.money?1:0}"></div>`).join("")}
     </div></div>`).join("");
 }
 function currentWeekId(){ const d=parseD(document.getElementById("ing-inicio").value); return d?isoWeekId(d):null; }
@@ -1439,8 +1511,28 @@ let LAST_RESP = {};
 async function loadLastResp(){ const s=await sGet("selvadentro:last_resp"); if(s && typeof s==="object") LAST_RESP=s; }
 async function saveLastResp(){ await sSet("selvadentro:last_resp", LAST_RESP); }
 function defaultResp(){ return LAST_RESP[CH] || ""; }
+// Limpia lo que llega de una hoja de cálculo antes de convertir: comas de millares,
+// símbolo de moneda, espacios, y coma decimal. Antes, "1,200" pegado desde Excel se
+// guardaba como 0 sin ninguna diferencia visible frente a un 0 legítimo.
+function numCampo(v){
+  if(v==null) return 0;
+  let t = String(v).trim();
+  if(!t) return 0;
+  t = t.replace(/[$\s\u00A0%]/g, "");
+  const ic = t.lastIndexOf(","), ip = t.lastIndexOf(".");
+  if(ic >= 0 && ip >= 0){
+    // El separador que aparece de ÚLTIMO es el decimal: 1,234.56 (en-US) vs 1.234,56 (es-MX).
+    if(ic > ip) t = t.replace(/\./g, "").replace(",", ".");
+    else        t = t.replace(/,/g, "");
+  } else if(ic >= 0){
+    // Solo comas: decimal si quedan 1-2 dígitos después ("12,5"), si no son de millares.
+    t = /,\d{1,2}$/.test(t) ? t.replace(",", ".") : t.replace(/,/g, "");
+  }
+  const n = parseFloat(t);
+  return isFinite(n) ? n : 0;
+}
 function gatherForm(){
-  const data={}; allFields().forEach(f=>{ const el=document.getElementById("in_"+f.k); data[f.k]= el&&el.value!=="" ? Number(el.value):0; });
+  const data={}; allFields().forEach(f=>{ const el=document.getElementById("in_"+f.k); data[f.k]= numCampo(el?el.value:""); });
   return { inicio:document.getElementById("ing-inicio").value, fin:document.getElementById("ing-fin").value, semana:currentWeekId(),
     dimVals:curDimVals(), valores:data, notas:document.getElementById("txt-notas").value, aprendizajes:document.getElementById("txt-aprendizajes").value, cambios:document.getElementById("txt-cambios").value,
     responsable:(document.getElementById("ing-responsable")?.value||"").trim() };
@@ -1462,6 +1554,18 @@ function clearForm(){ allFields().forEach(f=>{ const el=document.getElementById(
 const BORRADOR_KEY = "selvadentro:borrador";
 let ingSucio = false;                      // hay algo escrito sin guardar
 // Confirma antes de reemplazar un registro que ya tiene datos.
+// Revisión de coherencia: no bloquea, avisa. Un embudo imposible casi siempre es un dedazo.
+function ingRevisarCoherencia(form){
+  const v = form.valores||{}, map = METRIC_MAP[CH]||{};
+  const g = (m)=> map[m] ? Number(v[map[m]]||0) : null;
+  const problemas = [];
+  const leads=g("leads"), opp=g("opp"), won=g("won"), ap=g("apartados");
+  if(leads!=null && opp!=null && opp>leads) problemas.push(`OPP (${opp}) es mayor que Leads (${leads})`);
+  if(opp!=null && won!=null && won>opp)     problemas.push(`WON (${won}) es mayor que OPP (${opp})`);
+  if(ap!=null && won!=null && won>ap && ap>0) problemas.push(`WON (${won}) es mayor que Apartados (${ap})`);
+  Object.entries(v).forEach(([k,val])=>{ if(Number(val)<0) problemas.push(`hay un valor negativo en "${k}"`); });
+  return problemas.length ? "Revisa estos números antes de guardar:\n· " + problemas.join("\n· ") : "";
+}
 function ingSobrescribirOk(previo, dv, w){
   const conDatos = Object.values((previo && previo.valores) || {}).some(v=>Number(v)!==0);
   if(!conDatos) return true;
@@ -1523,6 +1627,8 @@ async function saveWeek(){
   if(!isWeekEditable(w)){ toast("Solo puedes guardar la semana actual o la anterior"); return; }
   const dv=curDimVals(); const k=recKey(w,dv); const form=gatherForm();
   // Pisar un registro existente ya no es silencioso.
+  const aviso = ingRevisarCoherencia(form);
+  if(aviso && !confirm(aviso + "\n\n¿Guardar de todas formas?")) return;
   const previo = recGet(k);
   if(previo && !ingSobrescribirOk(previo, dv, w)) return;
   recSet(k, form);
@@ -1741,9 +1847,10 @@ document.querySelectorAll("[data-tab]").forEach(el=>el.onclick=()=>{
     if(api && typeof api.mktShowView==="function") api.mktShowView(tab==="metas"?"metas":"basedatos");
     return;
   }
-  document.querySelectorAll("[data-tab]").forEach(t=>t.classList.remove("active"));
+  document.querySelectorAll("[data-tab]").forEach(t=>{ t.classList.remove("active"); if(t.hasAttribute("aria-selected")) t.setAttribute("aria-selected","false"); });
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   el.classList.add("active");
+  if(el.hasAttribute("aria-selected")) el.setAttribute("aria-selected","true");
   // Las tres búsquedas de abajo van con guarda: este manejador ya apagó todas las vistas,
   // así que si algo devuelve null y lanza, la pantalla se queda en blanco sin encender ninguna.
   if(tab==="ventas"){
@@ -1831,8 +1938,8 @@ function aplicarModuloMkt(id){
   if(api && typeof api.mktSetActive === "function") api.mktSetActive(id);
 }
 document.querySelectorAll(".subtab[data-subtab]").forEach(el=>el.onclick=()=>{
-  document.querySelectorAll(".subtab[data-subtab]").forEach(t=>t.classList.remove("active"));
-  el.classList.add("active");
+  document.querySelectorAll(".subtab[data-subtab]").forEach(t=>{ t.classList.remove("active"); t.setAttribute("aria-selected","false"); });
+  el.classList.add("active"); el.setAttribute("aria-selected","true");
   VENTAS_SUBTAB=el.dataset.subtab;
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   document.getElementById("view-"+VENTAS_SUBTAB)?.classList.add("active");
@@ -2041,6 +2148,18 @@ const crmState = { built:false, agg:null, syncing:false };
 const CRM_SRC_LABELS = { ig:"Instagram", fb:"Facebook", facebook:"Facebook", instagram:"Instagram", google:"Google", tiktok:"TikTok", yt:"YouTube", youtube:"YouTube", whatsapp:"WhatsApp", "(sin fuente)":"(Sin fuente)" };
 
 const crmWeekOf = semanaISOTulum;   // antes leía en UTC: ver semanaISOTulum
+// Reintenta hasta que la condición se cumpla o se agote el plazo. Cuatro sitios hacían esto
+// con setTimeout sin contador, sin tope y sin salida de error: un fallo permanente se veía
+// exactamente igual que "está cargando", para siempre.
+function reintentar(cond, ok, falla, ms=300, maxIntentos=40){
+  let n = 0;
+  (function paso(){
+    if(cond()){ ok(); return; }
+    if(++n > maxIntentos){ falla(); return; }
+    setTimeout(paso, ms);
+  })();
+}
+
 function crmAgo(ts){ const m=Math.round((Date.now()-ts)/60000); if(m<1) return "ahora mismo"; if(m<60) return `hace ${m} min`; const h=Math.floor(m/60); if(h<24) return `hace ${h} h`; return new Date(ts).toLocaleString("es-MX",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}); }
 
 // Aviso de sincronización incompleta. Lo tenía solo Calidad de Leads; ahora es compartido,
@@ -2048,6 +2167,24 @@ function crmAgo(ts){ const m=Math.round((Date.now()-ts)/60000); if(m<1) return "
 // ceros de la pantalla son datos que faltan y no resultados, y quien lee el cache después
 // no tiene forma de saberlo. El aviso viaja DENTRO del agregado, así que lo ve todo el
 // equipo y no solo quien pulsó el botón.
+// --- Cancelación de las sincronizaciones largas ---------------------------------------
+// No existía ningún AbortController: una vez lanzada, una sincronización de 1-3 minutos no
+// se podía detener. El botón se convierte en "Cancelar" mientras corre.
+const SYNC_ABORT = {};
+function syncCancelable(nombre, btn, etiquetaOriginal){
+  SYNC_ABORT[nombre] = false;
+  const prev = btn.onclick;
+  btn.disabled = false;                       // se deja pulsable, ahora cancela
+  btn.textContent = "Cancelar";
+  btn.classList.add("btn-cancel");
+  btn.onclick = ()=>{ SYNC_ABORT[nombre] = true; btn.disabled = true; btn.textContent = "Cancelando…"; };
+  return ()=>{                                 // restaurar al terminar
+    btn.classList.remove("btn-cancel");
+    btn.disabled = false; btn.textContent = etiquetaOriginal; btn.onclick = prev;
+  };
+}
+const syncCancelado = (nombre)=> !!SYNC_ABORT[nombre];
+
 function bannerIncompleto(fallos, queRehacer){
   if(!(fallos||[]).length) return "";
   return `<div class="lq-meth" style="border-color:#a94436;background:#F2CFC9">
@@ -2177,7 +2314,8 @@ async function crmSync(){
   crmState.syncing = true;
   const btn=document.getElementById("crm-refresh"), prog=document.getElementById("crm-progress"),
         bar=document.getElementById("crm-progress-bar"), lbl=document.getElementById("crm-progress-lbl");
-  btn.disabled=true; btn.textContent="Sincronizando…"; prog.style.display="block"; bar.style.width="3%";
+  prog.style.display="block"; bar.style.width="3%";
+  const restaurarBtn = syncCancelable("crm", btn, "Sincronizar CRM");
   try{
     lbl.textContent="Conectando con el CRM…";
     const boot = await crmFn({action:"bootstrap"});
@@ -2187,9 +2325,10 @@ async function crmSync(){
     const opps=[]; let cursor=null, total=0;
     do{
       const res = await crmFn({action:"crawl", since:String(desde), ...(cursor||{})});
+      if(syncCancelado("crm")){ toast("Sincronización cancelada"); return; }
       opps.push(...res.opps); total = res.total || total; cursor = res.cursor;
-      const pct = total ? Math.min(97, Math.round(opps.length/total*100)) : 50;
-      bar.style.width=pct+"%";
+      if(total){ bar.style.width = Math.min(97, Math.round(opps.length/total*100))+"%"; bar.classList.remove("indet"); }
+      else bar.classList.add("indet");   // sin total no se inventa un porcentaje
       lbl.textContent=`Sincronizando oportunidades… ${opps.length.toLocaleString()}${total?(" de "+total.toLocaleString()):""}`;
     }while(cursor);
     bar.style.width="100%"; lbl.textContent="Procesando…";
@@ -2208,7 +2347,7 @@ async function crmSync(){
       crmRender();
     }
   }finally{
-    crmState.syncing=false; btn.disabled=false; btn.textContent="Sincronizar CRM";
+    crmState.syncing=false; restaurarBtn();
     setTimeout(()=>{ prog.style.display="none"; bar.style.width="0%"; }, 600);
   }
 }
@@ -3267,7 +3406,7 @@ function lqRender(){
     ${kpi(wonTot.toLocaleString(),"WONs de estos leads")}
   </div>`;
   const SUB = lqState.sub || "datos";
-  const subBar = `<div class="lq-subtabs">${LQ_SUBS.map(t=>`<div class="lq-subtab${SUB===t.id?" active":""}" data-lq-sub="${t.id}"><span class="ls-n">${t.n}</span><span><b>${t.name}</b><i>${t.sub}</i></span></div>`).join("")}</div>`;
+  const subBar = `<div class="lq-subtabs" role="tablist" aria-label="Vistas de Calidad de Leads">${LQ_SUBS.map(t=>`<button type="button" role="tab" aria-selected="${SUB===t.id?"true":"false"}" class="lq-subtab${SUB===t.id?" active":""}" data-lq-sub="${t.id}"><span class="ls-n">${t.n}</span><span><b>${t.name}</b><i>${t.sub}</i></span></button>`).join("")}</div>`;
   if(!agg.califField){
     html += `<div class="lq-meth">⚠ No se encontró el campo <b>"Calificación del lead"</b> en GoHighLevel; todos los leads aparecen como "Sin calificar". Verifica que el campo exista y que el token tenga el scope de campos personalizados.</div>`;
   }
@@ -3584,7 +3723,8 @@ async function lqSync(){
   let monedas = [];                  // monedas que reporta Windsor (si son varias, no se pueden sumar)
   const btn=document.getElementById("lq-refresh"), prog=document.getElementById("lq-progress"),
         bar=document.getElementById("lq-progress-bar"), lbl=document.getElementById("lq-progress-lbl");
-  btn.disabled=true; btn.textContent="Sincronizando…"; prog.style.display="block"; bar.style.width="3%";
+  prog.style.display="block"; bar.style.width="3%";
+  const restaurarBtn = syncCancelable("lq", btn, "Sincronizar leads");
   try{
     lbl.textContent="Conectando con el CRM…";
     const boot = await lqFn({action:"bootstrap"});
@@ -3594,9 +3734,10 @@ async function lqSync(){
     const rawLeads=[]; let cursor=null, total=0;
     do{
       const res = await lqFn({action:"leads", start:b0.startISO, end:b1.endISO, ...(cursor?{searchAfter:cursor}:{})});
+      if(syncCancelado("lq")){ toast("Sincronización cancelada"); return; }
       rawLeads.push(...res.leads); total = res.total || total; cursor = res.searchAfter;
-      const pct = total ? Math.min(90, Math.round(rawLeads.length/total*90)) : 45;
-      bar.style.width=pct+"%";
+      if(total){ bar.style.width = Math.min(90, Math.round(rawLeads.length/total*90))+"%"; bar.classList.remove("indet"); }
+      else bar.classList.add("indet");
       lbl.textContent=`Sincronizando contactos… ${rawLeads.length.toLocaleString()}${total?(" de "+total.toLocaleString()):""}`;
     }while(cursor);
     // Oportunidades del CRM (con contactId) para atribuir OPPs y WONs por campaña
@@ -3646,7 +3787,7 @@ async function lqSync(){
   }catch(e){
     toast("Error al sincronizar leads: "+(e.message||e));
   }finally{
-    lqState.syncing=false; btn.disabled=false; btn.textContent="Sincronizar leads";
+    lqState.syncing=false; restaurarBtn();
     setTimeout(()=>{ prog.style.display="none"; bar.style.width="0%"; }, 600);
   }
 }
@@ -4145,7 +4286,8 @@ async function slaSync(){
   slaState.syncing = true;
   const btn=document.getElementById("sla-refresh"), prog=document.getElementById("sla-progress"),
         bar=document.getElementById("sla-progress-bar"), lbl=document.getElementById("sla-progress-lbl");
-  btn.disabled=true; btn.textContent="Generando…"; prog.style.display="block"; bar.style.width="2%";
+  prog.style.display="block"; bar.style.width="2%";
+  const restaurarBtn = syncCancelable("sla", btn, "Generar reporte");
   try{
     const fallos = [];      // qué partes del barrido no se pudieron traer (viaja en el agregado)
     let lotesFallidos = 0, leadsSinBarrer = 0;
@@ -4162,6 +4304,7 @@ async function slaSync(){
     // Barrido de conversaciones y citas, en lotes de 8
     const sweepMap={};
     for(let i=0;i<contactsArr.length;i+=8){
+      if(syncCancelado("sla")){ toast("Reporte cancelado"); return; }
       const ids = contactsArr.slice(i,i+8).map(c=>c.id);
       try{
         const res = await slaFn({action:"sweep", ids});
@@ -4203,7 +4346,7 @@ async function slaSync(){
   }catch(e){
     toast("Error al generar el reporte SLA: "+(e.message||e));
   }finally{
-    slaState.syncing=false; btn.disabled=false; btn.textContent="Generar reporte";
+    slaState.syncing=false; restaurarBtn();
     setTimeout(()=>{ prog.style.display="none"; bar.style.width="0%"; }, 600);
   }
 }
@@ -4243,7 +4386,10 @@ function dirWeeklySeries(chsSel, weekSet){
 }
 function renderDirAnalitica(prefix, chsSel, weekSet, tabName){
   const host = document.getElementById(`${prefix}-analitica`); if(!host) return;
-  if(!window.Chart){ host.innerHTML = '<div class="anal-empty">Cargando librería de gráficas…</div>'; setTimeout(()=>renderDirAnalitica(prefix,chsSel,weekSet,tabName), 300); return; }
+  if(!window.Chart){ host.innerHTML = '<div class="anal-empty">Cargando librería de gráficas…</div>';
+    reintentar(()=>!!window.Chart, ()=>renderDirAnalitica(prefix,chsSel,weekSet,tabName),
+      ()=>{ host.innerHTML = '<div class="anal-empty">No se pudo cargar la librería de gráficas. Revisa tu conexión y recarga la página.</div>'; });
+    return; }
   if(!weekSet || !weekSet.size || !chsSel.length){ host.innerHTML = ''; return; }
   const state = ANAL_DIR[prefix];
   const { weeks, byMetric } = dirWeeklySeries(chsSel, weekSet);
@@ -4426,7 +4572,10 @@ function analDrawChart(canvasId, label, weeks, values, color){
 }
 function renderAnalitica(){
   const grid = document.getElementById("anal-grid"); if(!grid) return;
-  if(!window.Chart){ grid.innerHTML = '<div class="anal-empty">Cargando librería de gráficas…</div>'; setTimeout(renderAnalitica, 300); return; }
+  if(!window.Chart){ grid.innerHTML = '<div class="anal-empty">Cargando librería de gráficas…</div>';
+    reintentar(()=>!!window.Chart, ()=>renderAnalitica(),
+      ()=>{ grid.innerHTML = '<div class="anal-empty">No se pudo cargar la librería de gráficas. Revisa tu conexión y recarga la página.</div>'; });
+    return; }
   const chKey = CH;
   const full = analSeriesForChannel(chKey);
   const allWeeks = full.weeks;
@@ -4702,12 +4851,15 @@ function metasShowFrame(show, modKey){
   const hint = document.getElementById("metas-hint");
   if(!show){ frame.style.display="none"; body.style.display=""; hint.style.display=""; return; }
   body.style.display="none"; hint.style.display="none"; frame.style.display="block";
-  const apply = ()=>{
-    const w = frame.contentWindow;
-    if(w && typeof w.mktSetEmbedMode==='function' && typeof w.mktSetActive==='function' && typeof w.mktShowView==='function'){
-      w.mktSetEmbedMode(true); w.mktSetActive(modKey); w.mktShowView('metas');
-    } else { setTimeout(apply, 150); }
-  };
+  const listo = ()=>{ const w = frame.contentWindow;
+    return !!(w && typeof w.mktSetEmbedMode==='function' && typeof w.mktSetActive==='function' && typeof w.mktShowView==='function'); };
+  const apply = ()=> reintentar(listo,
+    ()=>{ const w = frame.contentWindow; w.mktSetEmbedMode(true); w.mktSetActive(modKey); w.mktShowView('metas'); },
+    ()=>{ frame.style.display="none";
+          const aviso = document.createElement("div"); aviso.className="empty-rep";
+          aviso.textContent = "No se pudo cargar el módulo de Marketing. Revisa tu conexión y recarga la página.";
+          frame.parentElement && frame.parentElement.insertBefore(aviso, frame); },
+    150, 40);
   if(!frame.src || frame.src==="about:blank" || frame.src.endsWith("about:blank")){
     frame.onload = apply; frame.src = "marketing.html";
   } else { apply(); }
@@ -5001,6 +5153,37 @@ function renderMetasBody(ch){
     };
   });
 
+  // --- Alternativa táctil: mover un KPI de sección con un desplegable ---
+  (function(){
+    const secs = [...body.querySelectorAll('.meta-section[data-section-id]')]
+      .map(sec => ({ id: sec.dataset.sectionId,
+                     nombre: ((sec.querySelector('h3')||{}).textContent || sec.dataset.sectionId).trim().slice(0,40) }));
+    if(secs.length < 2) return;                       // con una sola sección no hay a dónde mover
+    body.querySelectorAll('tr[data-k]').forEach(tr=>{
+      const cont = tr.closest('.meta-section');
+      const actual = cont && cont.dataset.sectionId;
+      const celda = tr.querySelector('td'); if(!celda) return;
+      const sel = document.createElement('select');
+      sel.className = 'kpi-sec';
+      sel.title = 'Mover este KPI a otra sección';
+      sel.innerHTML = secs.map(x=>`<option value="${escAttr(x.id)}"${x.id===actual?' selected':''}>${escAttr(x.nombre)}</option>`).join('');
+      sel.onchange = async ()=>{
+        const destino = sel.value; if(!destino || destino===actual) return;
+        const ch = tr.dataset.ch, fk = tr.dataset.k, isCustom = tr.dataset.custom === "1";
+        META_OVERRIDES[ch] = META_OVERRIDES[ch] || {};
+        META_OVERRIDES[ch].__field_sections = META_OVERRIDES[ch].__field_sections || {};
+        META_OVERRIDES[ch].__field_sections[fk] = destino;
+        if(isCustom){
+          const arr = META_OVERRIDES[ch].__custom || [];
+          const item = arr.find(x => x.k === fk);
+          if(item) item.section = destino === "KPIs personalizados" ? null : destino;
+        }
+        applyMetas(); await saveMetas(); toast("KPI movido ✓"); renderMetasBody(ch);
+      };
+      celda.prepend(sel);
+    });
+  })();
+
   // --- Drag de TODOS los KPIs (nativos + custom) ---
   body.querySelectorAll('tr[data-k]').forEach(tr=>{
     tr.ondragstart = (e)=>{
@@ -5243,12 +5426,15 @@ function dbShowFrame(show, modKey){
   if(getBtn) getBtn.style.display="none";
   ["db-csv","db-json"].forEach(id=>{ const b=document.getElementById(id); if(b) b.style.display="none"; });
   frame.style.display="block";
-  const apply = ()=>{
-    const w = frame.contentWindow;
-    if(w && typeof w.mktSetEmbedMode==='function' && typeof w.mktSetActive==='function' && typeof w.mktShowView==='function'){
-      w.mktSetEmbedMode(true); w.mktSetActive(modKey); w.mktShowView('basedatos');
-    } else { setTimeout(apply, 150); }
-  };
+  const listo = ()=>{ const w = frame.contentWindow;
+    return !!(w && typeof w.mktSetEmbedMode==='function' && typeof w.mktSetActive==='function' && typeof w.mktShowView==='function'); };
+  const apply = ()=> reintentar(listo,
+    ()=>{ const w = frame.contentWindow; w.mktSetEmbedMode(true); w.mktSetActive(modKey); w.mktShowView('basedatos'); },
+    ()=>{ frame.style.display="none";
+          const aviso = document.createElement("div"); aviso.className="empty-rep";
+          aviso.textContent = "No se pudo cargar el módulo de Marketing. Revisa tu conexión y recarga la página.";
+          frame.parentElement && frame.parentElement.insertBefore(aviso, frame); },
+    150, 40);
   if(!frame.src || frame.src==="about:blank" || frame.src.endsWith("about:blank")){
     frame.onload = apply; frame.src = "marketing.html";
   } else { apply(); }
@@ -5341,6 +5527,10 @@ async function switchChannel(ch){
   const dims=dimsOf();
   document.getElementById("ing-dims").innerHTML = dims.map((d,i)=>{ const vals = d.id==="asesor" ? activeAdvisorNames() : d.values; return `<div class="grp"><label>${d.label}</label><select id="ing-dim-${i}">${vals.map(v=>`<option>${v}</option>`).join("")}</select></div>`; }).join("");
   document.getElementById("rep-dims").innerHTML = dims.map((d,i)=>{ const vals = d.id==="ciudad" ? d.values.filter(v=>v!=="General") : d.values; return `<div class="grp"><label>${d.label}</label><select id="rep-dim-${i}"><option value="__todos">Todos</option>${vals.map(v=>`<option value="${v}">${v}</option>`).join("")}</select></div>`; }).join("");
+  // Al cambiar de canal, soltar las gráficas del canal anterior: sus canvas ya no están
+  // en el DOM y sus manejadores de resize seguían vivos en cada redimensionamiento.
+  Object.values(ANAL_STATE.charts).forEach(c=>{ try{ c.destroy(); }catch(e){} });
+  ANAL_STATE.charts = {};
   renderIngresoForm(); clearForm();
   // (el aviso de captura sin guardar lo da switchChannelSeguro, antes de llegar aquí)
   renderChips();
@@ -5385,13 +5575,11 @@ async function init(){
   // Cambiar de asesor o ciudad también debe traer el registro de esa combinación.
   document.getElementById("ing-dims")?.addEventListener("change", cargarRegistroDeSeleccion);
 
-  document.getElementById("btn-guardar").onclick=saveWeek;
   document.getElementById("btn-guardar2").onclick=saveWeek;
   const limpiarConfirm = ()=>{
     if(ingTieneAlgo() && !confirm("¿Limpiar el formulario?\n\nSe borra lo que está en pantalla. Lo ya guardado no se toca.")) return;
     clearForm(); borrarBorrador();
   };
-  document.getElementById("btn-limpiar").onclick=limpiarConfirm;
   document.getElementById("btn-limpiar2").onclick=limpiarConfirm;
   document.getElementById("btn-generar").onclick=generarReporte;
 
