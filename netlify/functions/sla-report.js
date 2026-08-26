@@ -93,21 +93,35 @@ async function contacts({ start, end, searchAfter }) {
 
 const ts = (x) => { const t = new Date(x || 0).getTime(); return isFinite(t) && t > 0 ? t : null; };
 
-// "Contacto manual" = actividad hecha por un asesor. Se excluyen automatizaciones
-// (workflow, campaña, acciones masivas) y todo lo que no trae usuario asignado.
-const AUTO_SOURCES = new Set(["workflow", "campaign", "bulk_actions", "automation"]);
+// "Acción manual" = la hizo un asesor con las manos. Definido con el cliente el
+// 2026-08-26: cuentan llamadas del asesor, WhatsApp escrito por el asesor, y SMS y
+// email escritos a mano desde el CRM. NO cuenta nada disparado por una
+// automatización, ni los mensajes que entran por un proveedor externo vía API.
+//
+// Los cinco valores que documenta GoHighLevel para `source` son workflow,
+// bulk_actions, campaign, api y app. Solo `app` es una persona en el CRM; `api` es
+// integración de terceros y queda fuera por decisión del cliente.
+const AUTO_SOURCES = new Set(["workflow", "campaign", "bulk_actions", "automation", "api"]);
+// Canales que cuentan como acción manual del asesor.
+const CANALES_MANUALES = new Set(["call", "whatsapp", "sms", "email"]);
+
 function isManual(m) {
   const src = String(m.source || "").toLowerCase();
   if (AUTO_SOURCES.has(src)) return false;
+  if (!CANALES_MANUALES.has(chanOf(m))) return false;   // formularios, webchat, etc. no son acción del asesor
   return !!m.userId;                      // sin usuario => no se puede atribuir a un asesor
 }
-// Canal a partir del messageType de GHL (TYPE_CALL, TYPE_SMS, TYPE_WHATSAPP, TYPE_EMAIL…)
+
+// Canal a partir del messageType de GHL. Los tipos sociales (Instagram, Facebook,
+// TikTok, webchat) se separan de "otro" para poder distinguir "llegó por un canal
+// que no medimos" de "no se pudo clasificar".
 function chanOf(m) {
   const t = String(m.messageType || m.type || "").toUpperCase();
   if (t.includes("CALL")) return "call";
   if (t.includes("WHATSAPP")) return "whatsapp";
   if (t.includes("SMS")) return "sms";
   if (t.includes("EMAIL")) return "email";
+  if (/INSTAGRAM|FACEBOOK|TIKTOK|WEBCHAT|LIVE_CHAT|GMB|REVIEW/.test(t)) return "social";
   return "otro";
 }
 const TZ_MS = 5 * 3600e3;                 // Tulum, UTC-5 sin DST
@@ -138,7 +152,7 @@ async function sweepOne(id) {
     days: [],                             // días distintos con contacto manual (para la regla de 10 días)
     calls: 0,                             // intentos de llamada manuales
     chans: [],                            // canales usados manualmente
-    deliv: { sent: 0, delivered: 0, read: 0, failed: 0 },   // actividad efectiva vs realizada
+    deliv: { sent: 0, delivered: 0, read: 0, failed: 0, sin: 0 },  // actividad efectiva vs realizada; sin = sin status legible
     users: [],                            // asesores que tocaron el contacto
     ap: { tot: 0, sh: 0, ns: 0, fut: 0, f: null },
   };
@@ -161,10 +175,15 @@ async function sweepOne(id) {
           dset.add(dayKey(t));
           const ch = chanOf(m); cset.add(ch);
           if (ch === "call") out.calls++;
+          // Actividad efectiva. Una llamada CONECTADA es el caso más efectivo que
+          // existe, pero su status es "connected" y antes caía en el else, es decir
+          // sumaba al denominador sin sumar al numerador: castigaba justo al asesor
+          // que trabaja por teléfono. Lo mismo con "answered".
           const st = String(m.status || "").toLowerCase();
-          if (st === "read") out.deliv.read++;
-          else if (st === "delivered") out.deliv.delivered++;
-          else if (st === "failed" || st === "undelivered") out.deliv.failed++;
+          if (st === "read" || st === "connected" || st === "answered") out.deliv.read++;
+          else if (st === "delivered" || st === "sent") out.deliv.delivered++;
+          else if (st === "failed" || st === "undelivered" || st === "no-answer" || st === "busy" || st === "voicemail") out.deliv.failed++;
+          else if (!st) out.deliv.sin++;          // sin status: no se puede juzgar, fuera del %
           else out.deliv.sent++;
           if (m.userId) uset.add(m.userId);
         }

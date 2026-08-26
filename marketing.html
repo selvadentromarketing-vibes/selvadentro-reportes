@@ -736,11 +736,13 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   /* ===== Registro de módulos + controlador ===== */
   const MODS={
     rrss:{ name:'Redes Sociales', period:'month', records:{}, metas:{}, pval:'', key:'mkt_rrss_rec', mkey:'mkt_rrss_meta', seed:RS_SEED, seedMetas:RS_SEED_METAS, ingreso:rsIngreso, fill:rsFill, read:rsRead, metasView:rsMetas, reporte:rsReporte },
-    ppc:{ name:'PPC Ads', period:'week', records:{}, metas:{}, pval:'', key:'mkt_ppc_rec', mkey:'mkt_ppc_meta', seed:{}, seedMetas:PPC_SEED_METAS, ingreso:ppcIngreso, fill:ppcFill, read:ppcRead, metasView:ppcMetas, reporte:ppcReporte },
-    crm:{ name:'CRM Manager', period:'week', records:{}, metas:{}, pval:'', key:'mkt_crm_rec', mkey:'mkt_crm_meta', seed:CRM_SEED, seedMetas:CRM_SEED_METAS, ingreso:crmIngreso, fill:crmFill, read:crmRead, metasView:crmMetas, reporte:crmReporte },
-    lq:{ name:'Calidad de Leads', period:'week', records:{}, metas:{}, pval:'', key:'mkt_lq_rec', mkey:'mkt_lq_meta', seed:LQ_SEED, seedMetas:LQ_SEED_METAS, ingreso:lqIngreso, fill:lqFill, read:lqRead, metasView:lqMetas, reporte:lqReporte }
   };
-  const ORDER=['rrss','ppc','crm','lq'];
+  // PPC Ads y CRM Manager se retiraron el 2026-08-26: pedían a mano lo que Windsor y
+  // GoHighLevel ya entregan solos (inversión, CPL, CTR, embudo, leads por fuente). El
+  // módulo manual de Calidad de Leads también se retiró: lo sustituye el motor en vivo
+  // de index.html. Sus registros históricos siguen guardados en el kv bajo
+  // mkt_ppc_rec / mkt_crm_rec / mkt_lq_rec — solo dejaron de tener pantalla.
+  const ORDER=['rrss'];
   const LOGO_KEY='mkt_logo';
   let RESP={};
   const state={ active:'rrss', view:'reporte', ingresoRendered:null };
