@@ -30,7 +30,17 @@ async function sendEmail({ to, subject, html }) {
     body: JSON.stringify({ from: FROM_EMAIL, to: [to], subject, html }),
   });
   const t = await r.text();
-  if (!r.ok) throw new Error("Resend " + r.status + " " + t);
+  if (!r.ok) {
+    // Traducir los fallos típicos de Resend a algo accionable
+    const low = t.toLowerCase();
+    let pista = "";
+    if (r.status === 401 || r.status === 403) pista = "la RESEND_API_KEY no es válida o no tiene permiso para enviar";
+    if (low.includes("domain") && (low.includes("verif") || low.includes("not found")))
+      pista = `el dominio de FROM_EMAIL (${FROM_EMAIL}) no está verificado en Resend — hay que agregar el dominio en resend.com/domains y publicar los registros DNS (SPF/DKIM)`;
+    if (low.includes("testing emails") || low.includes("own email address"))
+      pista = "la cuenta de Resend está en modo de prueba: sin un dominio verificado solo puede enviarse al email dueño de la cuenta";
+    throw new Error(pista ? pista : "Resend " + r.status + " " + t.slice(0, 300));
+  }
   return JSON.parse(t);
 }
 
@@ -70,10 +80,14 @@ exports.handler = async (event) => {
   if (event.httpMethod !== "POST")
     return json(405, { error: "Method not allowed" });
 
+  // El correo es una comodidad, no un requisito: si Resend no está configurado el
+  // usuario igual se crea y se le devuelven las credenciales al admin para que las
+  // comparta a mano. Antes esto abortaba el alta completa y nadie podía invitar.
   const miss = S.missingEnv();
-  if (!RESEND_KEY) miss.push("RESEND_API_KEY");
-  if (!FROM_EMAIL) miss.push("FROM_EMAIL");
   if (miss.length) return json(500, { error: "Faltan env vars: " + miss.join(", ") });
+  const mailCfg = !RESEND_KEY ? "Falta RESEND_API_KEY en las variables de entorno del site de Netlify"
+                : !FROM_EMAIL ? "Falta FROM_EMAIL (remitente verificado en Resend) en las variables de entorno del site de Netlify"
+                : "";
 
   let body;
   try { body = JSON.parse(event.body || "{}"); }
@@ -111,7 +125,18 @@ exports.handler = async (event) => {
   users.push({ email: newLc, salt, hash, password: newUser.password, role, channels, created_at: new Date().toISOString() });
   await kvSet(USERS_KEY, users);
 
-  // 4) Mandar email
+  // 4) Mandar email (si se puede). El alta ya está hecha pase lo que pase.
+  const sinCorreo = (motivo) => json(207, {
+    ok: true,
+    user_created: true,
+    email_sent: false,
+    motivo,
+    warning: "Usuario creado, pero el correo no se envió: " + motivo,
+    credenciales: { email: newLc, password: newUser.password, role, channels, url: SITE_URL },
+  });
+
+  if (mailCfg) return sinCorreo(mailCfg);
+
   try {
     await sendEmail({
       to: newLc,
@@ -119,13 +144,7 @@ exports.handler = async (event) => {
       html: inviteHtml({ email: newLc, password: newUser.password, role, channels, siteUrl: SITE_URL }),
     });
   } catch (e) {
-    // El user ya quedó creado; reportamos el error de email pero no rollback.
-    return json(207, {
-      ok: true,
-      user_created: true,
-      email_sent: false,
-      warning: "Usuario creado pero el email no se envió: " + e.message,
-    });
+    return sinCorreo(String(e.message || e));
   }
 
   return json(200, { ok: true, user_created: true, email_sent: true });

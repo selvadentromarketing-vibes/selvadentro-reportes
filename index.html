@@ -5333,9 +5333,22 @@ function openNewUserRow(){
       }
       await loadUsers();
       paintUsersTable();
-      if(j.email_sent) toast("Usuario creado y email enviado ✓");
-      else if(j.warning) toast("⚠ "+j.warning);
-      else toast("Usuario creado ✓");
+      if(j.email_sent){ toast("Usuario creado y email enviado ✓"); }
+      else {
+        // El alta sí se hizo; el correo no salió. Entregamos las credenciales al
+        // admin en un bloque copiable para que las mande por WhatsApp.
+        const c = j.credenciales || { email, password: pass, role, channels, url: location.origin };
+        const texto = `Ya tienes acceso al Sistema de Reportes de Selvadentro 👇\n\n`
+          + `Liga: ${c.url || location.origin}\n`
+          + `Usuario: ${c.email}\n`
+          + `Contraseña: ${c.password}\n\n`
+          + `Te recomendamos cambiarla en cuanto entres.`;
+        try{ await navigator.clipboard.writeText(texto); toast("Usuario creado ✓ · credenciales copiadas al portapapeles"); }
+        catch(_){ toast("Usuario creado ✓ · el correo no salió"); }
+        prompt("El usuario quedó creado, pero el correo automático no se envió ("
+          + (j.motivo || "email no configurado")
+          + ").\n\nCopia este mensaje y mándaselo por WhatsApp:", texto);
+      }
     }catch(e){
       alert("Error: "+e.message);
       btn.disabled = false; btn.textContent = "Crear";
