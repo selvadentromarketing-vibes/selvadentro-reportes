@@ -349,6 +349,19 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .lt-btn:hover{ border-color:var(--olivo); color:var(--verde-prof); }
   .lt-btn.active{ background:var(--olivo); border-color:var(--olivo); color:#fff; }
   .lq-dot{ display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:7px; vertical-align:middle; flex:none; }
+  /* ---- Rúbrica de desempeño del asesor ---- */
+  .sla-pill{ display:inline-block; min-width:28px; padding:3px 9px; border-radius:20px; font-weight:700; color:#fff; font-size:12px; }
+  .sla-pill.s5{ background:var(--verde-prof); } .sla-pill.s4{ background:#5aa08f; }
+  .sla-pill.s3{ background:var(--cobre); } .sla-pill.s2{ background:#c9743a; }
+  .sla-pill.s1{ background:#a94436; } .sla-pill.na{ background:#9aa39d; }
+  .tag-up,.tag-mid,.tag-dn,.tag-sm{ display:inline-block; padding:2px 8px; border-radius:6px; font-size:10.5px; font-weight:700; }
+  .tag-up{ background:#e4f0ec; color:var(--verde-prof); } .tag-mid{ background:#f3ecd9; color:#8a6a1f; }
+  .tag-dn{ background:#f6e6df; color:#a2542c; } .tag-sm{ background:#eee; color:#777; font-weight:600; }
+  .sla-bar{ display:grid; grid-template-columns:200px 1fr 92px; align-items:center; gap:10px; font-size:12px; padding:3px 0; }
+  .sla-bar .sb-track{ background:#eee; border-radius:6px; height:15px; overflow:hidden; }
+  .sla-bar .sb-track i{ display:block; height:100%; border-radius:6px; }
+  .sla-bar .sb-val{ font-weight:600; color:var(--texto); }
+  @media(max-width:680px){ .sla-bar{ grid-template-columns:120px 1fr 70px; } }
   .lq-legend-dots{ display:flex; gap:14px; align-items:center; font-size:11px; color:var(--neutro); margin:-4px 0 10px; }
   /* ---- Tablas desplegables (campaña → conjunto → anuncio) ---- */
   .lq-toolbar{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 10px; }
@@ -3285,91 +3298,170 @@ function slaBreakup(l){
   return (l.calls||0) >= 5 && (ch.includes("sms")||ch.includes("whatsapp")) && ch.includes("email") && !l.fi;
 }
 
-// Sub-notas 1-5 (escala definida en la retro de junio 2026)
-const nota5 = (pct)=> pct>=90?5 : pct>=75?4 : pct>=50?3 : pct>=25?2 : 1;
-function slaSubnotas(arr){
-  const cd = arr.filter(l=>!l.sd);
-  if(!cd.length) return { pc:null, sg:null, bu:null, n:0 };
-  // Primer contacto: % dentro de los rangos aceptables (≤2 h desde el reloj)
-  const pcOk = cd.filter(l=>l.bucket!=="out").length;
-  // Seguimiento: % con al menos 3 días distintos de contacto en los primeros 10
-  const sgOk = cd.filter(l=>(l.d10||0) >= 3).length;
-  // Break up: sobre los que nunca respondieron, % con la secuencia agotada
-  const sinResp = cd.filter(l=>!l.fi);
-  const buOk = sinResp.filter(l=>l.breakup).length;
-  return {
-    pc: nota5(pcOk/cd.length*100), sg: nota5(sgOk/cd.length*100),
-    bu: sinResp.length ? nota5(buOk/sinResp.length*100) : null,
-    n: cd.length, pcPct:Math.round(pcOk/cd.length*100), sgPct:Math.round(sgOk/cd.length*100),
-    buPct: sinResp.length?Math.round(buOk/sinResp.length*100):null, sinResp:sinResp.length,
+/* ---- Rúbrica de desempeño (prototipo "Sistema de Calificación", ago 2026) ----
+   5 sub-notas independientes en escala 1-5, cada una con sus propios umbrales de %.
+   La nota global es el promedio de las sub-notas DISPONIBLES y nunca se muestra sola.
+   Una sub-nota sin dato queda N/A y no baja la global. */
+const SLA_DIMS = [
+  { key:"vel",    label:"Velocidad de primer contacto", thr:[20,40,60,80] },
+  { key:"cad",    label:"Cadencia / seguimiento (10 días)", thr:[20,40,60,80] },
+  { key:"cierre", label:"Cierre de ciclo (break-up)", thr:[10,20,35,50] },
+  { key:"seg",    label:"Seguimiento a futuro", thr:[10,25,40,60] },
+  { key:"efec",   label:"Actividad efectiva", thr:[50,70,85,95] },
+];
+const SLA_MIN_N = 10;                        // muestra pequeña: se marca y sale del ranking
+const SCORELAB = {5:"Excelente",4:"Bueno",3:"Adecuado",2:"Necesita mejorar",1:"Crítico"};
+const dimThr = (k)=> (SLA_DIMS.find(d=>d.key===k)||{thr:[0,0,0,0]}).thr;
+function scoreOf(pct, thr){
+  if(pct==null) return null;
+  if(pct>=thr[3]) return 5; if(pct>=thr[2]) return 4;
+  if(pct>=thr[1]) return 3; if(pct>=thr[0]) return 2; return 1;
+}
+
+// Calcula las 5 sub-notas, el índice de calidad y la tasa de oportunidades de un asesor
+function slaScoreAsesor(arr){
+  const cd = arr.filter(l=>!l.sd);          // sin datos de conversación = no se puede juzgar
+  const N = cd.length;
+  const pct = (x)=> N ? x/N*100 : 0;
+  // Velocidad: % dentro de la ventana de oro de 2 h (rangos 0-5, 5-30, 30-120)
+  const enVentana = cd.filter(l=>l.bucket!=="out").length;
+  // Cadencia: % con al menos 3 días distintos de contacto manual en los primeros 10 días
+  const c3 = cd.filter(l=>(l.d10||0)>=3).length, c5 = cd.filter(l=>(l.d10||0)>=5).length;
+  // Cierre de ciclo: denominador = descalificados; si no hay, N (como el prototipo)
+  const desc = cd.filter(l=>l.lv==="desc").length;
+  const bkDen = desc > 0 ? desc : N;
+  const bk = cd.filter(l=>l.breakup).length;
+  // Seguimiento a futuro: campos manuales de GHL (semanal mp / mensual lp)
+  const segMarcados = cd.filter(l=>l.segSem || l.segMes).length;
+  const segMedido = cd.some(l=>l.segSem!=null || l.segMes!=null);
+  // Actividad efectiva: entregados + leídos ÷ enviados
+  let env=0, ent=0;
+  cd.forEach(l=>{ const d=l.deliv; if(!d) return;
+    env += (d.sent||0)+(d.delivered||0)+(d.read||0)+(d.failed||0);
+    ent += (d.delivered||0)+(d.read||0); });
+  const pctEfec = env > 0 ? ent/env*100 : null;
+
+  const pcts = {
+    vel: pct(enVentana), cad: pct(c3), cierre: bkDen ? bk/bkDen*100 : 0,
+    seg: segMedido ? pct(segMarcados) : null, efec: pctEfec,
+    c5: pct(c5), d05: pct(cd.filter(l=>l.bucket==="b5").length),
+    d30: pct(cd.filter(l=>l.bucket==="b30").length), d120: pct(cd.filter(l=>l.bucket==="b120").length),
+    dout: pct(cd.filter(l=>l.bucket==="out").length),
   };
+  const sub = {};
+  SLA_DIMS.forEach(d=>{ sub[d.key] = scoreOf(pcts[d.key], d.thr); });
+  const vals = Object.values(sub).filter(v=>v!=null);
+  const global = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+
+  // Índice de calidad de lead recibida (0-100): pondera SQL Selvadentro 4, SQL 3, CQL 1
+  const q = { sqls:0, sql:0, cql:0, desc:0 };
+  cd.forEach(l=>{ if(q[l.lv]!==undefined) q[l.lv]++; });
+  const qTot = q.sqls+q.sql+q.cql+q.desc;
+  const qIndex = qTot ? (4*q.sqls + 3*q.sql + 1*q.cql)/(4*qTot)*100 : null;
+
+  const opp = arr.reduce((a,l)=>a+(l.opp||0),0);
+  return { N, sub, global, pcts, q, qTot, qIndex, oppRate: pct(opp), opp,
+           small: N < SLA_MIN_N, bkDen, bk, desc, segMedido,
+           citas: arr.reduce((a,l)=>a+l.ap.tot,0), showed: arr.reduce((a,l)=>a+l.ap.sh,0) };
+}
+
+// Resultado ajustado por calidad: compara el percentil de la tasa de oportunidades
+// contra el percentil del índice de calidad, entre asesores comparables.
+function slaNormalizar(rows){
+  const comp = rows.filter(r=>!r.c.small && r.c.qIndex!=null && r.c.qTot>0);
+  const rank = (arr, val)=>{ if(arr.length<2) return .5;
+    const s=[...arr].sort((a,b)=>a-b); return s.indexOf(val)/(s.length-1); };
+  const opps = comp.map(r=>r.c.oppRate), quals = comp.map(r=>r.c.qIndex);
+  rows.forEach(r=>{
+    r.adj = null;
+    if(r.c.small || r.c.qIndex==null || r.c.qTot===0 || comp.length<2) return;
+    const d = rank(opps, r.c.oppRate) - rank(quals, r.c.qIndex);
+    r.adj = d > 0.15 ? "up" : d < -0.15 ? "down" : "mid";
+  });
+  return rows;
 }
 
 function slaAsesorSection(agg){
-  const leads = agg.leads;
   const name = (u)=> agg.users[u] || (u ? "(sin nombre)" : "(sin asesor)");
   const groups = {};
-  leads.forEach(l=>{ (groups[l.u]=groups[l.u]||[]).push(l); });
-  const keys = Object.keys(groups).sort((a,b)=>groups[b].length-groups[a].length);
-  const notaTxt = (v)=> v==null ? '<span style="color:var(--neutro)">—</span>'
-    : `<b style="color:${v>=4?"var(--verde-prof)":v>=3?"var(--cobre)":"#a94436"}">${v}</b><span style="color:var(--neutro);font-size:10px">/5</span>`;
+  agg.leads.forEach(l=>{ (groups[l.u]=groups[l.u]||[]).push(l); });
+  let rows = Object.keys(groups).map(u=>({ u, a:groups[u], c:slaScoreAsesor(groups[u]) }));
+  rows.sort((x,y)=>(y.c.global??-1)-(x.c.global??-1));
+  slaNormalizar(rows);
 
-  // Distribución de SLA por asesor (no solo el promedio)
-  const rows = keys.map(k=>{
-    const arr = groups[k], cd = arr.filter(l=>!l.sd);
-    const s = slaSubnotas(arr);
-    const dist = SLA_BUCKETS.map(b=>{ const n=cd.filter(l=>l.bucket===b.id).length;
-      return `<span style="background:${b.color};width:${cd.length?n/cd.length*100:0}%" title="${b.name}: ${n}"></span>`; }).join("");
-    const d3 = cd.filter(l=>(l.d10||0)>=3).length, d5 = cd.filter(l=>(l.d10||0)>=5).length;
-    const ef = cd.reduce((a,l)=>a+((l.deliv&&(l.deliv.delivered+l.deliv.read))||0),0);
-    const tot = cd.reduce((a,l)=>a+((l.deliv&&(l.deliv.sent+l.deliv.delivered+l.deliv.read+l.deliv.failed))||0),0);
-    return `<tr><td class="name">${escAttr(name(k))}</td><td>${arr.length}</td>
-      <td style="min-width:130px"><div class="lq-qbar">${dist}</div></td>
-      <td>${notaTxt(s.pc)}<div class="lq-sub">${s.pcPct??"—"}% ≤2 h</div></td>
-      <td>${notaTxt(s.sg)}<div class="lq-sub">${d3} con 3 d · ${d5} con 5 d</div></td>
-      <td>${notaTxt(s.bu)}<div class="lq-sub">${s.buPct==null?"sin casos":`${s.buPct}% de ${s.sinResp}`}</div></td>
-      <td>${tot?Math.round(ef/tot*100)+"%":"—"}<div class="lq-sub">${tot?`${ef} de ${tot}`:"sin dato"}</div></td>
-      <td>${arr.reduce((a,l)=>a+l.ap.tot,0)}</td>
-      <td>${arr.reduce((a,l)=>a+(l.opp||0),0)}</td></tr>`;
+  const pill = (v)=> v==null ? `<span class="sla-pill na">N/A</span>` : `<span class="sla-pill s${v}">${v}</span>`;
+  const adjTag = (r)=> r.c.small ? `<span class="tag-sm">muestra chica</span>`
+    : r.adj==="up" ? `<span class="tag-up">Supera</span>`
+    : r.adj==="down" ? `<span class="tag-dn">Debajo</span>`
+    : r.adj==="mid" ? `<span class="tag-mid">En línea</span>` : `<span style="color:var(--neutro)">—</span>`;
+
+  const tbody = rows.map(r=>{
+    const gl = r.c.global==null ? "—" : r.c.global.toFixed(1);
+    return `<tr><td class="name">${escAttr(name(r.u))}${r.c.small?' <span class="tag-sm">N chica</span>':''}</td>
+      <td>${r.c.N}</td>
+      ${SLA_DIMS.map(d=>`<td>${pill(r.c.sub[d.key])}</td>`).join("")}
+      <td><b>${gl}</b><div class="lq-sub">${r.c.global==null?"":SCORELAB[Math.round(r.c.global)]}</div></td>
+      <td>${r.c.qIndex==null?"—":Math.round(r.c.qIndex)}</td>
+      <td>${adjTag(r)}</td></tr>`;
   }).join("");
 
-  const leyenda = SLA_BUCKETS.map(b=>`<span><i style="background:${b.color};display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px"></i>${b.name}</span>`).join("");
   let html = `<h3 style="font-family:var(--serif);color:var(--verde-prof);font-size:20px;margin:22px 0 6px">Desempeño del asesor</h3>
-    <p class="hint" style="margin-top:0">Calculado del feed real del CRM: solo cuenta el <b>contacto manual del asesor</b> — se excluyen automatizaciones (workflows, campañas, envíos masivos) y actividad sin usuario asignado.</p>
-    <div class="lq-legend-dots">${leyenda}<span style="margin-left:auto">Distribución del primer contacto manual por lead</span></div>
+    <p class="hint" style="margin-top:0">Cinco sub-notas independientes en escala 1-5, calculadas del feed real del CRM. Solo cuenta el <b>contacto manual del asesor</b>: se excluyen automatizaciones (workflows, campañas, envíos masivos) y actividad sin usuario asignado. La nota global es el promedio de las sub-notas disponibles y nunca se muestra sola; una sub-nota sin dato queda N/A y no la baja.</p>
     <div class="table-scroll" style="margin-bottom:8px"><table class="cons">
-      <tr><th class="lft">Asesor</th><th>Leads</th><th class="lft">Distribución SLA</th>
-        <th title="Regla 1: primer contacto manual dentro de rango">1er contacto</th>
-        <th title="Regla 2: días distintos con contacto manual en los primeros 10 días">Seguimiento</th>
-        <th title="5 intentos de llamada + SMS/WhatsApp + email, sin contacto establecido">Break up</th>
-        <th title="Entregados o leídos ÷ enviados (actividad efectiva vs. realizada)">Efectividad</th>
-        <th>Citas</th><th title="OPP = cotización enviada">OPPs</th></tr>
-      ${rows || `<tr><td colspan="9" class="lft" style="color:var(--neutro);font-style:italic">Sin leads en el rango.</td></tr>`}
+      <tr><th class="lft">Asesor</th><th>N</th>
+        ${SLA_DIMS.map(d=>`<th title="${escAttr(d.label)} · umbrales ${d.thr.join("/")}%">${escAttr(d.label.split(" ")[0])}</th>`).join("")}
+        <th>Nota global</th><th title="SQL Selvadentro×4 + SQL×3 + CQL×1 sobre el total">Índice calidad</th>
+        <th title="Percentil de su tasa de oportunidades vs. percentil de la calidad de lead que recibió">Resultado ajustado</th></tr>
+      ${tbody || `<tr><td colspan="10" class="lft" style="color:var(--neutro);font-style:italic">Sin leads en el rango.</td></tr>`}
     </table></div>`;
 
-  // Comparación contra los campos que hoy se llenan a mano en GHL
-  const man = agg.manual || null;
-  if(man){
-    const f=(k)=>man[k]||0;
-    html += `<div class="lq-meth"><b>Campos manuales de GHL en este rango</b> — 0-5 min: ${f("b5")} · 0-30 min: ${f("b30")} · 2 h: ${f("b120")} ·
-      3 contactos/10 d: ${f("d3")} · 5 contactos/10 d: ${f("d5")} · break up: ${f("bu")}.
-      La tabla de arriba <b>no</b> usa estos campos: los calcula del feed. Si los números difieren mucho, es que el llenado manual está atrasado
-      (al 4 ago iba en 91 de ~2,198 contactos) — ese es justamente el trabajo que este reporte elimina.</div>`;
-  }
+  html += rows.map(r=>{
+    const c=r.c;
+    const col=(v)=> v==null?"#9aa39d":v===5?"var(--verde-prof)":v===4?"#5aa08f":v===3?"var(--cobre)":v===2?"#c9743a":"#a94436";
+    const bars = SLA_DIMS.map(d=>{
+      const v=c.sub[d.key], pc=c.pcts[d.key];
+      return `<div class="sla-bar"><span class="sb-lbl">${escAttr(d.label)}</span>
+        <span class="sb-track"><i style="width:${v==null?0:v/5*100}%;background:${col(v)}"></i></span>
+        <span class="sb-val">${v==null?"N/A":v}${pc==null?"":` · ${Math.round(pc)}%`}</span></div>`;
+    }).join("");
+    const dist = [["d05","0-5 min","var(--verde-prof)"],["d30","5-30 min","#5aa08f"],["d120","30 m-2 h","var(--cobre)"],["dout","fuera / sin contacto","#ddd8cb"]];
+    return `<div class="lq-card" style="margin-bottom:14px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+        <h4 style="margin:0">${escAttr(name(r.u))}</h4>
+        ${c.small?'<span class="tag-sm">muestra pequeña — interpretar con cautela</span>':''}
+        <span style="margin-left:auto;font-size:12px;color:var(--neutro)">Nota global <b style="font-size:20px;color:var(--verde-prof)">${c.global==null?"—":c.global.toFixed(1)}</b>/5</span>
+      </div>
+      <div class="lq-sub" style="margin-bottom:10px">N = ${c.N} leads · OPPs: ${c.opp} (${Math.round(c.oppRate)}%) · citas: ${c.showed}/${c.citas} asistidas · índice de calidad: ${c.qIndex==null?"—":Math.round(c.qIndex)+"/100"} · break up: ${c.bk} de ${c.bkDen} ${c.desc?"descalificados":"leads"}</div>
+      ${bars}
+      <div style="font-size:11.5px;font-weight:600;color:var(--neutro);margin:12px 0 4px">Distribución de velocidad de primer contacto</div>
+      <div class="lq-qbar">${dist.map(([k,,cl])=>`<span style="width:${c.pcts[k]}%;background:${cl}"></span>`).join("")}</div>
+      <div class="lq-legend-dots">${dist.map(([k,lbl,cl])=>`<span><i style="background:${cl};display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px"></i>${lbl} ${Math.round(c.pcts[k])}%</span>`).join("")}</div>
+    </div>`;
+  }).join("");
 
-  html += `<div class="lq-meth"><b>Cómo se calcula</b> —
-    <b>Regla 1 (1er contacto):</b> del alta del lead al primer contacto manual, en rangos exclusivos 0-5 min · 5-30 min · 30 min-2 h · fuera de rango.
-    Para leads creados fuera de horario el reloj arranca en la apertura del siguiente día hábil (hoy configurado <b>L-V ${SLA_HORARIO.abre}:00-${SLA_HORARIO.cierra}:00</b> hora Tulum — <b>pendiente de confirmar</b>).
-    <br><b>Regla 2 (seguimiento):</b> días distintos con contacto manual dentro de los primeros 10 días (≥3 y ≥5), no intentos individuales.
-    <br><b>Break up:</b> 5 o más intentos de llamada + SMS o WhatsApp + email, sin que el lead haya respondido nunca.
-    <br><b>Efectividad:</b> mensajes entregados o leídos ÷ enviados, según el estado que reporta GHL — mide actividad <i>efectiva</i>, no solo realizada.
-    <br><b>Sub-notas 1-5</b> independientes (primer contacto · seguimiento · break up), nunca un promedio único, y con la distribución al lado para no esconder que un asesor atendió bien a pocos leads.
-    <br><b>Pendiente:</b> el SLA de leads fríos de marketing debe arrancar en el traspaso a ventas; falta identificar ese evento en GHL. La causa de descalificación tampoco se captura todavía.</div>`;
+  // Distinguir "no se puede medir" de "gap real": si NADIE tiene el campo lleno,
+  // el 1 de todos es una falta de captura, no de desempeño.
+  const segOff = rows.length && rows.every(r=>!r.c.segMedido);
+  const segVacio = rows.length && !segOff && rows.every(r=>!r.c.pcts.seg);
+  html += `<div class="lq-meth"><b>Rúbrica</b> — cada sub-nota sale del % del criterio contra sus umbrales (≥ para 2 / 3 / 4 / 5):
+    ${SLA_DIMS.map(d=>`<br><b>${escAttr(d.label)}:</b> ${d.thr.join(" · ")}%`).join("")}
+    <br>Escala: 5 Excelente · 4 Bueno · 3 Adecuado · 2 Necesita mejorar · 1 Crítico. Muestra pequeña: menos de ${SLA_MIN_N} leads (se marca y sale del ranking de normalización).
+    <br><b>Índice de calidad</b> = (SQL Selvadentro×4 + SQL×3 + CQL×1) ÷ (4 × total), de la calificación que trae cada lead.
+    <br><b>Resultado ajustado</b> compara el percentil de la tasa de oportunidades del asesor contra el percentil de la calidad de lead que recibió, entre asesores comparables: separa el mérito del proceso de la suerte en la asignación.
+    <br><b>Cierre de ciclo</b> se mide sobre los descalificados del asesor; si no tiene descalificados, sobre el total de sus leads.
+    ${segOff?'<br>⚠ <b>Seguimiento a futuro</b> sale N/A: los campos "seguimiento semanal / mensual" no existen en GHL, así que no se puede medir y no baja la nota global.':''}
+    ${segVacio?'<br>⚠ <b>Seguimiento a futuro</b> da 1 a todos porque los campos de GHL existen pero están vacíos (1 y 0 de ~2,198 contactos al 4 ago). Es una falta de <b>captura</b>, no de desempeño: al llenarse esos campos la sub-nota se corrige sola. Si prefieren que salga N/A mientras tanto, se cambia en una línea.':''}
+    <br><b>Pendiente:</b> el SLA de leads fríos de marketing debe arrancar en el traspaso a ventas (falta identificar ese evento en GHL) y la causa de descalificación necesita un campo nuevo para distinguir mala calidad de mala gestión.</div>`;
   return html;
 }
 
-function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap){
+function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr){
   const rangoSet = new Set(rango);
+  // Campos de GHL usados por la rúbrica, detectados por nombre
+  const find = (re)=>{ const f=(fieldsArr||[]).find(x=>re.test(x.name||"")||re.test(x.key||"")); return f?{id:f.id,name:f.name}:null; };
+  const F = { calif: find(/calificaci[oó]n.*lead|lead.*calificaci[oó]n/i) || find(/calificaci[oó]n/i),
+              segSem: find(/seguimiento_semanal|seguimiento semanal/i),
+              segMes: find(/seguimiento_mensual|seguimiento mensual/i) };
   const leads = contactsArr.map(c=>{
     const wk = lqWeekOf(c.c); if(!wk || !rangoSet.has(wk)) return null;
     const sw = sweepMap[c.id] || {sin:true};
@@ -3389,6 +3481,10 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap){
              bucket: (()=>{ const r=slaReloj(created); return slaBucket(sw.foM && sw.foM>=r ? (sw.foM-r)/60000 : (sw.foM ? 0 : null)); })(),
              d10: (sw.days||[]).filter(d=>{ const t=Date.parse(d+"T12:00:00Z"); return t>=created-86400e3 && t<=created+10*86400e3; }).length,
              breakup: slaBreakup({calls:sw.calls, chans:sw.chans, fi:sw.fi}),
+             lv: F.calif ? lqClassify(c.cf && c.cf[F.calif.id]) : "nc",
+             segSem: F.segSem ? !!(c.cf && c.cf[F.segSem.id]) : null,
+             segMes: F.segMes ? !!(c.cf && c.cf[F.segMes.id]) : null,
+             opp: 0,
              ap: sw.ap || {tot:0,sh:0,ns:0,fut:0} };
   }).filter(Boolean);
   // OPPs (cotizaciones) y WONs por asesor dentro del rango
@@ -3401,7 +3497,13 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap){
     if(ww && rangoSet.has(ww)){ b.won++; b.wv += (o.v||0); }
   }
   Object.keys(byRepOpp).forEach(u=>{ const b=byRepOpp[u]; if(!b.opp && !b.won) delete byRepOpp[u]; });
-  return { ts:Date.now(), rango, users:usersMap||{}, leads, byRepOpp };
+  // OPP por asesor al nivel del lead, para la tasa de oportunidades de la rúbrica
+  leads.forEach(l=>{ const b=byRepOpp[l.u]; l.opp = 0; });
+  Object.entries(byRepOpp).forEach(([u,b])=>{
+    const mine = leads.filter(l=>l.u===u);
+    if(mine.length && b.opp) mine[0].opp = b.opp;    // se agrega por asesor, no por lead
+  });
+  return { ts:Date.now(), rango, users:usersMap||{}, fields:F, leads, byRepOpp };
 }
 
 function slaRender(){
@@ -3543,9 +3645,10 @@ async function slaSync(){
     }while(oc);
     bar.style.width="94%"; lbl.textContent="Resolviendo asesores…";
     let usersMap={};
-    try{ usersMap = (await slaFn({action:"users"})).users || {}; }catch(e){}
+    let fieldsArr = [];
+    try{ const u = await slaFn({action:"users"}); usersMap = u.users || {}; fieldsArr = u.fields || []; }catch(e){}
     bar.style.width="100%"; lbl.textContent="Procesando…";
-    slaState.agg = buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap);
+    slaState.agg = buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr);
     sSet(SLA_AGG_KEY, slaState.agg);
     slaPopulateWeeks(); slaRender();
     toast("Reporte SLA generado ✓ "+contactsArr.length+" leads analizados");

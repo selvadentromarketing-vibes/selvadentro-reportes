@@ -154,6 +154,25 @@ del CRM y con nombres:
   cada lead del rango en lotes de 8 vía `sla-report`; el resultado se cachea en el
   kv (`sla:agg:v1`) para todo el equipo. Acumulable dentro del mes eligiendo el
   rango de semanas.
+- **Desempeño del asesor** — rúbrica del prototipo "Sistema de Calificación"
+  (ago 2026), verificada con paridad exacta contra sus fórmulas: cinco sub-notas
+  independientes en escala 1-5 (velocidad de primer contacto · cadencia 10 días ·
+  cierre de ciclo/break-up · seguimiento a futuro · actividad efectiva), cada una
+  con sus umbrales de % (20/40/60/80 · 20/40/60/80 · 10/20/35/50 · 10/25/40/60 ·
+  50/70/85/95). La nota global es el promedio de las sub-notas disponibles y nunca
+  se muestra sola; una sub-nota sin dato queda N/A y no la baja.
+  - **Contacto manual**: se excluyen automatizaciones (`workflow`, `campaign`,
+    `bulk_actions`) y actividad sin usuario asignado, por `source` y `userId`.
+  - **Reloj del SLA**: leads creados fuera de horario arrancan en la apertura del
+    siguiente día hábil (configurable en `SLA_HORARIO`, hoy L-V 9-18 hora Tulum).
+  - **Break-up** detectado del feed: ≥5 intentos de llamada + SMS/WhatsApp + email
+    sin respuesta del lead. Denominador: descalificados del asesor, o el total si
+    no tiene.
+  - **Índice de calidad** (SQLS×4 + SQL×3 + CQL×1) ÷ (4×total) y **resultado
+    ajustado** por percentiles (tasa de OPPs vs. calidad recibida) para separar
+    mérito del proceso de suerte en la asignación. Muestra pequeña: <10 leads.
+  - **Actividad efectiva** del estado de entrega de cada mensaje (entregados +
+    leídos ÷ enviados).
 - **Permisos**: canal `crm_live` o `direccion_comercial` (o admin) — mismo gate en
   servidor y en el tab.
 - Requiere scopes de conversaciones y calendarios en el token (el token actual los

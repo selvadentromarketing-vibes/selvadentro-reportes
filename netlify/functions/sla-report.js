@@ -78,6 +78,10 @@ async function contacts({ start, end, searchAfter }) {
       u: c.assignedTo || "",
       tags: Array.isArray(c.tags) ? c.tags : [],
       attr: attrOf(c),
+      cf: (c.customFields || []).reduce((m, f) => {
+        if (f && f.id != null) m[f.id] = Array.isArray(f.value) ? f.value.join(", ") : String(f.value ?? "");
+        return m;
+      }, {}),
     }));
     total = data.total ?? total;
     const lastRaw = batch[batch.length - 1];
@@ -200,12 +204,18 @@ async function sweep({ ids }) {
 }
 
 async function users() {
-  const resp = await ghl(`/users/?locationId=${LOCATION_ID}`).catch(() => null);
+  const [resp, fieldsResp] = await Promise.all([
+    ghl(`/users/?locationId=${LOCATION_ID}`).catch(() => null),
+    ghl(`/locations/${LOCATION_ID}/customFields`).catch(() => null),
+  ]);
   const map = {};
   if (resp && Array.isArray(resp.users)) {
     resp.users.forEach((u) => { if (u.id && !u.deleted) map[u.id] = u.name || u.email || u.id; });
   }
-  return { users: map };
+  const fields = ((fieldsResp && fieldsResp.customFields) || []).map((f) => ({
+    id: f.id, name: f.name || f.fieldKey || "", key: f.fieldKey || "",
+  }));
+  return { users: map, fields };
 }
 
 async function opps({ startAfter, startAfterId }) {
