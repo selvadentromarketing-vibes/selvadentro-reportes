@@ -1701,6 +1701,10 @@ function aplicarModuloMkt(id){
   if(frame) frame.style.display = live ? "none" : "";
   if(vmk) vmk.classList.toggle("active", !live);
   if(vlq) vlq.classList.toggle("active", live);
+  // Marketing no comparte pantalla con Ventas: apagar sus vistas y sus sub-pestañas.
+  document.getElementById("ventas-subtabs").style.display = "none";
+  document.querySelectorAll("#view-ingreso,#view-reporte,#view-analitica,#view-sla")
+    .forEach(v=>v.classList.remove("active"));
   if(live){ showLQ(); return; }
   const api = mktFrameApi();
   if(api && typeof api.mktSetActive === "function") api.mktSetActive(id);
@@ -5045,7 +5049,13 @@ function populateCanalSelect(){
   if(cur && [...sel.options].some(o=>o.value===cur)) sel.value = cur;
 }
 // Alterna entre la vista de un canal de ventas y la de desempeño del equipo
+// ¿Está abierta la pestaña Ventas? switchChannel también corre al arrancar y al
+// cambiar de canal estando en otra pestaña; sin este guardia encendía las sub-pestañas
+// y el reporte de Ventas ENCIMA de Marketing.
+const ventasAbierto = ()=> !!document.querySelector('.tab[data-tab="ventas"].active');
+
 function mostrarDesempeno(on){
+  if(!ventasAbierto()) return;                      // no tocar vistas de otra pestaña
   document.getElementById("ventas-subtabs").style.display = on ? "none" : "flex";
   document.querySelectorAll("#view-ingreso,#view-reporte,#view-analitica").forEach(v=>{
     if(on) v.classList.remove("active");
@@ -5059,11 +5069,11 @@ async function switchChannel(ch){
   if(ch === CANAL_DESEMP){
     document.getElementById("canal-select").value = ch;
     mostrarDesempeno(true);
-    navPush({ tab:"ventas", subtab:CANAL_DESEMP });
+    if(ventasAbierto()) navPush({ tab:"ventas", subtab:CANAL_DESEMP });
     return;
   }
   mostrarDesempeno(false);
-  if(!document.querySelector("#view-ingreso.active,#view-reporte.active,#view-analitica.active")){
+  if(ventasAbierto() && !document.querySelector("#view-ingreso.active,#view-reporte.active,#view-analitica.active")){
     document.getElementById("view-"+(VENTAS_SUBTAB||"reporte"))?.classList.add("active");
   }
   CH=ch; document.getElementById("canal-select").value=ch;
