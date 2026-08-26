@@ -2414,6 +2414,9 @@ function lqIsOppStage2(st, th){
 function lqEtiquetaEtapa(st, th){
   if(LQ_RX_PIPE_NO_FUNNEL.test(st.p||"")) return { txt:"proceso post-venta", cls:"gris" };
   const t = th[st.p||""];
+  // Pipeline sin ninguna etapa de OPP (p.ej. reclutamiento de brokers): decirlo, en vez
+  // de etiquetar sus etapas como si no contaran por su nombre.
+  if(t == null && !lqIsOppStage2(st, th)) return { txt:"pipeline sin etapa de OPP", cls:"sub" };
   if(t != null && (st.i ?? 0) < t) return { txt:"antes de OPP", cls:"sub" };
   if(LQ_RX_MUERTA.test(st.s||"")) return { txt:"no cuenta", cls:"gris" };
   return lqIsOppStage2(st, th) ? { txt:"CUENTA COMO OPP", cls:"opp" } : { txt:"antes de OPP", cls:"sub" };
