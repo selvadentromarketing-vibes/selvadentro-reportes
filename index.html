@@ -163,6 +163,10 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .txt-micro{ font-size:var(--fs-xs); color:var(--neutro); }
   .txt-rojo{ color:var(--rojo); }
   .celda-fuerte{ font-weight:600; }
+  /* El formulario solo conocía dos estados, reposo y foco: un número imposible se avisaba
+     con un toast genérico y el campo culpable quedaba idéntico a los demás. */
+  .frow input.campo-error, input.campo-error{ border-color:var(--rojo) !important; background:#F9E9E6; }
+  .campo-aviso{ display:block; margin-top:4px; font-size:var(--fs-xs); color:var(--rojo); font-weight:600; }
   .hint.pegada{ margin-top:-2px; }
   h3.h-sec{ font-family:var(--serif); color:var(--verde-prof); font-size:var(--fs-xl); margin:22px 0 6px; }
   .modal-texto{ width:100%; margin-top:14px; font-family:var(--mono); font-size:var(--fs-s);
@@ -1566,6 +1570,10 @@ function renderIngresoForm(){
       ${s.fields.map(f=>`<div class="frow"><label>${f.l}</label>
         <input type="text" inputmode="decimal" id="in_${f.k}" placeholder="0" data-money="${f.money?1:0}"></div>`).join("")}
     </div></div>`).join("");
+  document.querySelectorAll("#ing-sections input").forEach(el=>{
+    el.addEventListener("blur", ()=>ingVigilarCampo(el));
+    el.addEventListener("input", ()=>{ if(el.classList.contains("campo-error")) ingVigilarCampo(el); });
+  });
 }
 function currentWeekId(){ const d=parseD(document.getElementById("ing-inicio").value); return d?isoWeekId(d):null; }
 // Ventana de edición para users no-admin: semana ISO de HOY + semana ISO anterior.
@@ -1602,6 +1610,13 @@ function numCampo(v){
   const n = parseFloat(t);
   return isFinite(n) ? n : 0;
 }
+// ¿El texto se pudo leer como número? numCampo devuelve 0 para lo ilegible —que es lo
+// correcto al guardar— así que la comprobación va aparte, para poder marcar el campo.
+function numCampoLegible(v){
+  const t = String(v==null?"":v).trim();
+  if(!t) return true;
+  return isFinite(parseFloat(t.replace(/[$\s\u00A0%,]/g, "")));
+}
 function gatherForm(){
   const data={}; allFields().forEach(f=>{ const el=document.getElementById("in_"+f.k); data[f.k]= numCampo(el?el.value:""); });
   return { inicio:document.getElementById("ing-inicio").value, fin:document.getElementById("ing-fin").value, semana:currentWeekId(),
@@ -1611,12 +1626,13 @@ function gatherForm(){
 function fillForm(rec){
   document.getElementById("ing-inicio").value=rec.inicio||""; document.getElementById("ing-fin").value=rec.fin||"";
   dimsOf().forEach((d,i)=>{ const el=document.getElementById("ing-dim-"+i); if(el&&rec.dimVals&&rec.dimVals[i]!=null){ const val=rec.dimVals[i]; if(![...el.options].some(o=>o.value===val)){ const o=document.createElement("option"); o.value=val; o.textContent=val; el.appendChild(o); } el.value=val; } });
+  ingMarcarErrores([]);
   allFields().forEach(f=>{ const el=document.getElementById("in_"+f.k); if(el) el.value=(rec.valores&&rec.valores[f.k]!=null)?rec.valores[f.k]:""; });
   document.getElementById("txt-notas").value=rec.notas||""; document.getElementById("txt-aprendizajes").value=rec.aprendizajes||""; document.getElementById("txt-cambios").value=rec.cambios||"";
   const respEl=document.getElementById("ing-responsable"); if(respEl) respEl.value=rec.responsable||defaultResp();
   updateSemanaBadge();
 }
-function clearForm(){ allFields().forEach(f=>{ const el=document.getElementById("in_"+f.k); if(el) el.value=""; }); document.getElementById("txt-notas").value=""; document.getElementById("txt-aprendizajes").value=""; document.getElementById("txt-cambios").value=""; const respEl=document.getElementById("ing-responsable"); if(respEl) respEl.value=defaultResp(); }
+function clearForm(){ ingMarcarErrores([]); allFields().forEach(f=>{ const el=document.getElementById("in_"+f.k); if(el) el.value=""; }); document.getElementById("txt-notas").value=""; document.getElementById("txt-aprendizajes").value=""; document.getElementById("txt-cambios").value=""; const respEl=document.getElementById("ing-responsable"); if(respEl) respEl.value=defaultResp(); }
 /* --- Red de seguridad del formulario de captura ---------------------------------------
    Capturar una semana son decenas de campos numéricos y había cuatro formas de perderlos
    sin una sola confirmación: Limpiar, cambiar de canal, que venciera la sesión, y guardar
@@ -1629,13 +1645,42 @@ let ingSucio = false;                      // hay algo escrito sin guardar
 function ingRevisarCoherencia(form){
   const v = form.valores||{}, map = METRIC_MAP[CH]||{};
   const g = (m)=> map[m] ? Number(v[map[m]]||0) : null;
-  const problemas = [];
+  const problemas = [], campos = new Set();
+  const marca = (...ms)=> ms.forEach(m=>{ if(map[m]) campos.add(map[m]); });
   const leads=g("leads"), opp=g("opp"), won=g("won"), ap=g("apartados");
-  if(leads!=null && opp!=null && opp>leads) problemas.push(`OPP (${opp}) es mayor que Leads (${leads})`);
-  if(opp!=null && won!=null && won>opp)     problemas.push(`WON (${won}) es mayor que OPP (${opp})`);
-  if(ap!=null && won!=null && won>ap && ap>0) problemas.push(`WON (${won}) es mayor que Apartados (${ap})`);
-  Object.entries(v).forEach(([k,val])=>{ if(Number(val)<0) problemas.push(`hay un valor negativo en "${k}"`); });
-  return problemas.length ? "· " + problemas.join("\n· ") : "";
+  if(leads!=null && opp!=null && opp>leads){ problemas.push(`OPP (${opp}) es mayor que Leads (${leads})`); marca("opp","leads"); }
+  if(opp!=null && won!=null && won>opp){     problemas.push(`WON (${won}) es mayor que OPP (${opp})`); marca("won","opp"); }
+  if(ap!=null && won!=null && won>ap && ap>0){ problemas.push(`WON (${won}) es mayor que Apartados (${ap})`); marca("won","apartados"); }
+  Object.entries(v).forEach(([k,val])=>{ if(Number(val)<0){ problemas.push(`hay un valor negativo en "${etiquetaCampo(k)}"`); campos.add(k); } });
+  return { mensaje: problemas.length ? "· " + problemas.join("\n· ") : "", campos:[...campos] };
+}
+const etiquetaCampo = (k)=> (allFields().find(f=>f.k===k)||{}).l || k;
+// Marca en rojo los campos culpables en vez de dejar el aviso en un toast genérico.
+function ingMarcarErrores(campos){
+  document.querySelectorAll("#ing-sections input.campo-error").forEach(el=>{
+    el.classList.remove("campo-error"); el.removeAttribute("aria-invalid");
+  });
+  document.querySelectorAll("#ing-sections .campo-aviso").forEach(el=>el.remove());
+  (campos||[]).forEach(k=>{
+    const el = document.getElementById("in_"+k); if(!el) return;
+    el.classList.add("campo-error"); el.setAttribute("aria-invalid","true");
+  });
+  const primero = document.querySelector("#ing-sections input.campo-error");
+  if(primero) primero.scrollIntoView({ block:"center", behavior:"smooth" });
+}
+// Un texto que el parser no puede leer ("abc", "—") se guardaba como 0, indistinguible de
+// un 0 legítimo. Ahora el campo lo dice en el momento, no al guardar.
+function ingVigilarCampo(el){
+  const t = (el.value||"").trim();
+  const malo = t !== "" && !numCampoLegible(t);
+  el.classList.toggle("campo-error", malo);
+  if(malo) el.setAttribute("aria-invalid","true"); else el.removeAttribute("aria-invalid");
+  const prev = el.parentElement.querySelector(".campo-aviso");
+  if(malo && !prev){
+    const n=document.createElement("span"); n.className="campo-aviso";
+    n.textContent="No se entiende como número; se guardaría como 0.";
+    el.parentElement.appendChild(n);
+  } else if(!malo && prev) prev.remove();
 }
 async function ingSobrescribirOk(previo, dv, w){
   const conDatos = Object.values((previo && previo.valores) || {}).some(v=>Number(v)!==0);
@@ -1701,8 +1746,9 @@ async function saveWeek(){
   if(!isWeekEditable(w)){ toast("Solo puedes guardar la semana actual o la anterior"); return; }
   const dv=curDimVals(); const k=recKey(w,dv); const form=gatherForm();
   // Pisar un registro existente ya no es silencioso.
-  const aviso = ingRevisarCoherencia(form);
-  if(aviso && !await confirmar(aviso, { titulo:"Revisa estos números", ok:"Guardar así" })) return;
+  const revision = ingRevisarCoherencia(form);
+  ingMarcarErrores(revision.campos);
+  if(revision.mensaje && !await confirmar(revision.mensaje, { titulo:"Revisa estos números", ok:"Guardar así" })) return;
   const previo = recGet(k);
   if(previo && !await ingSobrescribirOk(previo, dv, w)) return;
   recSet(k, form);
