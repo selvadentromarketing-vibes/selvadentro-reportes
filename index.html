@@ -19,6 +19,9 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
        de 4.5:1. --cobre-tx es el mismo color oscurecido (4.6:1) y se usa SOLO donde hay
        texto encima; --cobre se queda tal cual para bordes, puntos y barras. */
     --cobre-tx:#A65F22; --cobre-tx-hover:#8E4F1B;
+    /* Estos tres se escribían a mano por todo el archivo (var(--rojo) 21 veces) en vez de
+       ser variables, que es justo lo que hace que una paleta se erosione. */
+    --rojo:#a94436; --olivo-hover:#566034; --gris-suave:#8a8a8a;
     --crema:#FAF8F3; --crema-2:#F1ECE1; --linea:#E3DBCC; --texto:#2E332B; --gris-input:#ECECEC;
     --verde-ok-bg:#CBDDC0; --verde-ok-tx:#3C5A2E; --rojo-no-bg:#F2CFC9; --rojo-no-tx:#9B3B2E; --neutro:#5F6459; --logo:#EFE7D6;
     --serif:"Cardo",Georgia,serif; --sans:"Lexend",system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -114,7 +117,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .btn{ font-family:var(--sans); font-weight:600; font-size:13px; letter-spacing:.4px; cursor:pointer; border:none; border-radius:9px; padding:11px 22px; transition:.15s; }
   .btn-primary{ background:var(--cobre-tx); color:#fff; } .btn-primary:hover{ background:var(--cobre-tx-hover); }
   .btn-ghost{ background:transparent; color:var(--neutro); border:1px solid var(--linea); } .btn-ghost:hover{ background:var(--crema-2); color:var(--verde-prof); }
-  .btn-olive{ background:var(--olivo); color:#fff; } .btn-olive:hover{ background:#566034; }
+  .btn-olive{ background:var(--olivo); color:#fff; } .btn-olive:hover{ background:var(--olivo-hover); }
   /* Durante las sincronizaciones largas el botón cambiaba de texto pero seguía
      viéndose pulsable: mismo color, mismo cursor de mano, mismo hover. */
   .btn:disabled{ opacity:.55; cursor:progress; pointer-events:none; }
@@ -122,7 +125,15 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .cp-bar.indet{ width:35%!important; animation:cpslide 1.1s ease-in-out infinite alternate; }
   @keyframes cpslide{ from{ margin-left:0 } to{ margin-left:65% } }
   @media(prefers-reduced-motion:reduce){ .cp-bar.indet{ animation:none; width:100%!important; opacity:.5 } }
-  .btn.btn-cancel{ background:transparent; color:#a94436; border:1px solid #a94436; }
+  .btn.btn-cancel{ background:transparent; color:var(--rojo); border:1px solid var(--rojo); }
+  .btn-peligro{ background:var(--rojo); color:#fff; } .btn-peligro:hover{ background:#8e3529; }
+  .modal-fondo{ position:fixed; inset:0; z-index:400; background:rgba(46,51,43,.45);
+                display:flex; align-items:safe center; justify-content:center; padding:24px; overflow-y:auto; }
+  .modal-caja{ background:var(--crema); border:1px solid var(--linea); border-radius:14px;
+               padding:26px 28px; max-width:440px; width:100%; box-shadow:0 20px 60px rgba(0,0,0,.3); }
+  .modal-caja h3{ font-family:var(--serif); font-size:19px; color:var(--verde-prof); margin:0 0 10px; }
+  .modal-caja p{ margin:0; font-size:14px; line-height:1.55; color:var(--texto); }
+  .modal-btns{ display:flex; gap:10px; justify-content:flex-end; margin-top:22px; flex-wrap:wrap; }
   .btn.btn-cancel:hover{ background:#F2CFC9; }
   /* Alternativa táctil al arrastre: los eventos de drag de HTML5 no se disparan con el dedo,
      así que desde un celular no había forma de mover un KPI de sección ni ninguna otra vía. */
@@ -440,7 +451,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .sla-pill{ display:inline-block; min-width:28px; padding:3px 9px; border-radius:20px; font-weight:700; color:#fff; font-size:12px; }
   .sla-pill.s5{ background:var(--verde-prof); } .sla-pill.s4{ background:#5aa08f; }
   .sla-pill.s3{ background:var(--cobre); } .sla-pill.s2{ background:#c9743a; }
-  .sla-pill.s1{ background:#a94436; } .sla-pill.na{ background:#9aa39d; }
+  .sla-pill.s1{ background:var(--rojo); } .sla-pill.na{ background:#9aa39d; }
   .tag-up,.tag-mid,.tag-dn,.tag-sm{ display:inline-block; padding:2px 8px; border-radius:6px; font-size:10.5px; font-weight:700; }
   .tag-up{ background:#e4f0ec; color:var(--verde-prof); } .tag-mid{ background:#f3ecd9; color:#8a6a1f; }
   .tag-dn{ background:#f6e6df; color:#a2542c; } .tag-sm{ background:#eee; color:#777; font-weight:600; }
@@ -467,6 +478,12 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .lq-orig.google{ background:#f6e7e0; color:#a2542c; }
   /* ---- Sub-pestañas de Calidad de Leads ---- */
   .lq-subtabs{ display:flex; gap:10px; flex-wrap:wrap; margin:2px 0 18px; }
+  .lq-leyenda{ background:var(--crema-2); border:1px solid var(--linea); border-radius:10px; padding:9px 14px; margin-bottom:14px; }
+  .lq-leyenda summary{ cursor:pointer; font-size:12.5px; font-weight:600; color:var(--olivo); }
+  .lq-leyenda-cuerpo{ display:flex; flex-wrap:wrap; gap:6px 20px; margin-top:9px; }
+  .lq-leyenda-cuerpo span{ font-size:12.5px; color:var(--texto); flex:1 1 260px; }
+  .lq-leyenda-cuerpo b{ color:var(--verde-prof); }
+  .lq-leyenda-pie{ font-size:11.5px; color:var(--neutro); margin-top:8px; font-style:italic; }
   .lq-subtab{ font-family:var(--sans); text-align:left; display:flex; align-items:center; gap:10px; background:var(--crema-2); border:1px solid var(--linea); border-radius:12px; padding:10px 16px; cursor:pointer; transition:.15s; min-width:190px; }
   .lq-subtab:hover{ border-color:var(--cobre); }
   .lq-subtab.active{ background:#fff; border-color:var(--cobre); box-shadow:0 2px 6px rgba(70,82,65,.08); }
@@ -478,7 +495,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .lq-lectura{ background:#fff; border:1px solid var(--linea); border-left:4px solid var(--cobre); border-radius:12px; padding:16px 20px; margin-bottom:18px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
   .lq-lectura h4{ margin:0 0 8px; font-family:var(--serif); font-size:17px; color:var(--verde-prof); }
   .lq-lectura p{ margin:5px 0; font-size:13px; line-height:1.6; color:var(--texto); }
-  .lq-lectura p.ok{ color:var(--verde-prof); } .lq-lectura p.warn{ color:#a94436; }
+  .lq-lectura p.ok{ color:var(--verde-prof); } .lq-lectura p.warn{ color:var(--rojo); }
   .lq-charts{ display:grid; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); gap:18px; margin-bottom:18px; }
   .lq-card{ background:#fff; border:1px solid var(--linea); border-radius:12px; padding:16px 18px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
   .lq-card h4{ margin:0 0 12px; font-family:var(--serif); font-size:16px; color:var(--verde-prof); }
@@ -570,7 +587,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
         <button id="nav-fwd" type="button" title="Adelante" disabled>→</button>
       </div>
       <span class="email" id="user-email">—</span>
-      <span class="role" id="user-role">user</span>
+      <span class="role" id="user-role">Usuario</span>
       <button type="button" class="logout" id="btn-logout">Salir</button>
     </div>
   </div>
@@ -606,11 +623,11 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
     <button type="button" class="tab" role="tab" aria-selected="false" data-tab="crm">CRM en vivo</button>
     <button type="button" class="tab" role="tab" aria-selected="false" data-tab="marketing">Marketing</button>
     <div class="canal-wrap">
-      <span class="lbl">Reporte</span>
+      <span class="lbl">Canal</span>
       <select id="canal-select"></select>
     </div>
     <div class="mkt-wrap" style="display:none">
-      <span class="lbl">Reporte</span>
+      <span class="lbl">Módulo</span>
       <select id="mkt-select"></select>
     </div>
   </div>
@@ -700,7 +717,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
         <button class="btn btn-olive" id="res-generar">Generar reporte</button>
       </div>
       <div class="canal-chips"><span class="cc-lbl">Canales</span><div id="res-canales"></div></div>
-      <p class="hint">Elige el rango de semanas; los canales marcados alimentan el embudo de arriba (la tabla siempre muestra los 7).</p>
+      <p class="hint dir-hint"></p>
       <div class="dir-content" id="res-content"><div class="empty-rep">Genera el reporte para ver los resultados.</div></div>
       <div id="res-analitica" style="margin-top:22px"></div>
     </div>
@@ -715,7 +732,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
         <button class="btn btn-olive" id="dc-generar">Generar reporte</button>
       </div>
       <div class="canal-chips"><span class="cc-lbl">Canales</span><div id="dc-canales"></div></div>
-      <p class="hint">Elige el rango de semanas; los canales marcados alimentan el embudo de arriba (la tabla siempre muestra los 7).</p>
+      <p class="hint dir-hint"></p>
       <div class="dir-content" id="dc-content"><div class="empty-rep">Genera el reporte para ver los resultados.</div></div>
       <div id="dc-analitica" style="margin-top:22px"></div>
     </div>
@@ -728,7 +745,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
         <div class="grp"><label>Semanas evaluadas</label><div class="semana-badge" id="crm-semanas-eval">—</div></div>
         <div class="spacer"></div>
         <div class="grp"><label>Última sincronización</label><div class="semana-badge" id="crm-last-sync">—</div></div>
-        <button class="btn btn-olive" id="crm-refresh">Sincronizar CRM</button>
+        <button class="btn btn-olive" id="crm-refresh">Actualizar desde el CRM</button>
       </div>
       <p class="hint">Datos en vivo del CRM (GoHighLevel). Las etapas muestran las oportunidades abiertas hoy; los leads nuevos, WON y fuentes se filtran por el rango de semanas. La sincronización guarda un resumen compartido para todo el equipo.</p>
       <div class="crm-progress" id="crm-progress" style="display:none">
@@ -746,7 +763,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
         <div class="grp"><label>Semanas evaluadas</label><div class="semana-badge" id="lq-semanas-eval">—</div></div>
         <div class="spacer"></div>
         <div class="grp"><label>Última sincronización</label><div class="semana-badge" id="lq-last-sync">—</div></div>
-        <button class="btn btn-olive" id="lq-refresh">Sincronizar leads</button>
+        <button class="btn btn-olive" id="lq-refresh">Actualizar desde el CRM</button>
       </div>
       <div class="crm-progress" id="lq-progress" style="display:none">
         <div class="cp-lbl" id="lq-progress-lbl">Sincronizando leads…</div>
@@ -807,8 +824,8 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
     <!-- ============ METAS ============ -->
     <div class="view" id="view-metas">
       <div class="periodo">
-        <div class="grp"><label>Ventas</label><select id="metas-canal"></select></div>
-        <div class="grp"><label>Marketing</label><select id="metas-marketing"></select></div>
+        <div class="grp"><label for="metas-canal">Canal de Ventas</label><select id="metas-canal"></select></div>
+        <div class="grp"><label for="metas-marketing">Módulo de Marketing</label><select id="metas-marketing"></select></div>
         <div class="spacer"></div>
       </div>
       <p class="hint" id="metas-hint">Define la <b>meta mensual</b> de cada KPI. Se guarda automáticamente y el reporte del canal la usa, ajustada al periodo (meta mensual ÷ 4.35 semanas × semanas evaluadas). Deja en blanco para no fijar meta.</p>
@@ -860,8 +877,8 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
     <!-- ============ BASE DE DATOS ============ -->
     <div class="view" id="view-db">
       <div class="periodo">
-        <div class="grp"><label>Ventas</label><select id="db-canal"></select></div>
-        <div class="grp"><label>Marketing</label><select id="db-marketing"></select></div>
+        <div class="grp"><label for="db-canal">Canal de Ventas</label><select id="db-canal"></select></div>
+        <div class="grp"><label for="db-marketing">Módulo de Marketing</label><select id="db-marketing"></select></div>
         <button class="btn btn-olive" id="db-get">Buscar</button>
         <div class="grp"><label>Registros</label><div class="semana-badge" id="db-count">—</div></div>
         <div class="spacer"></div>
@@ -1414,7 +1431,7 @@ function avisarLecturaFallida(){
   const d = document.createElement("div");
   d.id = "aviso-lectura";
   d.style.cssText = "position:sticky;top:0;z-index:120;background:#F2CFC9;color:#9B3B2E;"
-    + "border-bottom:2px solid #a94436;padding:10px 18px;font-size:13.5px;display:flex;"
+    + "border-bottom:2px solid var(--rojo);padding:10px 18px;font-size:13.5px;display:flex;"
     + "align-items:center;gap:12px;font-family:var(--sans)";
   d.innerHTML = '<span><b>No se pudieron cargar los datos guardados.</b> '
     + 'Lo que ves puede estar incompleto o desactualizado.</span>'
@@ -1564,23 +1581,25 @@ function ingRevisarCoherencia(form){
   if(opp!=null && won!=null && won>opp)     problemas.push(`WON (${won}) es mayor que OPP (${opp})`);
   if(ap!=null && won!=null && won>ap && ap>0) problemas.push(`WON (${won}) es mayor que Apartados (${ap})`);
   Object.entries(v).forEach(([k,val])=>{ if(Number(val)<0) problemas.push(`hay un valor negativo en "${k}"`); });
-  return problemas.length ? "Revisa estos números antes de guardar:\n· " + problemas.join("\n· ") : "";
+  return problemas.length ? "· " + problemas.join("\n· ") : "";
 }
-function ingSobrescribirOk(previo, dv, w){
+async function ingSobrescribirOk(previo, dv, w){
   const conDatos = Object.values((previo && previo.valores) || {}).some(v=>Number(v)!==0);
   if(!conDatos) return true;
   const quien = dv.length ? " · " + dv.join(" · ") : "";
-  return confirm(`Ya hay datos guardados para ${w}${quien}.\n\n`
-    + `Si guardas ahora, se reemplazan por lo que hay en pantalla. `
-    + `Para ver lo que ya estaba, cancela y pulsa el registro en "Registros guardados".\n\n¿Reemplazar?`);
+  return confirmar(`Ya hay datos guardados para ${w}${quien}. Si guardas ahora se reemplazan por lo que hay en pantalla.\n\n`
+    + `Para ver lo que ya estaba, cancela y pulsa el registro en "Registros guardados".`,
+    { titulo:"Reemplazar lo guardado", ok:"Reemplazar", peligro:true });
 }
 // Antes, elegir una semana que YA tenía datos abría el formulario en blanco: el camino
 // natural —semana, asesor, capturar— llevaba a pisar un registro completo con uno parcial.
 // fillForm ya existía y solo se usaba desde los chips de abajo; ahora también aquí.
-function cargarRegistroDeSeleccion(){
+async function cargarRegistroDeSeleccion(){
   const w = currentWeekId(); if(!w) return;
   if(ingSucio && ingTieneAlgo()){
-    if(!confirm("Tienes captura sin guardar.\n\nSi cambias de semana o de asesor se reemplaza por lo que haya guardado. ¿Continuar?")){ return; }
+    const seguir = await confirmar("Si cambias de semana o de asesor, lo que está en pantalla se reemplaza por lo que haya guardado.",
+      { titulo:"Captura sin guardar", ok:"Continuar", peligro:true });
+    if(!seguir) return;
   }
   let dv; try{ dv = curDimVals(); }catch(e){ return; }
   const rec = recGet(recKey(w, dv));
@@ -1607,12 +1626,13 @@ function ingTieneAlgo(){
   return !!(f.notas||f.aprendizajes||f.cambios);
 }
 // Ofrece recuperar lo capturado si la sesión se cayó o se cerró la pestaña a la mitad.
-function ofrecerBorrador(){
+async function ofrecerBorrador(){
   const b = leerBorrador(); if(!b || !b.form) return;
   if(b.k !== ingKeyActual()) return;                       // es de otra semana/canal
   if(ingTieneAlgo()) return;                                // ya hay algo escrito: no pisarlo
   const cuando = crmAgo(b.ts||Date.now());
-  if(confirm(`Tienes captura sin guardar de ${cuando} en esta semana.\n\n¿La recupero?`)){
+  if(await confirmar(`Guardaste captura sin enviar ${cuando} en esta semana.`,
+      { titulo:"Recuperar lo capturado", ok:"Recuperar" })){
     fillForm(b.form); ingSucio = true; toast("Borrador recuperado — revisa y pulsa Guardar");
   } else { borrarBorrador(); }
 }
@@ -1628,9 +1648,9 @@ async function saveWeek(){
   const dv=curDimVals(); const k=recKey(w,dv); const form=gatherForm();
   // Pisar un registro existente ya no es silencioso.
   const aviso = ingRevisarCoherencia(form);
-  if(aviso && !confirm(aviso + "\n\n¿Guardar de todas formas?")) return;
+  if(aviso && !await confirmar(aviso, { titulo:"Revisa estos números", ok:"Guardar así" })) return;
   const previo = recGet(k);
-  if(previo && !ingSobrescribirOk(previo, dv, w)) return;
+  if(previo && !await ingSobrescribirOk(previo, dv, w)) return;
   recSet(k, form);
   try{
     await sSet(k, form);
@@ -1745,7 +1765,14 @@ const metaPeriodo=meta=>meta==null?null:(meta/SEMANAS_MES*nWeeks);
 async function loadLogo(){
   const img=document.getElementById("brand-logo");
   const show=()=>{ img.style.display="block"; document.getElementById("brand-text-name").style.display="none"; document.getElementById("brand-text-sub").style.display="none"; };
-  try{ const saved=await sGet("selvadentro:logo"); if(saved&&saved.data){ img.src=saved.data; show(); return; } }catch(e){}
+  // El único cargador de logo real vive en marketing.html y escribe en "mkt_logo"; este lado
+  // leía otra llave ("selvadentro:logo") que nadie escribía nunca, así que siempre caía al
+  // PNG del CDN. Se lee la misma llave que sí se escribe, para que el logo sea uno solo.
+  try{
+    const saved = await sGet("mkt_logo");
+    const dato = (saved && saved.data) ? saved.data : (typeof saved === "string" ? saved : null);
+    if(dato){ img.src = dato; show(); return; }
+  }catch(e){}
   img.onload=show; img.onerror=()=>{ img.style.display="none"; };
   img.src="https://assets.cdn.filesafe.space/crN2IhAuOBAl7D8324yI/media/68a8b604cfc34e61b85396bf.png";
 }
@@ -1796,6 +1823,36 @@ function showPhrase(text){
 }
 
 /* ===================== UI ===================== */
+/* --- Diálogo de confirmación propio ---------------------------------------------------
+   Había 25 alert/confirm/prompt nativos. El diálogo del navegador bloquea toda la página,
+   se ve como un error del sistema y en el móvil aparece con el estilo del navegador encima
+   de un diseño cuidado — justo en los momentos de error, que es cuando más importa que la
+   app parezca confiable. `confirmar` devuelve una promesa; el confirm nativo queda como
+   respaldo si algo fallara al construir el diálogo. */
+function confirmar(mensaje, { ok="Continuar", cancelar="Cancelar", peligro=false, titulo="" } = {}){
+  return new Promise((resolve)=>{
+    try{
+      const fondo = document.createElement("div");
+      fondo.className = "modal-fondo";
+      fondo.innerHTML = `<div class="modal-caja" role="dialog" aria-modal="true">
+        ${titulo?`<h3>${escAttr(titulo)}</h3>`:""}
+        <p>${escAttr(mensaje).replace(/\n/g,"<br>")}</p>
+        <div class="modal-btns">
+          <button type="button" class="btn btn-ghost" data-r="0">${escAttr(cancelar)}</button>
+          <button type="button" class="btn ${peligro?"btn-peligro":"btn-primary"}" data-r="1">${escAttr(ok)}</button>
+        </div></div>`;
+      const cerrar = (v)=>{ document.removeEventListener("keydown", tecla); fondo.remove(); resolve(v); };
+      const tecla = (e)=>{ if(e.key==="Escape") cerrar(false); };
+      fondo.addEventListener("click",(e)=>{
+        if(e.target===fondo) return cerrar(false);
+        const b=e.target.closest("[data-r]"); if(b) cerrar(b.dataset.r==="1");
+      });
+      document.addEventListener("keydown", tecla);
+      document.body.appendChild(fondo);
+      fondo.querySelector('[data-r="1"]').focus();
+    }catch(e){ resolve(window.confirm(mensaje)); }
+  });
+}
 function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"),2200); }
 let VENTAS_SUBTAB = "reporte";
 const NAV_HIST = { stack: [], idx: -1, silent: false };
@@ -1807,7 +1864,45 @@ function navPush(entry){
   NAV_HIST.stack.push(entry);
   NAV_HIST.idx = NAV_HIST.stack.length - 1;
   navUpdateButtons();
+  navEscribirHash(entry);
 }
+
+/* --- La vista en la URL --------------------------------------------------------------
+   No había ninguna ruta: la URL decía lo mismo pasara lo que pasara. Consecuencias diarias:
+   no se podía mandar por WhatsApp un enlace a una vista, recargar volvía siempre al inicio,
+   y el Atrás REAL del navegador —el reflejo de cualquiera— sacaba de la app entera. Los
+   botones ←/→ propios enseñaban que había historial y luego el del navegador se comportaba
+   distinto: dos historiales que no coincidían. Ahora la vista vive en el hash. */
+let NAV_HASH_PROPIO = false;
+function navEscribirHash(entry){
+  const h = "#/" + entry.tab + (entry.tab === "ventas" && entry.subtab ? "/" + entry.subtab : "");
+  if(location.hash === h) return;
+  NAV_HASH_PROPIO = true;                       // no reaccionar a nuestro propio cambio
+  try{ history.pushState(null, "", h); }catch(e){ location.hash = h; }
+  setTimeout(()=>{ NAV_HASH_PROPIO = false; }, 0);
+}
+function navLeerHash(){
+  const m = (location.hash || "").match(/^#\/([a-z_]+)(?:\/([a-z_]+))?/i);
+  return m ? { tab: m[1], subtab: m[2] || null } : null;
+}
+// Aplica una vista sin volver a empujarla al historial (viene del historial).
+function navAplicar(entry){
+  if(!entry) return false;
+  const el = document.querySelector('.tab[data-tab="'+entry.tab+'"], .side-btn[data-tab="'+entry.tab+'"]');
+  if(!el) return false;
+  NAV_HIST.silent = true;
+  try{
+    if(entry.tab === "ventas" && entry.subtab && entry.subtab !== CANAL_DESEMP) VENTAS_SUBTAB = entry.subtab;
+    el.click();
+    if(entry.tab === "ventas" && entry.subtab && entry.subtab !== CANAL_DESEMP){
+      const st = document.querySelector('.subtab[data-subtab="'+entry.subtab+'"]');
+      if(st) st.click();
+    }
+  } finally { NAV_HIST.silent = false; navUpdateButtons(); }
+  return true;
+}
+window.addEventListener("popstate", ()=>{ if(!NAV_HASH_PROPIO) navAplicar(navLeerHash()); });
+window.addEventListener("hashchange", ()=>{ if(!NAV_HASH_PROPIO) navAplicar(navLeerHash()); });
 function navUpdateButtons(){
   const b = document.getElementById("nav-back"), f = document.getElementById("nav-fwd");
   if(b) b.disabled = NAV_HIST.idx <= 0;
@@ -2032,17 +2127,22 @@ function weekSetFromRange(iniW, finW){
   return weeksInRange(a,b);
 }
 
+// El mismo texto estaba escrito dos veces, palabra por palabra: señal de que las dos vistas
+// se clonaron. Una constante para que no puedan separarse.
+const DIR_HINT = "Elige el rango de semanas; los canales marcados alimentan el embudo de arriba (la tabla siempre muestra los 7).";
+document.querySelectorAll(".dir-hint").forEach(el=>el.textContent = DIR_HINT);
+
 async function renderResultados(){
   const cont=document.getElementById("res-content");
   const weekSet=weekSetFromRange(document.getElementById("res-sem-ini").value, document.getElementById("res-sem-fin").value); const wk=[...weekSet].sort();
   document.getElementById("res-semanas-eval").textContent=weekSet.size||"—";
   const chsSel=[...resState.chs];
   const f={}; METRIC_KEYS.forEach(m=>f[m]=0);
-  for(const ch of chsSel){ const m=await channelMetrics(ch,weekSet); METRIC_KEYS.forEach(k=>f[k]+=m[k]); }
+  for(const ch of chsSel){ const m=channelMetrics(ch,weekSet); METRIC_KEYS.forEach(k=>f[k]+=m[k]); }
   const fechas = wk.length? `${fechaIniW(wk[0])} → ${fechaFinW(wk[wk.length-1])}`:"—";
   let rows=""; const tot={}; METRIC_KEYS.forEach(m=>tot[m]=0); let totMeta=0; const nW=weekSet.size;
   for(const ch of Object.keys(CHANNELS)){
-    const m=await channelMetrics(ch,weekSet); METRIC_KEYS.forEach(k=>tot[k]+=m[k]); const meta=CHANNEL_META[ch].won; totMeta+=meta;
+    const m=channelMetrics(ch,weekSet); METRIC_KEYS.forEach(k=>tot[k]+=m[k]); const meta=CHANNEL_META[ch].won; totMeta+=meta;
     const metaPer=meta/SEMANAS_MES*nW;
     rows+=`<tr><td class="name">${CHANNELS[ch].name}</td><td>${m.leads}</td><td>${m.zooms}</td><td>${m.tours}</td><td>${m.opp}</td><td>${m.opp_zooms}</td><td>${m.opp_tours}</td><td>${m.apartados}</td><td>${m.won}</td><td>${fmtMoney(m.ingresos)}</td><td>${pctTxt(m.won,m.opp)}</td><td>${meta}</td><td>${estadoDot(m.leads,m.won,metaPer)}</td></tr>`;
   }
@@ -2068,11 +2168,11 @@ async function renderDirCom(){
   document.getElementById("dc-semanas-eval").textContent=nW||"—";
   const chsSel=[...dcState.chs];
   const f={}; METRIC_KEYS.forEach(m=>f[m]=0); let metaWonSel=0;
-  for(const ch of chsSel){ const m=await channelMetrics(ch,weekSet); METRIC_KEYS.forEach(k=>f[k]+=m[k]); metaWonSel+=CHANNEL_META[ch].won; }
+  for(const ch of chsSel){ const m=channelMetrics(ch,weekSet); METRIC_KEYS.forEach(k=>f[k]+=m[k]); metaWonSel+=CHANNEL_META[ch].won; }
   const metaWonPeriodo = +(metaWonSel/SEMANAS_MES*nW).toFixed(2);
   const fechas = wk.length? `${fechaIniW(wk[0])} → ${fechaFinW(wk[wk.length-1])}`:"—";
   const perCh=[]; const tot={}; METRIC_KEYS.forEach(m=>tot[m]=0); let totMetaWon=0, totMix=0;
-  for(const ch of Object.keys(CHANNELS)){ const m=await channelMetrics(ch,weekSet); perCh.push({ch,m}); METRIC_KEYS.forEach(k=>tot[k]+=m[k]); totMetaWon+=CHANNEL_META[ch].won; totMix+=CHANNEL_META[ch].mix; }
+  for(const ch of Object.keys(CHANNELS)){ const m=channelMetrics(ch,weekSet); perCh.push({ch,m}); METRIC_KEYS.forEach(k=>tot[k]+=m[k]); totMetaWon+=CHANNEL_META[ch].won; totMix+=CHANNEL_META[ch].mix; }
   let rows="";
   for(const {ch,m} of perCh){ const meta=CHANNEL_META[ch];
     rows+=`<tr><td class="name">${CHANNELS[ch].name}</td>
@@ -2187,7 +2287,7 @@ const syncCancelado = (nombre)=> !!SYNC_ABORT[nombre];
 
 function bannerIncompleto(fallos, queRehacer){
   if(!(fallos||[]).length) return "";
-  return `<div class="lq-meth" style="border-color:#a94436;background:#F2CFC9">
+  return `<div class="lq-meth" style="border-color:var(--rojo);background:#F2CFC9">
     ⚠ <b>Esta sincronización quedó incompleta.</b> No se pudo traer: ${escAttr(fallos.join(" · "))}.
     Los ceros y los guiones de abajo son datos que faltan, <b>no</b> resultados reales. Vuelve a pulsar
     <b>${escAttr(queRehacer)}</b> cuando se resuelva.</div>`;
@@ -2306,7 +2406,7 @@ function crmRender(){
   const tables = `<div class="crm-tables">${tbl("Oportunidades por fuente (rango)","Fuente",srcRows)}${tbl("Oportunidades por asesor (rango)","Asesor",asrRows)}</div>`;
 
   document.getElementById("crm-content").innerHTML =
-    bannerIncompleto(agg.fallos, "Sincronizar CRM") + kpis + tables + pipeCards.join("");
+    bannerIncompleto(agg.fallos, "Actualizar desde el CRM") + kpis + tables + pipeCards.join("");
 }
 
 async function crmSync(){
@@ -2315,7 +2415,7 @@ async function crmSync(){
   const btn=document.getElementById("crm-refresh"), prog=document.getElementById("crm-progress"),
         bar=document.getElementById("crm-progress-bar"), lbl=document.getElementById("crm-progress-lbl");
   prog.style.display="block"; bar.style.width="3%";
-  const restaurarBtn = syncCancelable("crm", btn, "Sincronizar CRM");
+  const restaurarBtn = syncCancelable("crm", btn, "Actualizar desde el CRM");
   try{
     lbl.textContent="Conectando con el CRM…";
     const boot = await crmFn({action:"bootstrap"});
@@ -2390,7 +2490,7 @@ const LQ_LEVELS = [
   { id:"mql",   name:"MQL",             short:"MQL",      color:"var(--olivo)" },
   { id:"cql",   name:"CQL",             short:"CQL",      color:"#b7ad91" },
   { id:"nuevo", name:"Nuevo",           short:"Nuevo",    color:"#8fa3b0" },
-  { id:"desc",  name:"Descalificado",   short:"Descal.",  color:"#a94436" },
+  { id:"desc",  name:"Descalificado",   short:"Descal.",  color:"var(--rojo)" },
   { id:"nc",    name:"Sin calificar",   short:"S/Calif",  color:"#d8d2c2" },
 ];
 // Orden de columnas del reporte: embudo ascendente, luego descartes
@@ -2742,6 +2842,25 @@ function lqRangeWeeks(){
 }
 
 const lqBadge = (lv)=>{ const L=LQ_LEVEL_BY_ID[lv]||LQ_LEVEL_BY_ID.nc; return `<span class="lq-badge" style="background:${L.color}">${L.name}</span>`; };
+// Leyenda desplegable de siglas. Las columnas de Calidad de Leads se imprimen abreviadas y
+// su nombre real vivía únicamente en el atributo title: en una pantalla táctil no hay hover,
+// así que desde el celular eran abreviaturas sin significado disponible.
+function lqLeyenda(){
+  return `<details class="lq-leyenda">
+    <summary>Qué significa cada sigla</summary>
+    <div class="lq-leyenda-cuerpo">
+      <span><b>SQL Selvadentro</b> señal fuerte de interés <i>y</i> perfil de ≥$100K USD con horizonte ≤6 meses</span>
+      <span><b>SQL</b> señal fuerte, sin ese perfil</span>
+      <span><b>MQL</b> respondió o mostró interés</span>
+      <span><b>CQL</b> capturado, sin respuesta aún</span>
+      <span><b>OPP</b> oportunidad real de cierre: Seguimiento de OPP, Carta oferta, Apartado o posterior. Una cotización enviada todavía no cuenta</span>
+      <span><b>${WON_DEFS.cohorte.n}</b> ventas de los leads que entraron en la semana, sin importar cuándo se cerraron</span>
+      <span><b>CPL</b> costo por lead · <b>Alto valor</b> SQL Selvadentro + SQL</span>
+    </div>
+    <div class="lq-leyenda-pie">El glosario completo está en <b>Diagnóstico</b>.</div>
+  </details>`;
+}
+
 function lqMixBar(counts, total){
   const segs = LQ_LEVELS.filter(L=>counts[L.id]).map(L=>`<span style="background:${L.color};width:${Math.max(1.5, counts[L.id]/total*100)}%" title="${L.name} · ${counts[L.id]}"></span>`).join("");
   const leg = LQ_LEVELS.filter(L=>counts[L.id]).map(L=>`<span><i style="background:${L.color}"></i>${L.name} · <b>${counts[L.id]}</b></span>`).join("");
@@ -2837,7 +2956,7 @@ function lqStatusIndex(agg){
 }
 // Punto de estado: verde = activo hoy · rojo = pausado · gris = sin dato de ads
 function lqDot(state){
-  const c = state===true ? "var(--olivo)" : state===false ? "#a94436" : "#cfc9b8";
+  const c = state===true ? "var(--olivo)" : state===false ? "var(--rojo)" : "#cfc9b8";
   const t = state===true ? "Activo" : state===false ? "Pausado o detenido" : "Sin datos de plataforma (orgánico, webinar o sin empate)";
   return `<span class="lq-dot" style="background:${c}" title="${t}"></span>`;
 }
@@ -2946,7 +3065,7 @@ function lqTierCells(arr){
   const c = lqCount(arr);
   return LQ_COLS.map(L=>{
     const n = c[L.id]||0;
-    const em = (L.id==="sqls"&&n) ? ' style="font-weight:700;color:var(--cobre)"' : (L.id==="desc"&&n) ? ' style="color:#a94436"' : "";
+    const em = (L.id==="sqls"&&n) ? ' style="font-weight:700;color:var(--cobre)"' : (L.id==="desc"&&n) ? ' style="color:var(--rojo)"' : "";
     return `<td${em}>${n||"·"}</td>`;
   }).join("");
 }
@@ -3010,7 +3129,7 @@ function lqQualityTree(agg, leads, rangoSet){
     ⚠ <b>Las cuentas de anuncios facturan en monedas distintas</b> (${escAttr((agg.monedas||[]).join(" y "))}).
     La inversión, el costo por lead y el costo por lead calificado están sumando monedas diferentes:
     tómalos como referencia, no como cifra exacta, hasta definir una moneda única o un tipo de cambio.</div>` : "";
-  const incompleto = bannerIncompleto(agg.fallos, "Sincronizar leads");
+  const incompleto = bannerIncompleto(agg.fallos, "Actualizar desde el CRM");
   const aviso = gap ? `<div class="lq-meth">⚠ <b>${gap}</b> de ${pagados} leads de Meta / Google llegaron <b>sin campaña en la atribución</b> (utm_campaign vacío) y se agrupan en "${LQ_SIN_CAMP}".
     Las campañas de la cuenta de anuncios sí aparecen abajo con su inversión, aunque no tengan leads empatados. Mientras los anuncios no pasen los parámetros UTM
     (utm_campaign, utm_content, utm_term) al formulario, no se puede saber qué campaña, conjunto o anuncio generó cada lead.</div>` : "";
@@ -3231,7 +3350,7 @@ function lqComboSection(agg, leadsAll, rango, rangoSet){
       <td style="min-width:150px">${barra(f.leads)}</td>
       <td><b>${cal}</b></td>
       <td>${f.inv&&n?fmtMoney(f.inv/n):"—"}</td>
-      <td style="${f.inv&&!cal?"color:#a94436":cal?"color:var(--cobre);font-weight:600":""}">${f.inv&&cal?fmtMoney(f.inv/cal):"—"}</td></tr>`;
+      <td style="${f.inv&&!cal?"color:var(--rojo)":cal?"color:var(--cobre);font-weight:600":""}">${f.inv&&cal?fmtMoney(f.inv/cal):"—"}</td></tr>`;
   }).join("");
   html += `<div class="table-scroll" style="margin-bottom:8px"><table class="cons">
     <tr><th class="lft">Familia de campaña</th><th>Inversión</th><th>Result. ads</th><th>Leads CRM</th><th class="lft">Calidad</th><th>Calif.</th><th>CPL</th><th>Costo/calif.</th></tr>
@@ -3287,7 +3406,7 @@ function lqConclusionesSection(){
   if(!a) return html + `<div class="empty-rep">Pulsa <b>Analizar con IA</b> para obtener el diagnóstico y las acciones recomendadas del periodo.</div>`;
   if(a.texto) return html + `<div class="lq-meth" style="white-space:pre-wrap">${escAttr(a.texto)}</div>`;
   const A = a.analisis || {};
-  const prio = (p)=> p==="alta" ? "#a94436" : p==="media" ? "var(--cobre)" : "var(--olivo)";
+  const prio = (p)=> p==="alta" ? "var(--rojo)" : p==="media" ? "var(--cobre)" : "var(--olivo)";
   html += `<div class="lq-lectura"><h4>Lectura</h4><p>${escAttr(A.lectura||"")}</p></div>`;
   if(Array.isArray(A.acciones) && A.acciones.length){
     html += `<div class="lq-actions">${A.acciones.map((x,i)=>`
@@ -3395,6 +3514,14 @@ function lqRender(){
   const swap = (l)=> qual==="auto" ? { ...l, lv: l.alv || "cql", crmLv: l.lv } : { ...l, crmLv: l.lv };
   const leads = agg.leads.filter(l=>rangoSet.has(l.wk)).map(swap);
 
+  const SUB = lqState.sub || "datos";
+  const subBar = `<div class="lq-subtabs" role="tablist" aria-label="Vistas de Calidad de Leads">${LQ_SUBS.map(t=>`<button type="button" role="tab" aria-selected="${SUB===t.id?"true":"false"}" class="lq-subtab${SUB===t.id?" active":""}" data-lq-sub="${t.id}"><span class="ls-n">${t.n}</span><span><b>${t.name}</b><i>${t.sub}</i></span></button>`).join("")}</div>`;
+
+  // El contenido de la pestaña "Calidad de Lead" —KPIs, monitor de integridad, mes contra
+  // mes, tablas por nivel/plataforma/asesor y glosario— se construía SIEMPRE, en las cuatro
+  // sub-pestañas, y solo se usa en una: en las otras tres se armaba entero y se tiraba.
+  // Ahora solo se arma cuando es la pestaña visible.
+  const calidadHtml = SUB !== "calidad" ? "" : (()=>{
   // --- KPIs
   const tot = lqCount(leads);
   const oppTot = leads.reduce((a,l)=>a+(l.o||0),0), wonTot = leads.reduce((a,l)=>a+(l.w||0),0);
@@ -3405,8 +3532,6 @@ function lqRender(){
     ${kpi(oppTot.toLocaleString(),"OPPs · oportunidades reales de cierre")}
     ${kpi(wonTot.toLocaleString(),"WONs de estos leads")}
   </div>`;
-  const SUB = lqState.sub || "datos";
-  const subBar = `<div class="lq-subtabs" role="tablist" aria-label="Vistas de Calidad de Leads">${LQ_SUBS.map(t=>`<button type="button" role="tab" aria-selected="${SUB===t.id?"true":"false"}" class="lq-subtab${SUB===t.id?" active":""}" data-lq-sub="${t.id}"><span class="ls-n">${t.n}</span><span><b>${t.name}</b><i>${t.sub}</i></span></button>`).join("")}</div>`;
   if(!agg.califField){
     html += `<div class="lq-meth">⚠ No se encontró el campo <b>"Calificación del lead"</b> en GoHighLevel; todos los leads aparecen como "Sin calificar". Verifica que el campo exista y que el token tenga el scope de campos personalizados.</div>`;
   }
@@ -3423,7 +3548,7 @@ function lqRender(){
       ${kpi(pcti(conFuente,leads.length),"Con fuente identificada")}
       ${kpi(pcti(conAsesor,leads.length),"Con asesor asignado")}
       ${kpi(pcti(conCalif,leads.length),"Calificados en el CRM")}
-      <div class="crm-kpi"><div class="k-val" style="${dups.length?'color:#a94436':''}">${dups.length}</div><div class="k-lbl">Posibles duplicados (12 sem.)</div></div>
+      <div class="crm-kpi"><div class="k-val" style="${dups.length?'color:var(--rojo)':''}">${dups.length}</div><div class="k-lbl">Posibles duplicados (12 sem.)</div></div>
     </div>`;
     if(dups.length){
       const rows=dups.slice(0,12).map(g=>`<tr><td class="lft" style="font-weight:600">${g.map(x=>escAttr(x.n)).join(" · ")}</td><td class="lft">${escAttr(g[0].ph?("…"+g[0].ph.slice(-4)):g[0].em)}</td><td class="lft">${g.map(x=>x.wk).join(", ")}</td></tr>`).join("");
@@ -3623,7 +3748,7 @@ function lqRender(){
     "Seguimiento de OPP", "Carta oferta", "Apartado" y cualquier etapa posterior. No es cualquier registro del pipeline. <b>WON</b> = venta cerrada.
     ${(agg.oppStages||[]).length ? `<br><span style="color:var(--neutro)">Etapas que hoy cuentan como OPP en tu CRM: <b>${escAttr((agg.oppStages||[]).join(" · "))}</b>.</span>` : ""}
     La <b>inversión</b> viene de Windsor.ai (Meta + Google).
-    Los datos se refrescan solos cada 30 minutos; para verlos al instante usa <b>Sincronizar leads</b>.</div>
+    Los datos se refrescan solos cada 30 minutos; para verlos al instante usa <b>Actualizar desde el CRM</b>.</div>
     <div class="lq-meth"><b>Reglas de calificación automática</b> — se evalúan en orden y la primera que se cumple manda. Umbral de producto
     <b>${fmtMoney(LQ_UMBRAL_USD)} USD</b>, horizonte del perfil <b>≤${LQ_HORIZONTE_M} meses</b>.
     <br>1 · <b>Descalificado</b>: oportunidad perdida en el CRM, etapa de descalificación, o tag de descalificación (número equivocado, spam, duplicado, sin interés).
@@ -3643,10 +3768,9 @@ function lqRender(){
     <b>CQL:</b> lead capturado; primer alcance enviado o intentos sin respuesta sustancial ·
     <b>Descalificado:</b> no pidió info, confundió el anuncio, número equivocado o sin fit.
     Umbral de producto: $100K USD. Semana ISO lun–dom en hora Tulum. Fuente: campo "${escAttr(agg.califField?.name||"Calificación del lead")}" de GoHighLevel; etapa derivada de tags.</div>`;
-
-  // html acumulado arriba = pestaña "Calidad de Lead"
-  const calidadHtml = html;
-  let out = subBar;
+    return html;
+  })();
+  let out = subBar + lqLeyenda();
   if(SUB==="datos"){
     out += `<div class="lq-toolbar">
       <input type="text" id="lq-q" class="lq-search" placeholder="Buscar campaña o anuncio…" value="${escAttr(lqState.q||"")}">
@@ -3685,8 +3809,15 @@ function lqRender(){
   };
   const q = document.getElementById("lq-q");
   if(q){
-    q.oninput = ()=>{ clearTimeout(lqState._qt); const v=q.value; lqState._qt=setTimeout(()=>{ lqState.q=v; lqRender();
-      const el=document.getElementById("lq-q"); if(el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 280); };
+    // El re-render destruye el input, así que hay que devolver el foco. Antes se mandaba el
+    // cursor al final siempre: editar en medio de la palabra saltaba al final en cada tecla.
+    // Ahora se conserva la posición real y también el scroll de la página.
+    q.oninput = ()=>{ clearTimeout(lqState._qt); const v=q.value, pos=q.selectionStart, sy=window.scrollY;
+      lqState._qt=setTimeout(()=>{ lqState.q=v; lqRender();
+        const el=document.getElementById("lq-q");
+        if(el){ el.focus(); const n=Math.min(pos==null?el.value.length:pos, el.value.length); el.setSelectionRange(n,n); }
+        window.scrollTo(0, sy);
+      }, 280); };
   }
 }
 
@@ -3724,7 +3855,7 @@ async function lqSync(){
   const btn=document.getElementById("lq-refresh"), prog=document.getElementById("lq-progress"),
         bar=document.getElementById("lq-progress-bar"), lbl=document.getElementById("lq-progress-lbl");
   prog.style.display="block"; bar.style.width="3%";
-  const restaurarBtn = syncCancelable("lq", btn, "Sincronizar leads");
+  const restaurarBtn = syncCancelable("lq", btn, "Actualizar desde el CRM");
   try{
     lbl.textContent="Conectando con el CRM…";
     const boot = await lqFn({action:"bootstrap"});
@@ -3873,7 +4004,7 @@ const SLA_BUCKETS = [
   { id:"b5",   max:5,   name:"0-5 min",   color:"var(--olivo)" },
   { id:"b30",  max:30,  name:"5-30 min",  color:"#8ca06a" },
   { id:"b120", max:120, name:"30 min-2 h",color:"var(--cobre)" },
-  { id:"out",  max:Infinity, name:"> 2 h o sin contacto", color:"#a94436" },
+  { id:"out",  max:Infinity, name:"> 2 h o sin contacto", color:"var(--rojo)" },
 ];
 
 // Inicio del reloj. Con SLA_HORARIO.activo en false (lo vigente) el reloj arranca en
@@ -4037,7 +4168,7 @@ function slaAsesorSection(agg){
   }
   html += fichas.map(r=>{
     const c=r.c;
-    const col=(v)=> v==null?"#9aa39d":v===5?"var(--verde-prof)":v===4?"#5aa08f":v===3?"var(--cobre)":v===2?"#c9743a":"#a94436";
+    const col=(v)=> v==null?"#9aa39d":v===5?"var(--verde-prof)":v===4?"#5aa08f":v===3?"var(--cobre)":v===2?"#c9743a":"var(--rojo)";
     const bars = SLA_DIMS.map(d=>{
       const v=c.sub[d.key], pc=c.pcts[d.key];
       return `<div class="sla-bar"><span class="sb-lbl">${escAttr(d.label)}</span>
@@ -4184,7 +4315,7 @@ function slaRender(){
     ${kpi(und(60),"≤ 60 min (WhatsApp)")}
     ${kpi(fmtDur(slaMedian(slasAt)),"Mediana del 1er intento")}
     ${(()=>{ const n=conDatos.filter(l=>l.z48).length, p=conDatos.length?Math.round(n/conDatos.length*100):0;
-      return `<div class="crm-kpi"><div class="k-val" style="color:${p>=40?'var(--verde-prof)':'#a94436'}">${conDatos.length?p+"%":"—"}</div><div class="k-lbl">Cita en ≤48 h · meta 40%</div></div>`; })()}
+      return `<div class="crm-kpi"><div class="k-val" style="color:${p>=40?'var(--verde-prof)':'var(--rojo)'}">${conDatos.length?p+"%":"—"}</div><div class="k-lbl">Cita en ≤48 h · meta 40%</div></div>`; })()}
     ${kpi((apSh+apNs)?pcti(apSh,apSh+apNs):"—","Show rate de citas")}
   </div>`;
 
@@ -4204,7 +4335,7 @@ function slaRender(){
         <td class="pct">${pcti(cd.filter(l=>l.fo).length,cd.length)}</td>
         <td class="pct">${pcti(cd.filter(l=>l.fi).length,cd.length)}</td>
         <td>${fmtDur(slaMedian(sa))}</td><td>${fmtDur(slaMedian(ss))}</td><td class="pct">${u15}</td><td class="pct">${u60}</td>
-        <td class="pct" style="${z!=null?(z>=40?"color:var(--verde-prof);font-weight:600":"color:#a94436"):""}">${z==null?"—":z+"%"}</td>
+        <td class="pct" style="${z!=null?(z>=40?"color:var(--verde-prof);font-weight:600":"color:var(--rojo)"):""}">${z==null?"—":z+"%"}</td>
         <td>${arr.filter(l=>!l.ad).reduce((a,l)=>a+l.ap.tot,0)}</td><td class="pct">${(sh+ns)?pcti(sh,sh+ns):"—"}</td></tr>`;
     }).join("");
     return `<div class="table-scroll" style="margin-bottom:18px"><table class="cons">
@@ -4231,7 +4362,7 @@ function slaRender(){
   }).sort((a,b)=>(a.lm||a.created)-(b.lm||b.created));
   const staleRows = stale.slice(0,40).map(l=>{
     const days = Math.floor((now-(l.lm||l.created))/86400e3);
-    return `<tr><td class="lft" style="font-weight:600">${escAttr(l.n)}</td><td class="lft">${escAttr(name(l.u))}</td><td class="lft">${escAttr(l.canal)}</td><td class="lft">${l.lm?"último mensaje":"nunca contactado"}</td><td style="color:#a94436;font-weight:700">${days} días</td></tr>`;
+    return `<tr><td class="lft" style="font-weight:600">${escAttr(l.n)}</td><td class="lft">${escAttr(name(l.u))}</td><td class="lft">${escAttr(l.canal)}</td><td class="lft">${l.lm?"último mensaje":"nunca contactado"}</td><td style="color:var(--rojo);font-weight:700">${days} días</td></tr>`;
   }).join("");
   html += `<div class="rep-section" style="margin-bottom:18px"><h3>Más de 7 días sin toque · ${stale.length} lead${stale.length!==1?"s":""}</h3>
     <table class="rep"><thead><tr><th class="lft">Lead</th><th class="lft">Asesor</th><th class="lft">Canal</th><th class="lft">Estado</th><th class="lft">Sin toque</th></tr></thead>
@@ -4688,7 +4819,10 @@ function renderAdvisors(){
     </tr>`).join("")+`</tbody>`;
   t.querySelectorAll(".adv-name").forEach(inp=>inp.onchange=()=>{ const i=+inp.dataset.i; const v=inp.value.trim(); if(!v){ inp.value=ADVISOR_LIST[i].name; return; } ADVISOR_LIST[i].name=v; setAdvDirty(true); });
   t.querySelectorAll(".adv-active").forEach(inp=>inp.onchange=()=>{ const i=+inp.dataset.i; ADVISOR_LIST[i].active=inp.checked; const pill=inp.parentElement.querySelector(".adv-pill"); pill.className="adv-pill "+(inp.checked?"on":"off"); pill.textContent=inp.checked?"Activo":"Inactivo"; setAdvDirty(true); });
-  t.querySelectorAll(".adv-del").forEach(b=>b.onclick=()=>{ const i=+b.dataset.i; if(confirm(`¿Quitar a "${ADVISOR_LIST[i].name}" de la lista? Se aplicará al Guardar. (Su histórico no se borra; considera marcarlo Inactivo en su lugar.)`)){ ADVISOR_LIST.splice(i,1); renderAdvisors(); setAdvDirty(true); } });
+  t.querySelectorAll(".adv-del").forEach(b=>b.onclick=async()=>{ const i=+b.dataset.i;
+    const ok = await confirmar(`¿Quitar a "${ADVISOR_LIST[i].name}" de la lista?\n\nSe aplicará al Guardar. Su histórico no se borra: si solo dejó de trabajar, considera marcarlo Inactivo en su lugar.`,
+      { titulo:"Quitar asesor", ok:"Quitar", peligro:true });
+    if(ok){ ADVISOR_LIST.splice(i,1); renderAdvisors(); setAdvDirty(true); } });
   setAdvDirty(advDirty);
 }
 
@@ -5127,7 +5261,7 @@ function renderMetasBody(ch){
       if(kpiCount > 0){
         if(!confirm(`La sección "${sec.title}" tiene ${kpiCount} KPI(s). Si la borras, esos KPIs irán a "KPIs personalizados" (sin sección). ¿Continuar?`)) return;
       } else {
-        if(!confirm(`¿Borrar la sección "${sec.title}"?`)) return;
+        if(!await confirmar(`¿Borrar la sección "${sec.title}"?`, { titulo:"Borrar sección", ok:"Borrar", peligro:true })) return;
       }
       // Limpiar referencias en __field_sections y en custom KPIs
       const ov = META_OVERRIDES[ch];
@@ -5352,7 +5486,7 @@ async function renderDBTable(ch){
   document.getElementById("db-table").innerHTML=`<thead>${head}</thead><tbody>${body||`<tr><td class="lft" colspan="${colspan}"><em>Sin registros en este canal.</em></td></tr>`}</tbody>`;
   document.querySelectorAll("#db-table .db-load").forEach(b=>b.onclick=()=>dbLoad(b.dataset.ch,b.dataset.key));
   if(adm){
-    document.querySelectorAll("#db-table .db-del").forEach(b=>b.onclick=async()=>{ if(confirm("¿Eliminar este registro de la base de datos? No se puede deshacer.")){ recDel(b.dataset.key); try{ await sDel(b.dataset.key); toast("Registro eliminado"); }catch(e){ alert("No se pudo borrar en el servidor: "+(e.message||e)); } renderDBTable(ch); } });
+    document.querySelectorAll("#db-table .db-del").forEach(b=>b.onclick=async()=>{ if(await confirmar("¿Eliminar este registro de la base de datos?\n\nNo se puede deshacer.", { titulo:"Eliminar registro", ok:"Eliminar", peligro:true })){ recDel(b.dataset.key); try{ await sDel(b.dataset.key); toast("Registro eliminado"); }catch(e){ alert("No se pudo borrar en el servidor: "+(e.message||e)); } renderDBTable(ch); } });
     document.querySelectorAll("#db-table .db-dup").forEach(b=>b.onclick=()=>dbDuplicate(b.dataset.ch,b.dataset.key));
   }
 }
@@ -5549,12 +5683,13 @@ async function init(){
   const sel=document.getElementById("canal-select");
   populateCanalSelect();
   let canalPrevio = sel.value;
-  sel.addEventListener("change",()=>{
+  sel.addEventListener("change",async ()=>{
     // switchChannel llama a clearForm(): antes bastaba con tocar este desplegable para
     // borrar un formulario a medio llenar, en silencio.
-    if(ingSucio && ingTieneAlgo() &&
-       !confirm("Tienes captura sin guardar en esta semana.\n\nSi cambias de reporte se pierde. ¿Continuar?")){
-      sel.value = canalPrevio; return;
+    if(ingSucio && ingTieneAlgo()){
+      const seguir = await confirmar("Tienes captura sin guardar en esta semana. Si cambias de canal se pierde.",
+        { titulo:"Captura sin guardar", ok:"Cambiar de todas formas", peligro:true });
+      if(!seguir){ sel.value = canalPrevio; return; }
     }
     borrarBorrador(); canalPrevio = sel.value; switchChannel(sel.value);
   });
@@ -5576,8 +5711,9 @@ async function init(){
   document.getElementById("ing-dims")?.addEventListener("change", cargarRegistroDeSeleccion);
 
   document.getElementById("btn-guardar2").onclick=saveWeek;
-  const limpiarConfirm = ()=>{
-    if(ingTieneAlgo() && !confirm("¿Limpiar el formulario?\n\nSe borra lo que está en pantalla. Lo ya guardado no se toca.")) return;
+  const limpiarConfirm = async ()=>{
+    if(ingTieneAlgo() && !await confirmar("Se borra lo que está en pantalla. Lo que ya guardaste no se toca.",
+        { titulo:"¿Limpiar el formulario?", ok:"Limpiar", peligro:true })) return;
     clearForm(); borrarBorrador();
   };
   document.getElementById("btn-limpiar2").onclick=limpiarConfirm;
@@ -5779,6 +5915,11 @@ async function onAuthenticated(){
   applyTabsVisibility();
   if(!isAdmin() && sessionChannels().length === 0){ showNoAccessScreen(); return; }
   await init();
+  // Si la URL trae una vista (enlace compartido o recarga), abrirla. Si el usuario no
+  // tiene permiso para esa pestaña, navAplicar no encuentra el botón y se queda donde init
+  // lo dejó, que es el comportamiento correcto.
+  const deLaUrl = navLeerHash();
+  if(deLaUrl) navAplicar(deLaUrl);
 }
 
 // Llama a la function de auth. El login ocurre 100% en el servidor: el cliente
@@ -5947,9 +6088,9 @@ async function diagRun(){
 }
 
 const diagOk  = (b)=> b ? `<span class="lq-badge" style="background:var(--olivo)">Funciona</span>`
-                        : `<span class="lq-badge" style="background:#a94436">Falla</span>`;
+                        : `<span class="lq-badge" style="background:var(--rojo)">Falla</span>`;
 const diagBar = (pct)=>{
-  const c = pct>=70 ? "var(--olivo)" : pct>=30 ? "var(--cobre)" : "#a94436";
+  const c = pct>=70 ? "var(--olivo)" : pct>=30 ? "var(--cobre)" : "var(--rojo)";
   return `<span class="sb-track" style="display:inline-block;width:120px;vertical-align:middle"><i style="width:${Math.max(2,pct)}%;background:${c}"></i></span>`;
 };
 
@@ -5964,11 +6105,11 @@ function diagSeccionPermisos(){
     <td class="lft" style="font-weight:600">${escAttr(p.nombre)}</td>
     <td>${diagOk(p.ok)}</td>
     <td class="lft" style="font-size:12px;color:var(--neutro)">${escAttr(p.ok ? (p.ms+" ms") : (p.nota||""))}</td>
-    <td class="lft" style="font-size:12px">${!p.ok && critico[p.nombre] ? `<span style="color:#a94436">${escAttr(critico[p.nombre])}</span>` : ""}</td>
+    <td class="lft" style="font-size:12px">${!p.ok && critico[p.nombre] ? `<span style="color:var(--rojo)">${escAttr(critico[p.nombre])}</span>` : ""}</td>
   </tr>`).join("");
   const fallan = pr.filter(p=>!p.ok).length;
   const resumen = fallan
-    ? `<div class="lq-meth" style="border-color:#a94436;background:#F2CFC9">⚠ <b>${fallan}</b> de ${pr.length} pruebas fallan. Mientras eso siga así, los reportes que dependen de ellas muestran ceros que <b>no</b> son resultados reales.</div>`
+    ? `<div class="lq-meth" style="border-color:var(--rojo);background:#F2CFC9">⚠ <b>${fallan}</b> de ${pr.length} pruebas fallan. Mientras eso siga así, los reportes que dependen de ellas muestran ceros que <b>no</b> son resultados reales.</div>`
     : `<div class="lq-meth" style="border-color:var(--olivo)">✓ El token tiene permiso para todo lo que la app necesita.</div>`;
   return `<h3 class="diag-h">Permisos del token de GoHighLevel</h3>
     <p class="hint" style="margin-top:-2px">Se llama a cada endpoint de verdad y se reporta cuál responde. No hace falta que nadie lea la pantalla de ajustes.</p>
@@ -5994,7 +6135,7 @@ function diagSeccionCampos(){
   ];
   const resumenClaves = claves.map(([lbl,rx])=>{
     const hit = buscar(rx);
-    if(!hit.length) return `<tr><td class="lft" style="font-weight:600">${escAttr(lbl)}</td><td class="lft" style="color:#a94436">No existe en el CRM</td><td>—</td><td class="lft"></td></tr>`;
+    if(!hit.length) return `<tr><td class="lft" style="font-weight:600">${escAttr(lbl)}</td><td class="lft" style="color:var(--rojo)">No existe en el CRM</td><td>—</td><td class="lft"></td></tr>`;
     return hit.map(c=>{
       const st = llenos[c.id];
       return `<tr><td class="lft" style="font-weight:600">${escAttr(lbl)}</td>
@@ -6049,7 +6190,7 @@ function diagSeccionAtribucion(){
     <td>${diagBar(pct)} <b>${pct}%</b></td><td>${n} de ${a.pagados}</td><td class="lft lq-sub">${escAttr(nota)}</td></tr>`;
   const veredicto = a.campPct >= 70
     ? `<div class="lq-meth" style="border-color:var(--olivo)">✓ Los anuncios <b>sí</b> están pasando la campaña. El desglose por campaña es confiable.</div>`
-    : `<div class="lq-meth" style="border-color:#a94436;background:#F2CFC9">⚠ Solo <b>${a.campPct}%</b> de los leads pagados trae campaña. <b>Esta es la respuesta a "¿los anuncios están pasando UTMs?": no.</b> Hasta que se configuren los parámetros UTM en Meta Ads y Google Ads, el desglose por campaña, conjunto y anuncio va a seguir saliendo casi vacío.</div>`;
+    : `<div class="lq-meth" style="border-color:var(--rojo);background:#F2CFC9">⚠ Solo <b>${a.campPct}%</b> de los leads pagados trae campaña. <b>Esta es la respuesta a "¿los anuncios están pasando UTMs?": no.</b> Hasta que se configuren los parámetros UTM en Meta Ads y Google Ads, el desglose por campaña, conjunto y anuncio va a seguir saliendo casi vacío.</div>`;
   return `<h3 class="diag-h">Atribución de los anuncios</h3>
     <p class="hint" style="margin-top:-2px">De los ${a.total} leads sincronizados, ${a.pagados} vienen de Meta o Google. Esto mide cuántos traen de dónde salieron.</p>
     ${veredicto}
@@ -6084,7 +6225,7 @@ function diagSeccionMensajes(){
   const pr = (diagState.pruebas||[]).find(p=>p.nombre==="Mensajes de conversación");
   if(!pr || !pr.ok || !pr.datos) return "";
   const d = pr.datos;
-  const av = (b, si, no)=> b ? `<span style="color:var(--verde-ok-tx)">✓ ${escAttr(si)}</span>` : `<span style="color:#a94436">✗ ${escAttr(no)}</span>`;
+  const av = (b, si, no)=> b ? `<span style="color:var(--verde-ok-tx)">✓ ${escAttr(si)}</span>` : `<span style="color:var(--rojo)">✗ ${escAttr(no)}</span>`;
   return `<h3 class="diag-h">De qué depende el SLA por asesor</h3>
     <p class="hint" style="margin-top:-2px">Para separar lo que escribió una persona de lo que mandó una automatización, la app necesita dos claves en cada mensaje. Esto comprueba si llegan.</p>
     <div class="lq-meth">
@@ -6312,7 +6453,7 @@ function paintUsersTable(){
       const role = tr.querySelector(".usr-role").value;
       const channels = role === "user" ? readChannels(tr.querySelector(".ch-pills")) : ALL_CH_KEYS.slice();
       if(USERS[idx].email === SESSION.email && role !== "admin"){
-        if(!confirm("Vas a quitarte el rol admin a ti mismo. ¿Continuar?")) return;
+        if(!await confirmar("Vas a quitarte el rol de administrador a ti mismo.\n\nPerderás el acceso a este panel.", { titulo:"Cambiar tu propio rol", ok:"Continuar", peligro:true })) return;
       }
       USERS[idx].role = role;
       USERS[idx].channels = channels;
@@ -6335,7 +6476,7 @@ function paintUsersTable(){
     };
     btnDel.onclick = async()=>{
       if(USERS[idx].email === SESSION.email){ alert("No puedes borrarte a ti mismo."); return; }
-      if(!confirm("¿Borrar a "+USERS[idx].email+"? No se puede deshacer.")) return;
+      if(!await confirmar("¿Borrar a "+USERS[idx].email+"?\n\nNo se puede deshacer.", { titulo:"Borrar usuario", ok:"Borrar", peligro:true })) return;
       USERS.splice(idx, 1);
       try{ await saveUsers(); paintUsersTable(); toast("Usuario borrado"); }
       catch(e){ alert("Error: "+e.message); }
