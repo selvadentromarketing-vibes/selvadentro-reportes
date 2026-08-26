@@ -114,7 +114,9 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
 - **Cache compartido**: agregado en el kv (`lq:agg:v1`), staleness de 30 min, igual
   que CRM en vivo.
 - **Permisos**: canal `mkt_lq` (o `marketing`, o admin). El módulo manual de
-  Calidad de Leads dentro de Marketing sigue existiendo tal cual.
+  Calidad de Leads dentro de Marketing **se retiró el 2026-08-26** junto con PPC Ads
+  y CRM Manager: los sustituye este motor en vivo. Sus registros históricos siguen
+  guardados en el kv bajo `mkt_lq_rec`, `mkt_ppc_rec` y `mkt_crm_rec`.
 - **Requisito GHL**: el Private Integration Token necesita el scope
   `contacts.readonly` (Settings → Private Integrations → editar → scopes). Sin él,
   la sincronización falla con el detalle del error de GHL visible en pantalla.
@@ -162,6 +164,23 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
   (% con fuente/asesor/calificación + posibles duplicados por teléfono/email) y
   sección **Paid Media en vivo** (estado activo/pausado por anuncio, link de
   preview, inversión y resultados vía Windsor `/facebook` y `/google_ads`).
+
+## Las tres cifras de ventas cerradas
+
+La app reporta ventas cerradas en tres pantallas y **cada una mide algo distinto**. Las
+tres son correctas; lo que no puede pasar es que se llamen igual. Desde el 2026-08-26 se
+llaman distinto y el glosario completo vive en la pestaña **Diagnóstico**:
+
+| Cifra | Dónde sale | Qué cuenta |
+|---|---|---|
+| **WON reportado** | Dirección General y Comercial | Lo que el equipo captura a mano cada semana en Ingreso de datos. Corta por la semana del reporte. |
+| **WON cerrado** | CRM en vivo | Oportunidades que pasaron a ganada dentro del rango, por su fecha de cambio de estatus. |
+| **WON del cohorte** | Calidad de Leads | Ventas de los leads que **entraron** en la semana, sin importar cuándo se cerraron. |
+
+**Todas las semanas se cuentan en hora Tulum (UTC−5)**, vía `semanaISOTulum`. Antes
+`crmWeekOf` leía en UTC y `lqWeekOf` en hora Tulum, así que los leads del domingo por la
+noche caían en semanas distintas según la pestaña. El agregado del CRM subió a
+`crm:agg:v2` para forzar la reconstrucción del cache que quedó agrupado con el reloj viejo.
 
 ## SLA y Seguimiento (Anexo 1 del proceso comercial)
 
@@ -217,8 +236,9 @@ secreto), se migraron los datos, y se eliminó la policy abierta de la tabla leg
 que conserva los datos históricos pero ya no es accesible desde fuera.
 
 El backend vive en el proyecto Supabase de Selvadentro (`vsnggxcuznleuvoyoenn`),
-el mismo que usaba la app original. `scripts/migrate-kv.mjs` quedó obsoleto tras el
-cutover (la tabla legacy ya no es legible por REST); se conserva como referencia.
+el mismo que usaba la app original. El script de migración (`scripts/migrate-kv.mjs`)
+quedó obsoleto tras el cutover —la tabla legacy ya no es legible por REST— y se eliminó
+del repo.
 
 ## Notas de seguridad restantes
 

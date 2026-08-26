@@ -10,14 +10,14 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
 -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cardo:ital,wght@0,400;0,700;1,400&family=Lexend:wght@300;400;500;600;700&family=Yellowtail&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cardo:ital,wght@0,400;0,700;1,400&family=Lexend:wght@400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
   :root{
     --verde-prof:#465241; --olivo:#65713F; --cobre:#CF8543; --arena:#D9B37E;
     --crema:#FAF8F3; --crema-2:#F1ECE1; --linea:#E3DBCC; --texto:#2E332B; --gris-input:#ECECEC;
     --verde-ok-bg:#CBDDC0; --verde-ok-tx:#3C5A2E; --rojo-no-bg:#F2CFC9; --rojo-no-tx:#9B3B2E; --neutro:#6F7468; --logo:#EFE7D6;
-    --serif:"Cardo",Georgia,serif; --sans:"Lexend",system-ui,-apple-system,"Segoe UI",sans-serif; --script:"Yellowtail",cursive;
+    --serif:"Cardo",Georgia,serif; --sans:"Lexend",system-ui,-apple-system,"Segoe UI",sans-serif;
   }
   *{ box-sizing:border-box; } body{ margin:0; }
   #app{ font-family:var(--sans); color:var(--texto); background:var(--crema); min-height:100vh; font-size:14px; line-height:1.45; }
@@ -484,7 +484,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
 
 <div id="app" style="display:none">
   <div class="topbar">
-    <div class="brand" id="brand" title="Clic para cambiar el logo">
+    <div class="brand" id="brand" title="Clic para una frase del día">
       <img id="brand-logo" alt="Selvadentro · tierra de cenotes">
       <span class="name" id="brand-text-name">Selvadentro</span>
       <span class="sub" id="brand-text-sub">tierra de cenotes</span>
@@ -1310,7 +1310,7 @@ const mem={};
 const supaStore = {
   async get(k){ const d=await kvCall({op:"get",k}); return (d && d.v!=null) ? {value:d.v} : null; },
   async set(k,valStr){ await kvCall({op:"set",k,v:valStr}); return true; },
-  async list(p){ const d=await kvCall({op:"list",prefix:p}); return {keys:(d&&d.keys)||[]}; },
+  // (la operación "list" del backend sigue disponible pero ya no la usa nadie desde el cliente)
   async delete(k){ await kvCall({op:"del",k}); return true; },
   async dump(p){ const d=await kvCall({op:"dump",prefix:p}); return (d&&d.rows)||[]; }
 };
@@ -1350,16 +1350,10 @@ function avisarLecturaFallida(){
   document.getElementById("app")?.prepend(d);
   document.getElementById("aviso-lectura-retry").onclick = ()=>location.reload();
 }
-const sReadReset  = ()=>{ LECTURA_FALLIDA = false; };
 async function sGet(k){
   try{ if(hasStore){ const r=await STORE.get(k); return r?JSON.parse(r.value):null; } }
   catch(e){ LECTURA_FALLIDA = true; return mem[k]??null; }
   return mem[k]??null;
-}
-async function sList(p){
-  try{ if(hasStore){ const r=await STORE.list(p); return r?r.keys:[]; } }
-  catch(e){ LECTURA_FALLIDA = true; }
-  return Object.keys(mem).filter(k=>k.startsWith(p));
 }
 
 /* ----- Caché de registros en memoria (evita lecturas masivas y rate-limit) ----- */
@@ -1646,10 +1640,6 @@ async function loadLogo(){
   const img=document.getElementById("brand-logo");
   const show=()=>{ img.style.display="block"; document.getElementById("brand-text-name").style.display="none"; document.getElementById("brand-text-sub").style.display="none"; };
   try{ const saved=await sGet("selvadentro:logo"); if(saved&&saved.data){ img.src=saved.data; show(); return; } }catch(e){}
-  if(window.fs&&window.fs.readFile){
-    const names=["selvadentro.png","Selvadentro.png","logo.png","logo-selvadentro.png","selvadentro-logo.png","SELVADENTRO__20.png","selvadentro.svg","logo.svg"];
-    for(const n of names){ try{ const buf=await window.fs.readFile(n); const type=n.endsWith(".svg")?"image/svg+xml":"image/png"; img.src=URL.createObjectURL(new Blob([buf],{type})); show(); return; }catch(e){} }
-  }
   img.onload=show; img.onerror=()=>{ img.style.display="none"; };
   img.src="https://assets.cdn.filesafe.space/crN2IhAuOBAl7D8324yI/media/68a8b604cfc34e61b85396bf.png";
 }
@@ -2046,6 +2036,7 @@ const CRM_AGG_KEY = "crm:agg:v2";   // v2: el agregado v1 quedó agrupado por se
 // Al cambiar la llave, la primera visita re-sincroniza y reconstruye con el reloj correcto.
 // El v1 se queda en el kv sin estorbar; se puede borrar cuando se confirme que v2 va bien.
 const CRM_STALE_MIN = 30;
+const CRM_SYNC_WEEKS = 78;   // ~18 meses: lo que el selector de semanas puede llegar a pedir
 const crmState = { built:false, agg:null, syncing:false };
 const CRM_SRC_LABELS = { ig:"Instagram", fb:"Facebook", facebook:"Facebook", instagram:"Instagram", google:"Google", tiktok:"TikTok", yt:"YouTube", youtube:"YouTube", whatsapp:"WhatsApp", "(sin fuente)":"(Sin fuente)" };
 
@@ -2190,9 +2181,12 @@ async function crmSync(){
   try{
     lbl.textContent="Conectando con el CRM…";
     const boot = await crmFn({action:"bootstrap"});
+    // Solo el histórico que la pestaña puede mostrar: CRM_SYNC_WEEKS semanas hacia atrás.
+    // Antes se bajaba el CRM entero cada 30 min por usuario para descartarlo al filtrar.
+    const desde = Date.now() - CRM_SYNC_WEEKS*7*86400e3;
     const opps=[]; let cursor=null, total=0;
     do{
-      const res = await crmFn({action:"crawl", ...(cursor||{})});
+      const res = await crmFn({action:"crawl", since:String(desde), ...(cursor||{})});
       opps.push(...res.opps); total = res.total || total; cursor = res.cursor;
       const pct = total ? Math.min(97, Math.round(opps.length/total*100)) : 50;
       bar.style.width=pct+"%";
@@ -2808,22 +2802,6 @@ function lqUnionTree(agg, leads, rangoSet, plat){
   return { camps:list, gap };
 }
 
-// Agrupa los leads del rango en campaña → conjunto → anuncio
-function lqHierarchy(leads, adIdx){
-  const tree = {};
-  for(const l of leads){
-    const c = l.fuente+" · "+l.camp;
-    const hit = adIdx[lqNormCamp(l.ad)] || null;
-    const g = l.grp || (hit && hit.grp) || (l.ad ? "(conjunto no identificado)" : "(sin conjunto)");
-    const a = l.ad || "(sin anuncio atribuido)";
-    const C = tree[c] = tree[c] || { leads:[], grps:{} };
-    C.leads.push(l);
-    const G = C.grps[g] = C.grps[g] || { leads:[], ads:{} };
-    G.leads.push(l);
-    (G.ads[a] = G.ads[a] || []).push(l);
-  }
-  return tree;
-}
 
 function lqTierCells(arr){
   const c = lqCount(arr);
@@ -3794,7 +3772,6 @@ const SLA_DIMS = [
 ];
 const SLA_MIN_N = 10;                        // muestra pequeña: se marca y sale del ranking
 const SCORELAB = {5:"Excelente",4:"Bueno",3:"Adecuado",2:"Necesita mejorar",1:"Crítico"};
-const dimThr = (k)=> (SLA_DIMS.find(d=>d.key===k)||{thr:[0,0,0,0]}).thr;
 function scoreOf(pct, thr){
   if(pct==null) return null;
   if(pct>=thr[3]) return 5; if(pct>=thr[2]) return 4;
@@ -5453,7 +5430,7 @@ async function init(){
       else if(active && active.id==="view-dircom"){ await showDirCom(); document.querySelector(".canal-wrap").style.display="none"; }
       else if(active && active.id==="view-db"){ renderDB(); if(dbLastCh && CHANNELS[dbLastCh]) await renderDBTable(dbLastCh); }
     }catch(e){ LECTURA_FALLIDA = true; console.error("Fallo al cargar los datos guardados", e); }
-    // La bandera existía y se levantaba bien; sReadFailed()/sReadReset() estaban escritos.
+    // La bandera existía y se levantaba bien, y sReadFailed() estaba escrito.
     // Nadie los consultaba jamás, así que un backend caído se veía igual que "todavía no hay
     // datos": la app mostraba el histórico incrustado en el archivo y nada de lo capturado
     // después. marketing.html sí avisaba; este lado no.
@@ -5579,10 +5556,6 @@ async function loadUsers(){
 }
 async function saveUsers(){ USERS = USERS.map(stripPass); await sSet(USERS_KEY, USERS); }
 
-function readSession(){
-  try{ const s = localStorage.getItem(SESSION_KEY); return s ? JSON.parse(s) : null; }
-  catch(e){ return null; }
-}
 function writeSession(s){
   if(s) localStorage.setItem(SESSION_KEY, JSON.stringify(s));
   else localStorage.removeItem(SESSION_KEY);

@@ -130,11 +130,44 @@ function authFromEvent(event) {
   return m ? verifyToken(m[1]) : null;
 }
 
+// --- Cliente HTTP de GoHighLevel ---------------------------------------------------
+// Vivía por triplicado: ghl-report.js, lead-quality.js y sla-report.js se construían cada
+// uno el suyo, y dos de las copias eran idénticas byte a byte. Cuando GHL cambie la versión
+// del API, el límite de tasa o la forma del cursor, hay que tocar un solo sitio. Esa
+// duplicación ya había cobrado su precio: attrOf existía en dos archivos y la copia de
+// sla-report se quedó atrás sin el campo del anuncio.
+const GHL_BASE = "https://services.leadconnectorhq.com";
+const GHL_VERSION = "2021-07-28";
+
+async function ghlFetch(path, opts) {
+  const API_KEY = process.env.GHL_API_KEY;
+  const headers = { Authorization: "Bearer " + API_KEY, Version: GHL_VERSION, Accept: "application/json" };
+  if (opts && opts.body) headers["Content-Type"] = "application/json";
+  const doFetch = () =>
+    fetch(GHL_BASE + path, {
+      method: (opts && opts.method) || "GET",
+      headers,
+      body: opts && opts.body ? JSON.stringify(opts.body) : undefined,
+    });
+  let resp = await doFetch();
+  // GHL responde 429 bajo carga; una espera corta y un reintento evitan apagar la pestaña.
+  if (resp.status === 429) { await new Promise((r) => setTimeout(r, 1200)); resp = await doFetch(); }
+  if (!resp.ok) {
+    const detail = await resp.text();
+    const err = new Error(`GHL ${resp.status} en ${path.split("?")[0]}`);
+    err.status = resp.status;
+    err.detail = detail.slice(0, 400);
+    throw err;
+  }
+  return resp.json();
+}
+
 const getUsers = async () => (await kvGetJSON(USERS_KEY)) || [];
 const findUser = (users, email) => users.find((u) => u.email.toLowerCase() === String(email || "").trim().toLowerCase());
 
 module.exports = {
   USERS_KEY, missingEnv, json, corsPreflight,
+  GHL_BASE, GHL_VERSION, ghlFetch,
   kvGet, kvSet, kvDel, kvList, kvDump, kvGetJSON, kvSetJSON,
   sha256Hex, randomHex, signToken, verifyToken, authFromEvent,
   signInvite, verifyInvite, INVITE_TTL_MS,

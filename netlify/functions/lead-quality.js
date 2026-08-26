@@ -36,21 +36,7 @@ const PAGE_SIZE = 100;
 
 const json = S.json;
 
-async function ghl(path, opts) {
-  const headers = { Authorization: "Bearer " + API_KEY, Version: "2021-07-28", Accept: "application/json" };
-  if (opts && opts.body) headers["Content-Type"] = "application/json";
-  const doFetch = () => fetch(BASE + path, { method: opts?.method || "GET", headers, body: opts?.body ? JSON.stringify(opts.body) : undefined });
-  let resp = await doFetch();
-  if (resp.status === 429) { await new Promise((r) => setTimeout(r, 1200)); resp = await doFetch(); }
-  if (!resp.ok) {
-    const detail = await resp.text();
-    const err = new Error(`GHL ${resp.status} en ${path.split("?")[0]}`);
-    err.status = resp.status;
-    err.detail = detail.slice(0, 400);
-    throw err;
-  }
-  return resp.json();
-}
+const ghl = S.ghlFetch;   // cliente compartido (lib/shared.js)
 
 // Última atribución disponible del contacto (utm campaign/source/medium/anuncio),
 // con fallback a la primera; los nombres de propiedad varían entre versiones del API.
@@ -408,6 +394,12 @@ async function diag() {
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return S.corsPreflight();
   if (event.httpMethod !== "POST") return json(405, { error: "Method not allowed" });
+    // SESSION_SECRET hace falta para verificar el token de sesión, y sin ella
+  // crypto.createHmac lanza y la function responde 502 SIN cabeceras CORS: el navegador
+  // reporta un error de CORS en vez de decir que falta una variable. Solo tres de las
+  // nueve functions comprobaban esto.
+  const miss = S.missingEnv();
+  if (miss.length) return json(500, { error: "Faltan env vars: " + miss.join(", ") });
   if (!API_KEY || !LOCATION_ID) return json(500, { error: "GHL_API_KEY / GHL_LOCATION_ID no configuradas en el entorno" });
 
   const session = S.authFromEvent(event);
