@@ -3200,7 +3200,7 @@ async function showLQ(){
 // Reporte de disciplina comercial directo del CRM: SLA de primera respuesta por
 // asesor y canal, leads >7 días sin toque, trabajados vs contactados efectivos,
 // citas y show rate, y OPPs/WONs por asesor. Con nombres, acumulable por semanas.
-const SLA_AGG_KEY = "sla:agg:v1";
+const SLA_AGG_KEY = "sla:agg:v2";   // v2: desempeño del asesor (contacto manual, breakup, efectividad)
 const SLA_STALE_MS = 7*86400e3; // "sin toque" = 7 días sin mensaje
 const slaState = { built:false, agg:null, syncing:false };
 
@@ -3250,6 +3250,124 @@ function fmtDur(ms){
   return (Math.round(h/24*10)/10)+" d";
 }
 
+/* ===== Desempeño del asesor (Protocolo Selvadentro, ago 2026) =====
+   Todo se calcula del feed real del CRM, distinguiendo contacto MANUAL del asesor
+   de las automatizaciones. Los campos manuales de GHL se leen aparte para comparar. */
+// Horario laboral para el SLA de leads creados fuera de horario. PENDIENTE de
+// confirmar con Dirección: al cambiarlo aquí se recalcula todo el reporte.
+const SLA_HORARIO = { abre: 9, cierra: 18, dias: [1,2,3,4,5] };   // L-V 9:00-18:00 Tulum
+const SLA_BUCKETS = [
+  { id:"b5",   max:5,   name:"0-5 min",   color:"var(--olivo)" },
+  { id:"b30",  max:30,  name:"5-30 min",  color:"#8ca06a" },
+  { id:"b120", max:120, name:"30 min-2 h",color:"var(--cobre)" },
+  { id:"out",  max:Infinity, name:"> 2 h o sin contacto", color:"#a94436" },
+];
+
+// Inicio del reloj: si el lead entró fuera de horario, arranca en la apertura del
+// siguiente día hábil (decisión del 25 ago 2026).
+function slaReloj(created){
+  const d = new Date(created - LQ_TZ_MS);            // a hora Tulum
+  const dow = d.getUTCDay(), h = d.getUTCHours();
+  const hábil = SLA_HORARIO.dias.includes(dow);
+  if(hábil && h >= SLA_HORARIO.abre && h < SLA_HORARIO.cierra) return created;
+  const n = new Date(d);
+  if(hábil && h < SLA_HORARIO.abre){ /* mismo día, antes de abrir */ }
+  else { do { n.setUTCDate(n.getUTCDate()+1); } while(!SLA_HORARIO.dias.includes(n.getUTCDay())); }
+  n.setUTCHours(SLA_HORARIO.abre, 0, 0, 0);
+  return n.getTime() + LQ_TZ_MS;
+}
+const slaBucket = (min)=> min==null ? "out" : (SLA_BUCKETS.find(b=>min<=b.max)||SLA_BUCKETS[3]).id;
+
+// Break up: se agotaron los 5 intentos de llamada + canal complementario + email
+// sin lograr contacto establecido (el lead nunca respondió).
+function slaBreakup(l){
+  const ch = l.chans||[];
+  return (l.calls||0) >= 5 && (ch.includes("sms")||ch.includes("whatsapp")) && ch.includes("email") && !l.fi;
+}
+
+// Sub-notas 1-5 (escala definida en la retro de junio 2026)
+const nota5 = (pct)=> pct>=90?5 : pct>=75?4 : pct>=50?3 : pct>=25?2 : 1;
+function slaSubnotas(arr){
+  const cd = arr.filter(l=>!l.sd);
+  if(!cd.length) return { pc:null, sg:null, bu:null, n:0 };
+  // Primer contacto: % dentro de los rangos aceptables (≤2 h desde el reloj)
+  const pcOk = cd.filter(l=>l.bucket!=="out").length;
+  // Seguimiento: % con al menos 3 días distintos de contacto en los primeros 10
+  const sgOk = cd.filter(l=>(l.d10||0) >= 3).length;
+  // Break up: sobre los que nunca respondieron, % con la secuencia agotada
+  const sinResp = cd.filter(l=>!l.fi);
+  const buOk = sinResp.filter(l=>l.breakup).length;
+  return {
+    pc: nota5(pcOk/cd.length*100), sg: nota5(sgOk/cd.length*100),
+    bu: sinResp.length ? nota5(buOk/sinResp.length*100) : null,
+    n: cd.length, pcPct:Math.round(pcOk/cd.length*100), sgPct:Math.round(sgOk/cd.length*100),
+    buPct: sinResp.length?Math.round(buOk/sinResp.length*100):null, sinResp:sinResp.length,
+  };
+}
+
+function slaAsesorSection(agg){
+  const leads = agg.leads;
+  const name = (u)=> agg.users[u] || (u ? "(sin nombre)" : "(sin asesor)");
+  const groups = {};
+  leads.forEach(l=>{ (groups[l.u]=groups[l.u]||[]).push(l); });
+  const keys = Object.keys(groups).sort((a,b)=>groups[b].length-groups[a].length);
+  const notaTxt = (v)=> v==null ? '<span style="color:var(--neutro)">—</span>'
+    : `<b style="color:${v>=4?"var(--verde-prof)":v>=3?"var(--cobre)":"#a94436"}">${v}</b><span style="color:var(--neutro);font-size:10px">/5</span>`;
+
+  // Distribución de SLA por asesor (no solo el promedio)
+  const rows = keys.map(k=>{
+    const arr = groups[k], cd = arr.filter(l=>!l.sd);
+    const s = slaSubnotas(arr);
+    const dist = SLA_BUCKETS.map(b=>{ const n=cd.filter(l=>l.bucket===b.id).length;
+      return `<span style="background:${b.color};width:${cd.length?n/cd.length*100:0}%" title="${b.name}: ${n}"></span>`; }).join("");
+    const d3 = cd.filter(l=>(l.d10||0)>=3).length, d5 = cd.filter(l=>(l.d10||0)>=5).length;
+    const ef = cd.reduce((a,l)=>a+((l.deliv&&(l.deliv.delivered+l.deliv.read))||0),0);
+    const tot = cd.reduce((a,l)=>a+((l.deliv&&(l.deliv.sent+l.deliv.delivered+l.deliv.read+l.deliv.failed))||0),0);
+    return `<tr><td class="name">${escAttr(name(k))}</td><td>${arr.length}</td>
+      <td style="min-width:130px"><div class="lq-qbar">${dist}</div></td>
+      <td>${notaTxt(s.pc)}<div class="lq-sub">${s.pcPct??"—"}% ≤2 h</div></td>
+      <td>${notaTxt(s.sg)}<div class="lq-sub">${d3} con 3 d · ${d5} con 5 d</div></td>
+      <td>${notaTxt(s.bu)}<div class="lq-sub">${s.buPct==null?"sin casos":`${s.buPct}% de ${s.sinResp}`}</div></td>
+      <td>${tot?Math.round(ef/tot*100)+"%":"—"}<div class="lq-sub">${tot?`${ef} de ${tot}`:"sin dato"}</div></td>
+      <td>${arr.reduce((a,l)=>a+l.ap.tot,0)}</td>
+      <td>${arr.reduce((a,l)=>a+(l.opp||0),0)}</td></tr>`;
+  }).join("");
+
+  const leyenda = SLA_BUCKETS.map(b=>`<span><i style="background:${b.color};display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px"></i>${b.name}</span>`).join("");
+  let html = `<h3 style="font-family:var(--serif);color:var(--verde-prof);font-size:20px;margin:22px 0 6px">Desempeño del asesor</h3>
+    <p class="hint" style="margin-top:0">Calculado del feed real del CRM: solo cuenta el <b>contacto manual del asesor</b> — se excluyen automatizaciones (workflows, campañas, envíos masivos) y actividad sin usuario asignado.</p>
+    <div class="lq-legend-dots">${leyenda}<span style="margin-left:auto">Distribución del primer contacto manual por lead</span></div>
+    <div class="table-scroll" style="margin-bottom:8px"><table class="cons">
+      <tr><th class="lft">Asesor</th><th>Leads</th><th class="lft">Distribución SLA</th>
+        <th title="Regla 1: primer contacto manual dentro de rango">1er contacto</th>
+        <th title="Regla 2: días distintos con contacto manual en los primeros 10 días">Seguimiento</th>
+        <th title="5 intentos de llamada + SMS/WhatsApp + email, sin contacto establecido">Break up</th>
+        <th title="Entregados o leídos ÷ enviados (actividad efectiva vs. realizada)">Efectividad</th>
+        <th>Citas</th><th title="OPP = cotización enviada">OPPs</th></tr>
+      ${rows || `<tr><td colspan="9" class="lft" style="color:var(--neutro);font-style:italic">Sin leads en el rango.</td></tr>`}
+    </table></div>`;
+
+  // Comparación contra los campos que hoy se llenan a mano en GHL
+  const man = agg.manual || null;
+  if(man){
+    const f=(k)=>man[k]||0;
+    html += `<div class="lq-meth"><b>Campos manuales de GHL en este rango</b> — 0-5 min: ${f("b5")} · 0-30 min: ${f("b30")} · 2 h: ${f("b120")} ·
+      3 contactos/10 d: ${f("d3")} · 5 contactos/10 d: ${f("d5")} · break up: ${f("bu")}.
+      La tabla de arriba <b>no</b> usa estos campos: los calcula del feed. Si los números difieren mucho, es que el llenado manual está atrasado
+      (al 4 ago iba en 91 de ~2,198 contactos) — ese es justamente el trabajo que este reporte elimina.</div>`;
+  }
+
+  html += `<div class="lq-meth"><b>Cómo se calcula</b> —
+    <b>Regla 1 (1er contacto):</b> del alta del lead al primer contacto manual, en rangos exclusivos 0-5 min · 5-30 min · 30 min-2 h · fuera de rango.
+    Para leads creados fuera de horario el reloj arranca en la apertura del siguiente día hábil (hoy configurado <b>L-V ${SLA_HORARIO.abre}:00-${SLA_HORARIO.cierra}:00</b> hora Tulum — <b>pendiente de confirmar</b>).
+    <br><b>Regla 2 (seguimiento):</b> días distintos con contacto manual dentro de los primeros 10 días (≥3 y ≥5), no intentos individuales.
+    <br><b>Break up:</b> 5 o más intentos de llamada + SMS o WhatsApp + email, sin que el lead haya respondido nunca.
+    <br><b>Efectividad:</b> mensajes entregados o leídos ÷ enviados, según el estado que reporta GHL — mide actividad <i>efectiva</i>, no solo realizada.
+    <br><b>Sub-notas 1-5</b> independientes (primer contacto · seguimiento · break up), nunca un promedio único, y con la distribución al lado para no esconder que un asesor atendió bien a pocos leads.
+    <br><b>Pendiente:</b> el SLA de leads fríos de marketing debe arrancar en el traspaso a ventas; falta identificar ese evento en GHL. La causa de descalificación tampoco se captura todavía.</div>`;
+  return html;
+}
+
 function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap){
   const rangoSet = new Set(rango);
   const leads = contactsArr.map(c=>{
@@ -3266,6 +3384,11 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap){
              fo:sw.fo||null, fi:sw.fi||null, lm:sw.lm||null, slaAt, slaEf, z48,
              // sd = sin datos de conversación (lote fallido o sin permisos): no es "sin contacto"
              sd: !!(sw.sin || sw.cerr),
+             // Desempeño del asesor: contacto MANUAL, reloj con horario, seguimiento y break up
+             foM: sw.foM||null, calls: sw.calls||0, chans: sw.chans||[], deliv: sw.deliv||null,
+             bucket: (()=>{ const r=slaReloj(created); return slaBucket(sw.foM && sw.foM>=r ? (sw.foM-r)/60000 : (sw.foM ? 0 : null)); })(),
+             d10: (sw.days||[]).filter(d=>{ const t=Date.parse(d+"T12:00:00Z"); return t>=created-86400e3 && t<=created+10*86400e3; }).length,
+             breakup: slaBreakup({calls:sw.calls, chans:sw.chans, fi:sw.fi}),
              ap: sw.ap || {tot:0,sh:0,ns:0,fut:0} };
   }).filter(Boolean);
   // OPPs (cotizaciones) y WONs por asesor dentro del rango
@@ -3336,6 +3459,7 @@ function slaRender(){
   if(sinDatos){
     html += `<div class="lq-meth">⚠ <b>${sinDatos}</b> de ${leads.length} leads quedaron <b>sin datos de conversación</b> (lote fallido o permisos del token) y están excluidos de los porcentajes de SLA y de la lista de "sin toque" — no se asume que no fueron contactados. Vuelve a generar el reporte para reintentarlos.</div>`;
   }
+  html += slaAsesorSection(agg);
   html += groupTbl("Asesor", l=>l.u, name);
   html += groupTbl("Canal", l=>l.canal, k=>k);
 

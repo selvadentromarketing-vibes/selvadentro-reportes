@@ -8,7 +8,9 @@
 //   { action:"contacts", start, end, searchAfter? }
 //     → { contacts:[{id,n,c,src,u,tags,attr}], total, searchAfter|null }
 //   { action:"sweep", ids:[contactId,...] }   (máx 8 por llamada)
-//     → { results:[{id, fo, fi, lm, cerr, aerr, ap:{tot,sh,ns,fut}}] }
+//     → { results:[{id, fo, fi, lm, foM, days[], calls, chans[], deliv{}, users[], cerr, aerr, ap{}}] }
+//     foM = primer contacto MANUAL (excluye workflows/campañas) · days = días distintos
+//     con contacto manual · calls = intentos de llamada · deliv = estado de entrega
 //     cerr/aerr = no se pudieron leer conversaciones/citas (≠ "no hubo")
 //     fo = primer mensaje SALIENTE (ts) · fi = primer mensaje ENTRANTE (ts)
 //     lm = último mensaje (ts) · ap = citas: total, showed, noshow, futuras, f = cita más temprana (ts)
@@ -87,6 +89,26 @@ async function contacts({ start, end, searchAfter }) {
 
 const ts = (x) => { const t = new Date(x || 0).getTime(); return isFinite(t) && t > 0 ? t : null; };
 
+// "Contacto manual" = actividad hecha por un asesor. Se excluyen automatizaciones
+// (workflow, campaña, acciones masivas) y todo lo que no trae usuario asignado.
+const AUTO_SOURCES = new Set(["workflow", "campaign", "bulk_actions", "automation"]);
+function isManual(m) {
+  const src = String(m.source || "").toLowerCase();
+  if (AUTO_SOURCES.has(src)) return false;
+  return !!m.userId;                      // sin usuario => no se puede atribuir a un asesor
+}
+// Canal a partir del messageType de GHL (TYPE_CALL, TYPE_SMS, TYPE_WHATSAPP, TYPE_EMAIL…)
+function chanOf(m) {
+  const t = String(m.messageType || m.type || "").toUpperCase();
+  if (t.includes("CALL")) return "call";
+  if (t.includes("WHATSAPP")) return "whatsapp";
+  if (t.includes("SMS")) return "sms";
+  if (t.includes("EMAIL")) return "email";
+  return "otro";
+}
+const TZ_MS = 5 * 3600e3;                 // Tulum, UTC-5 sin DST
+const dayKey = (t) => new Date(t - TZ_MS).toISOString().slice(0, 10);
+
 // Mensajes de una conversación, tolerante a las dos formas de respuesta del API
 // (plana o anidada bajo "messages"), paginando hasta 3 páginas hacia lo más viejo.
 async function allMessages(convId) {
@@ -106,7 +128,17 @@ async function allMessages(convId) {
 }
 
 async function sweepOne(id) {
-  const out = { id, fo: null, fi: null, lm: null, cerr: false, aerr: false, ap: { tot: 0, sh: 0, ns: 0, fut: 0, f: null } };
+  const out = {
+    id, fo: null, fi: null, lm: null, cerr: false, aerr: false,
+    foM: null,                            // primer contacto MANUAL (base del SLA del asesor)
+    days: [],                             // días distintos con contacto manual (para la regla de 10 días)
+    calls: 0,                             // intentos de llamada manuales
+    chans: [],                            // canales usados manualmente
+    deliv: { sent: 0, delivered: 0, read: 0, failed: 0 },   // actividad efectiva vs realizada
+    users: [],                            // asesores que tocaron el contacto
+    ap: { tot: 0, sh: 0, ns: 0, fut: 0, f: null },
+  };
+  const dset = new Set(), cset = new Set(), uset = new Set();
   // Conversaciones del contacto
   try {
     const cs = await ghl(`/conversations/search?locationId=${LOCATION_ID}&contactId=${encodeURIComponent(id)}&limit=20`);
@@ -120,6 +152,18 @@ async function sweepOne(id) {
         if (m.direction === "outbound" && (!out.fo || t < out.fo)) out.fo = t;
         if (m.direction === "inbound" && (!out.fi || t < out.fi)) out.fi = t;
         if (!out.lm || t > out.lm) out.lm = t;
+        if (m.direction === "outbound" && isManual(m)) {
+          if (!out.foM || t < out.foM) out.foM = t;
+          dset.add(dayKey(t));
+          const ch = chanOf(m); cset.add(ch);
+          if (ch === "call") out.calls++;
+          const st = String(m.status || "").toLowerCase();
+          if (st === "read") out.deliv.read++;
+          else if (st === "delivered") out.deliv.delivered++;
+          else if (st === "failed" || st === "undelivered") out.deliv.failed++;
+          else out.deliv.sent++;
+          if (m.userId) uset.add(m.userId);
+        }
       }
     }
   } catch (e) { out.cerr = true; /* conversaciones no disponibles: se marca, no se asume "sin contacto" */ }
@@ -139,6 +183,7 @@ async function sweepOne(id) {
       if (stt && (!out.ap.f || stt < out.ap.f)) out.ap.f = stt;
     }
   } catch (e) { out.aerr = true; /* citas no disponibles */ }
+  out.days = [...dset]; out.chans = [...cset]; out.users = [...uset];
   return out;
 }
 
