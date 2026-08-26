@@ -153,6 +153,10 @@ async function sweepOne(id) {
     calls: 0,                             // intentos de llamada manuales
     chans: [],                            // canales usados manualmente
     deliv: { sent: 0, delivered: 0, read: 0, failed: 0, sin: 0 },  // actividad efectiva vs realizada; sin = sin status legible
+    // Histograma de la hora (Tulum) de cada acción manual del asesor: permite MEDIR el
+    // horario real de trabajo en vez de asumirlo. hrs[0..23], dow[0..6] (0 = domingo).
+    hrs: new Array(24).fill(0),
+    dow: new Array(7).fill(0),
     users: [],                            // asesores que tocaron el contacto
     ap: { tot: 0, sh: 0, ns: 0, fut: 0, f: null },
   };
@@ -180,6 +184,9 @@ async function sweepOne(id) {
           dset.add(dayKey(t));
           const ch = chanOf(m); cset.add(ch);
           if (ch === "call") out.calls++;
+          const loc = new Date(t - TZ_MS);
+          out.hrs[loc.getUTCHours()]++;
+          out.dow[loc.getUTCDay()]++;
           // Actividad efectiva. Una llamada CONECTADA es el caso más efectivo que
           // existe, pero su status es "connected" y antes caía en el else, es decir
           // sumaba al denominador sin sumar al numerador: castigaba justo al asesor

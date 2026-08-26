@@ -3537,7 +3537,7 @@ async function showLQ(){
 // Reporte de disciplina comercial directo del CRM: SLA de primera respuesta por
 // asesor y canal, leads >7 días sin toque, trabajados vs contactados efectivos,
 // citas y show rate, y OPPs/WONs por asesor. Con nombres, acumulable por semanas.
-const SLA_AGG_KEY = "sla:agg:v2";   // v2: desempeño del asesor (contacto manual, breakup, efectividad)
+const SLA_AGG_KEY = "sla:agg:v3";   // v3: guarda el histograma de horas para medir el horario real
 const SLA_STALE_MS = 7*86400e3; // "sin toque" = 7 días sin mensaje
 const slaState = { built:false, agg:null, syncing:false, asesor:"" };   // asesor:"" = todo el equipo
 
@@ -3849,7 +3849,15 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr)
     const mine = leads.filter(l=>l.u===u);
     if(mine.length && b.opp) mine[0].opp = b.opp;    // se agrega por asesor, no por lead
   });
-  return { ts:Date.now(), rango, users:usersMap||{}, fields:F, leads, byRepOpp };
+  // Horario REAL observado: se suman las horas de cada acción manual de los asesores.
+  // Convierte "¿cuál es el horario laboral?" de una pregunta a una medición que el
+  // equipo solo tiene que confirmar.
+  const hrs = new Array(24).fill(0), dow = new Array(7).fill(0);
+  Object.values(sweepMap||{}).forEach(sw=>{
+    (sw.hrs||[]).forEach((n,i)=>{ hrs[i]+=n||0; });
+    (sw.dow||[]).forEach((n,i)=>{ dow[i]+=n||0; });
+  });
+  return { ts:Date.now(), rango, users:usersMap||{}, fields:F, leads, byRepOpp, hrs, dow };
 }
 
 function slaRender(){
@@ -5671,6 +5679,74 @@ function diagSeccionMensajes(){
     </div>`;
 }
 
+// Horario real de trabajo, medido de las acciones manuales de los asesores.
+function diagSeccionHorario(){
+  const agg = slaState.agg;
+  const hrs = agg && agg.hrs;
+  if(!hrs || !hrs.some(n=>n)) return `<h3 class="diag-h">Horario real de trabajo</h3>
+    <p class="hint">Genera el reporte de <b>Desempeño de Ventas</b> para medir a qué horas trabaja de verdad el equipo.</p>`;
+  const tot = hrs.reduce((a,b)=>a+b,0);
+  // Ventana que concentra el 90% de la actividad: se recorta 5% por cada extremo
+  const corte = tot*0.05;
+  let acc=0, ini=0, fin=23;
+  for(let h=0; h<24; h++){ acc+=hrs[h]; if(acc>=corte){ ini=h; break; } }
+  acc=0;
+  for(let h=23; h>=0; h--){ acc+=hrs[h]; if(acc>=corte){ fin=h; break; } }
+  const max = Math.max(...hrs);
+  const barras = hrs.map((n,h)=>{
+    const alto = max ? Math.round(n/max*46)+2 : 2;
+    const dentro = h>=ini && h<=fin;
+    return `<div style="display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px">
+      <div style="width:15px;height:${alto}px;background:${dentro?"var(--olivo)":"var(--linea)"};border-radius:2px" title="${h}:00 · ${n} acciones"></div>
+      <span style="font-size:8.5px;color:var(--neutro)">${h}</span></div>`;
+  }).join("");
+  const DIAS=["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+  const dow = agg.dow||[];
+  const totD = dow.reduce((a,b)=>a+b,0)||1;
+  const dias = dow.map((n,i)=>{
+    const pct = Math.round(n/totD*100);
+    return `<span class="chip" style="background:${pct>=8?"var(--verde-ok-bg)":"var(--crema-2)"};color:${pct>=8?"var(--verde-ok-tx)":"var(--neutro)"}">${DIAS[i]} ${pct}%</span>`;
+  }).join(" ");
+  const cfg = `${SLA_HORARIO.abre}:00–${SLA_HORARIO.cierra}:00, ${SLA_HORARIO.dias.map(d=>DIAS[d]).join(" ")}`;
+  const coincide = ini>=SLA_HORARIO.abre-1 && fin<=SLA_HORARIO.cierra+1;
+  return `<h3 class="diag-h">Horario real de trabajo</h3>
+    <p class="hint" style="margin-top:-2px">Medido de ${tot.toLocaleString()} acciones manuales de los asesores en el rango del último reporte. Esto <b>no</b> decide la política: la propone para que Dirección la confirme.</p>
+    <div class="lq-meth">
+      <b>Observado:</b> el 90% de la actividad ocurre entre las <b>${ini}:00</b> y las <b>${fin}:59</b>, hora de Tulum.
+      <br><b>Configurado hoy en la app:</b> ${escAttr(cfg)}.
+      ${coincide ? `<br><span style="color:var(--verde-ok-tx)">✓ Coinciden: el reloj del SLA está midiendo contra un horario realista.</span>`
+                 : `<br><span style="color:#a94436">⚠ No coinciden. Si el horario configurado está mal, el reloj del SLA arranca o se detiene a la hora equivocada y los tiempos de respuesta salen mal para todos.</span>`}
+      <div style="display:flex;gap:2px;align-items:flex-end;margin:14px 0 6px">${barras}</div>
+      <div style="margin-top:8px">${dias}</div>
+    </div>`;
+}
+
+// ¿El monto de la oportunidad es el presupuesto del cliente o el precio de lista?
+// Si se repiten pocos valores redondos, es precio de lista.
+function diagSeccionValores(){
+  const agg = lqState.agg;
+  const vals = ((agg && agg.leads)||[]).map(l=>l.ov||0).filter(v=>v>0);
+  if(!vals.length) return "";
+  const cuenta = {};
+  vals.forEach(v=>{ cuenta[v]=(cuenta[v]||0)+1; });
+  const top = Object.entries(cuenta).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const distintos = Object.keys(cuenta).length;
+  const repetidos = top.reduce((a,[,n])=>a+n,0);
+  const pctRep = Math.round(repetidos/vals.length*100);
+  const listaPrecio = distintos <= Math.max(8, vals.length*0.15);
+  const filas = top.map(([v,n])=>`<tr><td class="lft">${fmtMoney(+v)}</td><td>${n}</td><td>${Math.round(n/vals.length*100)}%</td></tr>`).join("");
+  return `<h3 class="diag-h">Qué significa el monto de una oportunidad</h3>
+    <p class="hint" style="margin-top:-2px">La regla de <b>SQL Selvadentro</b> usa el monto de la oportunidad como presupuesto del prospecto cuando el campo de presupuesto viene vacío. Si el equipo carga ahí el precio de lista del lote, casi todo supera el umbral y la calificación se infla.</p>
+    <div class="lq-meth" style="border-color:${listaPrecio?"var(--cobre)":"var(--olivo)"}">
+      ${listaPrecio
+        ? `⚠ <b>Se parece a precio de lista.</b> ${vals.length} oportunidades con valor, pero solo <b>${distintos}</b> montos distintos, y los ${top.length} más comunes cubren el ${pctRep}%. Eso es un catálogo, no presupuestos declarados por prospectos. Vale la pena confirmarlo con Dirección Comercial antes de fiarse del tramo SQL Selvadentro.`
+        : `✓ <b>Se parece a presupuesto real.</b> ${vals.length} oportunidades con valor y <b>${distintos}</b> montos distintos: la dispersión es la de cifras declaradas caso por caso, no la de un catálogo de precios.`}
+    </div>
+    <div class="table-scroll" style="margin-bottom:18px"><table class="cons">
+      <tr><th class="lft">Monto más repetido</th><th>Veces</th><th>% de las oportunidades</th></tr>${filas}
+    </table></div>`;
+}
+
 function renderDiag(){
   const host = document.getElementById("diag-content"); if(!host) return;
   const dr = document.getElementById("diag-run"); if(dr) dr.onclick = diagRun;
@@ -5680,7 +5756,8 @@ function renderDiag(){
     return;
   }
   host.innerHTML = diagSeccionPermisos() + diagSeccionMensajes() + diagSeccionCampos()
-                 + diagSeccionPipelines() + diagSeccionAtribucion() + diagSeccionCuentas();
+                 + diagSeccionPipelines() + diagSeccionAtribucion() + diagSeccionCuentas()
+                 + diagSeccionHorario() + diagSeccionValores();
 }
 
 /* ===================== ADMIN PANEL ===================== */
