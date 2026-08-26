@@ -355,21 +355,50 @@ async function diag() {
   let pCitas = { nombre: "Citas", ok: false, nota: "No se pudo probar: no hubo contacto de muestra" };
   if (contactoId) {
     let convId = "";
+    let muestra = null;                 // mensajes REALES encontrados, si los hay
     pConv = await probar("Conversaciones", async () => {
-      // Se recorren varios contactos hasta encontrar uno con conversación: así la
-      // prueba de mensajes mide algo real y no un contacto recién creado y sin tocar.
-      let vistos = 0, conConv = 0;
-      for (const id of candidatos.slice(0, 8)) {
+      // No basta con encontrar una conversación: hay que encontrar una que tenga
+      // mensajes de verdad. Muchas conversaciones solo llevan TYPE_ACTIVITY_* (bitácora
+      // del CRM), que nunca traen userId, y medir sobre ellas no dice nada. Se recorren
+      // contactos y sus conversaciones hasta dar con mensajes reales.
+      let vistos = 0, conConv = 0, convRevisadas = 0;
+      for (const id of candidatos.slice(0, 10)) {
         const d = await ghl(`/conversations/search?locationId=${LOCATION_ID}&contactId=${encodeURIComponent(id)}&limit=5`);
         const cvs = d.conversations || [];
         vistos++;
-        if (cvs.length) {
-          conConv++;
-          if (!convId) { convId = cvs[0].id; contactoId = id; }
+        if (!cvs.length) continue;
+        conConv++;
+        for (const cv of cvs.slice(0, 3)) {
+          if (muestra) break;
+          convRevisadas++;
+          try {
+            const md = await ghl(`/conversations/${encodeURIComponent(cv.id)}/messages?limit=50`);
+            const arr = Array.isArray(md.messages) ? md.messages : (md.messages && md.messages.messages) || [];
+            const reales = arr.filter((x) => x && !/^TYPE_ACTIVITY/i.test(String(x.messageType || "")));
+            if (reales.length) { muestra = { arr, reales }; convId = cv.id; contactoId = id; }
+            else if (!convId) { convId = cv.id; contactoId = id; }
+          } catch (e) { /* sigue con la siguiente */ }
         }
+        if (muestra) break;
       }
-      return { contactosRevisados: vistos, conConversacion: conConv };
+      return { contactosRevisados: vistos, conConversacion: conConv, conversacionesRevisadas: convRevisadas, conMensajesReales: !!muestra };
     });
+    // Si el barrido ya encontró mensajes reales, se reporta sobre ellos.
+    if (muestra) {
+      const sal = muestra.reales.filter((x) => x.direction === "outbound");
+      const base = sal.length ? sal : muestra.reales;
+      pMsgs = {
+        nombre: "Mensajes de conversación", ok: true, ms: 0, nota: "",
+        datos: {
+          mensajes: muestra.arr.length, reales: muestra.reales.length, salientes: sal.length,
+          traeUserId: base.some((x) => x.userId),
+          traeSource: base.some((x) => x.source),
+          tipos: [...new Set(muestra.arr.map((x) => x && x.messageType).filter(Boolean))],
+          claves: base[0] ? Object.keys(base[0]).sort() : [],
+        },
+      };
+      convId = "";                       // ya está medido, no repetir abajo
+    }
     if (convId) {
       pMsgs = await probar("Mensajes de conversación", async () => {
         const d = await ghl(`/conversations/${encodeURIComponent(convId)}/messages?limit=50`);

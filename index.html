@@ -2369,6 +2369,12 @@ const LQ_RX_MUERTA = new RegExp([
   // cubetas de enrutamiento, no etapas del embudo
   "corretaje","redes sociales","sin respuesta","reagendar",
 ].join("|"), "i");
+// Pipelines que NO son embudo de venta sino proceso posterior al cierre. En el
+// diagnóstico del 2026-08-26 el pipeline "Legal" contaba sus 8 etapas como OPP —
+// desde "Pago de apartado" hasta "Escrituración" — pero ahí ya hay venta hecha: son
+// WON en trámite, no oportunidades por cerrar, y se sumaban dos veces.
+const LQ_RX_PIPE_NO_FUNNEL = /legal|jur[ií]dic|escritur|postventa|post-?venta|cobranza|administra/i;
+
 function lqOppThresholds(stages){
   const byPipe = {};
   for(const [id, st] of Object.entries(stages||{})){
@@ -2392,11 +2398,25 @@ function lqOppStageNames(stages, th){
 }
 function lqIsOppStage2(st, th){
   if(!st) return false;
+  if(LQ_RX_PIPE_NO_FUNNEL.test(st.p||"")) return false;   // trámite post-venta, no embudo
   const n = st.s || "";
-  if(LQ_RX_MUERTA.test(n)) return false;
   const t = th[st.p||""];
+  // Antes del umbral nunca es OPP, sin importar el nombre. Las exclusiones por nombre
+  // solo aplican de ahí en adelante: así "Zoom no show / reagendar", que está mucho
+  // antes del umbral, no se etiqueta como terminal cuando en realidad sigue vivo.
+  if(t != null && (st.i ?? 0) < t) return false;
+  if(LQ_RX_MUERTA.test(n)) return false;
   if(t == null) return LQ_RX_OPP.test(n) && !LQ_RX_NO_OPP.test(n);
-  return (st.i ?? 0) >= t;
+  return true;
+}
+// Cómo etiquetar una etapa en el Diagnóstico: distingue "todavía no llega" de
+// "está después pero no cuenta" y de "este pipeline no es embudo".
+function lqEtiquetaEtapa(st, th){
+  if(LQ_RX_PIPE_NO_FUNNEL.test(st.p||"")) return { txt:"proceso post-venta", cls:"gris" };
+  const t = th[st.p||""];
+  if(t != null && (st.i ?? 0) < t) return { txt:"antes de OPP", cls:"sub" };
+  if(LQ_RX_MUERTA.test(st.s||"")) return { txt:"no cuenta", cls:"gris" };
+  return lqIsOppStage2(st, th) ? { txt:"CUENTA COMO OPP", cls:"opp" } : { txt:"antes de OPP", cls:"sub" };
 }
 function lqIsOppStage(stageId, stages, th){
   return lqIsOppStage2((stages||{})[stageId], th);
@@ -5712,11 +5732,10 @@ function diagSeccionPipelines(){
   const th = lqOppThresholds(stages);
   const bloques = pipes.map(p=>{
     const filas = p.etapas.map(e=>{
-      const esOpp = lqIsOppStage2({p:p.nombre, s:e.nombre, i:e.pos}, th);
-      const muerta = LQ_RX_MUERTA.test(e.nombre||"");
-      const et = muerta ? `<span class="lq-badge" style="background:#8a8a8a">Terminal · fuera</span>`
-               : esOpp ? `<span class="lq-badge" style="background:var(--cobre)">Cuenta como OPP</span>`
-               : `<span class="lq-sub">antes de OPP</span>`;
+      const lab = lqEtiquetaEtapa({p:p.nombre, s:e.nombre, i:e.pos}, th);
+      const et = lab.cls==="opp" ? `<span class="lq-badge" style="background:var(--cobre)">Cuenta como OPP</span>`
+               : lab.cls==="gris" ? `<span class="lq-badge" style="background:#8a8a8a">${escAttr(lab.txt)}</span>`
+               : `<span class="lq-sub">${escAttr(lab.txt)}</span>`;
       return `<tr><td style="width:40px">${e.pos+1}</td><td class="lft" style="font-weight:600">${escAttr(e.nombre)}</td><td class="lft">${et}</td></tr>`;
     }).join("");
     return `<div style="margin-bottom:14px"><div style="font-weight:600;color:var(--verde-prof);margin-bottom:5px">${escAttr(p.nombre)}</div>
@@ -5734,8 +5753,10 @@ function diagSeccionAtribucion(){
   const fila = (lbl,n,pct,nota)=>`<tr><td class="lft" style="font-weight:600">${escAttr(lbl)}</td>
     <td>${diagBar(pct)} <b>${pct}%</b></td><td>${n} de ${a.pagados}</td><td class="lft lq-sub">${escAttr(nota)}</td></tr>`;
   const veredicto = a.campPct >= 70
-    ? `<div class="lq-meth" style="border-color:var(--olivo)">✓ Los anuncios <b>sí</b> están pasando la campaña. El desglose por campaña es confiable.</div>`
-    : `<div class="lq-meth" style="border-color:#a94436;background:#F2CFC9">⚠ Solo <b>${a.campPct}%</b> de los leads pagados trae campaña. <b>Esta es la respuesta a "¿los anuncios están pasando UTMs?": no.</b> Hasta que se configuren los parámetros UTM en Meta Ads y Google Ads, el desglose por campaña, conjunto y anuncio va a seguir saliendo casi vacío.</div>`;
+    ? `<div class="lq-meth" style="border-color:var(--olivo)">✓ Los anuncios <b>sí</b> están pasando la campaña (${a.campPct}%). El desglose por campaña es confiable.</div>`
+    : a.campPct >= 25
+    ? `<div class="lq-meth" style="border-color:var(--cobre)">◑ Los anuncios pasan la campaña <b>a medias</b>: ${a.campPct}% de los leads pagados la trae. El desglose por campaña sirve para comparar, pero <b>${100-a.campPct}% de los leads sigue cayendo en "(sin campaña atribuida)"</b>, así que los totales por campaña están por debajo de la realidad. Vale la pena revisar qué anuncios o formularios no están pasando los parámetros.</div>`
+    : `<div class="lq-meth" style="border-color:#a94436;background:#F2CFC9">⚠ Solo <b>${a.campPct}%</b> de los leads pagados trae campaña: los anuncios <b>no</b> están pasando los parámetros. El desglose por campaña, conjunto y anuncio va a salir casi vacío hasta que se configuren en Meta Ads y Google Ads.</div>`;
   return `<h3 class="diag-h">Atribución de los anuncios</h3>
     <p class="hint" style="margin-top:-2px">De los ${a.total} leads sincronizados, ${a.pagados} vienen de Meta o Google. Esto mide cuántos traen de dónde salieron.</p>
     ${veredicto}
@@ -5901,9 +5922,7 @@ function diagTexto(){
     pipes.forEach(p=>{
       L.push("  " + p.nombre + ":");
       p.etapas.forEach(e=>{
-        const esOpp = lqIsOppStage2({p:p.nombre,s:e.nombre,i:e.pos}, th);
-        const muerta = LQ_RX_MUERTA.test(e.nombre||"");
-        L.push(`    ${e.pos+1}. ${e.nombre}  →  ${muerta ? "terminal, fuera" : esOpp ? "CUENTA COMO OPP" : "antes de OPP"}`);
+        L.push(`    ${e.pos+1}. ${e.nombre}  →  ${lqEtiquetaEtapa({p:p.nombre,s:e.nombre,i:e.pos}, th).txt}`);
       });
     });
     L.push("");
@@ -5916,7 +5935,7 @@ function diagTexto(){
     L.push(`  Traen campaña:  ${a.camp} (${a.campPct}%)`);
     L.push(`  Traen anuncio:  ${a.ad} (${a.adPct}%)`);
     L.push(`  Traen conjunto: ${a.grp} (${a.grpPct}%)`);
-    L.push(`  → ¿Los anuncios pasan UTMs? ${a.campPct>=70 ? "SÍ" : "NO"}`);
+    L.push(`  → ¿Los anuncios pasan UTMs? ${a.campPct>=70 ? "SÍ" : a.campPct>=25 ? "A MEDIAS ("+a.campPct+"%)" : "NO"}`);
     L.push("");
   } else {
     L.push("== ATRIBUCIÓN ==");
