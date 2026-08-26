@@ -298,7 +298,22 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .ch-group[open] summary::after{ content:'▴'; }
   .ch-group .ch-grp-count{ background:var(--olivo); color:#fff; font-size:10px; padding:2px 8px; border-radius:999px; font-weight:700; letter-spacing:.3px; }
   .ch-group .ch-pills-inner{ padding:8px 10px; display:flex; flex-wrap:wrap; gap:4px 6px; }
-  .ch-pill{ display:inline-flex; align-items:center; gap:5px; font-size:11px; padding:3px 8px; border-radius:14px; border:1px solid var(--linea); background:var(--crema); cursor:pointer; user-select:none; }
+  .ch-pill{ display:inline-flex; align-items:center; gap:5px; font-size:11px; padding:3px 8px; border-radius:14px; border:1px solid var(--linea); background:var(--crema); cursor:pointer; user-select:none; white-space:nowrap; }
+  /* Tarjeta de alta de usuario: fuera de la tabla, para que nunca se desalineen las columnas */
+  .usr-card{ border:1px solid var(--linea); border-radius:12px; background:#fff; padding:18px 20px; margin-top:14px; }
+  .usr-card-hd{ font-family:var(--serif); font-size:17px; color:var(--verde-prof); margin-bottom:14px; }
+  .usr-card-grid{ display:grid; grid-template-columns:minmax(240px,1.6fr) minmax(200px,1fr); gap:14px 18px; }
+  .usr-fld{ display:flex; flex-direction:column; gap:5px; margin-bottom:14px; }
+  .usr-fld > label{ font-size:10px; text-transform:uppercase; letter-spacing:.6px; color:var(--neutro); font-weight:700; }
+  .usr-fld input, .usr-fld select{ font-family:var(--sans); font-size:13px; padding:8px 10px; border:1px solid var(--linea); border-radius:7px; background:var(--crema); width:100%; }
+  .usr-hint-inline{ font-size:11px; color:var(--neutro); font-style:italic; text-transform:none; letter-spacing:0; font-weight:400; }
+  .usr-card-ft{ display:flex; align-items:center; gap:16px; flex-wrap:wrap; border-top:1px solid var(--crema-2); padding-top:14px; margin-top:4px; }
+  .usr-card-ft .usr-hint-inline{ flex:1; min-width:220px; }
+  .usr-card-btns{ display:flex; gap:8px; margin-left:auto; }
+  /* Los canales del alta caben en dos columnas: no se apilan verticalmente */
+  #new-ch .ch-groups{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:10px; max-width:none; }
+  table.usr-table td.ch-col{ min-width:300px; }
+  table.usr-table td.acc-col{ white-space:nowrap; font-size:12px; }
   .ch-pill input{ accent-color:var(--olivo); }
   .ch-pill.on{ background:var(--verde-ok-bg); border-color:var(--verde-ok-tx); color:var(--verde-ok-tx); font-weight:600; }
   .ch-pill.disabled{ opacity:.5; cursor:not-allowed; }
@@ -434,6 +449,20 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
         <input type="password" id="login-pass" autocomplete="current-password" required>
       </div>
       <button type="submit" class="btn btn-primary" id="login-submit">Entrar</button>
+    </form>
+
+    <form class="login-step" id="step-invite" autocomplete="off">
+      <h2>Define tu contraseña</h2>
+      <div class="subtitle" id="invite-sub">Validando tu invitación…</div>
+      <div class="login-field">
+        <label for="invite-pass">Contraseña nueva (mínimo 8 caracteres)</label>
+        <input type="password" id="invite-pass" autocomplete="new-password" minlength="8" required>
+      </div>
+      <div class="login-field">
+        <label for="invite-pass2">Repítela</label>
+        <input type="password" id="invite-pass2" autocomplete="new-password" minlength="8" required>
+      </div>
+      <button type="submit" class="btn btn-primary" id="invite-submit">Entrar al sistema</button>
     </form>
 
     <form class="login-step" id="step-setup" autocomplete="off">
@@ -706,6 +735,33 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
       <div class="admin-card">
         <h3>Administración de usuarios</h3>
         <p class="hint">Crea, edita o elimina cuentas. <b>admin</b> = acceso total + este panel; <b>user</b> = acceso solo a los canales marcados, sin este panel.</p>
+        <div id="usr-new-card" class="usr-card" style="display:none">
+          <div class="usr-card-hd">Nuevo usuario</div>
+          <div class="usr-card-grid">
+            <div class="usr-fld">
+              <label for="new-email">Email</label>
+              <input type="email" id="new-email" placeholder="nombre@selvadentrotulum.com" autocomplete="off">
+            </div>
+            <div class="usr-fld">
+              <label for="new-role">Rol</label>
+              <select id="new-role">
+                <option value="user" selected>user — solo los canales marcados</option>
+                <option value="admin">admin — acceso total + este panel</option>
+              </select>
+            </div>
+          </div>
+          <div class="usr-fld" id="new-ch-wrap">
+            <label>Canales <span class="usr-hint-inline">(solo aplican al rol user)</span></label>
+            <div id="new-ch"></div>
+          </div>
+          <div class="usr-card-ft">
+            <span class="usr-hint-inline">Se crea sin contraseña: obtienes una liga que caduca en 7 días para mandarle por WhatsApp. La persona define su propia contraseña al abrirla.</span>
+            <div class="usr-card-btns">
+              <button class="btn btn-ghost" id="new-cancel" type="button">Cancelar</button>
+              <button class="btn btn-primary" id="new-save" type="button">Crear y copiar liga</button>
+            </div>
+          </div>
+        </div>
         <div class="table-scroll"><table class="usr-table" id="usr-table"></table></div>
         <div class="adv-footer">
           <span class="adv-status" id="usr-status"></span>
@@ -4905,7 +4961,6 @@ const USERS_KEY = "selvadentro:users";
 const SESSION_KEY = "slvd-session-v2";
 let SESSION = null;       // { email, role }
 let USERS = [];           // [{ email, salt, hash, role, channels, password? }]
-let ADMIN_PASS = null;    // password en memoria sólo (se pierde al recargar) — para llamar a la Netlify Function
 
 const DATA_CH_KEYS = ["brokers","paid_organico","seminarios","referidos","pd_leads","pd_brokers","rp_vip"];
 const DIR_TABS = { direccion_general:"resultados", direccion_comercial:"dircom", crm_live:"crm", mkt_lq:"lq", sla_view:"sla", marketing:"marketing" };
@@ -4985,18 +5040,35 @@ function showNoAccessScreen(){
 const isAdmin = ()=> !!(SESSION && SESSION.role === "admin");
 window.isMktAdmin = ()=> isAdmin();
 
-function randomSalt(){
-  const b = new Uint8Array(12); crypto.getRandomValues(b);
-  return Array.from(b).map(x=>x.toString(16).padStart(2,"0")).join("");
-}
-async function hashPassword(pass, salt){
-  const data = new TextEncoder().encode(salt + ":" + pass);
-  const buf = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
-}
 
-async function loadUsers(){ USERS = (await sGet(USERS_KEY)) || []; return USERS; }
-async function saveUsers(){ await sSet(USERS_KEY, USERS); }
+// La contraseña en claro NUNCA se guarda: en el kv solo viven salt + hash. El admin
+// conoce la contraseña en el momento de crearla o restablecerla, y ahí se la entrega
+// a la persona; después ya nadie puede leerla, ni siquiera un admin.
+const stripPass = (u)=>{ const { password, ...resto } = u || {}; return resto; };
+
+// Entrega de la liga mágica: nunca viaja una contraseña por chat. La liga caduca a
+// los 7 días y es de un solo uso; la persona define su propia contraseña al abrirla.
+async function entregarLiga(email, link, tituloOk){
+  const texto = `Ya tienes acceso al Sistema de Reportes de Selvadentro 👇\n\n`
+    + `${link}\n\n`
+    + `Ábrela y define tu contraseña. La liga caduca en 7 días y solo sirve una vez.`;
+  let copiado = false;
+  try{ await navigator.clipboard.writeText(texto); copiado = true; }catch(_){}
+  toast(tituloOk + (copiado ? " · liga copiada al portapapeles" : ""));
+  prompt(`Mándale esta liga a ${email} por WhatsApp:`, texto);
+}
+async function loadUsers(){
+  USERS = (await sGet(USERS_KEY)) || [];
+  // Limpieza única de contraseñas en claro heredadas de la versión anterior
+  if(USERS.some(u=>u && u.password!==undefined)){
+    const n = USERS.filter(u=>u && u.password!==undefined).length;
+    USERS = USERS.map(stripPass);
+    try{ await saveUsers(); toast(`Se borraron ${n} contraseña${n===1?"":"s"} en claro del backend ✓`); }
+    catch(e){ console.warn("No se pudieron limpiar las contraseñas en claro:", e); }
+  }
+  return USERS;
+}
+async function saveUsers(){ USERS = USERS.map(stripPass); await sSet(USERS_KEY, USERS); }
 
 function readSession(){
   try{ const s = localStorage.getItem(SESSION_KEY); return s ? JSON.parse(s) : null; }
@@ -5051,6 +5123,39 @@ async function authCall(action, data){
   if(!r.ok){ const err=new Error(d.error||("auth "+r.status)); err.status=r.status; throw err; }
   return d;
 }
+let INVITE_TOKEN = null;
+async function inviteCall(action, data){
+  const r = await fetch("/.netlify/functions/invite", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json", ...(AUTH_TOKEN?{"Authorization":"Bearer "+AUTH_TOKEN}:{}) },
+    body: JSON.stringify({ action, ...(data||{}) })
+  });
+  const d = await r.json().catch(()=>({}));
+  if(!r.ok){ const err=new Error(d.error||("invite "+r.status)); err.status=r.status; throw err; }
+  return d;
+}
+
+// La persona invitada define su contraseña y entra directo: la respuesta ya trae sesión.
+async function inviteHandler(ev){
+  ev.preventDefault();
+  clearLoginError();
+  const p1 = document.getElementById("invite-pass").value;
+  const p2 = document.getElementById("invite-pass2").value;
+  if(p1.length < 8){ showLoginError("La contraseña debe tener al menos 8 caracteres."); return; }
+  if(p1 !== p2){ showLoginError("Las dos contraseñas no coinciden."); return; }
+  const btn = document.getElementById("invite-submit");
+  btn.disabled = true; btn.textContent = "Entrando…";
+  try{
+    const d = await inviteCall("claim", { token: INVITE_TOKEN, password: p1 });
+    INVITE_TOKEN = null;
+    applySessionResponse(d);
+    await onAuthenticated();
+  }catch(e){
+    showLoginError(e.message || "No se pudo completar la invitación.");
+    btn.disabled = false; btn.textContent = "Entrar al sistema";
+  }
+}
+
 function applySessionResponse(d){
   setAuthToken(d.token);
   SESSION = { email: d.email, role: d.role, channels: d.channels || [] };
@@ -5068,7 +5173,6 @@ async function signInHandler(e){
   try{
     const d = await authCall("login", { email, pass });
     applySessionResponse(d);
-    if(d.role === "admin") ADMIN_PASS = pass;
     await onAuthenticated();
   }catch(err){
     showLoginError(err.status===401 ? "Email o contraseña incorrectos" : String(err.message||err));
@@ -5088,7 +5192,6 @@ async function setupHandler(e){
   try{
     const d = await authCall("setup", { email, pass });
     applySessionResponse(d);
-    ADMIN_PASS = pass;
     await onAuthenticated();
   }catch(err){
     if(err.status===403){ showLoginStep("step-signin"); showLoginError("Ya existen usuarios. Inicia sesión normal."); }
@@ -5108,7 +5211,27 @@ function signOut(){
 async function bootAuth(){
   document.getElementById("step-signin").addEventListener("submit", signInHandler);
   document.getElementById("step-setup").addEventListener("submit", setupHandler);
+  document.getElementById("step-invite").addEventListener("submit", inviteHandler);
   document.getElementById("btn-logout").addEventListener("click", signOut);
+
+  // Liga de invitación: va en el hash (#invite=…) para que el token no viaje en la
+  // URL al servidor ni quede en logs o en el Referer.
+  const inv = (location.hash.match(/[#&]invite=([^&]+)/) || [])[1];
+  if(inv){
+    INVITE_TOKEN = decodeURIComponent(inv);
+    history.replaceState(null, "", location.pathname + location.search);   // limpiar la barra
+    showLoginStep("step-invite");
+    try{
+      const d = await inviteCall("peek", { token: INVITE_TOKEN });
+      document.getElementById("invite-sub").textContent =
+        `Hola ${d.email} — elige una contraseña para entrar al Sistema de Reportes.`;
+      document.getElementById("invite-pass").focus();
+    }catch(e){
+      document.getElementById("invite-sub").textContent = e.message || "Esta liga ya no sirve.";
+      document.getElementById("invite-submit").disabled = true;
+    }
+    return;
+  }
 
   // ¿Token guardado? Validarlo en el servidor (refresca rol/canales y el token).
   if(AUTH_TOKEN){
@@ -5177,9 +5300,10 @@ function paintUsersTable(){
   const rows = USERS.map((u, i)=>{
     const isUserRole = u.role === 'user';
     const chs = u.channels || [];
-    const passCell = u.password
-      ? `<span class="pass-mask">••••••••</span><button class="usr-action pass-reveal" type="button" title="Mostrar/ocultar">👁</button>`
-      : `<span style="color:var(--neutro)">—</span>`;
+    // Estado de acceso: la contraseña nunca se muestra (en el kv solo vive el hash).
+    const accCell = u.pendiente || u.inv
+      ? `<span style="color:var(--cobre);font-weight:600" title="Se le mandó una liga y todavía no la abre">Invitación pendiente</span>`
+      : `<span style="color:var(--verde-ok-tx)" title="Ya definió su contraseña">Activo</span>`;
     return `
     <tr data-i="${i}">
       <td>${u.email}</td>
@@ -5189,16 +5313,16 @@ function paintUsersTable(){
           <option value="admin" ${u.role==='admin'?'selected':''}>admin</option>
         </select>
       </td>
-      <td class="pass-col">${passCell}</td>
-      <td>${chPillsHtml(isUserRole ? chs : ALL_CH_KEYS, !isUserRole)}</td>
+      <td class="acc-col">${accCell}</td>
+      <td class="ch-col">${chPillsHtml(isUserRole ? chs : ALL_CH_KEYS, !isUserRole)}</td>
       <td style="text-align:right; white-space:nowrap;">
         <button class="usr-action save">Guardar</button>
-        <button class="usr-action">Reset pass</button>
+        <button class="usr-action" title="Genera una liga nueva para que defina su contraseña">Nueva liga</button>
         <button class="usr-action danger">Borrar</button>
       </td>
     </tr>`;
   }).join("");
-  tbl.innerHTML = `<thead><tr><th>Email</th><th>Rol</th><th>Contraseña</th><th>Canales (solo aplica a user)</th><th></th></tr></thead><tbody>${rows||`<tr><td colspan="5" class="admin-empty">Sin usuarios. Crea el primero.</td></tr>`}</tbody>`;
+  tbl.innerHTML = `<thead><tr><th>Email</th><th>Rol</th><th>Acceso</th><th>Canales (solo aplica a user)</th><th></th></tr></thead><tbody>${rows||`<tr><td colspan="5" class="admin-empty">Sin usuarios. Crea el primero.</td></tr>`}</tbody>`;
   bindPillsBehavior(tbl);
 
   // Cuando cambia el rol en la fila, habilitar/deshabilitar las pills
@@ -5215,23 +5339,9 @@ function paintUsersTable(){
   });
 
   // Botón ojo: revelar/ocultar password
-  tbl.querySelectorAll(".pass-reveal").forEach(btn=>{
-    const tr = btn.closest("tr");
-    const idx = +tr.dataset.i;
-    const span = tr.querySelector(".pass-mask");
-    btn.onclick = ()=>{
-      if(span.dataset.shown === "1"){
-        span.textContent = "••••••••"; span.dataset.shown = "0"; btn.textContent = "👁";
-      } else {
-        span.textContent = USERS[idx].password || "";
-        span.dataset.shown = "1"; btn.textContent = "🙈";
-      }
-    };
-  });
-
   tbl.querySelectorAll("tbody tr[data-i]").forEach(tr=>{
     const idx = +tr.dataset.i;
-    const actions = tr.querySelectorAll(".usr-action:not(.pass-reveal)");
+    const actions = tr.querySelectorAll(".usr-action");
     const [btnSave, btnReset, btnDel] = actions;
     btnSave.onclick = async()=>{
       const role = tr.querySelector(".usr-role").value;
@@ -5248,14 +5358,15 @@ function paintUsersTable(){
       }catch(e){ alert("Error guardando: "+e.message); }
     };
     btnReset.onclick = async()=>{
-      const pw = prompt("Nueva contraseña para "+USERS[idx].email+" (mínimo 6 caracteres):");
-      if(!pw) return;
-      if(pw.length < 6){ alert("Mínimo 6 caracteres"); return; }
-      USERS[idx].salt = randomSalt();
-      USERS[idx].hash = await hashPassword(pw, USERS[idx].salt);
-      USERS[idx].password = pw;
-      try{ await saveUsers(); paintUsersTable(); toast("Contraseña actualizada ✓"); }
-      catch(e){ alert("Error: "+e.message); }
+      const em = USERS[idx].email;
+      if(!confirm(`Generar una liga nueva para ${em}?\n\nCualquier liga anterior deja de servir. Si ya tenía contraseña, seguirá funcionando hasta que abra la liga nueva y defina otra.`)) return;
+      btnReset.disabled = true;
+      try{
+        const d = await inviteCall("relink", { email: em });
+        await loadUsers(); paintUsersTable();
+        await entregarLiga(em, d.link, "Liga nueva generada ✓");
+      }
+      catch(e){ alert("Error: "+e.message); btnReset.disabled = false; }
     };
     btnDel.onclick = async()=>{
       if(USERS[idx].email === SESSION.email){ alert("No puedes borrarte a ti mismo."); return; }
@@ -5267,91 +5378,52 @@ function paintUsersTable(){
   });
 }
 
+// Alta de usuario en una tarjeta propia (antes era una fila de la tabla con 4 celdas
+// contra 5 columnas del encabezado: todo se recorría y los canales caían en la
+// columna de contraseña). Sin contraseña: se genera una liga mágica.
 function openNewUserRow(){
-  const tbl = document.getElementById("usr-table");
-  if(tbl.querySelector(".new-user-row")) return;
-  const tbody = tbl.querySelector("tbody");
-  const tr = document.createElement("tr");
-  tr.className = "new-user-row";
-  tr.innerHTML = `
-    <td><input type="email" id="new-email" placeholder="email@dominio.com"></td>
-    <td>
-      <select id="new-role">
-        <option value="user" selected>user</option>
-        <option value="admin">admin</option>
-      </select>
-      <input type="text" id="new-pass" placeholder="Contraseña (≥6)" style="margin-top:5px">
-    </td>
-    <td>${chPillsHtml(ALL_CH_KEYS, false)}</td>
-    <td style="text-align:right; white-space:nowrap;">
-      <button class="usr-action save" id="new-save">Crear</button>
-      <button class="usr-action" id="new-cancel">Cancelar</button>
-    </td>`;
-  tbody.prepend(tr);
-  bindPillsBehavior(tr);
+  const card = document.getElementById("usr-new-card");
+  if(card.style.display === "block"){ document.getElementById("new-email").focus(); return; }
+
+  document.getElementById("new-ch").innerHTML = chPillsHtml(ALL_CH_KEYS, false);
+  document.getElementById("new-email").value = "";
+  document.getElementById("new-role").value = "user";
+  card.style.display = "block";
+  bindPillsBehavior(card);
+  document.getElementById("new-email").focus();
+
+  const chWrap = document.getElementById("new-ch-wrap");
   document.getElementById("new-role").onchange = (e)=>{
     const isUserRole = e.target.value === "user";
-    tr.querySelectorAll(".ch-pill").forEach(p => p.classList.toggle("disabled", !isUserRole));
-    tr.querySelectorAll(".ch-pill input").forEach(i => i.disabled = !isUserRole);
+    chWrap.style.opacity = isUserRole ? "1" : ".45";
+    card.querySelectorAll("#new-ch .ch-pill").forEach(pl => pl.classList.toggle("disabled", !isUserRole));
+    card.querySelectorAll("#new-ch .ch-pill input").forEach(inp => inp.disabled = !isUserRole);
   };
-  document.getElementById("new-cancel").onclick = ()=>tr.remove();
+  document.getElementById("new-cancel").onclick = ()=>{ card.style.display = "none"; };
+
   document.getElementById("new-save").onclick = async()=>{
     const email = document.getElementById("new-email").value.trim().toLowerCase();
-    const pass  = document.getElementById("new-pass").value;
     const role  = document.getElementById("new-role").value;
-    const channels = role === "user" ? readChannels(tr.querySelector(".ch-pills")) : ALL_CH_KEYS.slice();
-    if(!email || !pass){ alert("Email y contraseña son obligatorios"); return; }
-    if(pass.length < 6){ alert("Mínimo 6 caracteres"); return; }
-    if(USERS.some(u => u.email.toLowerCase() === email)){ alert("Ya existe ese email"); return; }
+    const channels = role === "user" ? readChannels(document.getElementById("new-ch")) : ALL_CH_KEYS.slice();
+    if(!email){ alert("El email es obligatorio"); return; }
+    if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ alert("Ese email no se ve válido"); return; }
+    if(USERS.some(u => u.email.toLowerCase() === email)){ alert("Ya existe un usuario con ese email"); return; }
     if(role === "user" && channels.length === 0){
       if(!confirm("Este user no tiene canales asignados — no podrá ver nada. ¿Crear igual?")) return;
-    }
-
-    let adminPw = ADMIN_PASS;
-    if(!adminPw){
-      adminPw = prompt("Confirma tu contraseña de admin (se perdió tras recargar la página):");
-      if(!adminPw) return;
-      ADMIN_PASS = adminPw;
     }
 
     const btn = document.getElementById("new-save");
     btn.disabled = true; btn.textContent = "Creando…";
     try{
-      const r = await fetch("/.netlify/functions/send-invite", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization":"Bearer "+AUTH_TOKEN },
-        body: JSON.stringify({
-          adminEmail: SESSION.email,
-          adminPassword: adminPw,
-          newUser: { email, password: pass, role, channels },
-        }),
-      });
-      const j = await r.json().catch(()=>({error:"respuesta inválida"}));
-      if(!r.ok && r.status !== 207){
-        if(r.status === 403) ADMIN_PASS = null; // contraseña no válida → re-prompt next time
-        throw new Error(j.error || ("HTTP "+r.status));
-      }
+      const d = await inviteCall("create", { email, role, channels });
+      card.style.display = "none";
       await loadUsers();
       paintUsersTable();
-      if(j.email_sent){ toast("Usuario creado y email enviado ✓"); }
-      else {
-        // El alta sí se hizo; el correo no salió. Entregamos las credenciales al
-        // admin en un bloque copiable para que las mande por WhatsApp.
-        const c = j.credenciales || { email, password: pass, role, channels, url: location.origin };
-        const texto = `Ya tienes acceso al Sistema de Reportes de Selvadentro 👇\n\n`
-          + `Liga: ${c.url || location.origin}\n`
-          + `Usuario: ${c.email}\n`
-          + `Contraseña: ${c.password}\n\n`
-          + `Te recomendamos cambiarla en cuanto entres.`;
-        try{ await navigator.clipboard.writeText(texto); toast("Usuario creado ✓ · credenciales copiadas al portapapeles"); }
-        catch(_){ toast("Usuario creado ✓ · el correo no salió"); }
-        prompt("El usuario quedó creado, pero el correo automático no se envió ("
-          + (j.motivo || "email no configurado")
-          + ").\n\nCopia este mensaje y mándaselo por WhatsApp:", texto);
-      }
+      await entregarLiga(email, d.link, "Usuario creado ✓");
     }catch(e){
       alert("Error: "+e.message);
-      btn.disabled = false; btn.textContent = "Crear";
+    }finally{
+      btn.disabled = false; btn.textContent = "Crear y copiar liga";
     }
   };
 }

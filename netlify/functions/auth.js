@@ -38,6 +38,11 @@ exports.handler = async (event) => {
       if (!email || !pass) return S.json(400, { error: "Faltan email o contraseña" });
       const users = await S.getUsers();
       const u = S.findUser(users, email);
+      // Invitado que todavía no abre su liga: no tiene hash. Decirlo, en vez de
+      // mandarlo a adivinar una contraseña que nunca existió.
+      if (u && !u.hash) {
+        return S.json(403, { error: "Tu invitación sigue pendiente: abre la liga que te mandaron para definir tu contraseña. Si ya venció, pide una nueva." });
+      }
       if (!u || S.sha256Hex(u.salt, pass) !== u.hash) {
         return S.json(401, { error: "Email o contraseña incorrectos" });
       }

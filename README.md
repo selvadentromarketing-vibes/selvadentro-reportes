@@ -27,28 +27,52 @@ Producción: https://team.selvadentrotulum.com (Netlify site: `slvd-reportes`).
     oportunidades, usuarios) para **SLA y Seguimiento** (requiere canal
     `crm_live`, `direccion_comercial` o admin).
   - `kpi-analyze` / `notes-analyze` — conclusiones ejecutivas con Claude (requieren sesión).
-  - `send-invite` — alta de usuarios + email vía Resend (re-verifica la contraseña del admin).
+  - `invite` — alta de usuarios por **liga mágica**: `create` / `relink` (admin, con su token de sesión)
+    y `peek` / `claim` (públicas, para que la persona invitada defina su contraseña). No usa
+    ningún proveedor de correo: la liga se manda por WhatsApp.
   - `lib/shared.js` — acceso al kv, firma/verificación de tokens, helpers compartidos.
 
 ## Variables de entorno (Netlify → Site settings → Environment variables)
 
 | Variable | Usada por | Descripción |
 |---|---|---|
-| `SUPABASE_URL` | kv, auth, send-invite | URL del proyecto Supabase del backend (`https://vsnggxcuznleuvoyoenn.supabase.co` — cuenta de Selvadentro) |
-| `SUPABASE_ANON_KEY` | kv, auth, send-invite | Anon key de ese proyecto (solo transporta la llamada al RPC) |
-| `KV_API_SECRET` | kv, auth, send-invite | Secreto que exige el RPC `slvd_kv_op` — **nunca en el cliente** |
+| `SUPABASE_URL` | kv, auth, invite | URL del proyecto Supabase del backend (`https://vsnggxcuznleuvoyoenn.supabase.co` — cuenta de Selvadentro) |
+| `SUPABASE_ANON_KEY` | kv, auth, invite | Anon key de ese proyecto (solo transporta la llamada al RPC) |
+| `KV_API_SECRET` | kv, auth, invite | Secreto que exige el RPC `slvd_kv_op` — **nunca en el cliente** |
 | `SESSION_SECRET` | todas | Llave HMAC de los tokens de sesión |
 | `GHL_API_KEY` | ghl-report, lead-quality | Private Integration Token de GoHighLevel (`pit-…`). Para Calidad de Leads necesita además el scope **contacts.readonly** |
 | `GHL_LOCATION_ID` | ghl-report, lead-quality | Location ID de la subcuenta GHL |
 | `WINDSOR_API_KEY` | lead-quality | Opcional; API key de Windsor.ai para inversión Meta/Google (sin ella la sección de inversión se apaga con aviso) |
 | `ANTHROPIC_API_KEY` | kpi-analyze, notes-analyze, lq-analyze | API key de console.anthropic.com (sin ella, la pestaña Conclusiones avisa y el resto funciona) |
-| `RESEND_API_KEY` | send-invite | API key de Resend (emails) |
-| `FROM_EMAIL` | send-invite | Remitente verificado en Resend |
-| `SITE_URL` | send-invite | Opcional; default `https://team.selvadentrotulum.com` |
+| `SITE_URL` | invite | Opcional; default `https://team.selvadentrotulum.com`. Es el dominio con el que se arman las ligas de invitación |
 
 Para desarrollo local, crea un `.env` en la raíz (está en `.gitignore`) con las mismas
 variables; `netlify dev` las inyecta automáticamente. Los valores actuales de
 `SUPABASE_*`, `KV_API_SECRET` y `SESSION_SECRET` están en el `.env` local de esta máquina.
+
+
+## Alta de usuarios (liga mágica)
+
+No hay proveedor de correo. El flujo es:
+
+1. Un admin abre **Usuarios → + Nuevo usuario**, pone el email, el rol y los canales.
+2. La app crea al usuario **sin contraseña** y devuelve una liga firmada
+   (`https://team.selvadentrotulum.com/#invite=…`), que además se copia al portapapeles.
+3. El admin la manda por WhatsApp. La persona la abre, define su propia contraseña y
+   entra directo.
+
+Propiedades de la liga:
+
+- Firmada con HMAC usando `SESSION_SECRET`, con **dominio separado** (`inv:`) para que
+  una invitación nunca pueda usarse como sesión ni al revés.
+- **Caduca a los 7 días** y es de **un solo uso**: lleva un `nonce` que también vive en el
+  usuario y se borra al consumirla, así una liga vieja reenviada por WhatsApp ya no sirve.
+- Va en el **hash** de la URL (`#invite=`), no en el query string, para que el token no
+  llegue al servidor ni quede en logs o en el `Referer`.
+- **Ninguna contraseña viaja por chat** y el kv solo guarda `salt` + `hash`.
+
+El botón **Nueva liga** de cada usuario sirve tanto para reinvitar como para restablecer
+contraseña, e invalida cualquier liga anterior.
 
 ## Desarrollo local
 

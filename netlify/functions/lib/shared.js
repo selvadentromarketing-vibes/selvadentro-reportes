@@ -94,6 +94,34 @@ function verifyToken(token) {
   } catch { return null; }
 }
 
+// --- Ligas de invitación (magic link) ---
+// Token aparte del de sesión y con dominio separado en el HMAC ("inv:"), para que
+// una liga de invitación jamás pueda usarse como sesión ni al revés. Lleva un nonce
+// que también se guarda en el usuario: al usarse se borra, así la liga es de un solo
+// uso y una liga vieja reenviada por WhatsApp ya no sirve.
+const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 días
+
+function signInvite({ email, nonce, ttlMs }) {
+  const payload = b64u(JSON.stringify({ p: "inv", email, nonce, exp: Date.now() + (ttlMs || INVITE_TTL_MS) }));
+  const sig = crypto.createHmac("sha256", SESSION_SECRET).update("inv:" + payload).digest("base64url");
+  return `inv1.${payload}.${sig}`;
+}
+
+function verifyInvite(token) {
+  if (!token || typeof token !== "string") return null;
+  const parts = token.split(".");
+  if (parts.length !== 3 || parts[0] !== "inv1") return null;
+  const expected = crypto.createHmac("sha256", SESSION_SECRET).update("inv:" + parts[1]).digest("base64url");
+  const a = Buffer.from(parts[2]), b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  try {
+    const payload = JSON.parse(unb64u(parts[1]));
+    if (payload.p !== "inv" || !payload.email || !payload.nonce || !payload.exp) return null;
+    if (Date.now() > payload.exp) return null;
+    return payload;
+  } catch { return null; }
+}
+
 // Sesión desde el header Authorization: Bearer <token>. Devuelve el payload o null.
 function authFromEvent(event) {
   const h = event.headers || {};
@@ -109,5 +137,6 @@ module.exports = {
   USERS_KEY, missingEnv, json, corsPreflight,
   kvGet, kvSet, kvDel, kvList, kvDump, kvGetJSON, kvSetJSON,
   sha256Hex, randomHex, signToken, verifyToken, authFromEvent,
+  signInvite, verifyInvite, INVITE_TTL_MS,
   getUsers, findUser,
 };
