@@ -161,10 +161,15 @@ async function sweepOne(id) {
   try {
     const cs = await ghl(`/conversations/search?locationId=${LOCATION_ID}&contactId=${encodeURIComponent(id)}&limit=20`);
     const convs = cs.conversations || [];
+    // Si el token tiene el scope de conversaciones pero NO el de mensajes, la búsqueda
+    // responde 200 y todos los mensajes vuelven vacíos: el reporte concluía "nunca
+    // contactado" y le ponía 1 de 5 a todos los asesores. Contamos los fallos para
+    // poder distinguir "no lo contactaron" de "no pudimos leerlo".
+    let convFallidas = 0;
     for (const cv of convs) {
       const lmd = ts(cv.lastMessageDate);
       if (lmd && (!out.lm || lmd > out.lm)) out.lm = lmd;
-      const msgs = await allMessages(cv.id).catch(() => []);
+      const msgs = await allMessages(cv.id).catch(() => { convFallidas++; return []; });
       for (const m of msgs) {
         const t = ts(m.dateAdded); if (!t) continue;
         if (m.direction === "outbound" && (!out.fo || t < out.fo)) out.fo = t;
@@ -189,6 +194,9 @@ async function sweepOne(id) {
         }
       }
     }
+    // Había conversaciones pero NINGUNA devolvió mensajes: es un fallo de lectura
+    // (típicamente falta el scope de mensajes en el token), no ausencia de contacto.
+    if (convs.length && convFallidas === convs.length) out.cerr = true;
   } catch (e) { out.cerr = true; /* conversaciones no disponibles: se marca, no se asume "sin contacto" */ }
   // Citas del contacto
   try {

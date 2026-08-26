@@ -1295,10 +1295,37 @@ const supaStore = {
 };
 const STORE = supaStore;
 const hasStore = true;
-async function sSet(k,v){ try{ if(hasStore) return await STORE.set(k,JSON.stringify(v)); }catch(e){} mem[k]=v; }
-async function sGet(k){ try{ if(hasStore){ const r=await STORE.get(k); return r?JSON.parse(r.value):null; } }catch(e){ return mem[k]??null; } return mem[k]??null; }
-async function sList(p){ try{ if(hasStore){ const r=await STORE.list(p); return r?r.keys:[]; } }catch(e){} return Object.keys(mem).filter(k=>k.startsWith(p)); }
-async function sDel(k){ try{ if(hasStore) return await STORE.delete(k); }catch(e){} delete mem[k]; }
+// Escrituras: si el backend falla, el error SE PROPAGA. Antes se lo tragaba un catch
+// vacío y caía a un objeto en memoria, así que la app decía "Guardado ✓" y al recargar
+// la semana no existía. El respaldo en memoria se conserva solo como copia local, pero
+// quien llama se entera del fallo y puede avisar.
+async function sSet(k,v){
+  mem[k]=v;
+  if(!hasStore) return;
+  try{ return await STORE.set(k,JSON.stringify(v)); }
+  catch(e){ throw new Error("No se pudo guardar en el servidor: "+(e.message||e)); }
+}
+async function sDel(k){
+  delete mem[k];
+  if(!hasStore) return;
+  try{ return await STORE.delete(k); }
+  catch(e){ throw new Error("No se pudo borrar en el servidor: "+(e.message||e)); }
+}
+// Lecturas: degradan a memoria, pero marcan que la lectura falló para que quien llama
+// pueda distinguir "no hay datos" de "no se pudieron leer los datos".
+let LECTURA_FALLIDA = false;
+const sReadFailed = ()=>LECTURA_FALLIDA;
+const sReadReset  = ()=>{ LECTURA_FALLIDA = false; };
+async function sGet(k){
+  try{ if(hasStore){ const r=await STORE.get(k); return r?JSON.parse(r.value):null; } }
+  catch(e){ LECTURA_FALLIDA = true; return mem[k]??null; }
+  return mem[k]??null;
+}
+async function sList(p){
+  try{ if(hasStore){ const r=await STORE.list(p); return r?r.keys:[]; } }
+  catch(e){ LECTURA_FALLIDA = true; }
+  return Object.keys(mem).filter(k=>k.startsWith(p));
+}
 
 /* ----- Caché de registros en memoria (evita lecturas masivas y rate-limit) ----- */
 const RECCACHE = {};                                  // { recKey: record }
@@ -1386,8 +1413,16 @@ async function saveWeek(){
   const w=currentWeekId(); if(!w){ toast("Selecciona la fecha de inicio primero"); return; }
   if(!isWeekEditable(w)){ toast("Solo puedes guardar la semana actual o la anterior"); return; }
   const dv=curDimVals(); const k=recKey(w,dv); const form=gatherForm();
-  recSet(k, form); await sSet(k, form);
-  if(form.responsable && form.responsable !== LAST_RESP[CH]){ LAST_RESP[CH]=form.responsable; await saveLastResp(); }
+  recSet(k, form);
+  try{
+    await sSet(k, form);
+  }catch(e){
+    // El toast decía "Guardado ✓" aunque el backend hubiera fallado. Ahora se dice.
+    alert("NO se guardó en el servidor.\n\n"+(e.message||e)+"\n\nLo capturado sigue en pantalla: revisa tu conexión y vuelve a pulsar Guardar. Si recargas la página ahora, se pierde.");
+    toast("⚠ No se guardó — revisa tu conexión");
+    return;
+  }
+  if(form.responsable && form.responsable !== LAST_RESP[CH]){ LAST_RESP[CH]=form.responsable; try{ await saveLastResp(); }catch(e){} }
   toast("Guardado ✓ "+w+(dv.length?(" · "+dv.join(" · ")):"")); renderChips();
 }
 function renderChips(){
@@ -1419,7 +1454,11 @@ function buildSeedMap(){
 }
 // Escribe a almacenamiento solo las semillas que aún NO existen guardadas (en segundo plano)
 async function persistSeeds(){
-  for(const k in SEEDMAP){ if(!STORED_KEYS.has(k)){ await sSet(k, SEEDMAP[k]); STORED_KEYS.add(k); } }
+  for(const k in SEEDMAP){
+    if(STORED_KEYS.has(k)) continue;
+    try{ await sSet(k, SEEDMAP[k]); STORED_KEYS.add(k); }
+    catch(e){ console.warn("Semilla no persistida:", k, e); }   // un fallo no debe abortar el resto
+  }
 }
 
 /* ===================== REPORTE ===================== */
@@ -1989,7 +2028,7 @@ async function crmSync(){
     }while(cursor);
     bar.style.width="100%"; lbl.textContent="Procesando…";
     crmState.agg = buildCrmAgg(boot, opps);
-    sSet(CRM_AGG_KEY, crmState.agg);
+    sSet(CRM_AGG_KEY, crmState.agg).catch(e=>toast("Cache del CRM no guardado: "+(e.message||e)));
     crmPopulateWeeks(); crmRender();
     toast("CRM sincronizado ✓ "+opps.length.toLocaleString()+" oportunidades");
   }catch(e){
@@ -2635,10 +2674,14 @@ function lqQualityTree(agg, leads, rangoSet){
     <td>${leads.reduce((a,l)=>a+(l.o||0),0)}</td><td>${leads.reduce((a,l)=>a+(l.w||0),0)}</td>
     <td>${spT?fmtMoney(spT):"—"}</td><td>—</td></tr>`;
   const pagados = leads.filter(l=>l.fuente==="Meta"||l.fuente==="Google").length;
+  const incompleto = (agg.fallos||[]).length ? `<div class="lq-meth" style="border-color:#a94436;background:#F2CFC9">
+    ⚠ <b>Esta sincronización quedó incompleta.</b> No se pudo traer: ${escAttr(agg.fallos.join(" · "))}.
+    Los ceros y los guiones de abajo son datos que faltan, <b>no</b> resultados reales. Vuelve a pulsar
+    <b>Sincronizar leads</b> cuando se resuelva.</div>` : "";
   const aviso = gap ? `<div class="lq-meth">⚠ <b>${gap}</b> de ${pagados} leads de Meta / Google llegaron <b>sin campaña en la atribución</b> (utm_campaign vacío) y se agrupan en "${LQ_SIN_CAMP}".
     Las campañas de la cuenta de anuncios sí aparecen abajo con su inversión, aunque no tengan leads empatados. Mientras los anuncios no pasen los parámetros UTM
     (utm_campaign, utm_content, utm_term) al formulario, no se puede saber qué campaña, conjunto o anuncio generó cada lead.</div>` : "";
-  return aviso + `<div class="table-scroll" style="margin-bottom:8px"><table class="cons lq-tree">
+  return incompleto + aviso + `<div class="table-scroll" style="margin-bottom:8px"><table class="cons lq-tree">
     <tr><th class="lft">Campaña / conjunto / anuncio</th><th class="lft">Familia</th>
       ${LQ_COLS.map(L=>`<th title="${L.name}">${L.short}</th>`).join("")}
       <th>Total</th><th>Calif.</th><th>%</th><th title="OPP = oportunidad real de cierre: Seguimiento de OPP, Carta oferta, Apartado o posterior. La cotización enviada aún no cuenta.">OPPs</th><th title="WON = venta cerrada">WONs</th><th>Inversión</th><th>Costo/lead</th></tr>
@@ -3322,6 +3365,7 @@ async function lqPersist(agg){
 async function lqSync(){
   if(lqState.syncing) return;
   lqState.syncing = true;
+  const fallos = [];                 // qué partes de la sincronización no se pudieron traer
   const btn=document.getElementById("lq-refresh"), prog=document.getElementById("lq-progress"),
         bar=document.getElementById("lq-progress-bar"), lbl=document.getElementById("lq-progress-lbl");
   btn.disabled=true; btn.textContent="Sincronizando…"; prog.style.display="block"; bar.style.width="3%";
@@ -3362,17 +3406,23 @@ async function lqSync(){
         seen += res.fetched; oc = res.cursor;
         lbl.textContent=`Sincronizando oportunidades… ${seen.toLocaleString()}`;
       }while(oc);
-    }catch(e){ toast("Oportunidades no disponibles: "+(e.message||e)); }
+    }catch(e){ fallos.push("oportunidades del CRM (OPPs y WONs salen en 0)"); toast("Oportunidades no disponibles: "+(e.message||e)); }
     bar.style.width="92%"; lbl.textContent="Consultando inversión y anuncios (Windsor)…";
     let spendRows=[], adRows=[];
     if(boot.windsor){
       try{ const sp = await lqFn({action:"spend", start:b0.startYMD, end:b1.endYMD}); spendRows = sp.rows||[]; }
-      catch(e){ toast("Windsor no respondió: "+(e.message||e)); }
+      catch(e){ fallos.push("inversión de Windsor (la columna Inversión sale vacía)"); toast("Windsor no respondió: "+(e.message||e)); }
       try{ const ad = await lqFn({action:"ads", start:b0.startYMD, end:b1.endYMD}); adRows = ad.ads||[]; }
-      catch(e){ toast("Detalle por anuncio no disponible: "+(e.message||e)); }
+      catch(e){ fallos.push("detalle por anuncio de Windsor (no hay conjuntos ni anuncios)"); toast("Detalle por anuncio no disponible: "+(e.message||e)); }
+    } else {
+      fallos.push("Windsor no está configurado (sin WINDSOR_API_KEY)");
     }
     bar.style.width="100%"; lbl.textContent="Procesando…";
     lqState.agg = buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows);
+    // Sincronización incompleta: se marca EN el agregado para que quien lo lea del
+    // cache lo vea en pantalla. Antes el error era solo un toast pasajero que veía
+    // quien pulsó Sincronizar, y el resto del equipo leía los ceros como si fueran datos.
+    lqState.agg.fallos = fallos;
     lqPersist(lqState.agg);
     lqPopulateWeeks(); lqRender();
     toast("Leads sincronizados ✓ "+rawLeads.length.toLocaleString()+" contactos");
@@ -3552,7 +3602,9 @@ function slaScoreAsesor(arr){
   const opp = arr.reduce((a,l)=>a+(l.opp||0),0);
   return { N, sub, global, pcts, q, qTot, qIndex, oppRate: pct(opp), opp,
            small: N < SLA_MIN_N, bkDen, bk, desc, segMedido,
-           citas: arr.reduce((a,l)=>a+l.ap.tot,0), showed: arr.reduce((a,l)=>a+l.ap.sh,0) };
+           citas: arr.filter(l=>!l.ad).reduce((a,l)=>a+l.ap.tot,0),
+           showed: arr.filter(l=>!l.ad).reduce((a,l)=>a+l.ap.sh,0),
+           sinCitas: arr.filter(l=>l.ad).length };
 }
 
 // Resultado ajustado por calidad: compara el percentil de la tasa de oportunidades
@@ -3683,6 +3735,9 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr)
              fo:sw.fo||null, fi:sw.fi||null, lm:sw.lm||null, slaAt, slaEf, z48,
              // sd = sin datos de conversación (lote fallido o sin permisos): no es "sin contacto"
              sd: !!(sw.sin || sw.cerr),
+             // ad = no se pudieron leer las citas: tampoco es "no tuvo citas". El backend
+             // ya lo marcaba (aerr) pero el front nunca lo miraba y contaba 0 citas reales.
+             ad: !!(sw.sin || sw.aerr),
              // Desempeño del asesor: contacto MANUAL, reloj con horario, seguimiento y break up
              foM: sw.foM||null, calls: sw.calls||0, chans: sw.chans||[], deliv: sw.deliv||null,
              bucket: (()=>{ const r=slaReloj(created); return slaBucket(sw.foM && sw.foM>=r ? (sw.foM-r)/60000 : (sw.foM ? 0 : null)); })(),
@@ -3723,7 +3778,9 @@ function slaRender(){
   const slasEf = leads.map(l=>l.slaEf).filter(x=>x!=null);   // contacto efectivo (definición del Anexo 1)
   const slasAt = leads.map(l=>l.slaAt).filter(x=>x!=null);   // primer intento
   const und = (mins)=> slasEf.length ? Math.round(slasEf.filter(x=>x<=mins*60000).length/slasEf.length*100)+"%" : "—";
-  const apTot = leads.reduce((a,l)=>a+l.ap.tot,0), apSh = leads.reduce((a,l)=>a+l.ap.sh,0), apNs = leads.reduce((a,l)=>a+l.ap.ns,0);
+  const conCitas = leads.filter(l=>!l.ad);        // solo los que sí se pudieron leer
+  const apTot = conCitas.reduce((a,l)=>a+l.ap.tot,0), apSh = conCitas.reduce((a,l)=>a+l.ap.sh,0), apNs = conCitas.reduce((a,l)=>a+l.ap.ns,0);
+  const sinCitas = leads.length - conCitas.length;
 
   const kpi = (v,l)=>`<div class="crm-kpi"><div class="k-val">${v}</div><div class="k-lbl">${l}</div></div>`;
   const conDatos = leads.filter(l=>!l.sd);
@@ -3758,7 +3815,7 @@ function slaRender(){
         <td class="pct">${pcti(cd.filter(l=>l.fi).length,cd.length)}</td>
         <td>${fmtDur(slaMedian(sa))}</td><td>${fmtDur(slaMedian(ss))}</td><td class="pct">${u15}</td><td class="pct">${u60}</td>
         <td class="pct" style="${z!=null?(z>=40?"color:var(--verde-prof);font-weight:600":"color:#a94436"):""}">${z==null?"—":z+"%"}</td>
-        <td>${arr.reduce((a,l)=>a+l.ap.tot,0)}</td><td class="pct">${(sh+ns)?pcti(sh,sh+ns):"—"}</td></tr>`;
+        <td>${arr.filter(l=>!l.ad).reduce((a,l)=>a+l.ap.tot,0)}</td><td class="pct">${(sh+ns)?pcti(sh,sh+ns):"—"}</td></tr>`;
     }).join("");
     return `<div class="table-scroll" style="margin-bottom:18px"><table class="cons">
       <tr><th class="lft">${title}</th><th>Leads</th><th>1er toque</th><th>Efectivos</th><th>Med. intento</th><th>Med. efectivo</th><th>≤15m</th><th>≤60m</th><th>Cita ≤48h</th><th>Citas</th><th>Show</th></tr>
@@ -3767,6 +3824,9 @@ function slaRender(){
   };
   if(sinDatos){
     html += `<div class="lq-meth">⚠ <b>${sinDatos}</b> de ${leads.length} leads quedaron <b>sin datos de conversación</b> (lote fallido o permisos del token) y están excluidos de los porcentajes de SLA y de la lista de "sin toque" — no se asume que no fueron contactados. Vuelve a generar el reporte para reintentarlos.</div>`;
+  }
+  if(sinCitas){
+    html += `<div class="lq-meth">⚠ <b>${sinCitas}</b> de ${leads.length} leads quedaron <b>sin datos de citas</b> (mismo motivo) y están fuera del conteo de citas y del show rate. No se asume que no tuvieron cita.</div>`;
   }
   html += slaAsesorSection(agg);
   html += groupTbl("Asesor", l=>l.u, name);
@@ -3868,7 +3928,7 @@ async function slaSync(){
     try{ const u = await slaFn({action:"users"}); usersMap = u.users || {}; fieldsArr = u.fields || []; }catch(e){}
     bar.style.width="100%"; lbl.textContent="Procesando…";
     slaState.agg = buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr);
-    sSet(SLA_AGG_KEY, slaState.agg);
+    sSet(SLA_AGG_KEY, slaState.agg).catch(e=>toast("Cache del reporte no guardado: "+(e.message||e)));
     slaPopulateWeeks(); slaRender();
     toast("Reporte SLA generado ✓ "+contactsArr.length+" leads analizados");
   }catch(e){
@@ -4834,7 +4894,7 @@ async function renderDBTable(ch){
   document.getElementById("db-table").innerHTML=`<thead>${head}</thead><tbody>${body||`<tr><td class="lft" colspan="${colspan}"><em>Sin registros en este canal.</em></td></tr>`}</tbody>`;
   document.querySelectorAll("#db-table .db-load").forEach(b=>b.onclick=()=>dbLoad(b.dataset.ch,b.dataset.key));
   if(adm){
-    document.querySelectorAll("#db-table .db-del").forEach(b=>b.onclick=async()=>{ if(confirm("¿Eliminar este registro de la base de datos? No se puede deshacer.")){ recDel(b.dataset.key); await sDel(b.dataset.key); toast("Registro eliminado"); renderDBTable(ch); } });
+    document.querySelectorAll("#db-table .db-del").forEach(b=>b.onclick=async()=>{ if(confirm("¿Eliminar este registro de la base de datos? No se puede deshacer.")){ recDel(b.dataset.key); try{ await sDel(b.dataset.key); toast("Registro eliminado"); }catch(e){ alert("No se pudo borrar en el servidor: "+(e.message||e)); } renderDBTable(ch); } });
     document.querySelectorAll("#db-table .db-dup").forEach(b=>b.onclick=()=>dbDuplicate(b.dataset.ch,b.dataset.key));
   }
 }

@@ -747,7 +747,42 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   let RESP={};
   const state={ active:'rrss', view:'reporte', ingresoRendered:null };
 
-  async function loadMod(M){ try{ const r=await window.storage.get(M.key); if(r&&r.value) M.records=JSON.parse(r.value); }catch(e){ M.records={}; } if((!M.records||Object.keys(M.records).length===0)&&Object.keys(M.seed).length){ M.records=JSON.parse(JSON.stringify(M.seed)); await saveRec(M); } try{ const m=await window.storage.get(M.mkey); if(m&&m.value) M.metas=JSON.parse(m.value); }catch(e){} if(!M.metas||Object.keys(M.metas).length===0){ M.metas=JSON.parse(JSON.stringify(M.seedMetas)); await saveMeta(M); } const ks=Object.keys(M.records).sort(); M.pval=ks.length?ks[ks.length-1]:(M.period==='week'?isoWeekOf(new Date()):(new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0'))); }
+  // Un fallo de LECTURA no es "no hay datos": antes se interpretaba así y se escribía
+  // la semilla de ejemplo ENCIMA de los registros reales que ya vivían en Supabase.
+  // Ahora, si la lectura falla, no se escribe nada y se avisa.
+  async function loadMod(M){
+    let leyoOk = true;
+    try{
+      const r = await window.storage.get(M.key);
+      if(r && r.value) M.records = JSON.parse(r.value);
+    }catch(e){ leyoOk = false; M.records = {}; console.error("No se pudieron leer los registros de "+M.key, e); }
+
+    if(leyoOk && (!M.records || Object.keys(M.records).length===0) && Object.keys(M.seed).length){
+      M.records = JSON.parse(JSON.stringify(M.seed));
+      await saveRec(M);                      // solo sembramos cuando SABEMOS que está vacío
+    }
+
+    let leyoMetas = true;
+    try{
+      const m = await window.storage.get(M.mkey);
+      if(m && m.value) M.metas = JSON.parse(m.value);
+    }catch(e){ leyoMetas = false; console.error("No se pudieron leer las metas de "+M.mkey, e); }
+
+    if(leyoMetas && (!M.metas || Object.keys(M.metas).length===0)){
+      M.metas = JSON.parse(JSON.stringify(M.seedMetas));
+      await saveMeta(M);
+    }
+
+    if(!leyoOk || !leyoMetas){
+      M._lecturaFallida = true;
+      try{ alert("No se pudieron leer los datos guardados de "+M.name+".\n\nNo se escribió nada para no pisar la información real. Recarga la página cuando vuelva la conexión."); }catch(_){}
+    } else { M._lecturaFallida = false; }
+
+    const ks = Object.keys(M.records).sort();
+    M.pval = ks.length ? ks[ks.length-1]
+      : (M.period==='week' ? isoWeekOf(new Date())
+        : (new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')));
+  }
   async function saveRec(M){ try{ await window.storage.set(M.key,JSON.stringify(M.records)); }catch(e){console.error(e);} }
   async function saveMeta(M){ try{ await window.storage.set(M.mkey,JSON.stringify(M.metas)); }catch(e){console.error(e);} state.ingresoRendered=null; }
 
