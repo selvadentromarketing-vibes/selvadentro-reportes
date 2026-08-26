@@ -274,6 +274,7 @@ async function opps({ startAfter, startAfterId, since }) {
     }
     const batch = data.opportunities || [];
     batch.forEach((o) => out.push({
+      ct: o.contactId || (o.contact && o.contact.id) || "",   // para fijar el traspaso a ventas
       u: o.assignedTo || "",
       st: o.status || "open",
       c: o.createdAt || "",

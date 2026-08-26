@@ -2194,7 +2194,11 @@ function lqAutoQualify(l){
   const ap = l.ap || {tot:0,sh:0,ns:0};
   const pres = lqParseMoney(l.pres), hor = lqParseMonths(l.hor);
   const valor = l.wv || l.ov || 0;
-  const presupuesto = pres != null ? pres : (valor >= LQ_UMBRAL_USD ? valor : null);
+  // El monto de la oportunidad es el PRECIO DE LISTA del lote, no lo que el prospecto
+  // declaró que puede invertir (confirmado con el cliente el 2026-08-26). Antes se usaba
+  // como presupuesto cuando el campo venía vacío, lo que inflaba SQL Selvadentro: casi
+  // cualquier oportunidad supera los 100k y todas parecían de alto presupuesto.
+  const presupuesto = pres;
   const noAns = (tags.match(/d\d+-no-a?n?swer/g)||[]).length;
   const respondio = LQ_TAGS_RESP.test(tags) || ap.sh>0 || LQ_RX.contacto.test(stage) || LQ_RX.fuerte.test(stage);
 
@@ -3537,7 +3541,7 @@ async function showLQ(){
 // Reporte de disciplina comercial directo del CRM: SLA de primera respuesta por
 // asesor y canal, leads >7 días sin toque, trabajados vs contactados efectivos,
 // citas y show rate, y OPPs/WONs por asesor. Con nombres, acumulable por semanas.
-const SLA_AGG_KEY = "sla:agg:v3";   // v3: guarda el histograma de horas para medir el horario real
+const SLA_AGG_KEY = "sla:agg:v4";   // v4: reloj 24/7 y arranque en el traspaso a ventas
 const SLA_STALE_MS = 7*86400e3; // "sin toque" = 7 días sin mensaje
 const slaState = { built:false, agg:null, syncing:false, asesor:"" };   // asesor:"" = todo el equipo
 
@@ -3590,9 +3594,11 @@ function fmtDur(ms){
 /* ===== Desempeño del asesor (Protocolo Selvadentro, ago 2026) =====
    Todo se calcula del feed real del CRM, distinguiendo contacto MANUAL del asesor
    de las automatizaciones. Los campos manuales de GHL se leen aparte para comparar. */
-// Horario laboral para el SLA de leads creados fuera de horario. PENDIENTE de
-// confirmar con Dirección: al cambiarlo aquí se recalcula todo el reporte.
-const SLA_HORARIO = { abre: 9, cierra: 18, dias: [1,2,3,4,5] };   // L-V 9:00-18:00 Tulum
+// Horario del reloj de respuesta. El cliente confirmó el 2026-08-26 que se mide 24/7:
+// no hay ventana laboral, el reloj corre desde que entra el lead, noches y fines de
+// semana incluidos. `activo:false` deja la ventana apagada; si algún día quieren
+// volver a una jornada, basta con poner activo:true y ajustar las horas.
+const SLA_HORARIO = { activo: false, abre: 9, cierra: 18, dias: [1,2,3,4,5] };
 const SLA_BUCKETS = [
   { id:"b5",   max:5,   name:"0-5 min",   color:"var(--olivo)" },
   { id:"b30",  max:30,  name:"5-30 min",  color:"#8ca06a" },
@@ -3600,9 +3606,11 @@ const SLA_BUCKETS = [
   { id:"out",  max:Infinity, name:"> 2 h o sin contacto", color:"#a94436" },
 ];
 
-// Inicio del reloj: si el lead entró fuera de horario, arranca en la apertura del
-// siguiente día hábil (decisión del 25 ago 2026).
+// Inicio del reloj. Con SLA_HORARIO.activo en false (lo vigente) el reloj arranca en
+// el instante en que entra el lead: se mide 24/7 y nada se "perdona" por ser de noche
+// o fin de semana.
 function slaReloj(created){
+  if(!SLA_HORARIO.activo) return created;
   const d = new Date(created - LQ_TZ_MS);            // a hora Tulum
   const dow = d.getUTCDay(), h = d.getUTCHours();
   const hábil = SLA_HORARIO.dias.includes(dow);
@@ -3805,17 +3813,35 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr)
   const F = { calif: find(/calificaci[oó]n.*lead|lead.*calificaci[oó]n/i) || find(/calificaci[oó]n/i),
               segSem: find(/seguimiento_semanal|seguimiento semanal/i),
               segMes: find(/seguimiento_mensual|seguimiento mensual/i) };
+  // Traspaso de marketing a ventas: el cliente confirmó el 2026-08-26 que es cuando
+  // el lead ENTRA AL PIPELINE, es decir cuando se le crea la oportunidad. Para un lead
+  // frío que llegó hace meses y hoy se empuja a ventas, el reloj del asesor debe
+  // arrancar ahí, no en la fecha en que el contacto se creó.
+  const traspaso = {};
+  for(const o of (oppsArr||[])){
+    if(!o.ct || !o.c) continue;
+    const t = new Date(o.c).getTime();
+    if(!isFinite(t) || t<=0) continue;
+    if(!traspaso[o.ct] || t < traspaso[o.ct]) traspaso[o.ct] = t;   // la primera del contacto
+  }
+
   const leads = contactsArr.map(c=>{
     const wk = lqWeekOf(c.c); if(!wk || !rangoSet.has(wk)) return null;
     const sw = sweepMap[c.id] || {sin:true};
-    const created = new Date(c.c).getTime();
+    const alta = new Date(c.c).getTime();
+    // Si el lead entró al pipeline DESPUÉS de darse de alta, ese es el momento en que
+    // ventas se hizo cargo y desde ahí se le mide.
+    const hand = traspaso[c.id] || null;
+    const created = (hand && hand > alta) ? hand : alta;
     // El Anexo 1 define el SLA de primera respuesta contra el CONTACTO EFECTIVO
     // (el lead respondió), no contra el intento. Se miden los dos por separado.
     const slaAt = (sw.fo && sw.fo>=created) ? sw.fo-created : null;   // hasta el 1er intento
     const slaEf = (sw.fi && sw.fi>=created) ? sw.fi-created : null;   // hasta la respuesta del lead
     const z48 = (sw.ap && sw.ap.f && sw.ap.f>=created) ? (sw.ap.f-created) <= 48*3600e3 : false;
     const canal = lqSourceCamp({tags:c.tags, src:c.src, attr:c.attr}).fuente;
-    return { n:c.n, wk, canal, u:c.u||"", created,
+    return { n:c.n, wk, canal, u:c.u||"", created, alta,
+             // hand = el reloj arrancó en el traspaso a ventas, no en el alta del contacto
+             hand: (hand && hand > alta) ? hand : null,
              fo:sw.fo||null, fi:sw.fi||null, lm:sw.lm||null, slaAt, slaEf, z48,
              // sd = sin datos de conversación (lote fallido o sin permisos): no es "sin contacto"
              sd: !!(sw.sin || sw.cerr),
@@ -3948,6 +3974,10 @@ function slaRender(){
     ${oppRows || `<tr><td colspan="4" class="lft" style="color:var(--neutro);font-style:italic">Sin oportunidades en el rango.</td></tr>`}
   </table></div>`;
 
+  const conHand = leads.filter(l=>l.hand).length;
+  if(conHand){
+    html += `<div class="lq-meth">ℹ En <b>${conHand}</b> de ${leads.length} leads el reloj no arranca en la fecha de alta del contacto sino en el <b>traspaso a ventas</b> (cuando entró al pipeline). Son leads que estuvieron un tiempo en marketing antes de asignarse: medirlos desde su alta los haría ver como respuestas de días o semanas.</div>`;
+  }
   html += `<div class="lq-meth"><b>Definiciones</b> (Anexo 1) —
     <b>1er toque / intento:</b> primer mensaje saliente (SMS/WhatsApp/email/llamada) registrado en el CRM ·
     <b>Contacto efectivo:</b> el lead respondió — hubo conversación, no solo un intento ·
@@ -5707,15 +5737,18 @@ function diagSeccionHorario(){
     const pct = Math.round(n/totD*100);
     return `<span class="chip" style="background:${pct>=8?"var(--verde-ok-bg)":"var(--crema-2)"};color:${pct>=8?"var(--verde-ok-tx)":"var(--neutro)"}">${DIAS[i]} ${pct}%</span>`;
   }).join(" ");
-  const cfg = `${SLA_HORARIO.abre}:00–${SLA_HORARIO.cierra}:00, ${SLA_HORARIO.dias.map(d=>DIAS[d]).join(" ")}`;
-  const coincide = ini>=SLA_HORARIO.abre-1 && fin<=SLA_HORARIO.cierra+1;
+  const cfg = SLA_HORARIO.activo
+    ? `${SLA_HORARIO.abre}:00–${SLA_HORARIO.cierra}:00, ${SLA_HORARIO.dias.map(d=>DIAS[d]).join(" ")}`
+    : "24/7 — sin ventana laboral";
+  const fuera = tot ? Math.round(hrs.reduce((a,n,h)=>a+((h<8||h>20)?n:0),0)/tot*100) : 0;
   return `<h3 class="diag-h">Horario real de trabajo</h3>
-    <p class="hint" style="margin-top:-2px">Medido de ${tot.toLocaleString()} acciones manuales de los asesores en el rango del último reporte. Esto <b>no</b> decide la política: la propone para que Dirección la confirme.</p>
+    <p class="hint" style="margin-top:-2px">Medido de ${tot.toLocaleString()} acciones manuales de los asesores en el rango del último reporte. El reloj del SLA ya no depende de esto: se decidió medir 24/7. Sirve para entender cómo trabaja el equipo.</p>
     <div class="lq-meth">
-      <b>Observado:</b> el 90% de la actividad ocurre entre las <b>${ini}:00</b> y las <b>${fin}:59</b>, hora de Tulum.
-      <br><b>Configurado hoy en la app:</b> ${escAttr(cfg)}.
-      ${coincide ? `<br><span style="color:var(--verde-ok-tx)">✓ Coinciden: el reloj del SLA está midiendo contra un horario realista.</span>`
-                 : `<br><span style="color:#a94436">⚠ No coinciden. Si el horario configurado está mal, el reloj del SLA arranca o se detiene a la hora equivocada y los tiempos de respuesta salen mal para todos.</span>`}
+      <b>Configurado hoy:</b> ${escAttr(cfg)} — el reloj corre desde que entra el lead, sin perdonar noches ni fines de semana.
+      <br><b>Observado:</b> el 90% de la actividad ocurre entre las <b>${ini}:00</b> y las <b>${fin}:59</b>, hora de Tulum.
+      <br><b>Fuera de 8:00–20:00:</b> ${fuera}% de las acciones.
+      ${fuera >= 15 ? `<br><span style="color:var(--verde-ok-tx)">Con esa actividad nocturna, medir 24/7 es coherente: el equipo sí responde fuera de oficina.</span>`
+                    : `<br><span style="color:var(--cobre)">Casi toda la actividad es en horario de oficina. Medir 24/7 penaliza los leads que entran de noche o en fin de semana — es una decisión tomada a propósito, no un error.</span>`}
       <div style="display:flex;gap:2px;align-items:flex-end;margin:14px 0 6px">${barras}</div>
       <div style="margin-top:8px">${dias}</div>
     </div>`;

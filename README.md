@@ -130,11 +130,15 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
 - **Punto de estado activo/pausado** (verde/rojo/gris) en campaña, conjunto y
   anuncio, tomado del último estado que reporta Windsor; un conjunto o campaña
   cuenta como activo si al menos uno de sus anuncios lo está.
-- **OPP = cotización enviada** (Anexo 2), no cualquier registro del pipeline: se
-  detecta la primera etapa de cotización/propuesta de cada pipeline y solo cuentan
-  las oportunidades que llegaron a esa etapa o a una posterior. Los registros del
-  pipeline se guardan aparte (`pr`) y alimentan las reglas de calificación.
-  **WON = venta cerrada.**
+- **OPP = oportunidad real de cierre**, no cualquier registro del pipeline. En el
+  pipeline de Selvadentro arranca en **"Seguimiento de OPP"** y cuentan también
+  "Carta oferta", "Apartado" y las etapas posteriores. **"Cotización enviada" NO
+  cuenta** (confirmado con el cliente el 2026-08-26): una cotización entregada
+  todavía no es una oportunidad de cierre. Las etapas terminales negativas
+  ("Perdido", "Descalificado") quedan fuera aunque estén al final del tablero. Los
+  registros del pipeline se guardan aparte (`pr`) y alimentan las reglas de
+  calificación. **WON = venta cerrada.** La pestaña de Diagnóstico lista las etapas
+  que hoy cuentan como OPP, leídas del CRM.
 - **Cuatro sub-pestañas**: (1) **Datos de Campañas** — inversión y desempeño por
   campaña desde Windsor, desplegable a anuncios por plataforma; (2) **Calidad de
   Lead** — mezcla de calificación desplegable de campaña → conjunto → anuncio;
@@ -187,8 +191,10 @@ del CRM y con nombres:
   se muestra sola; una sub-nota sin dato queda N/A y no la baja.
   - **Contacto manual**: se excluyen automatizaciones (`workflow`, `campaign`,
     `bulk_actions`) y actividad sin usuario asignado, por `source` y `userId`.
-  - **Reloj del SLA**: leads creados fuera de horario arrancan en la apertura del
-    siguiente día hábil (configurable en `SLA_HORARIO`, hoy L-V 9-18 hora Tulum).
+  - **Reloj del SLA**: corre **24/7** desde que entra el lead (confirmado con el
+    cliente el 2026-08-26). No hay ventana laboral: noches y fines de semana cuentan.
+    Si algún día se quiere volver a una jornada, `SLA_HORARIO.activo = true` reactiva
+    el desplazamiento a la apertura del siguiente día hábil.
   - **Break-up** detectado del feed: ≥5 intentos de llamada + SMS/WhatsApp + email
     sin respuesta del lead. Denominador: descalificados del asesor, o el total si
     no tiene.
