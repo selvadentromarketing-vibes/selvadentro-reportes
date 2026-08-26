@@ -1937,7 +1937,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v4";   // v4: OPP = cotización enviada (antes contaba todo registro del pipeline)
+const LQ_AGG_KEY = "lq:agg:v6";   // v6: OPP desde "Seguimiento de OPP" (v5: campaña solo desde la atribución real)
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 const LQ_TZ = "-05:00";                 // Tulum (America/Cancun): UTC-5 fijo, sin DST
@@ -2119,26 +2119,50 @@ function lqStage(level, tagsLower){
   return "1er toque";
 }
 
-// Fuente y campaña: primero la atribución utm del contacto; si falta, heurística
-// por tags de campaña (seguridad → Meta MX · premium/escape → Meta US/CA ·
-// accesibilidad/google → Google · webinar-registered → Webinar).
+const LQ_SIN_CAMP = "(sin campaña atribuida)";
+const LQ_SIN_GRP  = "(sin conjunto atribuido)";
+const LQ_SIN_AD   = "(sin anuncio atribuido)";
+
+// Señal de campaña que dan los tags cuando la atribución UTM viene vacía. Es una
+// PISTA, no un nombre de campaña: se muestra como sub-agrupación de los leads sin
+// atribuir, nunca como si fuera la campaña real (antes se inventaban los nombres
+// "INVESTORS_US/CA_ESCAPE" e "INVESTORS_MX_DYNAMIC", lo que metía todos los leads
+// de Meta en una sola campaña y hacía desaparecer las de México del reporte).
+function lqTagHint(t){
+  if(t.includes("seguridad")) return "Señal por tags · MX / seguridad";
+  if(t.includes("premium") || t.includes("escape")) return "Señal por tags · US-CA / escape";
+  if(t.includes("accesibilidad")) return "Señal por tags · accesibilidad";
+  return "";
+}
+
+// Fuente y campaña: la campaña SOLO sale de la atribución del contacto. Los tags
+// y el utm_source únicamente deciden la plataforma (Meta / Google / Webinar).
 function lqSourceCamp(lead){
   const t = (lead.tags||[]).map(x=>String(x).toLowerCase());
   const blob = ((lead.src||"")+" "+(lead.attr?.src||"")+" "+(lead.attr?.med||"")).toLowerCase();
-  const camp = lead.attr?.camp || "";
-  if(t.includes("webinar-registered")) return { fuente:"Webinar", camp: camp || "Registro a webinar · funnel MKT" };
+  const camp = String(lead.attr?.camp || "").trim();
+  const hint = lqTagHint(t);
+  if(t.includes("webinar-registered")) return { fuente:"Webinar", camp: camp || "Registro a webinar · funnel MKT", hint };
   if(/google|adwords|gclid|ppc/.test(blob) || t.includes("google") || t.includes("accesibilidad"))
-    return { fuente:"Google", camp: camp || "Google Ads · PPC" };
+    return { fuente:"Google", camp: camp || LQ_SIN_CAMP, hint };
   if(/facebook|instagram|meta|(^|\W)fb(\W|$)|(^|\W)ig(\W|$)/.test(blob) || t.includes("seguridad") || t.includes("premium") || t.includes("escape"))
-    return { fuente:"Meta", camp: camp || (t.includes("premium")||t.includes("escape") ? "INVESTORS_US/CA_ESCAPE" : t.includes("seguridad") ? "INVESTORS_MX_DYNAMIC" : "(campaña sin atribuir)") };
-  if(!blob.trim() && !camp) return { fuente:"Social orgánico / directo", camp:"Social orgánico · IG / WhatsApp" };
-  return { fuente: lead.src || "Otra fuente", camp: camp || lead.src || "(sin campaña)" };
+    return { fuente:"Meta", camp: camp || LQ_SIN_CAMP, hint };
+  if(!blob.trim() && !camp) return { fuente:"Social orgánico / directo", camp:"Social orgánico · IG / WhatsApp", hint };
+  return { fuente: lead.src || "Otra fuente", camp: camp || lead.src || LQ_SIN_CAMP, hint };
 }
 
-// OPP = COTIZACIÓN ENVIADA (Anexo 2), no cualquier registro del pipeline.
-// Para cada pipeline se busca la primera etapa de cotización/propuesta; una
-// oportunidad cuenta como OPP si está en esa etapa o en una posterior.
-const LQ_RX_OPP = /cotiza|propuesta|quote|proposal|apartad|contrat|negocia|cierre|ganad|won|deposit/i;
+// OPP = oportunidad REAL de cierre: la cotización ya está entregada y en
+// seguimiento. En el pipeline de Selvadentro son "Seguimiento de OPP",
+// "Carta oferta", "Apartado" y lo que venga después. "Cotización enviada"
+// NO cuenta (confirmado con el equipo el 2026-08-26), ni ningún registro
+// anterior del pipeline.
+const LQ_RX_OPP = /\bopp\b|carta\s*oferta|apartad|contrat|negocia|cierre|ganad|won|deposit/i;
+// Etapas que quedan explícitamente FUERA aunque estén cerca de la cotización.
+const LQ_RX_NO_OPP = /cotiza|propuesta|quote|proposal/i;
+// Etapas terminales negativas: aunque estén al final del tablero (y por tanto
+// "después" del umbral), un lead perdido o descalificado no es una oportunidad
+// de cierre. Se excluyen por nombre, no por posición.
+const LQ_RX_MUERTA = /perdid|lost|descalific|no calific|abandon|nurtur|sin inter[eé]s|basura|spam|duplicad/i;
 function lqOppThresholds(stages){
   const byPipe = {};
   for(const [id, st] of Object.entries(stages||{})){
@@ -2147,15 +2171,29 @@ function lqOppThresholds(stages){
   const th = {};
   for(const [pipe, arr] of Object.entries(byPipe)){
     arr.sort((a,b)=>a.i-b.i);
-    const hit = arr.find(x=>LQ_RX_OPP.test(x.name));
-    th[pipe] = hit ? hit.i : null;      // null = ese pipeline no tiene etapa de cotización
+    const hit = arr.find(x=>LQ_RX_OPP.test(x.name) && !LQ_RX_NO_OPP.test(x.name) && !LQ_RX_MUERTA.test(x.name));
+    th[pipe] = hit ? hit.i : null;      // null = ese pipeline no tiene etapa de OPP
   }
   return th;
 }
-function lqIsOppStage(stageId, stages, th){
-  const st = (stages||{})[stageId]; if(!st) return false;
+// Nombres de las etapas que cuentan como OPP, para poder auditarlo en la app.
+function lqOppStageNames(stages, th){
+  const out = [];
+  for(const st of Object.values(stages||{})){
+    if(lqIsOppStage2(st, th)) out.push((st.p?st.p+" › ":"")+(st.s||""));
+  }
+  return [...new Set(out)].sort();
+}
+function lqIsOppStage2(st, th){
+  if(!st) return false;
+  const n = st.s || "";
+  if(LQ_RX_MUERTA.test(n)) return false;
   const t = th[st.p||""];
-  return t == null ? LQ_RX_OPP.test(st.s||"") : (st.i ?? 0) >= t;
+  if(t == null) return LQ_RX_OPP.test(n) && !LQ_RX_NO_OPP.test(n);
+  return (st.i ?? 0) >= t;
+}
+function lqIsOppStage(stageId, stages, th){
+  return lqIsOppStage2((stages||{})[stageId], th);
 }
 
 function lqMonthOf(iso){ const d = iso ? new Date(new Date(iso).getTime() - LQ_TZ_MS) : null; return (d && !isNaN(d)) ? `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}` : null; }
@@ -2189,7 +2227,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
       // pst = etiqueta de tags, que solo se usa cuando no hay oportunidad.
       pipe: stg ? stg.p : "", pstage: stg ? stg.s : "", ost: op ? op.st : "",
       n:l.n, c:l.c, wk:lqWeekOf(l.c), mo:lqMonthOf(l.c), lv, st:lqStage(lv, tagsLower),
-      fuente:sc.fuente, camp:sc.camp, ad:(l.attr && l.attr.ad) || "", grp:(l.attr && l.attr.grp) || "", u:l.u||"",
+      fuente:sc.fuente, camp:sc.camp, hint:sc.hint||"", ad:(l.attr && l.attr.ad) || "", grp:(l.attr && l.attr.grp) || "", u:l.u||"",
       em:l.em||"", ph:l.ph||"",
       hs: !!(l.src || (l.attr && (l.attr.camp||l.attr.src))),   // fuente identificada
       o: op ? op.o : 0, pr: op ? op.pr : 0, w: op ? op.w : 0, wv: op ? op.v : 0,   // OPP (cotización) / registros de pipeline / WONs / valor
@@ -2202,6 +2240,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
   // Calificación automática por reglas (independiente del campo que llena el equipo)
   leads.forEach(l=>{ const a = lqAutoQualify(l); l.alv = a.lv; l.awhy = a.why.join(" · ").slice(0,180); });
   return { ts:Date.now(), users:boot.users||{}, califField:F.calif, windsor:!!boot.windsor,
+           oppStages: lqOppStageNames(boot.stages, lqOppThresholds(boot.stages)),
            weeks:weeks||[], spend:spendRows||[], adw:lqBucketAds(adRows), leads };
 }
 
@@ -2269,8 +2308,8 @@ function lqAdIndex(agg){
 function lqLevelKey(l, level, adIdx){
   if(level==="camp") return l.fuente+" · "+l.camp;
   const hit = adIdx[lqNormCamp(l.ad)] || null;
-  if(level==="grp") return l.grp || (hit && hit.grp) || (l.ad ? "(conjunto no identificado)" : "(sin conjunto)");
-  return l.ad || "(sin anuncio atribuido)";
+  if(level==="grp") return l.grp || (hit && hit.grp) || LQ_SIN_GRP;
+  return l.ad || LQ_SIN_AD;
 }
 // Inversión del rango agrupada al nivel elegido, emparejada por nombre normalizado
 function lqSpendByLevel(agg, rangoSet, level, keys, leadCount){
@@ -2342,6 +2381,7 @@ function lqStatusOf(key, level, idx, adIdx){
   if(level==="grp") return idx.grp[k];
   // Campaña: la clave del nivel viene como "Fuente · Campaña"
   const solo = String(key).split(" · ").slice(1).join(" · ");
+  if(!solo || solo===LQ_SIN_CAMP) return undefined;   // cubo de leads sin atribuir, no es una campaña
   if(idx.camp[lqNormCamp(solo)]!==undefined) return idx.camp[lqNormCamp(solo)];
   for(const [ck,v] of Object.entries(idx.camp)){
     const n = lqNormCamp(solo);
@@ -2363,6 +2403,73 @@ function lqFamilia(camp){
 const lqExpKey = (s)=> "e"+lqNormCamp(s).slice(0,60);
 const lqIsExp  = (k)=> !!(lqState.exp && lqState.exp[k]);
 const lqCaret  = (k, has)=> has ? `<span class="lq-caret">${lqIsExp(k)?"▾":"▸"}</span>` : `<span class="lq-caret" style="opacity:0"></span>`;
+
+// Árbol UNIÓN: la estructura real de la cuenta de anuncios (Windsor: campaña →
+// conjunto → anuncio, con inversión y estado) MÁS los leads del CRM colgados donde
+// la atribución lo permite. Antes el árbol se construía solo con los leads, así que
+// una campaña que gastaba pero cuyos leads llegaban sin utm_campaign simplemente no
+// existía en el reporte (por eso "no se ven las campañas de México").
+function lqUnionTree(agg, leads, rangoSet, plat){
+  const camps = {};
+  const newCamp = (key, p, name)=> camps[key] = camps[key] || { key, plat:p, camp:name, spend:0, leads:[], grps:{} };
+  const newGrp  = (C, name)=> C.grps[name] = C.grps[name] || { name, spend:0, leads:[], ads:{} };
+  const newAd   = (G, name)=> G.ads[name] = G.ads[name] || { name, id:"", spend:0, leads:[] };
+  const platOk  = (p)=> plat==="all" ? true : plat==="otras" ? false : p===plat;
+
+  // 1. Esqueleto desde el detalle por anuncio de Windsor
+  for(const a of (agg.adw||[])){
+    if(!rangoSet.has(a.wk) || !platOk(a.plat)) continue;
+    const cname = a.camp || LQ_SIN_CAMP;
+    const C = newCamp(a.plat+" · "+cname, a.plat, cname); C.spend += a.spend;
+    const G = newGrp(C, a.grp || LQ_SIN_GRP); G.spend += a.spend;
+    const A = newAd(G, a.name || a.id || LQ_SIN_AD); A.spend += a.spend;
+    if(a.id) A.id = a.id;
+  }
+  // 2. Campañas que solo aparecen en el gasto diario (/all) y no en el detalle por anuncio
+  const platOfSrc = (x)=> /facebook|instagram|meta/.test(x||"") ? "Meta" : /google|adwords/.test(x||"") ? "Google" : "";
+  const adCampNames = [...new Set(Object.values(camps).map(C=>C.camp))];
+  for(const r of (agg.spend||[])){
+    const w = r.d ? lqWeekOf(r.d+"T12:00:00"+LQ_TZ) : null;
+    if(!w || !rangoSet.has(w) || !r.spend) continue;
+    const p = platOfSrc(r.src); if(!p || !platOk(p)) continue;
+    if(lqMatchCamp(r.camp, adCampNames)) continue;      // ya cubierta arriba
+    const cname = r.camp || LQ_SIN_CAMP;
+    newCamp(p+" · "+cname, p, cname).spend += r.spend;
+  }
+
+  // 3. Colgar los leads del CRM en la campaña real; si no empatan, en su propio nodo
+  const adIdx = lqAdIndex(agg);
+  const byNorm = {}; Object.values(camps).forEach(C=>{ byNorm[C.plat+"|"+lqNormCamp(C.camp)] = C; });
+  const nombres = [...new Set(Object.values(camps).map(C=>C.camp))];
+  const mismo = (obj, name)=> Object.keys(obj).find(k=>lqNormCamp(k)===lqNormCamp(name)) || name;
+  let gap = 0;
+  for(const l of leads){
+    let C = null;
+    if(l.camp && l.camp !== LQ_SIN_CAMP){
+      C = byNorm[l.fuente+"|"+lqNormCamp(l.camp)] || null;
+      if(!C){
+        const m = lqMatchCamp(l.camp, nombres);
+        if(m) C = Object.values(camps).find(x=>x.camp===m && x.plat===l.fuente) || null;
+      }
+    } else if(l.fuente==="Meta" || l.fuente==="Google"){
+      gap++;                                            // lead pagado sin utm_campaign
+    }
+    if(!C) C = newCamp(l.fuente+" · "+(l.camp||LQ_SIN_CAMP), l.fuente, l.camp||LQ_SIN_CAMP);
+    C.leads.push(l);
+    const hitAd = adIdx[lqNormCamp(l.ad)] || null;
+    // Sin conjunto atribuido: la pista por tags sirve como sub-agrupación visible
+    const gname = l.grp || (hitAd && hitAd.grp) || (C.camp===LQ_SIN_CAMP && l.hint ? l.hint : LQ_SIN_GRP);
+    const G = newGrp(C, mismo(C.grps, gname)); G.leads.push(l);
+    const A = newAd(G, mismo(G.ads, l.ad || LQ_SIN_AD)); A.leads.push(l);
+  }
+
+  const ord = (a,b)=> (b.leads.length-a.leads.length) || (b.spend-a.spend);
+  const list = Object.values(camps).map(C=>({
+    ...C,
+    grps: Object.values(C.grps).map(G=>({ ...G, ads: Object.values(G.ads).sort(ord) })).sort(ord),
+  })).sort(ord);
+  return { camps:list, gap };
+}
 
 // Agrupa los leads del rango en campaña → conjunto → anuncio
 function lqHierarchy(leads, adIdx){
@@ -2400,7 +2507,7 @@ function lqQRow(label, sub, arr, depth, expKey, hasKids, extra){
       ${sub?`<div class="lq-sub" style="padding-left:${hasKids?16:0}px">${escAttr(sub)}</div>`:""}</td>
     <td class="lft lq-sub">${extra&&extra.fam?escAttr(extra.fam):""}</td>
     ${lqTierCells(arr)}
-    <td><b>${arr.length}</b></td><td>${califN||"·"}</td><td class="pct">${arr.length?pct+"%":"—"}</td>
+    <td><b>${arr.length||"·"}</b></td><td>${califN||"·"}</td><td class="pct">${arr.length?pct+"%":"—"}</td>
     <td>${arr.reduce((a,l)=>a+(l.o||0),0)||"·"}</td><td>${arr.reduce((a,l)=>a+(l.w||0),0)||"·"}</td>
     <td>${extra&&extra.spend?fmtMoney(extra.spend):"—"}</td>
     <td>${extra&&extra.spend&&arr.length?fmtMoney(extra.spend/arr.length):"—"}</td>
@@ -2411,50 +2518,47 @@ function lqQRow(label, sub, arr, depth, expKey, hasKids, extra){
 function lqQualityTree(agg, leads, rangoSet){
   const adIdx = lqAdIndex(agg);
   const stIdx = lqStatusIndex(agg);
-  const tree = lqHierarchy(leads, adIdx);
-  const campKeys = Object.keys(tree).sort((a,b)=>tree[b].leads.length-tree[a].leads.length);
-  const spCamp = lqSpendByLevel(agg, rangoSet, "camp", campKeys, Object.fromEntries(campKeys.map(k=>[k,tree[k].leads.length])));
+  const { camps, gap } = lqUnionTree(agg, leads, rangoSet, lqState.plat||"all");
   const q = (lqState.q||"").trim().toLowerCase();
   const hit = (s)=> !q || String(s||"").toLowerCase().includes(q);
 
   let body = "";
-  for(const ck of campKeys){
-    const C = tree[ck];
-    const gKeys = Object.keys(C.grps).sort((a,b)=>C.grps[b].leads.length-C.grps[a].leads.length);
-    const adNames = Object.keys(C.grps).flatMap(g=>Object.keys(C.grps[g].ads));
-    if(!(hit(ck) || gKeys.some(hit) || adNames.some(hit))) continue;
-    const ek = lqExpKey(ck);
-    const camp = ck.split(" · ").slice(1).join(" · ");
-    body += lqQRow(ck, "", C.leads, 0, ek, gKeys.length>0,
-      { dot: lqStatusOf(ck,"camp",stIdx,adIdx), fam: lqFamilia(camp), spend: spCamp[ck]||0,
-        count: `${gKeys.length} conjunto${gKeys.length===1?"":"s"}` });
+  for(const C of camps){
+    const adNames = C.grps.flatMap(G=>G.ads.map(a=>a.name));
+    if(!(hit(C.key) || C.grps.some(G=>hit(G.name)) || adNames.some(hit))) continue;
+    const ek = lqExpKey(C.key);
+    const sub = (!C.leads.length && C.spend) ? "Con inversión en el rango · sin leads atribuidos"
+              : (C.camp===LQ_SIN_CAMP) ? "Leads pagados que llegaron sin utm_campaign" : "";
+    body += lqQRow(C.key, sub, C.leads, 0, ek, C.grps.length>0,
+      { dot: lqStatusOf(C.key,"camp",stIdx,adIdx), fam: C.camp===LQ_SIN_CAMP?"—":lqFamilia(C.camp), spend: C.spend,
+        count: `${C.grps.length} conjunto${C.grps.length===1?"":"s"}` });
     if(!lqIsExp(ek)) continue;
-    const spGrp = lqSpendByLevel(agg, rangoSet, "grp", gKeys, Object.fromEntries(gKeys.map(k=>[k,C.grps[k].leads.length])));
-    for(const gk of gKeys){
-      const G = C.grps[gk];
-      const aKeys = Object.keys(G.ads).sort((a,b)=>G.ads[b].length-G.ads[a].length);
-      const gek = lqExpKey(ck+"|"+gk);
-      body += lqQRow(gk, "", G.leads, 1, gek, aKeys.length>0,
-        { dot: lqStatusOf(gk,"grp",stIdx,adIdx), spend: spGrp[gk]||0,
-          count: `${aKeys.length} anuncio${aKeys.length===1?"":"s"}` });
+    for(const G of C.grps){
+      const gek = lqExpKey(C.key+"|"+G.name);
+      body += lqQRow(G.name, "", G.leads, 1, gek, G.ads.length>0,
+        { dot: lqStatusOf(G.name,"grp",stIdx,adIdx), spend: G.spend,
+          count: `${G.ads.length} anuncio${G.ads.length===1?"":"s"}` });
       if(!lqIsExp(gek)) continue;
-      const spAd = lqSpendByLevel(agg, rangoSet, "ad", aKeys, Object.fromEntries(aKeys.map(k=>[k,G.ads[k].length])));
-      for(const ak of aKeys){
-        body += lqQRow(ak, "", G.ads[ak], 2, "", false,
-          { dot: lqStatusOf(ak,"ad",stIdx,adIdx), spend: spAd[ak]||0 });
+      for(const A of G.ads){
+        body += lqQRow(A.name, "", A.leads, 2, "", false,
+          { dot: lqStatusOf(A.id||A.name,"ad",stIdx,adIdx), spend: A.spend });
       }
     }
   }
-  const spT = Object.values(spCamp).reduce((a,b)=>a+b,0);
+  const spT = camps.reduce((a,C)=>a+C.spend,0);
   const califT = lqCalif(leads);
   const totRow = `<tr class="total"><td class="lft">Total</td><td></td>${lqTierCells(leads)}
     <td><b>${leads.length}</b></td><td>${califT}</td><td class="pct">${leads.length?Math.round(califT/leads.length*100)+"%":"—"}</td>
     <td>${leads.reduce((a,l)=>a+(l.o||0),0)}</td><td>${leads.reduce((a,l)=>a+(l.w||0),0)}</td>
     <td>${spT?fmtMoney(spT):"—"}</td><td>—</td></tr>`;
-  return `<div class="table-scroll" style="margin-bottom:8px"><table class="cons lq-tree">
+  const pagados = leads.filter(l=>l.fuente==="Meta"||l.fuente==="Google").length;
+  const aviso = gap ? `<div class="lq-meth">⚠ <b>${gap}</b> de ${pagados} leads de Meta / Google llegaron <b>sin campaña en la atribución</b> (utm_campaign vacío) y se agrupan en "${LQ_SIN_CAMP}".
+    Las campañas de la cuenta de anuncios sí aparecen abajo con su inversión, aunque no tengan leads empatados. Mientras los anuncios no pasen los parámetros UTM
+    (utm_campaign, utm_content, utm_term) al formulario, no se puede saber qué campaña, conjunto o anuncio generó cada lead.</div>` : "";
+  return aviso + `<div class="table-scroll" style="margin-bottom:8px"><table class="cons lq-tree">
     <tr><th class="lft">Campaña / conjunto / anuncio</th><th class="lft">Familia</th>
       ${LQ_COLS.map(L=>`<th title="${L.name}">${L.short}</th>`).join("")}
-      <th>Total</th><th>Calif.</th><th>%</th><th title="OPP = cotización enviada (Anexo 2)">OPPs</th><th title="WON = venta cerrada">WONs</th><th>Inversión</th><th>Costo/lead</th></tr>
+      <th>Total</th><th>Calif.</th><th>%</th><th title="OPP = oportunidad real de cierre: Seguimiento de OPP, Carta oferta, Apartado o posterior. La cotización enviada aún no cuenta.">OPPs</th><th title="WON = venta cerrada">WONs</th><th>Inversión</th><th>Costo/lead</th></tr>
     ${body || `<tr><td colspan="18" class="lft" style="color:var(--neutro);font-style:italic">Sin leads que coincidan.</td></tr>`}
     ${totRow}
   </table></div>`;
@@ -2560,7 +2664,7 @@ function lqLevelSection(agg, leadsAll, rango, rangoSet){
   const tierTot = LQ_LEVELS.map(L=>`<td><b>${cT[L.id]||0}</b></td>`).join("");
   const mainTable = `<div class="table-scroll" style="margin-bottom:10px"><table class="cons">
     <tr><th class="lft">${LQ_LEVELS_UI.find(o=>o.id===level).name}</th><th>Leads</th>${tierCols}
-      <th>% Alto valor</th><th>% SQL+</th><th>% Descal.</th><th title="OPP = cotización enviada">OPPs</th><th title="WON = venta cerrada">WONs</th><th>Inversión</th><th>Costo/lead</th><th>Costo/alto valor</th></tr>
+      <th>% Alto valor</th><th>% SQL+</th><th>% Descal.</th><th title="OPP = oportunidad real de cierre: Seguimiento de OPP, Carta oferta, Apartado o posterior. La cotización enviada aún no cuenta.">OPPs</th><th title="WON = venta cerrada">WONs</th><th>Inversión</th><th>Costo/lead</th><th>Costo/alto valor</th></tr>
     ${rows || `<tr><td colspan="16" class="lft" style="color:var(--neutro);font-style:italic">Sin leads en el rango.</td></tr>`}
     <tr class="total"><td class="lft">Total</td><td><b>${leads.length}</b></td>${tierTot}
       <td class="pct">${pct(hiT,leads.length)}</td><td class="pct">${pct(sqlPlusT,leads.length)}</td><td class="pct">${pct(cT.desc||0,leads.length)}</td>
@@ -2611,7 +2715,7 @@ function lqFamiliaData(agg, leads, rangoSet){
   }
   // Leads del CRM
   for(const l of leads){
-    const name = (l.camp && l.camp!=="(campaña sin atribuir)") ? lqFamilia(l.camp) : "(Sin campaña / directo)";
+    const name = (l.camp && l.camp!==LQ_SIN_CAMP) ? lqFamilia(l.camp) : "(Sin campaña / directo)";
     F(name).leads.push(l);
   }
   return fams;
@@ -3036,7 +3140,10 @@ function lqRender(){
     la app con señales objetivas del CRM (ver reglas abajo), sin depender de que un asesor califique su propio lead. Con el interruptor en
     <b>Campo del CRM</b> se lee tal cual el campo "${escAttr(agg.califField?.name||"Calificación del lead")}" (vacío = "Sin calificar", nunca se adivina).
     La <b>etapa</b> es la etapa real de la oportunidad en el pipeline; si el lead todavía no tiene oportunidad, se muestra en gris una señal derivada de tags.
-    <b>OPP</b> = cotización enviada: una oportunidad que alcanzó la etapa de cotización/propuesta o una posterior, no cualquier registro del pipeline. <b>WON</b> = venta cerrada. La <b>inversión</b> viene de Windsor.ai (Meta + Google).
+    <b>OPP</b> = oportunidad real de cierre: la cotización ya está entregada y en seguimiento activo. <b>"Cotización enviada" no cuenta</b>; cuentan
+    "Seguimiento de OPP", "Carta oferta", "Apartado" y cualquier etapa posterior. No es cualquier registro del pipeline. <b>WON</b> = venta cerrada.
+    ${(agg.oppStages||[]).length ? `<br><span style="color:var(--neutro)">Etapas que hoy cuentan como OPP en tu CRM: <b>${escAttr((agg.oppStages||[]).join(" · "))}</b>.</span>` : ""}
+    La <b>inversión</b> viene de Windsor.ai (Meta + Google).
     Los datos se refrescan solos cada 30 minutos; para verlos al instante usa <b>Sincronizar leads</b>.</div>
     <div class="lq-meth"><b>Reglas de calificación automática</b> — se evalúan en orden y la primera que se cumple manda. Umbral de producto
     <b>${fmtMoney(LQ_UMBRAL_USD)} USD</b>, horizonte del perfil <b>≤${LQ_HORIZONTE_M} meses</b>.
@@ -3161,7 +3268,7 @@ async function lqSync(){
           if(!o.ct) continue;
           const b = oppsByContact[o.ct] = oppsByContact[o.ct] || {o:0,pr:0,w:0,v:0,ov:0,s:"",sc:0,st:"",ap:{tot:0,sh:0,ns:0}};
           b.pr++;                                            // registro del pipeline (no es un OPP)
-          if(lqIsOppStage(o.s, boot.stages, oppTh)) b.o++;    // OPP = cotización enviada o posterior
+          if(lqIsOppStage(o.s, boot.stages, oppTh)) b.o++;    // OPP = seguimiento de OPP o posterior
           if(o.st==="won"){ b.w++; b.v+=(o.v||0); }
           b.ov = Math.max(b.ov, o.v||0);
           if(o.ap){ b.ap.tot+=o.ap.tot; b.ap.sh+=o.ap.sh; b.ap.ns+=o.ap.ns; }
@@ -3596,7 +3703,7 @@ function slaRender(){
     la mediana del intento se muestra aparte para separar rapidez de conectividad ·
     <b>Sin toque:</b> más de 7 días sin ningún mensaje ·
     <b>Show rate:</b> citas con estatus showed ÷ (showed + no-show) ·
-    <b>Oportunidades creadas:</b> registros del pipeline creados en el rango, por asesor asignado (no son OPPs: OPP = cotización enviada).</div>
+    <b>Oportunidades creadas:</b> registros del pipeline creados en el rango, por asesor asignado (no son OPPs: OPP = oportunidad real de cierre, de "Seguimiento de OPP" en adelante).</div>
     <div class="lq-meth"><b>SLAs contra los que se mide</b> —
     transferencia en caliente a un asesor <b>15 minutos</b> · handoff por WhatsApp <b>60 minutos</b> ·
     agendamiento <b>40% de los leads a una cita en 48 horas</b> (verde si se cumple, rojo si no) ·

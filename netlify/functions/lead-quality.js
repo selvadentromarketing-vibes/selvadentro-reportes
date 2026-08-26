@@ -59,12 +59,19 @@ function attrOf(c) {
   const pick = (o, ...keys) => { for (const k of keys) { if (o && typeof o[k] === "string" && o[k]) return o[k]; } return ""; };
   const last = list[list.length - 1] || c.lastAttributionSource || {};
   const first = list[0] || c.attributionSource || {};
+  // GoHighLevel usa distintas grafías segun el origen (formulario nativo, lead ad de
+  // Meta, UTM del sitio): se prueban todas antes de darla por vacía.
+  const CAMP = ["campaign", "campaignName", "utmCampaign", "utm_campaign"];
+  const SRC = ["utmSource", "utm_source", "sessionSource", "source"];
+  const MED = ["utmMedium", "utm_medium", "medium"];
+  const AD = ["adName", "ad_name", "utmContent", "utm_content", "adId", "ad_id"];
+  const GRP = ["adGroupName", "adsetName", "adSetName", "adset_name", "ad_group_name", "utmTerm", "utm_term", "adGroupId", "adset_id"];
   return {
-    camp: pick(last, "campaign", "utmCampaign") || pick(first, "campaign", "utmCampaign"),
-    src: pick(last, "utmSource", "sessionSource") || pick(first, "utmSource", "sessionSource"),
-    med: pick(last, "utmMedium", "medium") || pick(first, "utmMedium", "medium"),
-    ad: pick(last, "adName", "utmContent") || pick(first, "adName", "utmContent"),
-    grp: pick(last, "adGroupName", "adGroupId", "utmTerm") || pick(first, "adGroupName", "adGroupId", "utmTerm"),
+    camp: pick(last, ...CAMP) || pick(first, ...CAMP),
+    src: pick(last, ...SRC) || pick(first, ...SRC),
+    med: pick(last, ...MED) || pick(first, ...MED),
+    ad: pick(last, ...AD) || pick(first, ...AD),
+    grp: pick(last, ...GRP) || pick(first, ...GRP),
   };
 }
 
