@@ -1387,6 +1387,22 @@ function fmtMoney(n){ return "$"+(Number(n)||0).toLocaleString("en-US",{minimumF
 function fmtPct(x){ return (x*100).toFixed(2)+"%"; }
 function weekLabel(w){ const m=w&&w.match(/^(\d{4})-W(\d+)$/); if(!m) return w; const a=dateOfIsoWeek(+m[1],+m[2]); const b=sundayOf(a); return `${w} · ${fmtDate(a)} → ${fmtDate(b)}`; }
 
+/* --- Zona horaria del negocio: una sola definición para toda la app -------------------
+   Antes había dos relojes. crmWeekOf leía el timestamp tal cual (UTC) y lqWeekOf lo movía
+   primero a hora Tulum, así que un lead creado el domingo por la noche —entre las 00:00 y
+   las 04:59 UTC del lunes, todavía domingo aquí— caía en la semana siguiente en "CRM en
+   vivo" y en la correcta en "Calidad de Leads" y en SLA. Dos pantallas de la misma app
+   daban conteos semanales distintos de los mismos datos. La convención del proyecto es
+   hora Tulum (está en el README), así que todo pasa por aquí. */
+const LQ_TZ = "-05:00";                 // Tulum (America/Cancun): UTC-5 fijo, sin DST
+const LQ_TZ_MS = 5 * 3600e3;
+// Semana ISO a la que pertenece un instante, contada en hora Tulum.
+function semanaISOTulum(iso){
+  if(!iso) return null;
+  const d = new Date(new Date(iso).getTime() - LQ_TZ_MS);
+  return isNaN(d) ? null : isoWeekId(d);
+}
+
 /* ===================== INGRESO FORM ===================== */
 function renderIngresoForm(){
   document.getElementById("ing-sections").innerHTML = sections().map(s=>`
@@ -1621,10 +1637,17 @@ function navGo(delta){
   const e = NAV_HIST.stack[target];
   NAV_HIST.silent = true;
   try {
-    if(e.tab === "ventas" && e.subtab){ VENTAS_SUBTAB = e.subtab; }
+    // "Desempeño de Ventas" NO es una sub-pestaña: es un canal sintético que se elige en el
+    // select de Reporte. Restaurarlo como si lo fuera dejaba VENTAS_SUBTAB en "__desempeno",
+    // y el manejador del tab buscaba un #view-__desempeno que no existe: lanzaba y dejaba la
+    // pantalla en blanco, porque ya había apagado todas las vistas. Se restaura por el select,
+    // que es el mismo camino que usa switchChannel.
+    const esDesemp = e.tab === "ventas" && e.subtab === CANAL_DESEMP;
+    if(e.tab === "ventas" && e.subtab && !esDesemp){ VENTAS_SUBTAB = e.subtab; }
+    if(esDesemp){ const sc = document.getElementById("canal-select"); if(sc) sc.value = CANAL_DESEMP; }
     const el = document.querySelector('.tab[data-tab="'+e.tab+'"], .side-btn[data-tab="'+e.tab+'"]');
     if(el) el.click();
-    if(e.tab === "ventas" && e.subtab){ const st = document.querySelector('.subtab[data-subtab="'+e.subtab+'"]'); if(st) st.click(); }
+    if(e.tab === "ventas" && e.subtab && !esDesemp){ const st = document.querySelector('.subtab[data-subtab="'+e.subtab+'"]'); if(st) st.click(); }
   } finally { NAV_HIST.silent = false; navUpdateButtons(); }
 }
 function mktIsActive(){ return document.querySelector('.tab[data-tab="marketing"]').classList.contains("active"); }
@@ -1644,22 +1667,26 @@ document.querySelectorAll("[data-tab]").forEach(el=>el.onclick=()=>{
   document.querySelectorAll("[data-tab]").forEach(t=>t.classList.remove("active"));
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   el.classList.add("active");
+  // Las tres búsquedas de abajo van con guarda: este manejador ya apagó todas las vistas,
+  // así que si algo devuelve null y lanza, la pantalla se queda en blanco sin encender ninguna.
   if(tab==="ventas"){
-    document.getElementById("view-"+VENTAS_SUBTAB).classList.add("active");
+    const vSub = document.getElementById("view-"+VENTAS_SUBTAB);
+    if(vSub) vSub.classList.add("active");
+    else { VENTAS_SUBTAB="reporte"; document.getElementById("view-reporte")?.classList.add("active"); }
     const selC = document.getElementById("canal-select");
     if(selC && selC.value === CANAL_DESEMP){ mostrarDesempeno(true); }
     else {
       mostrarDesempeno(false);
-      document.getElementById("ventas-subtabs").style.display="flex";
+      const st=document.getElementById("ventas-subtabs"); if(st) st.style.display="flex";
       if(VENTAS_SUBTAB==="analitica") renderAnalitica();
     }
   } else {
-    document.getElementById("view-"+tab).classList.add("active");
-    document.getElementById("ventas-subtabs").style.display="none";
+    document.getElementById("view-"+tab)?.classList.add("active");
+    const st=document.getElementById("ventas-subtabs"); if(st) st.style.display="none";
   }
   const dir = ["resultados","dircom","crm","marketing","asesores","metas","db","admin","diag"].includes(tab);
-  document.querySelector(".canal-wrap").style.display = dir?"none":"flex";
-  document.querySelector(".mkt-wrap").style.display = (tab==="marketing")?"flex":"none";
+  const cw=document.querySelector(".canal-wrap"); if(cw) cw.style.display = dir?"none":"flex";
+  const mw=document.querySelector(".mkt-wrap");   if(mw) mw.style.display = (tab==="marketing")?"flex":"none";
   if(tab==="resultados") showResultados();
   if(tab==="dircom") showDirCom();
   if(tab==="crm") showCRM();
@@ -1737,6 +1764,22 @@ document.querySelectorAll(".subtab[data-subtab]").forEach(el=>el.onclick=()=>{
 });
 function showMarketing(){ const f=document.getElementById("mkt-frame"); if(f && (!f.src || f.src==="about:blank" || f.src.endsWith("about:blank"))) f.src="marketing.html"; }
 
+/* --- Los tres WON de la app ------------------------------------------------------------
+   La app reporta WON en tres pantallas y cada una mide algo distinto. Las tres son válidas
+   y las tres sirven; lo que no puede pasar —y pasaba— es que se llamen igual, se vean igual
+   y den tres cifras distintas para la misma semana sin que nada lo explique. En una junta
+   eso no se lee como "son métricas distintas": se lee como que el sistema está roto.
+   Cada pantalla usa desde aquí su nombre y su nota; el glosario completo está en Diagnóstico. */
+const WON_DEFS = {
+  reportado: { n:"WON reportado",
+    t:"WON reportado — la cifra que el equipo captura a mano cada semana en Ingreso de datos. Corta por la semana del reporte." },
+  cerrado:   { n:"WON cerrado",
+    t:"WON cerrado en la semana — oportunidades que pasaron a ganada dentro del rango, por su fecha de cambio de estatus en el CRM (hora Tulum). Una venta de un lead viejo cuenta en la semana en que se cerró." },
+  cohorte:   { n:"WON del cohorte",
+    t:"WON del cohorte — ventas que produjeron los leads que ENTRARON en la semana, sin importar cuándo se cerraron. Corta por la fecha de alta del lead (hora Tulum). Una venta cerrada en la semana 34, de un lead de la 28, cuenta en la 28." },
+};
+const wonTh = (k, extra)=>`<th title="${escAttr(WON_DEFS[k].t)}">${WON_DEFS[k].n}${extra||""}</th>`;
+
 /* ===================== REPORTES DE DIRECCIÓN (CONSOLIDADOS) ===================== */
 // Mapeo de cada métrica común al campo real de cada canal
 const METRIC_MAP = {
@@ -1773,13 +1816,13 @@ function convBlock(f){
   return row("Zooms → OPP", f.opp_zooms, f.zooms, CONV_T.zo)
        + row("Tours → OPP", f.opp_tours, f.tours, CONV_T.to)
        + row("OPP → Apartados", f.apartados, f.opp, CONV_T.oa)
-       + row("Apartados → WON", f.won, f.apartados, CONV_T.aw);
+       + row("Apartados → WON reportado", f.won, f.apartados, CONV_T.aw);
 }
 function funnelRows(f, metas){
   const r=(l,v,m)=>`<tr><td class="lbl">${l}</td><td class="v">${v}</td>${m?('<td class="m">'+m+'</td>'):''}</tr>`;
   return r("Leads",f.leads)+r("Zooms realizados",f.zooms)+r("Tours realizados",f.tours)
        +r("OPP",f.opp)+r("OPP de zooms",f.opp_zooms)+r("OPP de tours",f.opp_tours)
-       +r("Apartados",f.apartados)+r("WON",f.won, metas||"")+r("Ingresos",fmtMoney(f.ingresos));
+       +r("Apartados",f.apartados)+r(WON_DEFS.reportado.n,f.won, metas||"")+r("Ingresos",fmtMoney(f.ingresos));
 }
 
 const resState={chs:new Set(Object.keys(CHANNELS)), built:false};
@@ -1826,7 +1869,7 @@ async function renderResultados(){
       <div class="funnel-col">${convBlock(f)}</div>
     </div>
     <div class="table-scroll"><table class="cons">
-      <thead><tr><th class="lft">Canal</th><th>Leads</th><th>Zooms</th><th>Tours</th><th>OPP</th><th>OPP de zooms</th><th>OPP de tours</th><th>Apartado</th><th>WON</th><th>Ingresos</th><th>Cierre %</th><th>Meta WON mensual</th><th>Estado</th></tr></thead>
+      <thead><tr><th class="lft">Canal</th><th>Leads</th><th>Zooms</th><th>Tours</th><th>OPP</th><th>OPP de zooms</th><th>OPP de tours</th><th>Apartado</th>${wonTh('reportado')}<th>Ingresos</th><th>Cierre %</th><th>Meta WON mensual</th><th>Estado</th></tr></thead>
       <tbody>${rows}
         <tr class="total"><td class="lft">Total</td><td>${tot.leads}</td><td>${tot.zooms}</td><td>${tot.tours}</td><td>${tot.opp}</td><td>${tot.opp_zooms}</td><td>${tot.opp_tours}</td><td>${tot.apartados}</td><td>${tot.won}</td><td>${fmtMoney(tot.ingresos)}</td><td>${pctTxt(tot.won,tot.opp)}</td><td>${totMeta}</td><td>${estadoDot(tot.leads,tot.won,totMeta/SEMANAS_MES*nW)}</td></tr>
       </tbody></table></div>`;
@@ -1890,7 +1933,7 @@ async function renderDirCom(){
         <th>OPP de tours</th><th>/Tours</th>
         <th>OPP &gt;14 días</th>
         <th>Apartado</th><th>Lead→APT</th>
-        <th>WON</th><th>Ingresos</th><th>Lead→WON</th>
+        ${wonTh('reportado')}<th>Ingresos</th><th>Lead→WON</th>
         <th>Meta del mix</th><th>Meta WON mens.</th><th>Alcance meta (periodo)</th>
         <th>Estado</th>
       </tr></thead>
@@ -1911,12 +1954,14 @@ async function showDirCom(){
 // Sincroniza oportunidades desde GHL vía la Netlify Function ghl-report (el token vive
 // en el entorno del servidor). El resumen agregado se comparte por Supabase kv para que
 // el resto del equipo cargue al instante sin recorrer el CRM otra vez.
-const CRM_AGG_KEY = "crm:agg:v1";
+const CRM_AGG_KEY = "crm:agg:v2";   // v2: el agregado v1 quedó agrupado por semana UTC.
+// Al cambiar la llave, la primera visita re-sincroniza y reconstruye con el reloj correcto.
+// El v1 se queda en el kv sin estorbar; se puede borrar cuando se confirme que v2 va bien.
 const CRM_STALE_MIN = 30;
 const crmState = { built:false, agg:null, syncing:false };
 const CRM_SRC_LABELS = { ig:"Instagram", fb:"Facebook", facebook:"Facebook", instagram:"Instagram", google:"Google", tiktok:"TikTok", yt:"YouTube", youtube:"YouTube", whatsapp:"WhatsApp", "(sin fuente)":"(Sin fuente)" };
 
-function crmWeekOf(iso){ const d = iso ? new Date(iso) : null; return (d && !isNaN(d)) ? isoWeekId(d) : null; }
+const crmWeekOf = semanaISOTulum;   // antes leía en UTC: ver semanaISOTulum
 function crmAgo(ts){ const m=Math.round((Date.now()-ts)/60000); if(m<1) return "ahora mismo"; if(m<60) return `hace ${m} min`; const h=Math.floor(m/60); if(h<24) return `hace ${h} h`; return new Date(ts).toLocaleString("es-MX",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}); }
 
 async function crmFn(body){
@@ -2005,7 +2050,7 @@ function crmRender(){
         <span class="p-badge">
           <span>${(p.status.open||0).toLocaleString()} abiertas</span>
           ${cr?`<span>+${cr.toLocaleString()} nuevas en el rango</span>`:""}
-          ${won?`<span>${won} WON en el rango</span>`:""}
+          ${won?`<span>${won} WON cerrados en el rango</span>`:""}
           ${p.status.won?`<span>${p.status.won} WON hist.</span>`:""}
         </span>
       </h3>
@@ -2016,8 +2061,8 @@ function crmRender(){
   const kpi = (v,l)=>`<div class="crm-kpi"><div class="k-val">${v}</div><div class="k-lbl">${l}</div></div>`;
   const kpis = `<div class="crm-kpis">
     ${kpi(crTot.toLocaleString(),"Oportunidades nuevas en el rango")}
-    ${kpi(wonTot.toLocaleString(),"WON en el rango")}
-    ${kpi(fmtMoney(wvTot),"Valor WON en el rango")}
+    ${kpi(wonTot.toLocaleString(),"WON cerrados en el rango")}
+    ${kpi(fmtMoney(wvTot),"Valor de los WON cerrados")}
     ${kpi(openTot.toLocaleString(),"Oportunidades abiertas hoy")}
     ${kpi(agg.total.toLocaleString(),"Oportunidades totales en el CRM")}
   </div>`;
@@ -2087,8 +2132,7 @@ async function showCRM(){
 const LQ_AGG_KEY = "lq:agg:v7";   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
-const LQ_TZ = "-05:00";                 // Tulum (America/Cancun): UTC-5 fijo, sin DST
-const LQ_TZ_MS = 5 * 3600e3;
+// (LQ_TZ y LQ_TZ_MS ahora viven junto al resto de helpers de fecha, arriba)
 const lqState = { built:false, agg:null, syncing:false, sub:"datos", exp:{} };
 const LQ_SUBS = [
   { id:"datos",        n:"1", name:"Datos de Campañas", sub:"Meta + Google · auto" },
@@ -2111,7 +2155,7 @@ const LQ_COLS = ["cql","mql","sql","sqls","desc","nuevo","nc"].map(id=>LQ_LEVELS
 const LQ_LEVEL_BY_ID = Object.fromEntries(LQ_LEVELS.map(l=>[l.id,l]));
 const LQ_RANK = Object.fromEntries(LQ_LEVELS.map((l,i)=>[l.id,i]));
 
-function lqWeekOf(iso){ const d = iso ? new Date(new Date(iso).getTime() - LQ_TZ_MS) : null; return (d && !isNaN(d)) ? isoWeekId(d) : null; }
+const lqWeekOf = semanaISOTulum;
 function lqWeekBounds(weekId){
   const m = weekId.match(/^(\d{4})-W(\d+)$/); if(!m) return null;
   const mon = dateOfIsoWeek(+m[1], +m[2]), sun = sundayOf(mon);
@@ -2749,7 +2793,7 @@ function lqQualityTree(agg, leads, rangoSet){
   return incompleto + multiMoneda + aviso + `<div class="table-scroll" style="margin-bottom:8px"><table class="cons lq-tree">
     <tr><th class="lft">Campaña / conjunto / anuncio</th><th class="lft">Familia</th>
       ${LQ_COLS.map(L=>`<th title="${L.name}">${L.short}</th>`).join("")}
-      <th>Total</th><th>Calif.</th><th>%</th><th title="OPP = oportunidad real de cierre: Seguimiento de OPP, Carta oferta, Apartado o posterior. La cotización enviada aún no cuenta.">OPPs</th><th title="WON = venta cerrada">WONs</th><th>Inversión</th><th>Costo/lead</th></tr>
+      <th>Total</th><th>Calif.</th><th>%</th><th title="OPP = oportunidad real de cierre: Seguimiento de OPP, Carta oferta, Apartado o posterior. La cotización enviada aún no cuenta.">OPPs</th>${wonTh('cohorte')}<th>Inversión</th><th>Costo/lead</th></tr>
     ${body || `<tr><td colspan="18" class="lft" style="color:var(--neutro);font-style:italic">Sin leads que coincidan.</td></tr>`}
     ${totRow}
   </table></div>`;
@@ -2855,7 +2899,7 @@ function lqLevelSection(agg, leadsAll, rango, rangoSet){
   const tierTot = LQ_LEVELS.map(L=>`<td><b>${cT[L.id]||0}</b></td>`).join("");
   const mainTable = `<div class="table-scroll" style="margin-bottom:10px"><table class="cons">
     <tr><th class="lft">${LQ_LEVELS_UI.find(o=>o.id===level).name}</th><th>Leads</th>${tierCols}
-      <th>% Alto valor</th><th>% SQL+</th><th>% Descal.</th><th title="OPP = oportunidad real de cierre: Seguimiento de OPP, Carta oferta, Apartado o posterior. La cotización enviada aún no cuenta.">OPPs</th><th title="WON = venta cerrada">WONs</th><th>Inversión</th><th>Costo/lead</th><th>Costo/alto valor</th></tr>
+      <th>% Alto valor</th><th>% SQL+</th><th>% Descal.</th><th title="OPP = oportunidad real de cierre: Seguimiento de OPP, Carta oferta, Apartado o posterior. La cotización enviada aún no cuenta.">OPPs</th>${wonTh('cohorte')}<th>Inversión</th><th>Costo/lead</th><th>Costo/alto valor</th></tr>
     ${rows || `<tr><td colspan="16" class="lft" style="color:var(--neutro);font-style:italic">Sin leads en el rango.</td></tr>`}
     <tr class="total"><td class="lft">Total</td><td><b>${leads.length}</b></td>${tierTot}
       <td class="pct">${pct(hiT,leads.length)}</td><td class="pct">${pct(sqlPlusT,leads.length)}</td><td class="pct">${pct(cT.desc||0,leads.length)}</td>
@@ -4522,12 +4566,18 @@ let metasBuilt=false;
 // guardados en el kv; solo dejaron de tener pantalla.
 const MKT_LQ_LIVE = "lq_live";
 const MKT_MODULES = [ {id:'rrss',name:'Redes Sociales'}, {id:MKT_LQ_LIVE,name:'Calidad de Leads'} ];
+// Calidad de Leads en vivo vive en index.html, NO dentro del iframe: marketing.html no tiene
+// un módulo con ese id. Metas y Base de datos delegan en el iframe, así que ofrecerla ahí
+// hacía que mktSetActive('lq_live') no hiciera nada (está guardado con if(MODS[id])) y la
+// pantalla siguiera mostrando —y guardando— Redes Sociales sin avisar. Estos dos selects
+// solo pueden ofrecer módulos que existan del otro lado.
+const MKT_MODULES_EMBED = MKT_MODULES.filter(m => m.id !== MKT_LQ_LIVE);
 function renderMetas(){
   const sel=document.getElementById("metas-canal");
   const selM=document.getElementById("metas-marketing");
   if(!metasBuilt){
     sel.innerHTML='<option value="">—</option>' + Object.keys(CHANNELS).map(k=>`<option value="${k}">${CHANNELS[k].name}</option>`).join("");
-    selM.innerHTML='<option value="">—</option>' + MKT_MODULES.map(m=>`<option value="${m.id}">${m.name}</option>`).join("");
+    selM.innerHTML='<option value="">—</option>' + MKT_MODULES_EMBED.map(m=>`<option value="${m.id}">${m.name}</option>`).join("");
     sel.onchange=()=>{
       if(!sel.value){ metasShowFrame(false); document.getElementById("metas-body").innerHTML=''; return; }
       selM.value=""; metasShowFrame(false); renderMetasBody(sel.value);
@@ -5045,7 +5095,7 @@ function renderDB(){
   const selM=document.getElementById("db-marketing");
   if(!dbBuilt){
     sel.innerHTML='<option value="">—</option>' + Object.keys(CHANNELS).map(k=>`<option value="${k}">${CHANNELS[k].name}</option>`).join("");
-    selM.innerHTML='<option value="">—</option>' + MKT_MODULES.map(m=>`<option value="${m.id}">${m.name}</option>`).join("");
+    selM.innerHTML='<option value="">—</option>' + MKT_MODULES_EMBED.map(m=>`<option value="${m.id}">${m.name}</option>`).join("");
     sel.onchange=()=>{
       if(!sel.value){ dbShowFrame(false); dbPlaceholder(); return; }
       selM.value=""; dbShowFrame(false); renderDBTable(sel.value);
@@ -5310,16 +5360,23 @@ function applyChannelFilter(){
     }
   }
 }
+// Se reemplaza .shell (barra lateral + contenido), no solo .main: la barra lateral es
+// hermana de .main, así que antes sobrevivía intacta —con sus manejadores, que se enlazan
+// una sola vez al arrancar— y al pulsar cualquiera de sus botones el manejador buscaba
+// vistas que acababan de borrarse y lanzaba. Es la primera pantalla que ve alguien recién
+// dado de alta: no puede tener botones que no hacen nada.
 function showNoAccessScreen(){
-  document.querySelector(".main").innerHTML = `
-    <div class="wrap">
+  const shell = document.querySelector(".shell");
+  if(!shell) return;
+  shell.innerHTML = `
+    <div class="main"><div class="wrap">
       <div class="placeholder-card">
         <h3>Sin acceso</h3>
         <p>Tu cuenta no tiene canales asignados todavía.</p>
         <p>Pídele al admin que te asigne acceso.</p>
         <p style="margin-top:18px"><button class="btn btn-ghost" onclick="signOut()">Cerrar sesión</button></p>
       </div>
-    </div>`;
+    </div></div>`;
 }
 
 const isAdmin = ()=> !!(SESSION && SESSION.role === "admin");
@@ -5780,15 +5837,56 @@ function diagSeccionValores(){
     </table></div>`;
 }
 
+// Glosario: las siglas sobre las que gira la conversación de resultados. Vivían repartidas
+// —OPP solo dentro de un tooltip (invisible en celular), las calificaciones solo en el README—
+// y los tres WON ni siquiera se distinguían entre sí. No depende del CRM, así que se muestra
+// aunque todavía no se hayan probado las conexiones.
+function diagSeccionGlosario(){
+  // La columna de definiciones va con white-space:normal: table.cons fuerza nowrap para las
+  // tablas de números, pero aquí es prosa y se recortaba por el borde en vez de partirse.
+  const fila = (sigla, donde, dice)=>
+    `<tr><td class="lft"><b>${sigla}</b></td><td class="lft" style="white-space:normal">${donde}</td>`
+    + `<td class="lft" style="white-space:normal;line-height:1.5">${dice}</td></tr>`;
+  return `<h3 class="diag-h">Glosario: qué mide cada cifra</h3>
+  <p class="hint" style="margin-top:-2px">Las tres pantallas que reportan ventas cerradas miden cosas distintas, y las tres son correctas.
+  Por eso ya no se llaman igual: si dos tabs dan cifras diferentes para la misma semana, aquí está por qué.</p>
+  <div class="table-scroll" style="margin-bottom:18px"><table class="cons" style="table-layout:fixed;width:100%">
+    <colgroup><col style="width:16%"><col style="width:22%"><col></colgroup>
+    <thead><tr><th class="lft">Cifra</th><th class="lft">Dónde sale</th><th class="lft">Qué cuenta exactamente</th></tr></thead>
+    <tbody>
+      ${fila(WON_DEFS.reportado.n, "Dirección General y Comercial",
+             "La cifra que el equipo captura a mano cada semana en Ingreso de datos. Corta por la semana del reporte.")}
+      ${fila(WON_DEFS.cerrado.n, "CRM en vivo",
+             "Oportunidades que pasaron a ganada dentro del rango, por su fecha de cambio de estatus en el CRM. Una venta de un lead viejo cuenta en la semana en que se cerró.")}
+      ${fila(WON_DEFS.cohorte.n, "Calidad de Leads",
+             "Ventas que produjeron los leads que <b>entraron</b> en la semana, sin importar cuándo se cerraron. Una venta de la semana 34, de un lead de la 28, cuenta en la 28.")}
+      ${fila("OPP", "Calidad de Leads y SLA",
+             "Oportunidad real de cierre: <b>Seguimiento de OPP</b>, <b>Carta oferta</b>, <b>Apartado</b> o cualquier etapa posterior. Una cotización enviada todavía <b>no</b> cuenta (confirmado con el cliente el 2026-08-26).")}
+      ${fila("SQL Selvadentro", "Calidad de Leads",
+             "Señal fuerte de interés <b>y</b> perfil de ≥$100K USD con horizonte ≤6 meses.")}
+      ${fila("SQL", "Calidad de Leads", "Señal fuerte de interés, sin el perfil de presupuesto y horizonte.")}
+      ${fila("MQL", "Calidad de Leads", "Respondió o mostró interés, sin señal fuerte todavía.")}
+      ${fila("CQL", "Calidad de Leads", "Capturado: el lead entró y quedó registrado, sin respuesta aún.")}
+    </tbody>
+  </table></div>
+  <div class="lq-meth" style="border-color:var(--olivo);margin-bottom:22px">
+    <b>Todas las semanas se cuentan en hora Tulum (UTC−5).</b> Un lead que entra el domingo a las 10 de la noche
+    pertenece a la semana que termina ese domingo, no a la siguiente. Las tres pantallas usan el mismo reloj.
+  </div>`;
+}
+
 function renderDiag(){
   const host = document.getElementById("diag-content"); if(!host) return;
   const dr = document.getElementById("diag-run"); if(dr) dr.onclick = diagRun;
   if(!isAdmin()){ host.innerHTML = `<div class="empty-rep">Solo administradores.</div>`; return; }
+  // El glosario no depende de las pruebas de conexión: se muestra siempre.
   if(!diagState.pruebas){
-    host.innerHTML = `<div class="empty-rep">Pulsa <b>Probar conexiones</b> para revisar los permisos del token y leer la configuración del CRM.</div>`;
+    host.innerHTML = diagSeccionGlosario()
+      + `<div class="empty-rep">Pulsa <b>Probar conexiones</b> para revisar los permisos del token y leer la configuración del CRM.</div>`;
     return;
   }
-  host.innerHTML = diagSeccionPermisos() + diagSeccionMensajes() + diagSeccionCampos()
+  host.innerHTML = diagSeccionGlosario()
+                 + diagSeccionPermisos() + diagSeccionMensajes() + diagSeccionCampos()
                  + diagSeccionPipelines() + diagSeccionAtribucion() + diagSeccionCuentas()
                  + diagSeccionHorario() + diagSeccionValores();
 }

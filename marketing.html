@@ -312,7 +312,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   }
   function respBlock(){ return `<div class="card"><div class="card-head"><span class="dot" style="background:var(--meta)"></span><h3>Responsable</h3></div><div class="card-body"><input type="text" id="x_resp" placeholder="Nombre del responsable" style="font-family:var(--sans);font-size:14px;padding:8px 10px;border:1px solid var(--linea);border-radius:8px;background:var(--crema);color:var(--texto);width:100%;max-width:420px;"></div></div>`; }
   function fillResp(rec){ const v = (rec && rec.responsable) || RESP[state.active] || ''; setV('x_resp', v); }
-  function readResp(rec){ const v = gv('x_resp'); rec.responsable = v; if(v && v !== RESP[state.active]){ RESP[state.active] = v; try{ window.storage.set('mkt_resp', JSON.stringify(RESP)); }catch(e){} } }
+  function readResp(rec){ const v = gv('x_resp'); rec.responsable = v; if(v && v !== RESP[state.active]){ RESP[state.active] = v; try{ window.storage.set('mkt_resp', JSON.stringify(RESP)); }catch(e){ console.error('No se pudo guardar el responsable', e); } } }
   function noData(p,type){ const r=type==='week'?weekRange(p):ymLabel(p); return `<div class="card"><div class="card-body" style="text-align:center;color:var(--neutro)">No hay datos para <b>${type==='week'?p:r}</b>${type==='week'?' ('+r+')':''}. Captúralos en <b>Ingreso de datos</b>.</div></div>`; }
   function respLine(rec){ const r=(rec&&rec.responsable)||RESP[state.active]||''; return `<div class="sresp">Responsable: ${r&&r.trim()?escHtmlSafe(r):'sin asignar'}</div>`; }
   function cRow(n,v){ return `<tr><td class="kname">${n}</td><td class="kval">${fmt(v)}</td><td class="kmeta"></td><td class="ccell"></td></tr>`; }
@@ -468,19 +468,19 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
         } else {
           writeMetaLabel(M, sec, key, v, nameInp.dataset.orig);
         }
-        await saveMeta(M); showToast('✓ Nombre guardado');
+        if(await saveMeta(M)) showToast('✓ Nombre guardado');
       };
       numInp.onchange = async () => {
         const v = numInp.value.trim();
         if(isCustom){ const it = mktCustomKPIs(M).find(c => c.k === key); if(it) it.meta_num = v === '' ? null : Number(v); }
         else writeMetaNum(M, sec, key, v);
-        await saveMeta(M); showToast('✓ Meta guardada');
+        if(await saveMeta(M)) showToast('✓ Meta guardada');
       };
       pctInp.onchange = async () => {
         const v = pctInp.value.trim();
         if(isCustom){ const it = mktCustomKPIs(M).find(c => c.k === key); if(it) it.meta_pct = v === '' ? null : Number(v); }
         else writeMetaPct(M, sec, key, v);
-        await saveMeta(M); showToast('✓ Meta % guardada');
+        if(await saveMeta(M)) showToast('✓ Meta % guardada');
       };
       delBtn.onclick = async () => {
         if(isCustom){
@@ -516,7 +516,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
         } else {
           setKpiSection(M, { scope: data.sec, key: data.key }, targetSec);
         }
-        await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); showToast('KPI movido ✓');
+        { const ok=await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); if(ok) showToast('KPI movido ✓'); }
       };
     });
     // Drag de secciones para reorder
@@ -553,7 +553,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
         order.splice(fromIdx, 1);
         order.splice(toIdx, 0, draggedId);
         M.metas.__section_order = order;
-        await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); showToast('Sección reordenada ✓');
+        { const ok=await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); if(ok) showToast('Sección reordenada ✓'); }
       };
     });
     // Renombrar sección custom
@@ -563,7 +563,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
         M.metas.__section_labels = M.metas.__section_labels || {};
         if(v === secId) delete M.metas.__section_labels[secId]; else M.metas.__section_labels[secId] = v;
         if(!Object.keys(M.metas.__section_labels).length) delete M.metas.__section_labels;
-        await saveMeta(M); showToast('✓ Sección renombrada');
+        if(await saveMeta(M)) showToast('✓ Sección renombrada');
       };
     });
     // Borrar sección custom
@@ -577,7 +577,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
         if(!M.metas.__custom_sections.length) delete M.metas.__custom_sections;
         (M.metas.__custom || []).forEach(c => { if(c.section === secId) c.section = null; });
         if(M.metas.__section_labels) delete M.metas.__section_labels[secId];
-        await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); showToast('Sección borrada');
+        { const ok=await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); if(ok) showToast('Sección borrada'); }
       };
     });
     // Crear sección
@@ -587,7 +587,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
       M.metas.__custom_sections = mktCustomSections(M).slice();
       if(M.metas.__custom_sections.includes(name) || nativeSections.some(s => s.scope === name)){ alert('Ya existe una sección con ese nombre'); return; }
       M.metas.__custom_sections.push(name);
-      await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); showToast(`✓ Sección "${name}" creada`);
+      { const ok=await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); if(ok) showToast(`✓ Sección "${name}" creada`); }
     };
     // Crear KPI personalizado
     document.getElementById('mkt-new-kpi-save').onclick = async () => {
@@ -599,7 +599,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
       const k = 'custom_' + name.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,40) + '_' + Math.random().toString(36).slice(2,6);
       M.metas.__custom = mktCustomKPIs(M).slice();
       M.metas.__custom.push({ k, l: name, meta_num: num === '' ? null : Number(num), meta_pct: pct === '' ? null : Number(pct), section: secId });
-      await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); showToast(`✓ KPI "${name}" agregado`);
+      { const ok=await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); if(ok) showToast(`✓ KPI "${name}" agregado`); }
     };
   }
   function rsMetas(host,M){
@@ -783,8 +783,30 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
       : (M.period==='week' ? isoWeekOf(new Date())
         : (new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')));
   }
-  async function saveRec(M){ try{ await window.storage.set(M.key,JSON.stringify(M.records)); }catch(e){console.error(e);} }
-  async function saveMeta(M){ try{ await window.storage.set(M.mkey,JSON.stringify(M.metas)); }catch(e){console.error(e);} state.ingresoRendered=null; }
+  // Un guardado que falla NO puede terminar en "✓ Guardado". Antes el error se tragaba en un
+  // console.error, la promesa resolvía normal y quien llamaba celebraba igual: alguien capturaba
+  // el reporte del mes, veía el ✓ verde, cerraba la pestaña y no se había guardado nada. El lado
+  // de Ventas ya lo había arreglado (index.html · saveWeek); esto trae el mismo comportamiento.
+  // Las dos funciones avisan ellas mismas del fallo —para que un sitio de llamada nuevo no pueda
+  // olvidarlo— y devuelven true/false para que quien llama decida si muestra su mensaje de éxito.
+  function avisarFalloGuardado(e, queEs){
+    const detalle = (e && e.message) ? e.message : String(e);
+    console.error('No se pudo guardar ' + queEs, e);
+    showToast('⚠ No se guardó — revisa tu conexión');
+    try{
+      alert('NO se guardó ' + queEs + ' en el servidor.\n\n' + detalle +
+        '\n\nLo que capturaste sigue en pantalla: revisa tu conexión y vuelve a guardar. ' +
+        'Si recargas la página ahora, se pierde.');
+    }catch(_){}
+  }
+  async function saveRec(M){
+    try{ await window.storage.set(M.key, JSON.stringify(M.records)); return true; }
+    catch(e){ avisarFalloGuardado(e, 'el reporte de ' + M.name); return false; }
+  }
+  async function saveMeta(M){
+    try{ await window.storage.set(M.mkey, JSON.stringify(M.metas)); state.ingresoRendered=null; return true; }
+    catch(e){ avisarFalloGuardado(e, 'las metas de ' + M.name); return false; }
+  }
 
   function getAllowedMods(){ try{ if(window.parent && window.parent!==window && typeof window.parent.getMktAllowedModules==='function'){ const r = window.parent.getMktAllowedModules(); return r==null ? null : r; } }catch(e){} return null; }
   function orderFiltered(){ const a=getAllowedMods(); return a==null ? ORDER : ORDER.filter(id=>a.includes(id)); }
@@ -923,10 +945,10 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     }
     const inp=$('#resp-pill-input'); if(inp && document.activeElement!==inp){ inp.value = RESP[state.active] || ''; }
   }
-  (function(){ const inp=$('#resp-pill-input'); if(!inp) return; const save=async()=>{ const v=inp.value.trim(); if(v!==(RESP[state.active]||'')){ RESP[state.active]=v; try{ await window.storage.set('mkt_resp', JSON.stringify(RESP)); }catch(e){} showToast('✓ Responsable guardado'); if(state.view==='ingreso'){ const x=$('#x_resp'); if(x) x.value=v; } } }; inp.addEventListener('blur',save); inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); inp.blur(); } }); })();
+  (function(){ const inp=$('#resp-pill-input'); if(!inp) return; const save=async()=>{ const v=inp.value.trim(); if(v!==(RESP[state.active]||'')){ RESP[state.active]=v; let ok=true; try{ await window.storage.set('mkt_resp', JSON.stringify(RESP)); }catch(e){ ok=false; avisarFalloGuardado(e, 'el responsable'); } if(ok) showToast('✓ Responsable guardado'); if(state.view==='ingreso'){ const x=$('#x_resp'); if(x) x.value=v; } } }; inp.addEventListener('blur',save); inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); inp.blur(); } }); })();
   function setNavActive(){ document.querySelectorAll('[data-view]').forEach(el=>el.classList.toggle('active', el.dataset.view===state.view)); }
-  function bindSave(){ const b=$('#btn-save'); if(b) b.onclick=async()=>{ const M=MODS[state.active]; if(!M.pval){alert('Elige periodo.');return;} if(!isPeriodEditable(M, M.pval)){ alert('Solo puedes guardar el periodo actual o el anterior.'); return; } M.records[M.pval]=M.read(); await saveRec(M); updatePill(); showToast('✓ Guardado · '+(M.period==='week'?M.pval:ymLabel(M.pval))); }; const c=$('#btn-clear'); if(c) c.onclick=()=>{ if(confirm('¿Limpiar el formulario? (no borra lo guardado)')) MODS[state.active].fill(null); }; }
-  function renderResponsable(){ let h=`<div class="metas-hint">Escribe el responsable de cada reporte. Aparece junto al periodo y en el encabezado de cada reporte.</div><div class="card"><div class="card-head"><span class="dot" style="background:var(--meta)"></span><h3>Responsable del reporte</h3></div><div class="card-body"><div class="grid">`; ORDER.forEach(id=> h+=`<div class="field"><label>${MODS[id].name}</label><input type="text" id="resp_${id}" value="${(RESP[id]||'').replace(/"/g,'&quot;')}" placeholder="Nombre del responsable"></div>`); h+=`</div></div></div><div class="actions"><button class="btn-prim" id="btn-save-resp">Guardar responsables</button></div>`; $('#view-responsable').innerHTML=h; $('#btn-save-resp').onclick=async()=>{ ORDER.forEach(id=>RESP[id]=$('#resp_'+id).value.trim()); try{await window.storage.set('mkt_resp',JSON.stringify(RESP));}catch(e){} showToast('✓ Responsables guardados'); updatePill(); }; }
+  function bindSave(){ const b=$('#btn-save'); if(b) b.onclick=async()=>{ const M=MODS[state.active]; if(!M.pval){alert('Elige periodo.');return;} if(!isPeriodEditable(M, M.pval)){ alert('Solo puedes guardar el periodo actual o el anterior.'); return; } M.records[M.pval]=M.read(); const ok=await saveRec(M); updatePill(); if(ok) showToast('✓ Guardado · '+(M.period==='week'?M.pval:ymLabel(M.pval))); }; const c=$('#btn-clear'); if(c) c.onclick=()=>{ if(confirm('¿Limpiar el formulario? (no borra lo guardado)')) MODS[state.active].fill(null); }; }
+  function renderResponsable(){ let h=`<div class="metas-hint">Escribe el responsable de cada reporte. Aparece junto al periodo y en el encabezado de cada reporte.</div><div class="card"><div class="card-head"><span class="dot" style="background:var(--meta)"></span><h3>Responsable del reporte</h3></div><div class="card-body"><div class="grid">`; ORDER.forEach(id=> h+=`<div class="field"><label>${MODS[id].name}</label><input type="text" id="resp_${id}" value="${(RESP[id]||'').replace(/"/g,'&quot;')}" placeholder="Nombre del responsable"></div>`); h+=`</div></div></div><div class="actions"><button class="btn-prim" id="btn-save-resp">Guardar responsables</button></div>`; $('#view-responsable').innerHTML=h; $('#btn-save-resp').onclick=async()=>{ ORDER.forEach(id=>RESP[id]=$('#resp_'+id).value.trim()); let ok=true; try{await window.storage.set('mkt_resp',JSON.stringify(RESP));}catch(e){ ok=false; avisarFalloGuardado(e, 'los responsables'); } if(ok) showToast('✓ Responsables guardados'); updatePill(); }; }
   function checkAdmin(){ try{ return !!(window.parent && window.parent !== window && typeof window.parent.isMktAdmin === 'function' && window.parent.isMktAdmin()); }catch(e){ return false; } }
   function isPeriodEditable(M, pval){
     if(checkAdmin()) return true;
@@ -1011,7 +1033,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     });
     $('#view-basedatos').querySelectorAll('.db-del').forEach(b => b.onclick = async () => {
       if(!confirm('¿Eliminar el registro '+b.dataset.k+'? No se puede deshacer.')) return;
-      delete M.records[b.dataset.k]; await saveRec(M); renderBaseDatos(M); updatePill(); showToast('Registro eliminado');
+      { delete M.records[b.dataset.k]; const ok=await saveRec(M); renderBaseDatos(M); updatePill(); if(ok) showToast('Registro eliminado'); }
     });
     const ex = $('#db-export'); if(ex) ex.onclick = () => {
       const data = JSON.stringify({reporte:MODS[moduleId].name, records:M.records, metas:M.metas, responsable:RESP[moduleId]||''}, null, 2);

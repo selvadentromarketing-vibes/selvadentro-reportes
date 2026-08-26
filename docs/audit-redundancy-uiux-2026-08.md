@@ -5,6 +5,9 @@
 **Result:** 46 verified findings — 18 high severity, 25 medium, 3 low. ~406 lines removable without losing functionality.
 
 
+**Update:** 6 findings are already fixed and 2 partly fixed — the five most urgent ones, implemented and verified in a browser against the pre-fix code. Each carries a **Status** line below saying what changed.
+
+
 > Every finding cites line references verified against the file. Findings that did not
 > survive verification are not included.
 
@@ -71,6 +74,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** They don't need to be unified: the three measure legitimately different things and all three are useful. They need to be NAMED differently and said out loud on screen. Concrete proposal: in Dirección, “Reported WON” (captured by the team); in CRM en vivo, “WON closed this week”; in Calidad de Leads, “Cohort WON” or “sales from this week's leads”. Each with a one-line footnote saying which date it cuts on. And while you're there, align crmWeekOf to Tulum time, which is the convention the README already sets, so at least the two CRM readings share a calendar. The Diagnóstico tab is the natural place to publish all three definitions together.
 
+**Status.** Fixed — the three are now “WON reportado”, “WON cerrado” and “WON del cohorte”, each with the cutoff date in its tooltip, and all three definitions are published in the Diagnóstico glossary.
+
 ### [HIGH] The ← button leaves the app blank after visiting “Desempeño de Ventas”
 
 `crash-atras-desempeno` · correctness · low effort
@@ -82,6 +87,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 **Why it matters.** The exception fires AFTER every view has been switched off, so the handler aborts and turns none back on: the content area goes completely blank with the tab bar still showing. There's no error message. The only way out is reloading the page, and reloading loses whatever week range was being reviewed. It's a short, plausible path: “Desempeño de Ventas” is one of the most-consulted reports and the ← arrow sits right there in the top bar.
 
 **How to fix it.** Two lines. Add the guard on 1648: const v = document.getElementById("view-"+VENTAS_SUBTAB); if(v) v.classList.add("active"); else { VENTAS_SUBTAB="reporte"; document.getElementById("view-reporte").classList.add("active"); }. And have navGo call mostrarDesempeno(true) when it restores an entry whose subtab is CANAL_DESEMP, instead of treating it as a normal sub-tab — which is exactly what switchChannel already does correctly when the change comes from the select.
+
+**Status.** Fixed — navGo restores the synthetic channel through the select instead of as a sub-tab, and the view lookup in the tab handler is guarded.
 
 ### [HIGH] Two tabs file the same lead in different weeks: CRM counts in UTC, Calidad de Leads in Tulum time
 
@@ -95,6 +102,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** Align crmWeekOf with the documented convention: function crmWeekOf(iso){ const d = iso ? new Date(new Date(iso).getTime() - LQ_TZ_MS) : null; … }. Better still, delete both and keep a single week function with the timezone shift inside, so they can't drift apart again. Note: the change moves records from one week to another, so the crm:agg:v1 cache has to be invalidated and re-synced, and it's worth telling the team that some historical CRM counts will shift by one slot.
 
+**Status.** Fixed — crmWeekOf and lqWeekOf are now the same function, semanaISOTulum, and the CRM aggregate cache key moved to v2 so stale UTC-bucketed data gets rebuilt.
+
 ### [HIGH] In Metas and Base de datos, picking “Calidad de Leads” silently shows Redes Sociales data
 
 `metas-lq-muestra-rrss` · correctness · low effort
@@ -106,6 +115,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 **Why it matters.** The user believes they're editing Calidad de Leads goals and they're actually editing and saving the Redes Sociales ones. There's no signal at all: no error, no different title, no empty screen. Goals are the criterion the app uses to paint every KPI green or red, so a goal set in the wrong place propagates into every report. Same thing in Base de datos, where records can also be deleted.
 
 **How to fix it.** MKT_LQ_LIVE exists for the Marketing tab's selector, where the live view genuinely lives in index.html; it shouldn't appear in Metas or Base de datos because it has no module on the iframe side. Filter it out of both: MKT_MODULES.filter(m=>m.id!==MKT_LQ_LIVE). If live Calidad de Leads should have its own goals, they need to be built in index.html rather than delegated to the iframe.
+
+**Status.** Fixed — Metas and Base de datos build their Marketing dropdown from MKT_MODULES_EMBED, which excludes lq_live.
 
 ### [HIGH] The SLA report grades advisors on data that may be missing, and doesn't say so
 
@@ -167,6 +178,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** Have showNoAccessScreen replace the whole .shell rather than just .main, so the sidebar goes with the rest. As a general safety net, guard the handler's two lines (1657 and 1660) against null, which also covers any other view removed in future.
 
+**Status.** Fixed — showNoAccessScreen now replaces .shell, so the sidebar goes with the content; the handler's lookups are guarded too.
+
 ### [HIGH] The app says “don't reload, you'll lose it” and then reloads itself
 
 `sesion-expira-borra-captura` · correctness · medium effort
@@ -190,6 +203,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 **Why it matters.** This is silent data loss, not an annoyance. Someone captures the monthly Redes Sociales report, sees the green ✓, closes the tab — and nothing was saved. There's no way for them to notice until they come back and find the period empty, probably weeks later. Of every finding in this report, it's the one that can destroy work without leaving a trace.
 
 **How to fix it.** Let saveRec and saveMeta propagate the error (drop the catch or rethrow) and have bindSave show the ✓ only if the promise resolved, with the same warning index.html already uses on failure. Three lines, and the most urgent fix in this audit alongside the SLA one.
+
+**Status.** Fixed — saveRec and saveMeta report the failure themselves and return a boolean; all 10 call sites only show their success toast when the write actually resolved.
 
 ### [HIGH] Picking a week that already has data opens a blank form, and saving overwrites it without warning
 
@@ -557,6 +572,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** Move what is content out of the tooltip: a legend row above the table, or a collapsible footnote with the definitions of OPP, WON and the column abbreviations. The title can stay as reinforcement for mouse users, but it can't be the only place the information lives.
 
+**Status.** Partly fixed — the OPP definition is now in the Diagnóstico glossary as well as the tooltip. The abbreviated column headers still rely on hover.
+
 ### [MEDIUM] The form validates nothing: anything pasted from Excel is saved as 0, and there's no per-field error state
 
 `captura-sin-validacion` · forms · medium effort
@@ -604,6 +621,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 **Why it matters.** These are the acronyms the results conversation turns on, and the app takes them as given. Anyone joining the team has to ask what separates an MQL from a CQL, and since each person gets the answer from someone different, the definitions drift apart — which is exactly the problem the automatic rule-based qualification was built to solve.
 
 **How to fix it.** The Diagnóstico tab already exists to answer this kind of question with system data: it's the natural home for the glossary — the five qualifications, OPP, WON — next to the real pipeline stages it already lists. Plus a collapsible legend above the tables that use the acronyms, so nobody has to change screens.
+
+**Status.** Partly fixed — the glossary now lives in Diagnóstico with the five qualifications, OPP and the three WONs. The collapsible legend above the tables is still pending.
 
 ### [LOW] The brand mark says “Click to change the logo” and there's no way to change the logo
 
