@@ -356,6 +356,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .lq-legend{ display:flex; flex-wrap:wrap; gap:5px 14px; margin-top:7px; font-size:11.5px; color:var(--texto); }
   .lq-legend i{ display:inline-block; width:9px; height:9px; border-radius:3px; margin-right:5px; }
   .lq-tags{ font-size:11px; color:var(--neutro); max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .diag-h{ font-family:var(--serif); color:var(--verde-prof); font-size:20px; margin:24px 0 6px; }
   .lq-meth{ background:var(--crema-2); border:1px solid var(--linea); border-radius:12px; padding:16px 20px; margin-bottom:18px; font-size:12px; color:var(--texto); line-height:1.55; }
   .lq-meth b{ color:var(--verde-prof); }
   .lq-toggle{ display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin:6px 0 12px; }
@@ -516,6 +517,10 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
       <button class="side-btn" data-tab="db" title="Base de datos">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5.5" rx="7" ry="2.8"/><path d="M5 5.5v6c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-6"/><path d="M5 11.5v6c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-6"/></svg>
         <span>Base&nbsp;datos</span>
+      </button>
+      <button class="side-btn admin-only" data-tab="diag" title="Diagnóstico del CRM y de los permisos" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
+        <span>Diagnóstico</span>
       </button>
       <button class="side-btn admin-only" data-tab="admin" title="Administración de usuarios" style="display:none">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M4 20c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/><circle cx="18" cy="6" r="1.4" fill="currentColor" stroke="none"/></svg>
@@ -692,6 +697,17 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
         <div class="cp-track"><div class="cp-bar" id="sla-progress-bar"></div></div>
       </div>
       <div id="sla-content"><div class="empty-rep">Elige el rango de semanas y pulsa Generar: el reporte recorre las conversaciones y citas de cada lead del CRM (toma 1–3 minutos).</div></div>
+    </div>
+
+    <!-- ============ DIAGNÓSTICO ============ -->
+    <div class="view" id="view-diag">
+      <div class="periodo">
+        <div class="grp"><label>Qué es esto</label><div class="semana-badge">Lo que la app ya sabe de tu CRM</div></div>
+        <div class="spacer"></div>
+        <button class="btn btn-olive" id="diag-run">Probar conexiones</button>
+      </div>
+      <p class="hint">Esta pantalla responde sola varias preguntas que antes había que ir a preguntarle a alguien: qué permisos trae el token, qué campos existen en GoHighLevel y quién los llena, cómo se llaman las etapas del pipeline, y qué porcentaje de leads llega con atribución. Los porcentajes salen de la última sincronización de Calidad de Leads.</p>
+      <div id="diag-content"><div class="empty-rep">Pulsa <b>Probar conexiones</b> para revisar los permisos del token y leer la configuración del CRM.</div></div>
     </div>
 
     <!-- ============ MARKETING (embebido) ============ -->
@@ -1641,7 +1657,7 @@ document.querySelectorAll("[data-tab]").forEach(el=>el.onclick=()=>{
     document.getElementById("view-"+tab).classList.add("active");
     document.getElementById("ventas-subtabs").style.display="none";
   }
-  const dir = ["resultados","dircom","crm","marketing","asesores","metas","db","admin"].includes(tab);
+  const dir = ["resultados","dircom","crm","marketing","asesores","metas","db","admin","diag"].includes(tab);
   document.querySelector(".canal-wrap").style.display = dir?"none":"flex";
   document.querySelector(".mkt-wrap").style.display = (tab==="marketing")?"flex":"none";
   if(tab==="resultados") showResultados();
@@ -1663,6 +1679,7 @@ document.querySelectorAll("[data-tab]").forEach(el=>el.onclick=()=>{
   if(tab==="metas") renderMetas();
   if(tab==="db") renderDB();
   if(tab==="admin") renderAdmin();
+  if(tab==="diag") renderDiag();
   navPush({ tab, subtab: tab==="ventas" ? VENTAS_SUBTAB : null });
 });
 document.getElementById("nav-back")?.addEventListener("click", ()=>navGo(-1));
@@ -2067,7 +2084,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v6";   // v6: OPP desde "Seguimiento de OPP" (v5: campaña solo desde la atribución real)
+const LQ_AGG_KEY = "lq:agg:v7";   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 const LQ_TZ = "-05:00";                 // Tulum (America/Cancun): UTC-5 fijo, sin DST
@@ -2343,6 +2360,35 @@ function lqBucketAds(adRows){
   return Object.values(by);
 }
 
+// Cuántos leads traen lleno CADA campo personalizado. Se calcula aquí porque el
+// agregado solo conserva dos campos y el resto se descarta: sin esto no había forma
+// de responder "¿existe el campo de presupuesto y lo está llenando alguien?".
+function lqCamposLlenos(boot, rawLeads){
+  const n = rawLeads.length || 1;
+  return (boot.fields||[]).map(f=>{
+    const llenos = rawLeads.filter(l=>{
+      const v = l.cf && l.cf[f.id];
+      return v != null && String(v).trim() !== "";
+    }).length;
+    return { id:f.id, nombre:f.name||"", opciones:(f.options||[]).slice(0,12), n:llenos, pct: Math.round(llenos/n*100) };
+  }).sort((a,b)=>b.n-a.n);
+}
+
+// Cobertura de atribución: responde sin preguntarle a nadie si los anuncios están
+// pasando los parámetros UTM.
+function lqCoberturaAtrib(rawLeads){
+  const pagados = rawLeads.filter(l=>{
+    const blob = ((l.src||"")+" "+((l.attr&&l.attr.src)||"")+" "+((l.attr&&l.attr.med)||"")).toLowerCase();
+    return /facebook|instagram|meta|google|adwords|gclid|fbclid|ppc|paid/.test(blob);
+  });
+  const d = pagados.length || 1;
+  const con = (k)=> pagados.filter(l=>l.attr && String(l.attr[k]||"").trim()).length;
+  return { pagados: pagados.length, total: rawLeads.length,
+           camp: con("camp"), campPct: Math.round(con("camp")/d*100),
+           ad:   con("ad"),   adPct:   Math.round(con("ad")/d*100),
+           grp:  con("grp"),  grpPct:  Math.round(con("grp")/d*100) };
+}
+
 function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
   const F = lqDetectFields(boot.fields);
   const O = oppsByContact || {};
@@ -2371,6 +2417,9 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
   leads.forEach(l=>{ const a = lqAutoQualify(l); l.alv = a.lv; l.awhy = a.why.join(" · ").slice(0,180); });
   return { ts:Date.now(), users:boot.users||{}, califField:F.calif, windsor:!!boot.windsor,
            oppStages: lqOppStageNames(boot.stages, lqOppThresholds(boot.stages)),
+           stages: boot.stages||{},
+           campos: lqCamposLlenos(boot, rawLeads),
+           atrib: lqCoberturaAtrib(rawLeads),
            weeks:weeks||[], spend:spendRows||[], adw:lqBucketAds(adRows), leads };
 }
 
@@ -5450,6 +5499,188 @@ async function bootAuth(){
     if(!st.hasUsers){ showLoginStep("step-setup"); return; }
   }catch(e){ /* si falla caemos a signin igual */ }
   showLoginStep("step-signin");
+}
+
+/* ===================== DIAGNÓSTICO ===================== */
+// Responde con datos las preguntas que antes se le hacían al equipo.
+let diagState = { pruebas:null, cuentas:null, corriendo:false };
+
+async function diagRun(){
+  if(diagState.corriendo) return;
+  diagState.corriendo = true;
+  const btn = document.getElementById("diag-run");
+  if(btn){ btn.disabled = true; btn.textContent = "Probando…"; }
+  try{
+    const d = await lqFn({action:"diag"});
+    diagState.pruebas = d.pruebas || [];
+    diagState.cuentas = d.cuentas || null;
+  }catch(e){
+    toast("No se pudo diagnosticar: "+(e.message||e));
+  }finally{
+    diagState.corriendo = false;
+    if(btn){ btn.disabled = false; btn.textContent = "Probar conexiones"; }
+    renderDiag();
+  }
+}
+
+const diagOk  = (b)=> b ? `<span class="lq-badge" style="background:var(--olivo)">Funciona</span>`
+                        : `<span class="lq-badge" style="background:#a94436">Falla</span>`;
+const diagBar = (pct)=>{
+  const c = pct>=70 ? "var(--olivo)" : pct>=30 ? "var(--cobre)" : "#a94436";
+  return `<span class="sb-track" style="display:inline-block;width:120px;vertical-align:middle"><i style="width:${Math.max(2,pct)}%;background:${c}"></i></span>`;
+};
+
+function diagSeccionPermisos(){
+  const pr = diagState.pruebas;
+  if(!pr) return "";
+  const critico = { "Mensajes de conversación":"Sin esto el reporte marca a TODOS los leads como nunca contactados y le pone 1 de 5 a todos los asesores.",
+                    "Citas":"Sin esto el show rate y el conteo de citas salen en cero como si nadie hubiera agendado.",
+                    "Campos personalizados":"Sin esto no se puede leer la calificación, el presupuesto ni el horizonte del lead.",
+                    "Oportunidades":"Sin esto no hay OPPs ni WONs en ningún reporte." };
+  const filas = pr.map(p=>`<tr>
+    <td class="lft" style="font-weight:600">${escAttr(p.nombre)}</td>
+    <td>${diagOk(p.ok)}</td>
+    <td class="lft" style="font-size:12px;color:var(--neutro)">${escAttr(p.ok ? (p.ms+" ms") : (p.nota||""))}</td>
+    <td class="lft" style="font-size:12px">${!p.ok && critico[p.nombre] ? `<span style="color:#a94436">${escAttr(critico[p.nombre])}</span>` : ""}</td>
+  </tr>`).join("");
+  const fallan = pr.filter(p=>!p.ok).length;
+  const resumen = fallan
+    ? `<div class="lq-meth" style="border-color:#a94436;background:#F2CFC9">⚠ <b>${fallan}</b> de ${pr.length} pruebas fallan. Mientras eso siga así, los reportes que dependen de ellas muestran ceros que <b>no</b> son resultados reales.</div>`
+    : `<div class="lq-meth" style="border-color:var(--olivo)">✓ El token tiene permiso para todo lo que la app necesita.</div>`;
+  return `<h3 class="diag-h">Permisos del token de GoHighLevel</h3>
+    <p class="hint" style="margin-top:-2px">Se llama a cada endpoint de verdad y se reporta cuál responde. No hace falta que nadie lea la pantalla de ajustes.</p>
+    ${resumen}
+    <div class="table-scroll" style="margin-bottom:18px"><table class="cons">
+      <tr><th class="lft">Qué se probó</th><th>Estado</th><th class="lft">Detalle</th><th class="lft">Si falla</th></tr>${filas}
+    </table></div>`;
+}
+
+function diagSeccionCampos(){
+  const pr = (diagState.pruebas||[]).find(p=>p.nombre==="Campos personalizados");
+  const campos = (pr && pr.ok && pr.datos) || [];
+  const agg = lqState.agg;
+  const llenos = {}; ((agg && agg.campos)||[]).forEach(c=>{ llenos[c.id]=c; });
+  if(!campos.length) return "";
+  const buscar = (rx)=> campos.filter(c=>rx.test(c.nombre||""));
+  const claves = [
+    ["Calificación del lead", /calific/i],
+    ["Presupuesto", /presupuest|budget|inversi[oó]n|capital/i],
+    ["Horizonte de compra", /horizonte|plazo|cu[aá]ndo|timeline|tiempo/i],
+    ["Motivo de descalificación", /descalific|motivo|raz[oó]n|perdid/i],
+    ["Seguimiento a futuro", /seguimiento/i],
+  ];
+  const resumenClaves = claves.map(([lbl,rx])=>{
+    const hit = buscar(rx);
+    if(!hit.length) return `<tr><td class="lft" style="font-weight:600">${escAttr(lbl)}</td><td class="lft" style="color:#a94436">No existe en el CRM</td><td>—</td><td class="lft"></td></tr>`;
+    return hit.map(c=>{
+      const st = llenos[c.id];
+      return `<tr><td class="lft" style="font-weight:600">${escAttr(lbl)}</td>
+        <td class="lft">${escAttr(c.nombre)} <span class="lq-sub">${escAttr(c.tipo||"")}</span></td>
+        <td>${st ? `${diagBar(st.pct)} <b>${st.pct}%</b>` : "<span class='lq-sub'>sincroniza para medir</span>"}</td>
+        <td class="lft lq-sub">${escAttr((c.opciones||[]).join(" · ").slice(0,120))}</td></tr>`;
+    }).join("");
+  }).join("");
+  const resto = campos.filter(c=>!claves.some(([,rx])=>rx.test(c.nombre||"")))
+    .map(c=>{ const st=llenos[c.id];
+      return `<tr><td class="lft lq-sub">—</td><td class="lft">${escAttr(c.nombre)}</td>
+        <td>${st ? `${diagBar(st.pct)} ${st.pct}%` : "—"}</td><td class="lft lq-sub">${escAttr((c.opciones||[]).join(" · ").slice(0,90))}</td></tr>`; }).join("");
+  return `<h3 class="diag-h">Campos del CRM · ${campos.length} en total</h3>
+    <p class="hint" style="margin-top:-2px">Arriba, los campos de los que dependen las reglas de calificación. El porcentaje es cuántos leads sincronizados lo traen lleno: un campo que existe pero nadie llena vale lo mismo que un campo que no existe.</p>
+    <div class="table-scroll" style="margin-bottom:18px"><table class="cons">
+      <tr><th class="lft">La app busca</th><th class="lft">Campo encontrado</th><th>Qué tan lleno</th><th class="lft">Opciones</th></tr>
+      ${resumenClaves}
+      <tr class="total"><td colspan="4" class="lft">Los demás campos del CRM</td></tr>
+      ${resto || `<tr><td colspan="4" class="lft lq-sub">Ninguno más.</td></tr>`}
+    </table></div>`;
+}
+
+function diagSeccionPipelines(){
+  const pr = (diagState.pruebas||[]).find(p=>p.nombre==="Pipelines y etapas");
+  const pipes = (pr && pr.ok && pr.datos) || [];
+  if(!pipes.length) return "";
+  const stages = {};
+  pipes.forEach(p=>p.etapas.forEach(e=>{ stages[e.id] = { p:p.nombre, s:e.nombre, i:e.pos }; }));
+  const th = lqOppThresholds(stages);
+  const bloques = pipes.map(p=>{
+    const filas = p.etapas.map(e=>{
+      const esOpp = lqIsOppStage2({p:p.nombre, s:e.nombre, i:e.pos}, th);
+      const muerta = LQ_RX_MUERTA.test(e.nombre||"");
+      const et = muerta ? `<span class="lq-badge" style="background:#8a8a8a">Terminal · fuera</span>`
+               : esOpp ? `<span class="lq-badge" style="background:var(--cobre)">Cuenta como OPP</span>`
+               : `<span class="lq-sub">antes de OPP</span>`;
+      return `<tr><td style="width:40px">${e.pos+1}</td><td class="lft" style="font-weight:600">${escAttr(e.nombre)}</td><td class="lft">${et}</td></tr>`;
+    }).join("");
+    return `<div style="margin-bottom:14px"><div style="font-weight:600;color:var(--verde-prof);margin-bottom:5px">${escAttr(p.nombre)}</div>
+      <div class="table-scroll"><table class="cons"><tr><th>#</th><th class="lft">Etapa</th><th class="lft">Cómo la cuenta la app</th></tr>${filas}</table></div></div>`;
+  }).join("");
+  return `<h3 class="diag-h">Pipelines y etapas</h3>
+    <p class="hint" style="margin-top:-2px">Los nombres reales de tu CRM, en orden, y cómo los interpreta la app hoy. <b>OPP</b> arranca en la primera etapa de seguimiento y las etapas terminales negativas quedan fuera aunque estén al final del tablero.</p>
+    ${bloques}`;
+}
+
+function diagSeccionAtribucion(){
+  const a = lqState.agg && lqState.agg.atrib;
+  if(!a) return `<h3 class="diag-h">Atribución de los anuncios</h3>
+    <p class="hint">Sincroniza Calidad de Leads para medir qué porcentaje de leads pagados llega con campaña, anuncio y conjunto.</p>`;
+  const fila = (lbl,n,pct,nota)=>`<tr><td class="lft" style="font-weight:600">${escAttr(lbl)}</td>
+    <td>${diagBar(pct)} <b>${pct}%</b></td><td>${n} de ${a.pagados}</td><td class="lft lq-sub">${escAttr(nota)}</td></tr>`;
+  const veredicto = a.campPct >= 70
+    ? `<div class="lq-meth" style="border-color:var(--olivo)">✓ Los anuncios <b>sí</b> están pasando la campaña. El desglose por campaña es confiable.</div>`
+    : `<div class="lq-meth" style="border-color:#a94436;background:#F2CFC9">⚠ Solo <b>${a.campPct}%</b> de los leads pagados trae campaña. <b>Esta es la respuesta a "¿los anuncios están pasando UTMs?": no.</b> Hasta que se configuren los parámetros UTM en Meta Ads y Google Ads, el desglose por campaña, conjunto y anuncio va a seguir saliendo casi vacío.</div>`;
+  return `<h3 class="diag-h">Atribución de los anuncios</h3>
+    <p class="hint" style="margin-top:-2px">De los ${a.total} leads sincronizados, ${a.pagados} vienen de Meta o Google. Esto mide cuántos traen de dónde salieron.</p>
+    ${veredicto}
+    <div class="table-scroll" style="margin-bottom:18px"><table class="cons">
+      <tr><th class="lft">Qué trae el lead</th><th>Cobertura</th><th>Leads</th><th class="lft">Para qué sirve</th></tr>
+      ${fila("Campaña (utm_campaign)", a.camp, a.campPct, "Sin esto no se sabe qué campaña generó el lead")}
+      ${fila("Anuncio (utm_content)", a.ad, a.adPct, "Sin esto no hay desglose por anuncio")}
+      ${fila("Conjunto (utm_term)", a.grp, a.grpPct, "GoHighLevel no expone conjunto: solo se resuelve cruzando el anuncio con Windsor")}
+    </table></div>`;
+}
+
+function diagSeccionCuentas(){
+  const c = diagState.cuentas;
+  if(!c) return "";
+  if(!c.configurado) return `<h3 class="diag-h">Cuentas de anuncios</h3><div class="lq-meth">Windsor no está configurado (falta WINDSOR_API_KEY).</div>`;
+  const fila = (lbl,x)=> x ? `<tr><td class="lft" style="font-weight:600">${escAttr(lbl)}</td><td class="lft">${escAttr(x.cuenta||"—")}</td><td class="lft">${escAttr(x.moneda||"—")}</td><td class="lft">${escAttr(x.zona||"—")}</td></tr>`
+                           : `<tr><td class="lft" style="font-weight:600">${escAttr(lbl)}</td><td colspan="3" class="lft lq-sub">Sin datos en los últimos 7 días</td></tr>`;
+  const monedas = [c.meta&&c.meta.moneda, c.google&&c.google.moneda].filter(Boolean);
+  const aviso = monedas.length>1 && new Set(monedas).size>1
+    ? `<div class="lq-meth" style="border-color:var(--cobre)">⚠ Las cuentas facturan en monedas distintas (${escAttr([...new Set(monedas)].join(" y "))}). La inversión total y el costo por lead están sumando monedas diferentes.</div>`
+    : monedas.length ? `<div class="lq-meth" style="border-color:var(--olivo)">✓ Ambas cuentas facturan en <b>${escAttr(monedas[0])}</b>: la inversión se puede sumar sin convertir.</div>` : "";
+  return `<h3 class="diag-h">Cuentas de anuncios</h3>
+    <p class="hint" style="margin-top:-2px">Moneda y zona horaria leídas directo de las plataformas. Esto responde las dos preguntas que estaban en la lista de Elsa.</p>
+    ${aviso}
+    <div class="table-scroll" style="margin-bottom:18px"><table class="cons">
+      <tr><th class="lft">Plataforma</th><th class="lft">Cuenta</th><th class="lft">Moneda</th><th class="lft">Zona horaria</th></tr>
+      ${fila("Meta Ads", c.meta)}${fila("Google Ads", c.google)}
+    </table></div>`;
+}
+
+function diagSeccionMensajes(){
+  const pr = (diagState.pruebas||[]).find(p=>p.nombre==="Mensajes de conversación");
+  if(!pr || !pr.ok || !pr.datos) return "";
+  const d = pr.datos;
+  const av = (b, si, no)=> b ? `<span style="color:var(--verde-ok-tx)">✓ ${escAttr(si)}</span>` : `<span style="color:#a94436">✗ ${escAttr(no)}</span>`;
+  return `<h3 class="diag-h">De qué depende el SLA por asesor</h3>
+    <p class="hint" style="margin-top:-2px">Para separar lo que escribió una persona de lo que mandó una automatización, la app necesita dos claves en cada mensaje. Esto comprueba si llegan.</p>
+    <div class="lq-meth">
+      ${av(d.traeUserId, "Los mensajes traen usuario: se puede atribuir el trabajo a cada asesor.", "Los mensajes NO traen usuario: sin esto todo el contacto manual se cuenta como automatización y el SLA por asesor mide ruido.")}
+      <br>${av(d.traeSource, "Los mensajes traen origen: se pueden excluir workflows y campañas.", "Los mensajes NO traen origen: no se puede distinguir un workflow de un mensaje escrito a mano.")}
+      ${(d.tipos||[]).length ? `<br><span class="lq-sub">Tipos vistos en la muestra: ${escAttr(d.tipos.join(", "))}</span>` : ""}
+    </div>`;
+}
+
+function renderDiag(){
+  const host = document.getElementById("diag-content"); if(!host) return;
+  const dr = document.getElementById("diag-run"); if(dr) dr.onclick = diagRun;
+  if(!isAdmin()){ host.innerHTML = `<div class="empty-rep">Solo administradores.</div>`; return; }
+  if(!diagState.pruebas){
+    host.innerHTML = `<div class="empty-rep">Pulsa <b>Probar conexiones</b> para revisar los permisos del token y leer la configuración del CRM.</div>`;
+    return;
+  }
+  host.innerHTML = diagSeccionPermisos() + diagSeccionMensajes() + diagSeccionCampos()
+                 + diagSeccionPipelines() + diagSeccionAtribucion() + diagSeccionCuentas();
 }
 
 /* ===================== ADMIN PANEL ===================== */

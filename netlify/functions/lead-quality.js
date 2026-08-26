@@ -281,6 +281,120 @@ async function ads({ start, end }) {
   return { configured: true, ads: rows.filter((r) => r.spend || r.clicks || r.impr || r.results) };
 }
 
+// --- Diagnóstico: la app se responde a sí misma ---
+// Varias "preguntas al cliente" (¿existe el campo de presupuesto?, ¿qué etapas tiene
+// el pipeline?, ¿el token tiene permiso de mensajes?) no eran preguntas: eran datos
+// que la app ya bajaba y tiraba. Esto los expone, y de paso PRUEBA cada endpoint para
+// saber qué permisos trae realmente el token, en vez de pedirle a alguien que lea la
+// pantalla de ajustes de GoHighLevel.
+async function diag() {
+  const probar = async (nombre, fn) => {
+    const t0 = Date.now();
+    try {
+      const r = await fn();
+      return { nombre, ok: true, ms: Date.now() - t0, nota: "", datos: r };
+    } catch (e) {
+      return { nombre, ok: false, ms: Date.now() - t0, nota: String(e.message || e), detalle: (e.detail || "").slice(0, 200) };
+    }
+  };
+
+  // Un contacto real para poder probar mensajes y citas (dependen de un id)
+  let contactoId = "";
+  const pContactos = await probar("Contactos", async () => {
+    const d = await ghl("/contacts/search", {
+      method: "POST",
+      body: { locationId: LOCATION_ID, pageLimit: 1, sort: [{ field: "dateAdded", direction: "desc" }] },
+    });
+    const c = (d.contacts || [])[0];
+    if (c && c.id) contactoId = c.id;
+    // Qué claves trae de verdad un contacto: cierra la duda de si llegan assignedTo,
+    // phone y los campos de nombre, que el esquema documentado no lista.
+    return { total: d.total ?? null, claves: c ? Object.keys(c).sort() : [], atribucion: c && c.attributionSource ? Object.keys(c.attributionSource).sort() : [] };
+  });
+
+  const [pCampos, pUsuarios, pPipelines, pOpps] = await Promise.all([
+    probar("Campos personalizados", async () => {
+      const d = await ghl(`/locations/${LOCATION_ID}/customFields`);
+      return (d.customFields || []).map((f) => ({
+        id: f.id, nombre: f.name || f.fieldKey || "", tipo: f.dataType || f.type || "",
+        opciones: (f.picklistOptions || f.options || []).map((o) => (typeof o === "string" ? o : o?.name || o?.value || "")).filter(Boolean),
+      }));
+    }),
+    probar("Usuarios", async () => {
+      const d = await ghl(`/users/?locationId=${LOCATION_ID}`);
+      return (d.users || []).filter((u) => !u.deleted).length;
+    }),
+    probar("Pipelines y etapas", async () => {
+      const d = await ghl(`/opportunities/pipelines?locationId=${LOCATION_ID}`);
+      return (d.pipelines || []).map((p) => ({
+        nombre: p.name || "",
+        etapas: (p.stages || []).map((st, i) => ({ id: st.id, nombre: st.name || "", pos: st.position ?? i })).sort((a, b) => a.pos - b.pos),
+      }));
+    }),
+    probar("Oportunidades", async () => {
+      const d = await ghl(`/opportunities/search?location_id=${LOCATION_ID}&limit=1&getTasks=true`);
+      const o = (d.opportunities || [])[0];
+      return {
+        total: d.total ?? null,
+        claves: o ? Object.keys(o).sort() : [],
+        // ¿Dónde vive el "próximo paso"? Si hay tareas, ahí puede vivir.
+        traeTareas: !!(o && Array.isArray(o.tasks)),
+        traeMotivoPerdida: !!(o && ("lostReasonId" in o)),
+      };
+    }),
+  ]);
+
+  // Mensajes y citas necesitan un contacto: son los dos permisos que más daño hacen
+  // en silencio (sin ellos el reporte marca a todos los leads como "nunca tocados").
+  let pConv = { nombre: "Conversaciones", ok: false, nota: "No se pudo probar: no hubo contacto de muestra" };
+  let pMsgs = { nombre: "Mensajes de conversación", ok: false, nota: "No se pudo probar: no hubo conversación de muestra" };
+  let pCitas = { nombre: "Citas", ok: false, nota: "No se pudo probar: no hubo contacto de muestra" };
+  if (contactoId) {
+    let convId = "";
+    pConv = await probar("Conversaciones", async () => {
+      const d = await ghl(`/conversations/search?locationId=${LOCATION_ID}&contactId=${encodeURIComponent(contactoId)}&limit=1`);
+      const cv = (d.conversations || [])[0];
+      if (cv && cv.id) convId = cv.id;
+      return { conversaciones: (d.conversations || []).length };
+    });
+    if (convId) {
+      pMsgs = await probar("Mensajes de conversación", async () => {
+        const d = await ghl(`/conversations/${encodeURIComponent(convId)}/messages?limit=5`);
+        const arr = Array.isArray(d.messages) ? d.messages : (d.messages && d.messages.messages) || [];
+        const m = arr[0];
+        return {
+          mensajes: arr.length,
+          // De estas dos claves depende TODO el SLA por asesor
+          traeUserId: arr.some((x) => x && x.userId),
+          traeSource: arr.some((x) => x && x.source),
+          tipos: [...new Set(arr.map((x) => x && x.messageType).filter(Boolean))],
+          claves: m ? Object.keys(m).sort() : [],
+        };
+      });
+    }
+    pCitas = await probar("Citas", async () => {
+      const d = await ghl(`/contacts/${encodeURIComponent(contactoId)}/appointments`);
+      return { citas: (d.events || []).length };
+    });
+  }
+
+  // Moneda y zona horaria de las cuentas de anuncios: son campos, no preguntas.
+  let cuentas = { configurado: !!WINDSOR_KEY, meta: null, google: null, error: "" };
+  if (WINDSOR_KEY) {
+    try {
+      const [fb, gg] = await Promise.all([
+        windsorGet("facebook", "date_preset=last_7d&fields=account_name,account_currency,account_timezone").catch(() => []),
+        windsorGet("google_ads", "date_preset=last_7d&fields=account_name,account_currency_code,account_time_zone").catch(() => []),
+      ]);
+      const f0 = fb[0] || null, g0 = gg[0] || null;
+      cuentas.meta = f0 ? { cuenta: f0.account_name || "", moneda: f0.account_currency || "", zona: f0.account_timezone || "" } : null;
+      cuentas.google = g0 ? { cuenta: g0.account_name || "", moneda: g0.account_currency_code || "", zona: g0.account_time_zone || "" } : null;
+    } catch (e) { cuentas.error = String(e.message || e); }
+  }
+
+  return { pruebas: [pContactos, pCampos, pUsuarios, pPipelines, pOpps, pConv, pMsgs, pCitas], cuentas };
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return S.corsPreflight();
   if (event.httpMethod !== "POST") return json(405, { error: "Method not allowed" });
@@ -299,11 +413,12 @@ exports.handler = async (event) => {
 
   try {
     if (payload.action === "bootstrap") return json(200, await bootstrap());
+    if (payload.action === "diag") return json(200, await diag());
     if (payload.action === "leads") return json(200, await leads(payload));
     if (payload.action === "opps") return json(200, await opps(payload));
     if (payload.action === "spend") return json(200, await spend(payload));
     if (payload.action === "ads") return json(200, await ads(payload));
-    return json(400, { error: "action debe ser 'bootstrap', 'leads', 'opps', 'spend' o 'ads'" });
+    return json(400, { error: "action debe ser 'bootstrap', 'diag', 'leads', 'opps', 'spend' o 'ads'" });
   } catch (e) {
     const status = e.status === 429 ? 429 : e.status === 400 ? 400 : 502;
     return json(status, { error: String(e.message || e), detail: e.detail });
