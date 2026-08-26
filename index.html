@@ -14,6 +14,13 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
 
 <style>
   :root{
+    /* Escala tipográfica y de radios. El archivo llegó a tener 25 tamaños de letra y 14
+       radios distintos, escritos a mano uno por uno; una escala sana tiene 7 u 8 pasos.
+       Nada de esto se veía roto en ninguna pantalla suelta: se acumulaba. Toda medida
+       nueva sale de aquí. */
+    --fs-xs:11px; --fs-s:12px; --fs-sm:13px; --fs-md:14px;
+    --fs-lg:16px; --fs-xl:20px; --fs-2xl:28px; --fs-3xl:38px;
+    --r-s:6px; --r-m:10px; --r-l:14px; --r-pill:999px;
     --verde-prof:#465241; --olivo:#65713F; --cobre:#CF8543; --arena:#D9B37E;
     /* El cobre de marca (#CF8543) da 2.96:1 con texto blanco encima — reprueba el mínimo
        de 4.5:1. --cobre-tx es el mismo color oscurecido (4.6:1) y se usa SOLO donde hay
@@ -21,68 +28,69 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
     --cobre-tx:#A65F22; --cobre-tx-hover:#8E4F1B;
     /* Estos tres se escribían a mano por todo el archivo (var(--rojo) 21 veces) en vez de
        ser variables, que es justo lo que hace que una paleta se erosione. */
-    --rojo:#a94436; --olivo-hover:#566034; --gris-suave:#8a8a8a;
+    --rojo:#a94436; --olivo-hover:#566034; --gris-suave:#8a8a8a; --cobre-hover:#bb7536;
     --crema:#FAF8F3; --crema-2:#F1ECE1; --linea:#E3DBCC; --texto:#2E332B; --gris-input:#ECECEC;
     --verde-ok-bg:#CBDDC0; --verde-ok-tx:#3C5A2E; --rojo-no-bg:#F2CFC9; --rojo-no-tx:#9B3B2E; --neutro:#5F6459; --logo:#EFE7D6;
     --serif:"Cardo",Georgia,serif; --sans:"Lexend",system-ui,-apple-system,"Segoe UI",sans-serif;
+    --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
   }
   *{ box-sizing:border-box; } body{ margin:0; }
   /* Estado de foco para TODA la app. Las reglas de más abajo quitan el outline de los
      campos y lo cambian por un borde de bajo contraste; esta lo devuelve, y llega
      también a botones, pestañas y selects, que no tenían ninguno. */
-  :focus-visible{ outline:2px solid var(--verde-prof); outline-offset:2px; border-radius:3px; }
+  :focus-visible{ outline:2px solid var(--verde-prof); outline-offset:2px; border-radius:var(--r-s); }
   .topbar :focus-visible, .sidebar :focus-visible{ outline-color:var(--arena); }
-  #app{ font-family:var(--sans); color:var(--texto); background:var(--crema); min-height:100vh; font-size:14px; line-height:1.45; }
+  #app{ font-family:var(--sans); color:var(--texto); background:var(--crema); min-height:100vh; font-size:var(--fs-md); line-height:1.45; }
   .topbar{ background:var(--verde-prof); color:var(--crema); padding:12px 32px; display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:24px; border-bottom:3px solid var(--cobre); }
   .topbar .brand{ justify-self:start; }
   .topbar .app-title{ justify-self:center; text-align:center; }
-  .topbar .app-title .t1{ font-family:var(--serif); font-size:19px; line-height:1.1; color:var(--crema); font-weight:400; }
-  .topbar .app-title .t2{ font-size:11px; letter-spacing:3.5px; text-transform:uppercase; color:var(--logo); margin-top:4px; font-weight:600; }
+  .topbar .app-title .t1{ font-family:var(--serif); font-size:var(--fs-xl); line-height:1.1; color:var(--crema); font-weight:400; }
+  .topbar .app-title .t2{ font-size:var(--fs-xs); letter-spacing:3.5px; text-transform:uppercase; color:var(--logo); margin-top:4px; font-weight:600; }
   .topbar .user-badge{ justify-self:end; margin-left:0; padding-left:0; }
   .brand{ display:flex; flex-direction:column; align-items:flex-start; line-height:1; cursor:pointer; }
   #brand-logo{ height:54px; display:none; }
-  .brand .name{ font-family:var(--serif); font-style:italic; font-weight:400; font-size:38px; color:var(--logo); line-height:.95; padding-right:6px; }
-  .brand .sub{ font-family:var(--serif); font-size:12px; letter-spacing:6px; text-transform:lowercase; color:var(--logo); margin-top:2px; padding-left:6px; opacity:.92; }
+  .brand .name{ font-family:var(--serif); font-style:italic; font-weight:400; font-size:var(--fs-3xl); color:var(--logo); line-height:.95; padding-right:6px; }
+  .brand .sub{ font-family:var(--serif); font-size:var(--fs-s); letter-spacing:6px; text-transform:lowercase; color:var(--logo); margin-top:2px; padding-left:6px; opacity:.92; }
   .app-title{ text-align:right; }
-  .app-title .t1{ font-family:var(--serif); font-size:18px; }
-  .app-title .t2{ font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--arena); }
+  .app-title .t1{ font-family:var(--serif); font-size:var(--fs-xl); }
+  .app-title .t2{ font-size:var(--fs-xs); letter-spacing:2px; text-transform:uppercase; color:var(--arena); }
 
   .tabs{ display:flex; align-items:center; background:var(--crema-2); padding:0 28px; border-bottom:1px solid var(--linea); }
   /* .tab y .subtab son <button> para que el teclado pueda llegar a ellos: antes eran
      <div> sin tabindex, así que la navegación principal era inalcanzable. */
   .tab, .subtab{ font-family:var(--sans); background:none; border:none; margin:0; }
-  .tab{ padding:14px 22px; cursor:pointer; font-weight:500; font-size:13px; letter-spacing:.4px; color:var(--neutro); border-bottom:3px solid transparent; user-select:none; transition:.15s; }
+  .tab{ padding:14px 22px; cursor:pointer; font-weight:500; font-size:var(--fs-sm); letter-spacing:.4px; color:var(--neutro); border-bottom:3px solid transparent; user-select:none; transition:.15s; }
   .tab:hover{ color:var(--verde-prof); }
   .tab.active{ color:var(--verde-prof); border-bottom-color:var(--cobre); background:var(--crema); }
   .subtabs{ display:flex; align-items:center; background:var(--crema); padding:0 28px; border-bottom:1px solid var(--linea); }
-  .subtab{ padding:10px 18px; cursor:pointer; font-weight:500; font-size:12px; letter-spacing:.3px; color:var(--neutro); border-bottom:2px solid transparent; user-select:none; transition:.15s; }
+  .subtab{ padding:10px 18px; cursor:pointer; font-weight:500; font-size:var(--fs-s); letter-spacing:.3px; color:var(--neutro); border-bottom:2px solid transparent; user-select:none; transition:.15s; }
   .subtab:hover{ color:var(--verde-prof); }
   .subtab.active{ color:var(--verde-prof); border-bottom-color:var(--olivo); }
   .anal-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:14px; margin-top:6px; }
-  .anal-card{ background:#fff; border:1px solid var(--linea); border-radius:12px; padding:14px; cursor:pointer; transition:.15s; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .anal-card{ background:#fff; border:1px solid var(--linea); border-radius:var(--r-l); padding:14px; cursor:pointer; transition:.15s; box-shadow:0 1px 2px rgba(70,82,65,.05); }
   .anal-card:hover{ border-color:var(--cobre); transform:translateY(-1px); }
-  .anal-card .ac-title{ font-family:var(--serif); font-size:14px; color:var(--verde-prof); font-weight:700; margin-bottom:6px; line-height:1.2; }
-  .anal-card .ac-total{ font-size:11px; color:var(--neutro); margin-bottom:8px; }
+  .anal-card .ac-title{ font-family:var(--serif); font-size:var(--fs-md); color:var(--verde-prof); font-weight:700; margin-bottom:6px; line-height:1.2; }
+  .anal-card .ac-total{ font-size:var(--fs-xs); color:var(--neutro); margin-bottom:8px; }
   .anal-card canvas{ width:100%!important; height:80px!important; }
   .anal-card.expanded{ grid-column:1/-1; cursor:default; }
   .anal-card.expanded canvas{ height:280px!important; }
-  .anal-card.expanded .ac-title{ font-size:20px; margin-bottom:4px; }
-  .anal-card.expanded .ac-total{ font-size:13px; margin-bottom:14px; }
+  .anal-card.expanded .ac-title{ font-size:var(--fs-xl); margin-bottom:4px; }
+  .anal-card.expanded .ac-total{ font-size:var(--fs-sm); margin-bottom:14px; }
   .anal-actions{ display:flex; gap:10px; align-items:center; margin-top:12px; flex-wrap:wrap; }
-  .anal-conc{ margin-top:14px; padding:14px 16px; background:var(--crema-2); border:1px solid var(--linea); border-radius:10px; font-size:13.5px; line-height:1.5; color:var(--texto); white-space:pre-wrap; }
+  .anal-conc{ margin-top:14px; padding:14px 16px; background:var(--crema-2); border:1px solid var(--linea); border-radius:var(--r-m); font-size:var(--fs-md); line-height:1.5; color:var(--texto); white-space:pre-wrap; }
   .anal-conc.loading{ color:var(--neutro); font-style:italic; }
-  .anal-empty{ background:var(--crema-2); border:1px dashed var(--linea); border-radius:10px; padding:22px; text-align:center; color:var(--neutro); grid-column:1/-1; }
-  .anal-notes-card{ background:#fff; border:1px solid var(--linea); border-radius:12px; padding:18px 20px; margin-top:22px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
-  .anal-notes-card h3{ font-family:var(--serif); font-size:20px; color:var(--verde-prof); margin:0 0 4px; }
-  .anal-notes-card .anal-notes-sub{ font-size:12.5px; color:var(--neutro); margin-bottom:14px; }
+  .anal-empty{ background:var(--crema-2); border:1px dashed var(--linea); border-radius:var(--r-m); padding:22px; text-align:center; color:var(--neutro); grid-column:1/-1; }
+  .anal-notes-card{ background:#fff; border:1px solid var(--linea); border-radius:var(--r-l); padding:18px 20px; margin-top:22px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .anal-notes-card h3{ font-family:var(--serif); font-size:var(--fs-xl); color:var(--verde-prof); margin:0 0 4px; }
+  .anal-notes-card .anal-notes-sub{ font-size:var(--fs-sm); color:var(--neutro); margin-bottom:14px; }
   .anal-notes-list{ display:flex; flex-direction:column; gap:12px; max-height:420px; overflow-y:auto; padding-right:6px; }
-  .anal-note-entry{ background:var(--crema); border:1px solid var(--linea); border-radius:10px; padding:11px 14px; }
-  .anal-note-entry .ane-head{ font-size:12px; font-weight:700; color:var(--olivo); margin-bottom:5px; }
-  .anal-note-entry .ane-line{ font-size:13px; line-height:1.45; margin-top:3px; color:var(--texto); }
+  .anal-note-entry{ background:var(--crema); border:1px solid var(--linea); border-radius:var(--r-m); padding:11px 14px; }
+  .anal-note-entry .ane-head{ font-size:var(--fs-s); font-weight:700; color:var(--olivo); margin-bottom:5px; }
+  .anal-note-entry .ane-line{ font-size:var(--fs-sm); line-height:1.45; margin-top:3px; color:var(--texto); }
   .anal-note-entry .ane-lbl{ font-weight:700; color:var(--verde-prof); margin-right:4px; }
   .canal-wrap, .mkt-wrap{ margin-left:auto; display:flex; align-items:center; gap:9px; }
-  .canal-wrap .lbl, .mkt-wrap .lbl{ font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--neutro); font-weight:700; }
-  #canal-select, #mkt-select{ font-family:var(--sans); font-weight:600; font-size:12.5px; letter-spacing:.4px; color:#fff; background:var(--olivo); border:none; border-radius:20px; padding:8px 16px; cursor:pointer; }
+  .canal-wrap .lbl, .mkt-wrap .lbl{ font-size:var(--fs-xs); letter-spacing:1px; text-transform:uppercase; color:var(--neutro); font-weight:700; }
+  #canal-select, #mkt-select{ font-family:var(--sans); font-weight:600; font-size:var(--fs-sm); letter-spacing:.4px; color:#fff; background:var(--olivo); border:none; border-radius:var(--r-pill); padding:8px 16px; cursor:pointer; }
   #canal-select option, #mkt-select option{ color:var(--texto); background:#fff; }
 
   .wrap{ max-width:1180px; margin:0 auto; padding:26px 28px 60px; }
@@ -90,31 +98,35 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   /* layout con barra lateral */
   .shell{ display:flex; align-items:stretch; min-height:calc(100vh - 90px); }
   .main{ flex:1; min-width:0; }
-  .sidebar{ flex:0 0 70px; background:var(--verde-prof); display:flex; flex-direction:column; align-items:center; gap:6px; padding:16px 7px 0; border-right:1px solid rgba(0,0,0,.1); position:sticky; top:0; align-self:flex-start; height:100vh; overflow-y:auto; }
+  /* El riel medía 70px cuando sus rótulos iban a 8.5px. Al subir toda la letra por debajo
+     de 11px —que es de donde venía buena parte de la ilegibilidad en pantallas chicas—
+     "Base datos" ya no cabía: el riel crece con ella. */
+  .sidebar{ flex:0 0 104px; background:var(--verde-prof); display:flex; flex-direction:column; align-items:center; gap:6px; padding:16px 7px 0; border-right:1px solid rgba(0,0,0,.1); position:sticky; top:0; align-self:flex-start; height:100vh; overflow-y:auto; }
   .nav-hist{ display:flex; gap:4px; align-items:center; margin-right:6px; padding-right:10px; border-right:1px solid rgba(239,231,214,.18); }
-  .nav-hist button{ background:transparent; border:1px solid rgba(239,231,214,.35); color:var(--logo); width:26px; height:26px; border-radius:6px; cursor:pointer; font-size:13px; line-height:1; display:flex; align-items:center; justify-content:center; padding:0; transition:.15s; font-family:var(--sans); }
+  .nav-hist button{ background:transparent; border:1px solid rgba(239,231,214,.35); color:var(--logo); width:26px; height:26px; border-radius:var(--r-s); cursor:pointer; font-size:var(--fs-sm); line-height:1; display:flex; align-items:center; justify-content:center; padding:0; transition:.15s; font-family:var(--sans); }
   .nav-hist button:not(:disabled):hover{ background:rgba(239,231,214,.12); border-color:rgba(239,231,214,.55); color:#fff; }
   .nav-hist button:disabled{ opacity:.3; cursor:not-allowed; }
-  .side-btn{ width:56px; height:56px; border:none; background:transparent; color:var(--logo); border-radius:11px; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-family:var(--sans); font-size:8.5px; font-weight:600; letter-spacing:.2px; text-transform:uppercase; opacity:.78; transition:.15s; }
+  .side-btn{ width:92px; height:60px; border:none; background:transparent; color:var(--logo); border-radius:var(--r-m); cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-family:var(--sans); font-size:var(--fs-xs); font-weight:600; letter-spacing:0; line-height:1.15; text-transform:uppercase; opacity:.78; transition:.15s; }
+  .side-btn span{ white-space:nowrap; }
   .side-btn svg{ width:21px; height:21px; }
   .side-btn:hover{ background:rgba(255,255,255,.09); opacity:1; }
   .side-btn.active{ background:var(--cobre-tx); opacity:1; color:#fff; }
   .view{ display:none; } .view.active{ display:block; }
 
-  .placeholder-card{ background:#fff; border:1px dashed var(--arena); border-radius:14px; padding:46px 30px; text-align:center; max-width:560px; margin:34px auto; box-shadow:0 1px 2px rgba(70,82,65,.05); }
-  .placeholder-card h3{ font-family:var(--serif); font-size:23px; color:var(--verde-prof); margin:0 0 12px; }
-  .placeholder-card p{ color:var(--neutro); margin:7px 0; font-size:14px; }
+  .placeholder-card{ background:#fff; border:1px dashed var(--arena); border-radius:var(--r-l); padding:46px 30px; text-align:center; max-width:560px; margin:34px auto; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .placeholder-card h3{ font-family:var(--serif); font-size:var(--fs-xl); color:var(--verde-prof); margin:0 0 12px; }
+  .placeholder-card p{ color:var(--neutro); margin:7px 0; font-size:var(--fs-md); }
 
-  .periodo{ background:#fff; border:1px solid var(--linea); border-radius:12px; padding:16px 20px; display:flex; flex-wrap:wrap; gap:22px; align-items:flex-end; margin-bottom:8px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .periodo{ background:#fff; border:1px solid var(--linea); border-radius:var(--r-l); padding:16px 20px; display:flex; flex-wrap:wrap; gap:22px; align-items:flex-end; margin-bottom:8px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
   #ing-dims, #rep-dims{ display:contents; }
   .periodo .grp{ display:flex; flex-direction:column; gap:5px; }
-  .periodo label{ font-size:11px; text-transform:uppercase; letter-spacing:.8px; color:var(--neutro); font-weight:600; }
-  .periodo input[type=date], .periodo select{ font-family:var(--sans); font-size:13px; padding:8px 10px; border:1px solid var(--linea); border-radius:8px; background:var(--crema); color:var(--texto); }
+  .periodo label{ font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.8px; color:var(--neutro); font-weight:600; }
+  .periodo input[type=date], .periodo select{ font-family:var(--sans); font-size:var(--fs-sm); padding:8px 10px; border:1px solid var(--linea); border-radius:var(--r-m); background:var(--crema); color:var(--texto); }
   .periodo input[readonly]{ background:var(--crema-2); color:var(--neutro); }
-  .semana-badge{ font-family:var(--sans); font-size:13px; color:var(--texto); background:var(--crema); padding:8px 10px; border-radius:8px; border:1px solid var(--linea); min-width:110px; }
+  .semana-badge{ font-family:var(--sans); font-size:var(--fs-sm); color:var(--texto); background:var(--crema); padding:8px 10px; border-radius:var(--r-m); border:1px solid var(--linea); min-width:110px; }
   .periodo .spacer{ flex:1; }
-  .hint{ font-size:11.5px; color:var(--neutro); margin:0 0 22px 4px; font-style:italic; }
-  .btn{ font-family:var(--sans); font-weight:600; font-size:13px; letter-spacing:.4px; cursor:pointer; border:none; border-radius:9px; padding:11px 22px; transition:.15s; }
+  .hint{ font-size:var(--fs-s); color:var(--neutro); margin:0 0 22px 4px; font-style:italic; }
+  .btn{ font-family:var(--sans); font-weight:600; font-size:var(--fs-sm); letter-spacing:.4px; cursor:pointer; border:none; border-radius:var(--r-m); padding:11px 22px; transition:.15s; }
   .btn-primary{ background:var(--cobre-tx); color:#fff; } .btn-primary:hover{ background:var(--cobre-tx-hover); }
   .btn-ghost{ background:transparent; color:var(--neutro); border:1px solid var(--linea); } .btn-ghost:hover{ background:var(--crema-2); color:var(--verde-prof); }
   .btn-olive{ background:var(--olivo); color:#fff; } .btn-olive:hover{ background:var(--olivo-hover); }
@@ -129,73 +141,83 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .btn-peligro{ background:var(--rojo); color:#fff; } .btn-peligro:hover{ background:#8e3529; }
   .modal-fondo{ position:fixed; inset:0; z-index:400; background:rgba(46,51,43,.45);
                 display:flex; align-items:safe center; justify-content:center; padding:24px; overflow-y:auto; }
-  .modal-caja{ background:var(--crema); border:1px solid var(--linea); border-radius:14px;
+  .modal-caja{ background:var(--crema); border:1px solid var(--linea); border-radius:var(--r-l);
                padding:26px 28px; max-width:440px; width:100%; box-shadow:0 20px 60px rgba(0,0,0,.3); }
-  .modal-caja h3{ font-family:var(--serif); font-size:19px; color:var(--verde-prof); margin:0 0 10px; }
-  .modal-caja p{ margin:0; font-size:14px; line-height:1.55; color:var(--texto); }
+  .modal-caja h3{ font-family:var(--serif); font-size:var(--fs-xl); color:var(--verde-prof); margin:0 0 10px; }
+  .modal-caja p{ margin:0; font-size:var(--fs-md); line-height:1.55; color:var(--texto); }
   .modal-btns{ display:flex; gap:10px; justify-content:flex-end; margin-top:22px; flex-wrap:wrap; }
   /* Metas y Base de datos editan dos sistemas distintos (Ventas o Marketing) según el
      desplegable que se haya tocado, y nada lo decía: dos personas siguiendo la misma
      instrucción escribían en almacenamientos distintos. Ahora la pantalla lo dice. */
   .sistema-hdr{ display:flex; align-items:center; gap:10px; flex-wrap:wrap;
-    background:var(--crema2); border:1px solid var(--linea); border-left:4px solid var(--olivo);
-    border-radius:10px; padding:10px 14px; margin:0 0 14px; font-size:13px; color:var(--texto); }
-  .sistema-hdr b{ font-family:var(--serif); font-size:15px; color:var(--verde-prof); font-weight:700; }
+    background:var(--crema-2); border:1px solid var(--linea); border-left:4px solid var(--olivo);
+    border-radius:var(--r-m); padding:10px 14px; margin:0 0 14px; font-size:var(--fs-sm); color:var(--texto); }
+  .sistema-hdr b{ font-family:var(--serif); font-size:var(--fs-lg); color:var(--verde-prof); font-weight:700; }
   .sistema-hdr .sh-sep{ color:var(--gris-suave); }
-  .sistema-hdr .sh-nota{ color:var(--neutro); font-size:12px; }
-  .modal-texto{ width:100%; margin-top:14px; font-family:var(--mono,ui-monospace,monospace); font-size:12px;
-    line-height:1.5; padding:10px 12px; border:1px solid var(--linea); border-radius:10px;
-    background:var(--papel); color:var(--texto); resize:vertical; }
+  .sistema-hdr .sh-nota{ color:var(--neutro); font-size:var(--fs-s); }
+  /* Utilidades para los estilos en línea que más se repetían DENTRO de plantillas de JS:
+     ahí no llega ninguna hoja de estilos, así que cambiar la apariencia obligaba a cazar
+     el mismo style= por todo el archivo. */
+  .mb-sec{ margin-bottom:18px; }
+  .txt-nota{ color:var(--neutro); font-style:italic; }
+  .txt-micro{ font-size:var(--fs-xs); color:var(--neutro); }
+  .txt-rojo{ color:var(--rojo); }
+  .celda-fuerte{ font-weight:600; }
+  .hint.pegada{ margin-top:-2px; }
+  h3.h-sec{ font-family:var(--serif); color:var(--verde-prof); font-size:var(--fs-xl); margin:22px 0 6px; }
+  .modal-texto{ width:100%; margin-top:14px; font-family:var(--mono); font-size:var(--fs-s);
+    line-height:1.5; padding:10px 12px; border:1px solid var(--linea); border-radius:var(--r-m);
+    background:#fff; color:var(--texto); resize:vertical; }
   .btn.btn-cancel:hover{ background:#F2CFC9; }
   /* Alternativa táctil al arrastre: los eventos de drag de HTML5 no se disparan con el dedo,
      así que desde un celular no había forma de mover un KPI de sección ni ninguna otra vía. */
-  .kpi-sec{ font-family:var(--sans); font-size:11px; padding:2px 4px; border:1px solid var(--linea);
-            background:var(--crema); color:var(--neutro); border-radius:4px; max-width:130px; }
+  .kpi-sec{ font-family:var(--sans); font-size:var(--fs-xs); padding:2px 4px; border:1px solid var(--linea);
+            background:var(--crema); color:var(--neutro); border-radius:var(--r-s); max-width:130px; }
   .kpi-sec:hover{ border-color:var(--cobre); }
 
-  .section{ background:#fff; border:1px solid var(--linea); border-radius:12px; margin-bottom:20px; overflow:hidden; box-shadow:0 1px 2px rgba(70,82,65,.05); }
-  .section h3{ margin:0; padding:13px 20px; background:var(--olivo); color:#fff; font-family:var(--serif); font-size:16px; font-weight:700; display:flex; align-items:center; gap:9px; }
+  .section{ background:#fff; border:1px solid var(--linea); border-radius:var(--r-l); margin-bottom:20px; overflow:hidden; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .section h3{ margin:0; padding:13px 20px; background:var(--olivo); color:#fff; font-family:var(--serif); font-size:var(--fs-lg); font-weight:700; display:flex; align-items:center; gap:9px; }
   .section h3 .dot{ width:8px; height:8px; border-radius:50%; background:var(--arena); }
   .fields{ padding:8px 20px 16px; }
   .frow{ display:flex; align-items:center; padding:7px 0; border-bottom:1px dashed var(--crema-2); }
   .frow:last-child{ border-bottom:none; }
-  .frow label{ flex:1; font-size:13.5px; padding-right:14px; }
-  .frow input{ width:150px; font-family:var(--sans); font-size:14px; text-align:right; padding:8px 11px; border:1px solid var(--linea); border-radius:8px; background:var(--gris-input); }
+  .frow label{ flex:1; font-size:var(--fs-md); padding-right:14px; }
+  .frow input{ width:150px; font-family:var(--sans); font-size:var(--fs-md); text-align:right; padding:8px 11px; border:1px solid var(--linea); border-radius:var(--r-m); background:var(--gris-input); }
   .frow input:focus{ outline:none; border-color:var(--cobre); background:#fff; }
   .textareas .frow{ align-items:flex-start; flex-direction:column; gap:6px; }
   .textareas label{ font-weight:600; color:var(--olivo); }
-  .textareas textarea{ width:100%; min-height:64px; resize:vertical; font-family:var(--sans); font-size:13px; padding:10px 12px; border:1px solid var(--linea); border-radius:8px; background:var(--crema); }
+  .textareas textarea{ width:100%; min-height:64px; resize:vertical; font-family:var(--sans); font-size:var(--fs-sm); padding:10px 12px; border:1px solid var(--linea); border-radius:var(--r-m); background:var(--crema); }
   .actions{ display:flex; gap:12px; justify-content:flex-end; margin-top:8px; }
   .saved-weeks{ margin-top:18px; }
-  .saved-weeks .lbl{ font-size:11px; text-transform:uppercase; letter-spacing:.8px; color:var(--neutro); font-weight:600; margin-bottom:8px; }
+  .saved-weeks .lbl{ font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.8px; color:var(--neutro); font-weight:600; margin-bottom:8px; }
   .chips{ display:flex; flex-wrap:wrap; gap:8px; }
-  .chip{ background:var(--crema-2); border:1px solid var(--linea); border-radius:20px; padding:5px 13px; font-size:12px; color:var(--verde-prof); font-weight:500; cursor:pointer; }
+  .chip{ background:var(--crema-2); border:1px solid var(--linea); border-radius:var(--r-pill); padding:5px 13px; font-size:var(--fs-s); color:var(--verde-prof); font-weight:500; cursor:pointer; }
   .chip:hover{ border-color:var(--cobre); }
   .chip.empty{ color:var(--neutro); font-style:italic; cursor:default; background:transparent; border-style:dashed; }
 
   .rep-head{ text-align:center; margin-bottom:6px; }
-  .rep-head .ttl{ font-family:var(--serif); font-size:26px; color:var(--verde-prof); }
-  .rep-head .meta-line{ font-size:13px; color:var(--neutro); margin-top:4px; }
-  .rep-section{ background:#fff; border:1px solid var(--linea); border-radius:12px; margin-bottom:18px; overflow:hidden; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .rep-head .ttl{ font-family:var(--serif); font-size:var(--fs-2xl); color:var(--verde-prof); }
+  .rep-head .meta-line{ font-size:var(--fs-sm); color:var(--neutro); margin-top:4px; }
+  .rep-section{ background:#fff; border:1px solid var(--linea); border-radius:var(--r-l); margin-bottom:18px; overflow:hidden; box-shadow:0 1px 2px rgba(70,82,65,.05); }
   .rep-section .layout{ display:flex; flex-wrap:wrap; }
   .rep-section .metrics{ flex:1 1 520px; }
-  .rep-section h3{ margin:0; padding:11px 18px; background:var(--olivo); color:#fff; font-family:var(--serif); font-size:15px; }
+  .rep-section h3{ margin:0; padding:11px 18px; background:var(--olivo); color:#fff; font-family:var(--serif); font-size:var(--fs-lg); }
   table.rep{ width:100%; border-collapse:collapse; }
-  table.rep th{ font-size:9.5px; text-transform:uppercase; letter-spacing:.6px; color:var(--neutro); font-weight:600; padding:9px 10px; text-align:right; border-bottom:1px solid var(--linea); background:var(--crema); }
+  table.rep th{ font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.6px; color:var(--neutro); font-weight:600; padding:9px 10px; text-align:right; border-bottom:1px solid var(--linea); background:var(--crema); }
   table.rep th.lft{ text-align:left; }
-  table.rep td{ padding:7px 10px; font-size:13px; border-bottom:1px solid var(--crema-2); text-align:right; }
+  table.rep td{ padding:7px 10px; font-size:var(--fs-sm); border-bottom:1px solid var(--crema-2); text-align:right; }
   table.rep td.lft{ text-align:left; } table.rep td.val{ font-weight:600; color:var(--verde-prof); }
   table.rep tr:last-child td{ border-bottom:none; }
-  .cump{ display:inline-block; min-width:62px; padding:3px 8px; border-radius:6px; font-weight:600; font-size:12px; }
+  .cump{ display:inline-block; min-width:62px; padding:3px 8px; border-radius:var(--r-s); font-weight:600; font-size:var(--fs-s); }
   .cump.ok{ background:var(--verde-ok-bg); color:var(--verde-ok-tx); } .cump.no{ background:var(--rojo-no-bg); color:var(--rojo-no-tx); }
   .conv{ flex:0 0 300px; border-left:1px solid var(--linea); padding:12px 16px; background:var(--crema); }
   .conv .citem{ margin-bottom:11px; } .conv .citem:last-child{ margin-bottom:0; }
-  .conv .clabel{ font-size:12px; display:flex; justify-content:space-between; gap:8px; }
-  .conv .ctarget{ color:var(--neutro); font-size:11px; white-space:nowrap; } .conv .cval{ margin-top:4px; }
+  .conv .clabel{ font-size:var(--fs-s); display:flex; justify-content:space-between; gap:8px; }
+  .conv .ctarget{ color:var(--neutro); font-size:var(--fs-xs); white-space:nowrap; } .conv .cval{ margin-top:4px; }
   .conclusion{ background:linear-gradient(180deg,#fff,var(--crema)); border:1px solid var(--arena); }
-  .conclusion .body{ padding:18px 22px; font-size:14px; line-height:1.6; color:var(--texto); }
+  .conclusion .body{ padding:18px 22px; font-size:var(--fs-md); line-height:1.6; color:var(--texto); }
   .empty-rep{ text-align:center; color:var(--neutro); padding:50px 20px; font-style:italic; }
-  .toast{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(80px); background:var(--verde-prof); color:#fff; padding:12px 24px; border-radius:30px; font-size:13px; box-shadow:0 6px 20px rgba(0,0,0,.2); opacity:0; transition:.3s; z-index:50; border:1px solid var(--cobre); }
+  .toast{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(80px); background:var(--verde-prof); color:#fff; padding:12px 24px; border-radius:var(--r-pill); font-size:var(--fs-sm); box-shadow:0 6px 20px rgba(0,0,0,.2); opacity:0; transition:.3s; z-index:50; border:1px solid var(--cobre); }
   .toast.show{ transform:translateX(-50%) translateY(0); opacity:1; }
   @media (max-width:680px){ .conv{ flex-basis:100%; border-left:none; border-top:1px solid var(--linea); } .frow input{ width:110px; } }
 
@@ -215,7 +237,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
     .canal-wrap, .mkt-wrap{ margin-left:12px; }
     .wrap{ padding:18px 14px 48px; }
     .topbar{ padding:10px 14px; gap:12px; }
-    .brand .name{ font-size:28px; } #brand-logo{ height:40px; }
+    .brand .name{ font-size:var(--fs-2xl); } #brand-logo{ height:40px; }
     /* El borde redondeado recortaba las columnas de la derecha sin dejar barra: el eje
        vertical se sigue recortando, el horizontal ahora se puede desplazar. */
     .section, .rep-section, .anal-card{ overflow-x:auto; overflow-y:hidden; }
@@ -235,7 +257,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
     .login-field input, .adv-add input, .adv-name, .lq-search,
     .meta-name, .meta-num, .meta-pct, .usr-fld input, .usr-fld select,
     table.usr-table select, table.usr-table input, #canal-select, #mkt-select,
-    #ing-responsable{ font-size:16px; }
+    #ing-responsable{ font-size:var(--fs-lg); }
     .frow{ flex-direction:column; align-items:stretch; gap:4px; }
     .frow label{ padding-right:0; }
     .frow input{ width:100%; text-align:left; }
@@ -244,105 +266,105 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   }
 
   /* ---- Reportes de dirección (consolidados) ---- */
-  .canal-chips{ display:flex; align-items:center; flex-wrap:wrap; gap:6px 16px; background:#fff; border:1px solid var(--linea); border-radius:12px; padding:12px 16px; margin:8px 0; box-shadow:0 1px 2px rgba(70,82,65,.05); }
-  .canal-chips .cc-lbl{ font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--neutro); font-weight:700; margin-right:4px; }
+  .canal-chips{ display:flex; align-items:center; flex-wrap:wrap; gap:6px 16px; background:#fff; border:1px solid var(--linea); border-radius:var(--r-l); padding:12px 16px; margin:8px 0; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .canal-chips .cc-lbl{ font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:1px; color:var(--neutro); font-weight:700; margin-right:4px; }
   .canal-chips > div{ display:flex; flex-wrap:wrap; gap:6px 16px; }
-  .chk{ display:inline-flex; align-items:center; gap:7px; font-size:12.5px; cursor:pointer; line-height:1.25; }
+  .chk{ display:inline-flex; align-items:center; gap:7px; font-size:var(--fs-sm); cursor:pointer; line-height:1.25; }
   .chk input{ accent-color:var(--olivo); cursor:pointer; flex:0 0 auto; }
   .chk:hover{ color:var(--verde-prof); }
   .dir-content{ min-width:0; }
-  .funnel-box{ display:flex; flex-wrap:wrap; gap:30px; background:#fff; border:1px solid var(--linea); border-radius:12px; padding:18px 22px; margin-bottom:18px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .funnel-box{ display:flex; flex-wrap:wrap; gap:30px; background:#fff; border:1px solid var(--linea); border-radius:var(--r-l); padding:18px 22px; margin-bottom:18px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
   .funnel-col{ flex:1 1 320px; }
   table.fnl{ width:100%; border-collapse:separate; border-spacing:0 7px; }
-  table.fnl td{ padding:7px 10px; font-size:13px; }
+  table.fnl td{ padding:7px 10px; font-size:var(--fs-sm); }
   table.fnl td.lbl{ text-align:right; color:var(--texto); font-weight:600; width:42%; }
-  table.fnl td.v{ background:var(--crema-2); border-radius:8px; font-weight:600; color:var(--verde-prof); min-width:90px; }
-  table.fnl td.m{ text-align:left; color:var(--neutro); font-size:11px; padding-left:10px; }
-  .conv-row{ display:flex; justify-content:space-between; align-items:center; gap:10px; padding:7px 0; font-size:13px; border-bottom:1px dashed var(--crema-2); }
+  table.fnl td.v{ background:var(--crema-2); border-radius:var(--r-m); font-weight:600; color:var(--verde-prof); min-width:90px; }
+  table.fnl td.m{ text-align:left; color:var(--neutro); font-size:var(--fs-xs); padding-left:10px; }
+  .conv-row{ display:flex; justify-content:space-between; align-items:center; gap:10px; padding:7px 0; font-size:var(--fs-sm); border-bottom:1px dashed var(--crema-2); }
   .conv-row:last-child{ border-bottom:none; }
-  .conv-row .ct{ color:var(--neutro); font-size:11px; margin-left:auto; margin-right:8px; white-space:nowrap; }
-  .table-scroll{ overflow-x:auto; background:#fff; border:1px solid var(--linea); border-radius:12px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .conv-row .ct{ color:var(--neutro); font-size:var(--fs-xs); margin-left:auto; margin-right:8px; white-space:nowrap; }
+  .table-scroll{ overflow-x:auto; background:#fff; border:1px solid var(--linea); border-radius:var(--r-l); box-shadow:0 1px 2px rgba(70,82,65,.05); }
   table.cons{ width:100%; border-collapse:collapse; white-space:nowrap; }
-  table.cons th{ font-size:9px; text-transform:uppercase; letter-spacing:.4px; color:var(--neutro); font-weight:700; padding:9px 8px; border-bottom:2px solid var(--linea); background:var(--crema); text-align:right; }
+  table.cons th{ font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.4px; color:var(--neutro); font-weight:700; padding:9px 8px; border-bottom:2px solid var(--linea); background:var(--crema); text-align:right; }
   table.cons th.lft, table.cons td.lft{ text-align:left; }
-  table.cons td{ padding:7px 8px; font-size:12px; border-bottom:1px solid var(--crema-2); text-align:right; }
+  table.cons td{ padding:7px 8px; font-size:var(--fs-s); border-bottom:1px solid var(--crema-2); text-align:right; }
   table.cons td.name{ text-align:left; font-weight:600; color:var(--verde-prof); }
-  table.cons td.pct{ color:var(--neutro); font-size:11px; }
+  table.cons td.pct{ color:var(--neutro); font-size:var(--fs-xs); }
   table.cons tr.total td{ border-top:2px solid var(--linea); border-bottom:none; font-weight:700; background:var(--crema); }
   .estado-dot{ display:inline-block; width:11px; height:11px; border-radius:50%; }
   .estado-dot.g{ background:#5BA85B; } .estado-dot.y{ background:#E0A93B; } .estado-dot.r{ background:#C7553F; } .estado-dot.n{ background:#C9C3D6; }
 
   /* ---- Asesores ---- */
-  .adv-card{ background:#fff; border:1px solid var(--linea); border-radius:12px; padding:22px 24px; max-width:680px; margin:6px auto; box-shadow:0 1px 2px rgba(70,82,65,.05); }
-  .adv-card h3{ font-family:var(--serif); font-size:22px; color:var(--verde-prof); margin:0 0 8px; }
+  .adv-card{ background:#fff; border:1px solid var(--linea); border-radius:var(--r-l); padding:22px 24px; max-width:680px; margin:6px auto; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .adv-card h3{ font-family:var(--serif); font-size:var(--fs-xl); color:var(--verde-prof); margin:0 0 8px; }
   table.adv-table{ width:100%; border-collapse:collapse; }
-  table.adv-table th{ font-size:10px; text-transform:uppercase; letter-spacing:.6px; color:var(--neutro); font-weight:700; padding:9px 8px; border-bottom:1px solid var(--linea); background:var(--crema); text-align:left; }
+  table.adv-table th{ font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.6px; color:var(--neutro); font-weight:700; padding:9px 8px; border-bottom:1px solid var(--linea); background:var(--crema); text-align:left; }
   table.adv-table td{ padding:8px; border-bottom:1px solid var(--crema-2); vertical-align:middle; }
   table.adv-table td.center{ text-align:center; } table.adv-table td.right{ text-align:right; }
-  .adv-name{ width:100%; font-family:var(--sans); font-size:14px; padding:8px 10px; border:1px solid var(--linea); border-radius:8px; background:var(--crema); }
+  .adv-name{ width:100%; font-family:var(--sans); font-size:var(--fs-md); padding:8px 10px; border:1px solid var(--linea); border-radius:var(--r-m); background:var(--crema); }
   .adv-name:focus{ outline:none; border-color:var(--cobre); background:#fff; }
-  .adv-toggle{ display:inline-flex; align-items:center; gap:7px; font-size:13px; cursor:pointer; }
+  .adv-toggle{ display:inline-flex; align-items:center; gap:7px; font-size:var(--fs-sm); cursor:pointer; }
   .adv-toggle input{ accent-color:var(--olivo); cursor:pointer; }
-  .adv-pill{ display:inline-block; padding:2px 10px; border-radius:20px; font-size:11px; font-weight:600; }
+  .adv-pill{ display:inline-block; padding:2px 10px; border-radius:var(--r-pill); font-size:var(--fs-xs); font-weight:600; }
   .adv-pill.on{ background:var(--verde-ok-bg); color:var(--verde-ok-tx); } .adv-pill.off{ background:var(--crema-2); color:var(--neutro); }
-  .adv-del{ font-family:var(--sans); font-size:12px; color:var(--rojo-no-tx); background:transparent; border:1px solid var(--linea); border-radius:7px; padding:6px 12px; cursor:pointer; }
+  .adv-del{ font-family:var(--sans); font-size:var(--fs-s); color:var(--rojo-no-tx); background:transparent; border:1px solid var(--linea); border-radius:var(--r-s); padding:6px 12px; cursor:pointer; }
   .adv-del:hover{ background:var(--rojo-no-bg); border-color:var(--rojo-no-bg); }
   .adv-add{ display:flex; gap:10px; margin-top:18px; }
-  .adv-add input{ flex:1; font-family:var(--sans); font-size:14px; padding:10px 12px; border:1px solid var(--linea); border-radius:8px; background:var(--crema); }
+  .adv-add input{ flex:1; font-family:var(--sans); font-size:var(--fs-md); padding:10px 12px; border:1px solid var(--linea); border-radius:var(--r-m); background:var(--crema); }
   .adv-add input:focus{ outline:none; border-color:var(--cobre); background:#fff; }
   .adv-footer{ display:flex; align-items:center; justify-content:flex-end; gap:14px; margin-top:16px; padding-top:14px; border-top:1px solid var(--linea); }
-  .adv-status{ font-size:12.5px; color:var(--cobre); font-style:italic; margin-right:auto; }
+  .adv-status{ font-size:var(--fs-sm); color:var(--cobre); font-style:italic; margin-right:auto; }
   #adv-save:disabled{ cursor:default; }
 
   /* ---- Base de datos ---- */
-  .db-load{ font-family:var(--sans); font-size:11px; color:var(--olivo); background:transparent; border:1px solid var(--linea); border-radius:6px; padding:4px 9px; cursor:pointer; }
+  .db-load{ font-family:var(--sans); font-size:var(--fs-xs); color:var(--olivo); background:transparent; border:1px solid var(--linea); border-radius:var(--r-s); padding:4px 9px; cursor:pointer; }
   .db-load:hover{ background:var(--crema-2); }
-  .db-dup{ font-family:var(--sans); font-size:11px; color:var(--cobre); background:transparent; border:1px solid var(--linea); border-radius:6px; padding:4px 9px; cursor:pointer; margin-left:4px; }
+  .db-dup{ font-family:var(--sans); font-size:var(--fs-xs); color:var(--cobre); background:transparent; border:1px solid var(--linea); border-radius:var(--r-s); padding:4px 9px; cursor:pointer; margin-left:4px; }
   .db-dup:hover{ background:var(--crema-2); border-color:var(--cobre); }
-  .db-del{ font-family:var(--sans); font-size:12px; color:var(--rojo-no-tx); background:transparent; border:1px solid var(--linea); border-radius:6px; padding:4px 9px; cursor:pointer; margin-left:4px; }
+  .db-del{ font-family:var(--sans); font-size:var(--fs-s); color:var(--rojo-no-tx); background:transparent; border:1px solid var(--linea); border-radius:var(--r-s); padding:4px 9px; cursor:pointer; margin-left:4px; }
   .db-del:hover{ background:var(--rojo-no-bg); border-color:var(--rojo-no-bg); }
   #db-table td.note{ max-width:220px; overflow:hidden; text-overflow:ellipsis; }
 
   /* ---- Login overlay ---- */
   #login-screen{ position:fixed; inset:0; z-index:200; background:var(--verde-prof); display:flex; align-items:safe center; justify-content:center; padding:24px; overflow-y:auto; }
   #login-screen.hidden{ display:none; }
-  .login-card{ background:var(--crema); border:1px solid var(--cobre); border-radius:16px; padding:38px 42px; max-width:400px; width:100%; box-shadow:0 8px 30px rgba(0,0,0,.25); }
+  .login-card{ background:var(--crema); border:1px solid var(--cobre); border-radius:var(--r-l); padding:38px 42px; max-width:400px; width:100%; box-shadow:0 8px 30px rgba(0,0,0,.25); }
   .login-card .brand-block{ text-align:center; margin-bottom:22px; }
-  .login-card .brand-block .name{ font-family:var(--serif); font-style:italic; font-size:36px; color:var(--verde-prof); display:block; line-height:1; }
-  .login-card .brand-block .sub{ font-family:var(--serif); font-size:11px; letter-spacing:5px; text-transform:lowercase; color:var(--cobre); display:block; margin-top:4px; }
-  .login-card h2{ font-family:var(--serif); font-size:20px; color:var(--verde-prof); margin:0 0 6px; text-align:center; font-weight:400; }
-  .login-card .subtitle{ font-size:12.5px; color:var(--neutro); text-align:center; margin-bottom:18px; }
+  .login-card .brand-block .name{ font-family:var(--serif); font-style:italic; font-size:var(--fs-3xl); color:var(--verde-prof); display:block; line-height:1; }
+  .login-card .brand-block .sub{ font-family:var(--serif); font-size:var(--fs-xs); letter-spacing:5px; text-transform:lowercase; color:var(--cobre); display:block; margin-top:4px; }
+  .login-card h2{ font-family:var(--serif); font-size:var(--fs-xl); color:var(--verde-prof); margin:0 0 6px; text-align:center; font-weight:400; }
+  .login-card .subtitle{ font-size:var(--fs-sm); color:var(--neutro); text-align:center; margin-bottom:18px; }
   .login-field{ display:flex; flex-direction:column; gap:5px; margin-bottom:14px; }
-  .login-field label{ font-size:11px; text-transform:uppercase; letter-spacing:.8px; color:var(--neutro); font-weight:600; }
-  .login-field input{ font-family:var(--sans); font-size:14px; padding:11px 13px; border:1px solid var(--linea); border-radius:9px; background:#fff; color:var(--texto); }
+  .login-field label{ font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.8px; color:var(--neutro); font-weight:600; }
+  .login-field input{ font-family:var(--sans); font-size:var(--fs-md); padding:11px 13px; border:1px solid var(--linea); border-radius:var(--r-m); background:#fff; color:var(--texto); }
   .login-field input:focus{ outline:none; border-color:var(--cobre); }
   .login-card .btn-primary{ width:100%; padding:13px; margin-top:6px; }
-  #login-error{ color:var(--rojo-no-tx); background:var(--rojo-no-bg); border-radius:8px; padding:9px 12px; font-size:12.5px; margin-bottom:12px; display:none; }
+  #login-error{ color:var(--rojo-no-tx); background:var(--rojo-no-bg); border-radius:var(--r-m); padding:9px 12px; font-size:var(--fs-sm); margin-bottom:12px; display:none; }
   #login-error.show{ display:block; }
   .login-step{ display:none; }
   .login-step.active{ display:block; }
 
   /* ---- User badge en topbar ---- */
-  .user-badge{ display:flex; align-items:center; gap:10px; font-size:12px; color:var(--logo); margin-left:auto; padding-left:18px; }
+  .user-badge{ display:flex; align-items:center; gap:10px; font-size:var(--fs-s); color:var(--logo); margin-left:auto; padding-left:18px; }
   .user-badge .email{ opacity:.9; }
-  .user-badge .role{ font-size:9px; letter-spacing:1.2px; text-transform:uppercase; background:var(--cobre); color:#fff; padding:2px 8px; border-radius:10px; font-weight:700; }
+  .user-badge .role{ font-size:var(--fs-xs); letter-spacing:1.2px; text-transform:uppercase; background:var(--cobre); color:#fff; padding:2px 8px; border-radius:var(--r-m); font-weight:700; }
   .user-badge .role.user{ background:var(--olivo); }
-  .user-badge .logout{ background:transparent; border:1px solid rgba(239,231,214,.4); color:var(--logo); border-radius:7px; padding:5px 11px; font-family:var(--sans); font-size:11px; cursor:pointer; letter-spacing:.4px; }
+  .user-badge .logout{ background:transparent; border:1px solid rgba(239,231,214,.4); color:var(--logo); border-radius:var(--r-s); padding:5px 11px; font-family:var(--sans); font-size:var(--fs-xs); cursor:pointer; letter-spacing:.4px; }
   .user-badge .logout:hover{ background:rgba(239,231,214,.12); }
 
   /* ---- Admin panel ---- */
-  .admin-card{ background:#fff; border:1px solid var(--linea); border-radius:12px; padding:22px 24px; max-width:980px; margin:6px auto; box-shadow:0 1px 2px rgba(70,82,65,.05); }
-  .admin-card h3{ font-family:var(--serif); font-size:22px; color:var(--verde-prof); margin:0 0 8px; }
+  .admin-card{ background:#fff; border:1px solid var(--linea); border-radius:var(--r-l); padding:22px 24px; max-width:980px; margin:6px auto; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .admin-card h3{ font-family:var(--serif); font-size:var(--fs-xl); color:var(--verde-prof); margin:0 0 8px; }
   table.usr-table{ width:100%; border-collapse:collapse; margin-top:14px; }
-  table.usr-table th{ font-size:10px; text-transform:uppercase; letter-spacing:.6px; color:var(--neutro); font-weight:700; padding:9px 8px; border-bottom:1px solid var(--linea); background:var(--crema); text-align:left; }
-  table.usr-table td{ padding:9px 8px; border-bottom:1px solid var(--crema-2); vertical-align:middle; font-size:13px; }
-  table.usr-table select, table.usr-table input{ font-family:var(--sans); font-size:13px; padding:6px 9px; border:1px solid var(--linea); border-radius:7px; background:var(--crema); }
-  .usr-action{ font-family:var(--sans); font-size:12px; background:transparent; border:1px solid var(--linea); border-radius:7px; padding:5px 10px; cursor:pointer; color:var(--texto); }
+  table.usr-table th{ font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.6px; color:var(--neutro); font-weight:700; padding:9px 8px; border-bottom:1px solid var(--linea); background:var(--crema); text-align:left; }
+  table.usr-table td{ padding:9px 8px; border-bottom:1px solid var(--crema-2); vertical-align:middle; font-size:var(--fs-sm); }
+  table.usr-table select, table.usr-table input{ font-family:var(--sans); font-size:var(--fs-sm); padding:6px 9px; border:1px solid var(--linea); border-radius:var(--r-s); background:var(--crema); }
+  .usr-action{ font-family:var(--sans); font-size:var(--fs-s); background:transparent; border:1px solid var(--linea); border-radius:var(--r-s); padding:5px 10px; cursor:pointer; color:var(--texto); }
   .usr-action:hover{ background:var(--crema-2); }
   .usr-action.danger{ color:var(--rojo-no-tx); }
   .usr-action.danger:hover{ background:var(--rojo-no-bg); border-color:var(--rojo-no-bg); }
   .usr-action.save{ color:#fff; background:var(--cobre); border-color:var(--cobre); }
-  .usr-action.save:hover{ background:#bb7536; }
+  .usr-action.save:hover{ background:var(--cobre-hover); }
   .new-user-row{ background:var(--crema-2); }
   .new-user-row td{ border-bottom:none; }
   .new-user-row input{ width:100%; }
@@ -350,26 +372,26 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
 
   /* ---- Metas table ---- */
   table.metas-table{ width:100%; border-collapse:collapse; }
-  table.metas-table th{ font-size:10px; text-transform:uppercase; letter-spacing:.6px; color:var(--neutro); font-weight:700; padding:9px 10px; border-bottom:1px solid var(--linea); background:var(--crema); text-align:left; }
+  table.metas-table th{ font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.6px; color:var(--neutro); font-weight:700; padding:9px 10px; border-bottom:1px solid var(--linea); background:var(--crema); text-align:left; }
   table.metas-table th.right{ text-align:right; }
   table.metas-table td{ padding:6px 10px; border-bottom:1px dashed var(--crema-2); vertical-align:middle; }
   table.metas-table td.right{ text-align:right; }
   table.metas-table tr:last-child td{ border-bottom:none; }
-  .meta-name{ width:100%; font-family:var(--sans); font-size:13.5px; padding:7px 9px; border:1px solid transparent; background:transparent; color:var(--texto); border-radius:6px; }
+  .meta-name{ width:100%; font-family:var(--sans); font-size:var(--fs-md); padding:7px 9px; border:1px solid transparent; background:transparent; color:var(--texto); border-radius:var(--r-s); }
   .meta-name:hover{ border-color:var(--linea); background:var(--crema); }
   .meta-name:focus{ outline:none; border-color:var(--cobre); background:#fff; }
-  .meta-num, .meta-pct{ width:110px; font-family:var(--sans); font-size:14px; text-align:right; padding:7px 10px; border:1px solid var(--linea); border-radius:7px; background:var(--gris-input); }
+  .meta-num, .meta-pct{ width:110px; font-family:var(--sans); font-size:var(--fs-md); text-align:right; padding:7px 10px; border:1px solid var(--linea); border-radius:var(--r-s); background:var(--gris-input); }
   .meta-num:focus, .meta-pct:focus{ outline:none; border-color:var(--cobre); background:#fff; }
   .meta-pct{ width:90px; }
   .meta-pct-wrap{ display:inline-flex; align-items:center; gap:4px; }
-  .meta-pct-wrap span{ color:var(--neutro); font-size:13px; }
-  .meta-del{ font-family:var(--sans); font-size:12px; color:var(--rojo-no-tx); background:transparent; border:1px solid var(--linea); border-radius:7px; padding:5px 10px; cursor:pointer; }
+  .meta-pct-wrap span{ color:var(--neutro); font-size:var(--fs-sm); }
+  .meta-del{ font-family:var(--sans); font-size:var(--fs-s); color:var(--rojo-no-tx); background:transparent; border:1px solid var(--linea); border-radius:var(--r-s); padding:5px 10px; cursor:pointer; }
   .meta-del:hover{ background:var(--rojo-no-bg); border-color:var(--rojo-no-bg); }
   .add-kpi-row td{ background:var(--crema-2); border-bottom:none; }
   .add-kpi-row .meta-num, .add-kpi-row .meta-pct, .add-kpi-row .meta-name{ background:#fff; }
-  .add-kpi-row button.btn-primary{ padding:8px 16px; font-size:12.5px; }
+  .add-kpi-row button.btn-primary{ padding:8px 16px; font-size:var(--fs-sm); }
   /* drag-and-drop de KPIs custom */
-  .meta-drag{ display:inline-block; width:18px; text-align:center; color:var(--neutro); cursor:grab; user-select:none; font-size:16px; line-height:1; }
+  .meta-drag{ display:inline-block; width:18px; text-align:center; color:var(--neutro); cursor:grab; user-select:none; font-size:var(--fs-lg); line-height:1; }
   .meta-drag:hover{ color:var(--cobre); }
   tr.dragging{ opacity:.4; }
   .section.drop-target{ outline:2px dashed var(--cobre); outline-offset:-2px; background:rgba(207,133,67,0.05); }
@@ -377,105 +399,105 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   /* drag y rename de secciones */
   .meta-section.dragging-section{ opacity:.4; }
   .meta-section.drop-section-before{ border-top:3px solid var(--cobre); margin-top:-3px; }
-  .meta-section .section-drag{ display:inline-block; width:18px; color:var(--logo); cursor:grab; opacity:.75; user-select:none; font-size:16px; line-height:1; margin-right:4px; }
+  .meta-section .section-drag{ display:inline-block; width:18px; color:var(--logo); cursor:grab; opacity:.75; user-select:none; font-size:var(--fs-lg); line-height:1; margin-right:4px; }
   .meta-section .section-drag:hover{ opacity:1; color:#fff; }
-  .meta-section h3 .section-title-input{ background:transparent; border:1px solid transparent; color:#fff; font-family:var(--serif); font-size:16px; font-weight:700; padding:2px 8px; border-radius:6px; min-width:200px; }
+  .meta-section h3 .section-title-input{ background:transparent; border:1px solid transparent; color:#fff; font-family:var(--serif); font-size:var(--fs-lg); font-weight:700; padding:2px 8px; border-radius:var(--r-s); min-width:200px; }
   .meta-section h3 .section-title-input:hover{ border-color:rgba(255,255,255,.3); }
   .meta-section h3 .section-title-input:focus{ outline:none; border-color:#fff; background:rgba(255,255,255,.1); }
   .ch-pills{ display:flex; flex-wrap:wrap; gap:5px 6px; max-width:360px; }
   .ch-groups{ display:flex; flex-direction:column; gap:6px; max-width:400px; }
-  .ch-group{ border:1px solid var(--linea); border-radius:8px; overflow:hidden; background:#fff; }
+  .ch-group{ border:1px solid var(--linea); border-radius:var(--r-m); overflow:hidden; background:#fff; }
   .ch-group[open]{ background:var(--crema); }
-  .ch-group summary{ padding:8px 12px; cursor:pointer; font-size:11px; letter-spacing:.5px; text-transform:uppercase; font-weight:700; color:var(--verde-prof); background:var(--crema-2); user-select:none; display:flex; align-items:center; gap:8px; list-style:none; }
+  .ch-group summary{ padding:8px 12px; cursor:pointer; font-size:var(--fs-xs); letter-spacing:.5px; text-transform:uppercase; font-weight:700; color:var(--verde-prof); background:var(--crema-2); user-select:none; display:flex; align-items:center; gap:8px; list-style:none; }
   .ch-group summary::-webkit-details-marker{ display:none; }
-  .ch-group summary::after{ content:'▾'; margin-left:auto; font-size:11px; color:var(--neutro); }
+  .ch-group summary::after{ content:'▾'; margin-left:auto; font-size:var(--fs-xs); color:var(--neutro); }
   .ch-group[open] summary::after{ content:'▴'; }
-  .ch-group .ch-grp-count{ background:var(--olivo); color:#fff; font-size:10px; padding:2px 8px; border-radius:999px; font-weight:700; letter-spacing:.3px; }
+  .ch-group .ch-grp-count{ background:var(--olivo); color:#fff; font-size:var(--fs-xs); padding:2px 8px; border-radius:var(--r-pill); font-weight:700; letter-spacing:.3px; }
   .ch-group .ch-pills-inner{ padding:8px 10px; display:flex; flex-wrap:wrap; gap:4px 6px; }
-  .ch-pill{ display:inline-flex; align-items:center; gap:5px; font-size:11px; padding:3px 8px; border-radius:14px; border:1px solid var(--linea); background:var(--crema); cursor:pointer; user-select:none; white-space:nowrap; }
+  .ch-pill{ display:inline-flex; align-items:center; gap:5px; font-size:var(--fs-xs); padding:3px 8px; border-radius:var(--r-l); border:1px solid var(--linea); background:var(--crema); cursor:pointer; user-select:none; white-space:nowrap; }
   /* Tarjeta de alta de usuario: fuera de la tabla, para que nunca se desalineen las columnas */
-  .usr-card{ border:1px solid var(--linea); border-radius:12px; background:#fff; padding:18px 20px; margin-top:14px; }
-  .usr-card-hd{ font-family:var(--serif); font-size:17px; color:var(--verde-prof); margin-bottom:14px; }
+  .usr-card{ border:1px solid var(--linea); border-radius:var(--r-l); background:#fff; padding:18px 20px; margin-top:14px; }
+  .usr-card-hd{ font-family:var(--serif); font-size:var(--fs-lg); color:var(--verde-prof); margin-bottom:14px; }
   .usr-card-grid{ display:grid; grid-template-columns:minmax(240px,1.6fr) minmax(200px,1fr); gap:14px 18px; }
   .usr-fld{ display:flex; flex-direction:column; gap:5px; margin-bottom:14px; }
-  .usr-fld > label{ font-size:10px; text-transform:uppercase; letter-spacing:.6px; color:var(--neutro); font-weight:700; }
-  .usr-fld input, .usr-fld select{ font-family:var(--sans); font-size:13px; padding:8px 10px; border:1px solid var(--linea); border-radius:7px; background:var(--crema); width:100%; }
-  .usr-hint-inline{ font-size:11px; color:var(--neutro); font-style:italic; text-transform:none; letter-spacing:0; font-weight:400; }
+  .usr-fld > label{ font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.6px; color:var(--neutro); font-weight:700; }
+  .usr-fld input, .usr-fld select{ font-family:var(--sans); font-size:var(--fs-sm); padding:8px 10px; border:1px solid var(--linea); border-radius:var(--r-s); background:var(--crema); width:100%; }
+  .usr-hint-inline{ font-size:var(--fs-xs); color:var(--neutro); font-style:italic; text-transform:none; letter-spacing:0; font-weight:400; }
   .usr-card-ft{ display:flex; align-items:center; gap:16px; flex-wrap:wrap; border-top:1px solid var(--crema-2); padding-top:14px; margin-top:4px; }
   .usr-card-ft .usr-hint-inline{ flex:1; min-width:220px; }
   .usr-card-btns{ display:flex; gap:8px; margin-left:auto; }
   /* Los canales del alta caben en dos columnas: no se apilan verticalmente */
   #new-ch .ch-groups{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:10px; max-width:none; }
   table.usr-table td.ch-col{ min-width:300px; }
-  table.usr-table td.acc-col{ white-space:nowrap; font-size:12px; }
+  table.usr-table td.acc-col{ white-space:nowrap; font-size:var(--fs-s); }
   .ch-pill input{ accent-color:var(--olivo); }
   .ch-pill.on{ background:var(--verde-ok-bg); border-color:var(--verde-ok-tx); color:var(--verde-ok-tx); font-weight:600; }
   .ch-pill.disabled{ opacity:.5; cursor:not-allowed; }
 
   /* ---- CRM en vivo (GoHighLevel) ---- */
   .crm-kpis{ display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:14px; margin-bottom:18px; }
-  .crm-kpi{ background:#fff; border:1px solid var(--linea); border-radius:12px; padding:16px 18px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
-  .crm-kpi .k-val{ font-family:var(--serif); font-size:28px; color:var(--verde-prof); font-weight:700; line-height:1.1; }
-  .crm-kpi .k-lbl{ font-size:10.5px; text-transform:uppercase; letter-spacing:.8px; color:var(--neutro); font-weight:600; margin-top:5px; }
-  .crm-pipe{ background:#fff; border:1px solid var(--linea); border-radius:12px; margin-bottom:18px; overflow:hidden; box-shadow:0 1px 2px rgba(70,82,65,.05); }
-  .crm-pipe h3{ margin:0; padding:12px 18px; background:var(--olivo); color:#fff; font-family:var(--serif); font-size:15.5px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .crm-kpi{ background:#fff; border:1px solid var(--linea); border-radius:var(--r-l); padding:16px 18px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .crm-kpi .k-val{ font-family:var(--serif); font-size:var(--fs-2xl); color:var(--verde-prof); font-weight:700; line-height:1.1; }
+  .crm-kpi .k-lbl{ font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.8px; color:var(--neutro); font-weight:600; margin-top:5px; }
+  .crm-pipe{ background:#fff; border:1px solid var(--linea); border-radius:var(--r-l); margin-bottom:18px; overflow:hidden; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .crm-pipe h3{ margin:0; padding:12px 18px; background:var(--olivo); color:#fff; font-family:var(--serif); font-size:var(--fs-lg); display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .crm-pipe h3 .p-badge{ margin-left:auto; display:flex; gap:6px; flex-wrap:wrap; }
-  .crm-pipe h3 .p-badge span{ background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.28); font-family:var(--sans); font-size:10.5px; font-weight:600; letter-spacing:.4px; padding:3px 10px; border-radius:999px; }
+  .crm-pipe h3 .p-badge span{ background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.28); font-family:var(--sans); font-size:var(--fs-xs); font-weight:600; letter-spacing:.4px; padding:3px 10px; border-radius:var(--r-pill); }
   .crm-stages{ padding:12px 18px 16px; }
   .crm-srow{ display:flex; align-items:center; gap:12px; padding:4px 0; }
-  .crm-srow .s-name{ flex:0 0 240px; font-size:12.5px; text-align:right; color:var(--texto); }
-  .crm-srow .s-track{ flex:1; background:var(--crema-2); border-radius:6px; height:18px; position:relative; overflow:hidden; }
-  .crm-srow .s-bar{ position:absolute; inset:0 auto 0 0; background:var(--olivo); border-radius:6px; min-width:2px; opacity:.85; }
+  .crm-srow .s-name{ flex:0 0 240px; font-size:var(--fs-sm); text-align:right; color:var(--texto); }
+  .crm-srow .s-track{ flex:1; background:var(--crema-2); border-radius:var(--r-s); height:18px; position:relative; overflow:hidden; }
+  .crm-srow .s-bar{ position:absolute; inset:0 auto 0 0; background:var(--olivo); border-radius:var(--r-s); min-width:2px; opacity:.85; }
   .crm-srow.won .s-bar{ background:var(--cobre); }
-  .crm-srow .s-count{ flex:0 0 60px; font-weight:600; font-size:13px; color:var(--verde-prof); }
+  .crm-srow .s-count{ flex:0 0 60px; font-weight:600; font-size:var(--fs-sm); color:var(--verde-prof); }
   .crm-tables{ display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:18px; margin-bottom:18px; }
-  .crm-progress{ background:#fff; border:1px solid var(--linea); border-radius:12px; padding:18px 22px; margin-bottom:18px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
-  .crm-progress .cp-lbl{ font-size:12.5px; color:var(--neutro); margin-bottom:10px; }
-  .crm-progress .cp-track{ background:var(--crema-2); border-radius:999px; height:10px; overflow:hidden; }
-  .crm-progress .cp-bar{ height:100%; background:var(--cobre); border-radius:999px; width:0%; transition:width .4s ease; }
-  @media (max-width:680px){ .crm-srow .s-name{ flex-basis:130px; font-size:11px; } }
+  .crm-progress{ background:#fff; border:1px solid var(--linea); border-radius:var(--r-l); padding:18px 22px; margin-bottom:18px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .crm-progress .cp-lbl{ font-size:var(--fs-sm); color:var(--neutro); margin-bottom:10px; }
+  .crm-progress .cp-track{ background:var(--crema-2); border-radius:var(--r-pill); height:10px; overflow:hidden; }
+  .crm-progress .cp-bar{ height:100%; background:var(--cobre); border-radius:var(--r-pill); width:0%; transition:width .4s ease; }
+  @media (max-width:680px){ .crm-srow .s-name{ flex-basis:130px; font-size:var(--fs-xs); } }
   /* ---- Calidad de Leads (en vivo) ---- */
-  .lq-badge{ display:inline-block; padding:3px 10px; border-radius:999px; font-size:10.5px; font-weight:700; letter-spacing:.4px; color:#fff; white-space:nowrap; }
-  .lq-group{ background:#fff; border:1px solid var(--linea); border-radius:12px; margin-bottom:18px; overflow:hidden; box-shadow:0 1px 2px rgba(70,82,65,.05); }
-  .lq-group h3{ margin:0; padding:12px 18px; background:var(--olivo); color:#fff; font-family:var(--serif); font-size:15.5px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .lq-badge{ display:inline-block; padding:3px 10px; border-radius:var(--r-pill); font-size:var(--fs-xs); font-weight:700; letter-spacing:.4px; color:#fff; white-space:nowrap; }
+  .lq-group{ background:#fff; border:1px solid var(--linea); border-radius:var(--r-l); margin-bottom:18px; overflow:hidden; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .lq-group h3{ margin:0; padding:12px 18px; background:var(--olivo); color:#fff; font-family:var(--serif); font-size:var(--fs-lg); display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .lq-group h3 .p-badge{ margin-left:auto; display:flex; gap:6px; flex-wrap:wrap; }
-  .lq-group h3 .p-badge span{ background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.28); font-family:var(--sans); font-size:10.5px; font-weight:600; letter-spacing:.4px; padding:3px 10px; border-radius:999px; }
+  .lq-group h3 .p-badge span{ background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.28); font-family:var(--sans); font-size:var(--fs-xs); font-weight:600; letter-spacing:.4px; padding:3px 10px; border-radius:var(--r-pill); }
   .lq-camp{ padding:12px 18px; border-bottom:1px solid var(--crema-2); }
   .lq-camp:last-child{ border-bottom:none; }
   .lq-camp .lc-head{ display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:7px; }
-  .lq-camp .lc-name{ font-weight:600; font-size:13px; color:var(--verde-prof); }
-  .lq-camp .lc-n{ font-size:11.5px; color:var(--neutro); }
-  .lq-mixbar{ display:flex; height:20px; border-radius:6px; overflow:hidden; background:var(--crema-2); }
+  .lq-camp .lc-name{ font-weight:600; font-size:var(--fs-sm); color:var(--verde-prof); }
+  .lq-camp .lc-n{ font-size:var(--fs-s); color:var(--neutro); }
+  .lq-mixbar{ display:flex; height:20px; border-radius:var(--r-s); overflow:hidden; background:var(--crema-2); }
   .lq-mixbar span{ min-width:2px; }
-  .lq-legend{ display:flex; flex-wrap:wrap; gap:5px 14px; margin-top:7px; font-size:11.5px; color:var(--texto); }
-  .lq-legend i{ display:inline-block; width:9px; height:9px; border-radius:3px; margin-right:5px; }
-  .lq-tags{ font-size:11px; color:var(--neutro); max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .diag-h{ font-family:var(--serif); color:var(--verde-prof); font-size:20px; margin:24px 0 6px; }
-  .lq-meth{ background:var(--crema-2); border:1px solid var(--linea); border-radius:12px; padding:16px 20px; margin-bottom:18px; font-size:12px; color:var(--texto); line-height:1.55; }
+  .lq-legend{ display:flex; flex-wrap:wrap; gap:5px 14px; margin-top:7px; font-size:var(--fs-s); color:var(--texto); }
+  .lq-legend i{ display:inline-block; width:9px; height:9px; border-radius:var(--r-s); margin-right:5px; }
+  .lq-tags{ font-size:var(--fs-xs); color:var(--neutro); max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .diag-h{ font-family:var(--serif); color:var(--verde-prof); font-size:var(--fs-xl); margin:24px 0 6px; }
+  .lq-meth{ background:var(--crema-2); border:1px solid var(--linea); border-radius:var(--r-l); padding:16px 20px; margin-bottom:18px; font-size:var(--fs-s); color:var(--texto); line-height:1.55; }
   .lq-meth b{ color:var(--verde-prof); }
   .lq-toggle{ display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin:6px 0 12px; }
-  .lq-toggle .lt-lbl{ font-size:10.5px; text-transform:uppercase; letter-spacing:.9px; color:var(--neutro); font-weight:700; margin-right:4px; }
-  .lt-btn{ font-family:var(--sans); font-size:12px; font-weight:600; letter-spacing:.3px; color:var(--texto); background:#fff; border:1px solid var(--linea); border-radius:999px; padding:6px 14px; cursor:pointer; transition:.15s; }
+  .lq-toggle .lt-lbl{ font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.9px; color:var(--neutro); font-weight:700; margin-right:4px; }
+  .lt-btn{ font-family:var(--sans); font-size:var(--fs-s); font-weight:600; letter-spacing:.3px; color:var(--texto); background:#fff; border:1px solid var(--linea); border-radius:var(--r-pill); padding:6px 14px; cursor:pointer; transition:.15s; }
   .lt-btn:hover{ border-color:var(--olivo); color:var(--verde-prof); }
   .lt-btn.active{ background:var(--olivo); border-color:var(--olivo); color:#fff; }
   .lq-dot{ display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:7px; vertical-align:middle; flex:none; }
   /* ---- Rúbrica de desempeño del asesor ---- */
-  .sla-pill{ display:inline-block; min-width:28px; padding:3px 9px; border-radius:20px; font-weight:700; color:#fff; font-size:12px; }
+  .sla-pill{ display:inline-block; min-width:28px; padding:3px 9px; border-radius:var(--r-pill); font-weight:700; color:#fff; font-size:var(--fs-s); }
   .sla-pill.s5{ background:var(--verde-prof); } .sla-pill.s4{ background:#5aa08f; }
   .sla-pill.s3{ background:var(--cobre); } .sla-pill.s2{ background:#c9743a; }
   .sla-pill.s1{ background:var(--rojo); } .sla-pill.na{ background:#9aa39d; }
-  .tag-up,.tag-mid,.tag-dn,.tag-sm{ display:inline-block; padding:2px 8px; border-radius:6px; font-size:10.5px; font-weight:700; }
+  .tag-up,.tag-mid,.tag-dn,.tag-sm{ display:inline-block; padding:2px 8px; border-radius:var(--r-s); font-size:var(--fs-xs); font-weight:700; }
   .tag-up{ background:#e4f0ec; color:var(--verde-prof); } .tag-mid{ background:#f3ecd9; color:#8a6a1f; }
   .tag-dn{ background:#f6e6df; color:#a2542c; } .tag-sm{ background:#eee; color:#777; font-weight:600; }
-  .sla-bar{ display:grid; grid-template-columns:200px 1fr 92px; align-items:center; gap:10px; font-size:12px; padding:3px 0; }
-  .sla-bar .sb-track{ background:#eee; border-radius:6px; height:15px; overflow:hidden; }
-  .sla-bar .sb-track i{ display:block; height:100%; border-radius:6px; }
+  .sla-bar{ display:grid; grid-template-columns:200px 1fr 92px; align-items:center; gap:10px; font-size:var(--fs-s); padding:3px 0; }
+  .sla-bar .sb-track{ background:#eee; border-radius:var(--r-s); height:15px; overflow:hidden; }
+  .sla-bar .sb-track i{ display:block; height:100%; border-radius:var(--r-s); }
   .sla-bar .sb-val{ font-weight:600; color:var(--texto); }
   @media(max-width:680px){ .sla-bar{ grid-template-columns:120px 1fr 70px; } }
-  .lq-legend-dots{ display:flex; gap:14px; align-items:center; font-size:11px; color:var(--neutro); margin:-4px 0 10px; }
+  .lq-legend-dots{ display:flex; gap:14px; align-items:center; font-size:var(--fs-xs); color:var(--neutro); margin:-4px 0 10px; }
   /* ---- Tablas desplegables (campaña → conjunto → anuncio) ---- */
   .lq-toolbar{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 10px; }
-  .lq-search{ font-family:var(--sans); font-size:12.5px; padding:7px 13px; border:1px solid var(--linea); border-radius:999px; background:#fff; min-width:280px; color:var(--texto); }
+  .lq-search{ font-family:var(--sans); font-size:var(--fs-sm); padding:7px 13px; border:1px solid var(--linea); border-radius:var(--r-pill); background:#fff; min-width:280px; color:var(--texto); }
   .lq-search:focus{ outline:none; border-color:var(--olivo); }
   table.lq-tree tr.lq-row.clickable{ cursor:pointer; }
   table.lq-tree tr.lq-row.clickable:hover{ background:var(--crema); }
@@ -483,46 +505,46 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   table.lq-tree tr.d1 > td:first-child, table.lq-tree tr.d2 > td:first-child{ font-weight:500; }
   table.lq-tree tr.d1{ background:rgba(245,241,232,.45); }
   table.lq-tree tr.d2{ background:rgba(245,241,232,.75); }
-  .lq-caret{ display:inline-block; width:14px; color:var(--cobre); font-size:10px; }
-  .lq-sub{ font-size:10.5px; color:var(--neutro); font-weight:400; }
-  .lq-orig{ display:inline-block; font-size:9.5px; font-weight:700; letter-spacing:.5px; padding:2px 8px; border-radius:4px; }
+  .lq-caret{ display:inline-block; width:14px; color:var(--cobre); font-size:var(--fs-xs); }
+  .lq-sub{ font-size:var(--fs-xs); color:var(--neutro); font-weight:400; }
+  .lq-orig{ display:inline-block; font-size:var(--fs-xs); font-weight:700; letter-spacing:.5px; padding:2px 8px; border-radius:var(--r-s); }
   .lq-orig.meta{ background:#e3ecf5; color:#2a4f7c; }
   .lq-orig.google{ background:#f6e7e0; color:#a2542c; }
   /* ---- Sub-pestañas de Calidad de Leads ---- */
   .lq-subtabs{ display:flex; gap:10px; flex-wrap:wrap; margin:2px 0 18px; }
-  .lq-leyenda{ background:var(--crema-2); border:1px solid var(--linea); border-radius:10px; padding:9px 14px; margin-bottom:14px; }
-  .lq-leyenda summary{ cursor:pointer; font-size:12.5px; font-weight:600; color:var(--olivo); }
+  .lq-leyenda{ background:var(--crema-2); border:1px solid var(--linea); border-radius:var(--r-m); padding:9px 14px; margin-bottom:14px; }
+  .lq-leyenda summary{ cursor:pointer; font-size:var(--fs-sm); font-weight:600; color:var(--olivo); }
   .lq-leyenda-cuerpo{ display:flex; flex-wrap:wrap; gap:6px 20px; margin-top:9px; }
-  .lq-leyenda-cuerpo span{ font-size:12.5px; color:var(--texto); flex:1 1 260px; }
+  .lq-leyenda-cuerpo span{ font-size:var(--fs-sm); color:var(--texto); flex:1 1 260px; }
   .lq-leyenda-cuerpo b{ color:var(--verde-prof); }
-  .lq-leyenda-pie{ font-size:11.5px; color:var(--neutro); margin-top:8px; font-style:italic; }
-  .lq-subtab{ font-family:var(--sans); text-align:left; display:flex; align-items:center; gap:10px; background:var(--crema-2); border:1px solid var(--linea); border-radius:12px; padding:10px 16px; cursor:pointer; transition:.15s; min-width:190px; }
+  .lq-leyenda-pie{ font-size:var(--fs-s); color:var(--neutro); margin-top:8px; font-style:italic; }
+  .lq-subtab{ font-family:var(--sans); text-align:left; display:flex; align-items:center; gap:10px; background:var(--crema-2); border:1px solid var(--linea); border-radius:var(--r-l); padding:10px 16px; cursor:pointer; transition:.15s; min-width:190px; }
   .lq-subtab:hover{ border-color:var(--cobre); }
   .lq-subtab.active{ background:#fff; border-color:var(--cobre); box-shadow:0 2px 6px rgba(70,82,65,.08); }
-  .lq-subtab .ls-n{ display:flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:var(--arena,#e0d8c6); color:var(--verde-prof); font-size:11px; font-weight:700; flex:none; }
+  .lq-subtab .ls-n{ display:flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:var(--arena,#e0d8c6); color:var(--verde-prof); font-size:var(--fs-xs); font-weight:700; flex:none; }
   .lq-subtab.active .ls-n{ background:var(--cobre); color:#fff; }
-  .lq-subtab b{ display:block; font-size:13px; color:var(--verde-prof); font-weight:600; line-height:1.25; }
-  .lq-subtab i{ display:block; font-size:10.5px; color:var(--neutro); font-style:normal; }
+  .lq-subtab b{ display:block; font-size:var(--fs-sm); color:var(--verde-prof); font-weight:600; line-height:1.25; }
+  .lq-subtab i{ display:block; font-size:var(--fs-xs); color:var(--neutro); font-style:normal; }
   /* ---- Reporte combinado ---- */
-  .lq-lectura{ background:#fff; border:1px solid var(--linea); border-left:4px solid var(--cobre); border-radius:12px; padding:16px 20px; margin-bottom:18px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
-  .lq-lectura h4{ margin:0 0 8px; font-family:var(--serif); font-size:17px; color:var(--verde-prof); }
-  .lq-lectura p{ margin:5px 0; font-size:13px; line-height:1.6; color:var(--texto); }
+  .lq-lectura{ background:#fff; border:1px solid var(--linea); border-left:4px solid var(--cobre); border-radius:var(--r-l); padding:16px 20px; margin-bottom:18px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .lq-lectura h4{ margin:0 0 8px; font-family:var(--serif); font-size:var(--fs-lg); color:var(--verde-prof); }
+  .lq-lectura p{ margin:5px 0; font-size:var(--fs-sm); line-height:1.6; color:var(--texto); }
   .lq-lectura p.ok{ color:var(--verde-prof); } .lq-lectura p.warn{ color:var(--rojo); }
   .lq-charts{ display:grid; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); gap:18px; margin-bottom:18px; }
-  .lq-card{ background:#fff; border:1px solid var(--linea); border-radius:12px; padding:16px 18px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
-  .lq-card h4{ margin:0 0 12px; font-family:var(--serif); font-size:16px; color:var(--verde-prof); }
+  .lq-card{ background:#fff; border:1px solid var(--linea); border-radius:var(--r-l); padding:16px 18px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .lq-card h4{ margin:0 0 12px; font-family:var(--serif); font-size:var(--fs-lg); color:var(--verde-prof); }
   .lq-card canvas{ max-height:190px; }
-  .lq-qbar{ display:flex; height:11px; border-radius:999px; overflow:hidden; background:#e8e4da; }
+  .lq-qbar{ display:flex; height:11px; border-radius:var(--r-pill); overflow:hidden; background:#e8e4da; }
   .lq-qbar span{ min-width:2px; }
   /* ---- Acciones de la IA ---- */
   .lq-actions{ display:flex; flex-direction:column; gap:10px; margin-bottom:18px; }
-  .lq-action{ background:#fff; border:1px solid var(--linea); border-radius:12px; padding:13px 16px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .lq-action{ background:#fff; border:1px solid var(--linea); border-radius:var(--r-l); padding:13px 16px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
   .la-head{ display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
-  .la-num{ display:flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; background:var(--crema-2); color:var(--verde-prof); font-size:11px; font-weight:700; flex:none; }
-  .la-prio{ font-size:9.5px; font-weight:700; letter-spacing:.6px; color:#fff; padding:2px 8px; border-radius:999px; }
-  .la-title{ font-size:13.5px; font-weight:600; color:var(--verde-prof); }
-  .la-resp{ margin-left:auto; font-size:10.5px; color:var(--neutro); border:1px solid var(--linea); border-radius:999px; padding:2px 9px; }
-  .la-detail{ font-size:12.5px; color:var(--texto); line-height:1.55; margin-top:6px; padding-left:29px; }
+  .la-num{ display:flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; background:var(--crema-2); color:var(--verde-prof); font-size:var(--fs-xs); font-weight:700; flex:none; }
+  .la-prio{ font-size:var(--fs-xs); font-weight:700; letter-spacing:.6px; color:#fff; padding:2px 8px; border-radius:var(--r-pill); }
+  .la-title{ font-size:var(--fs-md); font-weight:600; color:var(--verde-prof); }
+  .la-resp{ margin-left:auto; font-size:var(--fs-xs); color:var(--neutro); border:1px solid var(--linea); border-radius:var(--r-pill); padding:2px 9px; }
+  .la-detail{ font-size:var(--fs-sm); color:var(--texto); line-height:1.55; margin-top:6px; padding-left:29px; }
 </style>
 </head>
 <body>
@@ -672,7 +694,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
           <div class="grp"><label>Fin (domingo)</label><input type="date" id="ing-fin" readonly></div>
           <div class="grp"><label>Semana ISO</label><div class="semana-badge" id="ing-semana">—</div></div>
           <div id="ing-dims"></div>
-          <div class="grp"><label>Responsable</label><input type="text" id="ing-responsable" placeholder="Nombre del responsable" style="min-width:200px;padding:8px 10px;border:1px solid var(--linea);border-radius:8px;font-family:var(--sans);font-size:14px;background:var(--crema)"></div>
+          <div class="grp"><label>Responsable</label><input type="text" id="ing-responsable" placeholder="Nombre del responsable" style="min-width:200px;padding:8px 10px;border:1px solid var(--linea);border-radius:8px;font-family:var(--sans);font-size:var(--fs-md);background:var(--crema)"></div>
           <div class="spacer"></div>
           <!-- La barra de acciones vive al final del formulario, que es donde termina la
                captura. Antes había dos pares con etiquetas distintas ("Guardar" arriba,
@@ -1463,11 +1485,11 @@ function avisarLecturaFallida(){
   const d = document.createElement("div");
   d.id = "aviso-lectura";
   d.style.cssText = "position:sticky;top:0;z-index:120;background:#F2CFC9;color:#9B3B2E;"
-    + "border-bottom:2px solid var(--rojo);padding:10px 18px;font-size:13.5px;display:flex;"
+    + "border-bottom:2px solid var(--rojo);padding:10px 18px;font-size:var(--fs-md);display:flex;"
     + "align-items:center;gap:12px;font-family:var(--sans)";
   d.innerHTML = '<span><b>No se pudieron cargar los datos guardados.</b> '
     + 'Lo que ves puede estar incompleto o desactualizado.</span>'
-    + '<button class="btn btn-ghost" id="aviso-lectura-retry" style="padding:5px 12px;font-size:12px">Reintentar</button>';
+    + '<button class="btn btn-ghost" id="aviso-lectura-retry" style="padding:5px 12px;font-size:var(--fs-s)">Reintentar</button>';
   document.getElementById("app")?.prepend(d);
   document.getElementById("aviso-lectura-retry").onclick = ()=>location.reload();
 }
@@ -1845,7 +1867,7 @@ function showPhrase(text){
   if(!el){
     el = document.createElement("div");
     el.id = "brand-phrase-pop";
-    el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(.9);background:var(--verde-prof);color:var(--crema);padding:28px 36px;border-radius:16px;border-left:5px solid var(--cobre);box-shadow:0 20px 60px rgba(0,0,0,.35);font-family:var(--serif);font-style:italic;font-size:22px;line-height:1.4;max-width:520px;text-align:center;z-index:300;opacity:0;transition:all .35s cubic-bezier(.2,.9,.3,1.4);pointer-events:none;";
+    el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(.9);background:var(--verde-prof);color:var(--crema);padding:28px 36px;border-radius:16px;border-left:5px solid var(--cobre);box-shadow:0 20px 60px rgba(0,0,0,.35);font-family:var(--serif);font-style:italic;font-size:var(--fs-xl);line-height:1.4;max-width:520px;text-align:center;z-index:300;opacity:0;transition:all .35s cubic-bezier(.2,.9,.3,1.4);pointer-events:none;";
     document.body.appendChild(el);
   }
   el.textContent = "“" + text + "”";
@@ -2540,7 +2562,7 @@ function crmRender(){
     .map(([u,n])=>`<tr><td class="lft">${escAttr(agg.users[u]||"(sin nombre)")}</td><td class="val">${n.toLocaleString()}</td></tr>`).join("");
   const tbl = (title, head, rows)=>`<div class="rep-section" style="margin-bottom:0"><h3>${title}</h3>
     <table class="rep"><thead><tr><th class="lft">${head}</th><th>Opps</th></tr></thead>
-    <tbody>${rows || '<tr><td colspan="2" class="lft" style="color:var(--neutro);font-style:italic">Sin datos en el rango.</td></tr>'}</tbody></table></div>`;
+    <tbody>${rows || '<tr><td colspan="2" class="lft txt-nota">Sin datos en el rango.</td></tr>'}</tbody></table></div>`;
   const tables = `<div class="crm-tables">${tbl("Oportunidades por fuente (rango)","Fuente",srcRows)}${tbl("Oportunidades por asesor (rango)","Asesor",asrRows)}</div>`;
 
   document.getElementById("crm-content").innerHTML =
@@ -3275,7 +3297,7 @@ function lqQualityTree(agg, leads, rangoSet){
     <tr><th class="lft">Campaña / conjunto / anuncio</th><th class="lft">Familia</th>
       ${LQ_COLS.map(L=>`<th title="${L.name}">${L.short}</th>`).join("")}
       <th>Total</th><th>Calif.</th><th>%</th><th title="OPP = oportunidad real de cierre: Seguimiento de OPP, Carta oferta, Apartado o posterior. La cotización enviada aún no cuenta.">OPPs</th>${wonTh('cohorte')}<th>Inversión</th><th>Costo/lead</th></tr>
-    ${body || `<tr><td colspan="18" class="lft" style="color:var(--neutro);font-style:italic">Sin leads que coincidan.</td></tr>`}
+    ${body || `<tr><td colspan="18" class="lft txt-nota">Sin leads que coincidan.</td></tr>`}
     ${totRow}
   </table></div>`;
 }
@@ -3330,7 +3352,7 @@ function lqAdsTree(agg, rangoSet){
   return `<div class="table-scroll" style="margin-bottom:8px"><table class="cons lq-tree">
     <tr><th class="lft">Campaña / anuncio</th><th class="lft">Origen</th><th class="lft">Plataforma</th>
       <th>Inversión</th><th>Impres.</th><th>Clics</th><th>Resultados</th><th>CPL</th><th>CTR</th><th>CPC</th></tr>
-    ${body || `<tr><td colspan="10" class="lft" style="color:var(--neutro);font-style:italic">Sin anuncios que coincidan.</td></tr>`}
+    ${body || `<tr><td colspan="10" class="lft txt-nota">Sin anuncios que coincidan.</td></tr>`}
     <tr class="total"><td class="lft">Total (campañas del rango)</td><td></td><td></td>
       <td>${fmtMoney(T.spend)}</td><td>${T.impr.toLocaleString()}</td><td>${T.clicks.toLocaleString()}</td>
       <td>${T.results||"—"}</td><td>${cpl(T.spend,T.results)}</td><td>${ctr(T.clicks,T.impr)}</td><td>${cpc(T.spend,T.clicks)}</td></tr>
@@ -3381,7 +3403,7 @@ function lqLevelSection(agg, leadsAll, rango, rangoSet){
   const mainTable = `<div class="table-scroll" style="margin-bottom:10px"><table class="cons">
     <tr><th class="lft">${LQ_LEVELS_UI.find(o=>o.id===level).name}</th><th>Leads</th>${tierCols}
       <th>% Alto valor</th><th>% SQL+</th><th>% Descal.</th><th title="OPP = oportunidad real de cierre: Seguimiento de OPP, Carta oferta, Apartado o posterior. La cotización enviada aún no cuenta.">OPPs</th>${wonTh('cohorte')}<th>Inversión</th><th>Costo/lead</th><th>Costo/alto valor</th></tr>
-    ${rows || `<tr><td colspan="16" class="lft" style="color:var(--neutro);font-style:italic">Sin leads en el rango.</td></tr>`}
+    ${rows || `<tr><td colspan="16" class="lft txt-nota">Sin leads en el rango.</td></tr>`}
     <tr class="total"><td class="lft">Total</td><td><b>${leads.length}</b></td>${tierTot}
       <td class="pct">${pct(hiT,leads.length)}</td><td class="pct">${pct(sqlPlusT,leads.length)}</td><td class="pct">${pct(cT.desc||0,leads.length)}</td>
       <td>${sumO(leads)}</td><td>${sumW(leads)}</td><td>${spT?fmtMoney(spT):"—"}</td><td>—</td><td>—</td></tr>
@@ -3394,7 +3416,7 @@ function lqLevelSection(agg, leadsAll, rango, rangoSet){
     const trows = keys.map(k=>{
       const arr=groups[k];
       const cells = rango.map(w=>{ const sub=arr.filter(l=>l.wk===w); const hv=lqHigh(lqCount(sub));
-        return `<td>${sub.length?`${sub.length}<span style="color:var(--neutro);font-size:10px"> / ${hv}</span>`:"·"}</td>`; }).join("");
+        return `<td>${sub.length?`${sub.length}<span style="color:var(--neutro);font-size:var(--fs-xs)"> / ${hv}</span>`:"·"}</td>`; }).join("");
       return `<tr><td class="name">${escAttr(k)}</td>${cells}<td><b>${arr.length}</b></td></tr>`;
     }).join("");
     trend = `<div class="table-scroll" style="margin-bottom:10px"><table class="cons">
@@ -3414,7 +3436,7 @@ function lqLevelSection(agg, leadsAll, rango, rangoSet){
     <input type="text" id="lq-q" class="lq-search" placeholder="Buscar campaña, conjunto o anuncio…" value="${escAttr(lqState.q||"")}">
     <button class="lt-btn" id="lq-expand-all">Expandir / colapsar todo</button>
   </div>`;
-  return `<h3 style="font-family:var(--serif);color:var(--verde-prof);font-size:20px;margin:22px 0 6px">Calidad por ${LQ_LEVELS_UI.find(o=>o.id===level).name.toLowerCase()}</h3>
+  return `<h3 class="h-sec">Calidad por ${LQ_LEVELS_UI.find(o=>o.id===level).name.toLowerCase()}</h3>
     ${toggle}${buscador}${legend}${level==="camp" ? tree + `<p class="hint" style="margin-top:-4px">Haz clic en una campaña para ver sus conjuntos, y en un conjunto para ver sus anuncios. Calif. = MQL + SQL + SQL Selvadentro.</p>` : mainTable+trend}${hint}`;
 }
 
@@ -3492,7 +3514,7 @@ function lqComboSection(agg, leadsAll, rango, rangoSet){
   }).join("");
   html += `<div class="table-scroll" style="margin-bottom:8px"><table class="cons">
     <tr><th class="lft">Familia de campaña</th><th>Inversión</th><th>Result. ads</th><th>Leads CRM</th><th class="lft">Calidad</th><th>Calif.</th><th>CPL</th><th>Costo/calif.</th></tr>
-    ${rows || `<tr><td colspan="8" class="lft" style="color:var(--neutro);font-style:italic">Sin datos en el rango.</td></tr>`}
+    ${rows || `<tr><td colspan="8" class="lft txt-nota">Sin datos en el rango.</td></tr>`}
     <tr class="total"><td class="lft">Total</td><td>${fmtMoney(invT)}</td><td>${resT||"—"}</td><td>${leads.length}</td><td>${barra(leads)}</td><td><b>${califT}</b></td><td>${cplT!=null?fmtMoney(cplT):"—"}</td><td>${ccT!=null?fmtMoney(ccT):"—"}</td></tr>
   </table></div>
   <p class="hint">Result. ads = leads/conversiones que reporta la plataforma · Leads CRM = contactos en GoHighLevel · CPL = inversión ÷ leads CRM · Costo/calif. = inversión ÷ calificados. Las familias normalizan los nombres, que difieren entre plataforma y CRM.</p>`;
@@ -3537,7 +3559,7 @@ function lqDrawCharts(){
 /* ---- Conclusiones con IA ---- */
 function lqConclusionesSection(){
   const a = lqState.ia;
-  let html = `<h3 style="font-family:var(--serif);color:var(--verde-prof);font-size:20px;margin:6px 0">Conclusiones y acciones</h3>
+  let html = `<h3 style="font-family:var(--serif);color:var(--verde-prof);font-size:var(--fs-xl);margin:6px 0">Conclusiones y acciones</h3>
     <p class="hint" style="margin-top:0">Analiza el cruce de inversión y calidad del rango seleccionado y propone acciones concretas. Los datos van agregados: no se envía información personal de ningún lead.</p>
     <div style="margin-bottom:16px"><button class="btn btn-olive" id="lq-ia-btn">${a?"Volver a analizar":"Analizar con IA"}</button>
       ${a&&a.ts?`<span class="hint" style="margin-left:12px">Generado ${crmAgo(a.ts)}</span>`:""}</div>`;
@@ -3689,8 +3711,8 @@ function lqRender(){
       <div class="crm-kpi"><div class="k-val" style="${dups.length?'color:var(--rojo)':''}">${dups.length}</div><div class="k-lbl">Posibles duplicados (12 sem.)</div></div>
     </div>`;
     if(dups.length){
-      const rows=dups.slice(0,12).map(g=>`<tr><td class="lft" style="font-weight:600">${g.map(x=>escAttr(x.n)).join(" · ")}</td><td class="lft">${escAttr(g[0].ph?("…"+g[0].ph.slice(-4)):g[0].em)}</td><td class="lft">${g.map(x=>x.wk).join(", ")}</td></tr>`).join("");
-      html += `<div class="rep-section" style="margin-bottom:18px"><h3>Posibles duplicados por teléfono/email (últimas 12 semanas)</h3>
+      const rows=dups.slice(0,12).map(g=>`<tr><td class="lft celda-fuerte">${g.map(x=>escAttr(x.n)).join(" · ")}</td><td class="lft">${escAttr(g[0].ph?("…"+g[0].ph.slice(-4)):g[0].em)}</td><td class="lft">${g.map(x=>x.wk).join(", ")}</td></tr>`).join("");
+      html += `<div class="rep-section mb-sec"><h3>Posibles duplicados por teléfono/email (últimas 12 semanas)</h3>
         <table class="rep"><thead><tr><th class="lft">Contactos</th><th class="lft">Coincidencia</th><th class="lft">Semanas</th></tr></thead><tbody>${rows}</tbody></table>
         ${dups.length>12?`<p class="hint">…y ${dups.length-12} más.</p>`:""}
         <p class="hint">Detección por últimos 10 dígitos del teléfono o email exacto entre los leads sincronizados. La fusión se hace en GoHighLevel.</p></div>`;
@@ -3720,7 +3742,7 @@ function lqRender(){
       }).sort((x,y)=>(y.na+y.nb)-(x.na+x.nb)).slice(0,10)
         .map(r=>`<tr><td class="name">${escAttr(r.k)}</td><td>${r.na} → ${r.nb}</td><td>${r.ha} → ${r.hb}</td></tr>`).join("");
     })();
-    html += `<div class="crm-tables" style="margin-bottom:18px">
+    html += `<div class="crm-tables mb-sec">
       <div class="rep-section" style="margin-bottom:0"><h3>Mes anterior vs mes actual (${prevMo} → ${curMo})</h3>
         <div class="table-scroll" style="border:none;box-shadow:none"><table class="cons">
           <tr><th class="lft">Métrica</th><th>${prevMo}</th><th>${curMo}</th><th>Δ</th></tr>
@@ -3732,7 +3754,7 @@ function lqRender(){
       <div class="rep-section" style="margin-bottom:0"><h3>Leads por campaña · ${prevMo} → ${curMo}</h3>
         <div class="table-scroll" style="border:none;box-shadow:none"><table class="cons">
           <tr><th class="lft">Campaña</th><th>Leads</th><th>Alto valor</th></tr>
-          ${campRows||'<tr><td class="lft" colspan="3" style="color:var(--neutro);font-style:italic">Sin datos.</td></tr>'}
+          ${campRows||'<tr><td class="lft txt-nota" colspan="3">Sin datos.</td></tr>'}
         </table></div></div>
     </div>`;
   }
@@ -3755,7 +3777,7 @@ function lqRender(){
     const coinc = leads.filter(l=>(l.alv||"cql")===l.crmLv).length;
     const conCampo = leads.filter(l=>l.crmLv!=="nc");
     const acuerdo = conCampo.length ? Math.round(conCampo.filter(l=>(l.alv||"cql")===l.crmLv).length/conCampo.length*100) : null;
-    html += `<h3 style="font-family:var(--serif);color:var(--verde-prof);font-size:20px;margin:22px 0 6px">Reglas automáticas vs. captura del equipo</h3>
+    html += `<h3 class="h-sec">Reglas automáticas vs. captura del equipo</h3>
       <p class="hint" style="margin-top:0">Filas = calificación por reglas · columnas = campo "${escAttr(agg.califField?.name||"Calificación del lead")}" del CRM.
         La diagonal (verde) es coincidencia; lo rojo es discrepancia a revisar. Acuerdo sobre los ${conCampo.length} leads que sí traen el campo lleno: <b>${acuerdo==null?"—":acuerdo+"%"}</b>.</p>
       <div class="table-scroll" style="margin-bottom:8px"><table class="cons">
@@ -3781,13 +3803,13 @@ function lqRender(){
           return `<div class="crm-srow">
             <span class="s-name">${escAttr(st)}</span>
             <span class="s-track"><span class="s-bar" style="width:${Math.max(2,Math.round(arr.length/max*100))}%"></span></span>
-            <span class="s-count">${arr.length}<span style="color:var(--neutro);font-size:10.5px;font-weight:400"> · ${hi} AV</span></span>
+            <span class="s-count">${arr.length}<span style="color:var(--neutro);font-size:var(--fs-xs);font-weight:400"> · ${hi} AV</span></span>
           </div>`;
         }).join("");
         blocks += `<div class="crm-pipe"><h3>${escAttr(pipe)}<span class="p-badge"><span>${Object.values(stages).reduce((a,x)=>a+x.length,0)} leads con oportunidad</span></span></h3>
           <div class="crm-stages">${rows}</div></div>`;
       }
-      html += `<h3 style="font-family:var(--serif);color:var(--verde-prof);font-size:20px;margin:22px 0 6px">Etapa actual en el pipeline</h3>
+      html += `<h3 class="h-sec">Etapa actual en el pipeline</h3>
         <p class="hint" style="margin-top:0">Dónde está hoy cada lead del rango dentro del CRM (etapa real de su oportunidad más reciente). AV = leads de alto valor. ${leads.length-withOpp.length} de ${leads.length} leads aún no tienen oportunidad creada.</p>
         ${blocks}`;
     }
@@ -3811,7 +3833,7 @@ function lqRender(){
     const rows = Object.entries(buckets).sort((a,b)=>b[1].spend-a[1].spend).map(([lc,b])=>{
       const arr = leads.filter(l=>l.camp===lc);
       const hi = lqHigh(lqCount(arr));
-      const adsNote = b.ads>1 ? ` <span style="color:var(--neutro);font-size:10px">(${b.ads} campañas de ads)</span>` : "";
+      const adsNote = b.ads>1 ? ` <span style="color:var(--neutro);font-size:var(--fs-xs)">(${b.ads} campañas de ads)</span>` : "";
       return `<tr><td class="name">${escAttr(lc)}${adsNote}</td><td class="lft">${escAttr([...b.srcs].join(", "))}</td><td>${fmtMoney(b.spend)}</td><td>${arr.length}</td><td>${hi}</td><td>${arr.length?fmtMoney(b.spend/arr.length):"—"}</td><td>${hi?fmtMoney(b.spend/hi):"—"}</td></tr>`;
     }).join("") + unmatched.sort((a,b)=>b[1].spend-a[1].spend).map(([camp,s])=>
       `<tr><td class="name">${escAttr(camp)}</td><td class="lft">${escAttr(s.src||"")}</td><td>${fmtMoney(s.spend)}</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>`).join("");
@@ -3828,7 +3850,7 @@ function lqRender(){
     // El costo por lead del total solo tiene sentido contra leads de plataformas de pago
     const paidLeads = leads.filter(l=>l.fuente==="Meta"||l.fuente==="Google");
     const paidHi = lqHigh(lqCount(paidLeads));
-    html += `<div class="table-scroll" style="margin-bottom:18px"><table class="cons">
+    html += `<div class="table-scroll mb-sec"><table class="cons">
       <tr><th class="lft">Campaña</th><th class="lft">Plataforma</th><th>Inversión</th><th>Leads</th><th>Alto valor</th><th>Costo/lead</th><th>Costo/alto valor</th></tr>
       ${rows}
       ${platRows}
@@ -3853,12 +3875,12 @@ function lqRender(){
     const campBlocks = camps.map(([camp,arr])=>{
       const sorted = arr.slice().sort((a,b)=>(LQ_RANK[a.lv]-LQ_RANK[b.lv]) || a.n.localeCompare(b.n));
       const rows = sorted.map(l=>`<tr>
-        <td class="lft" style="font-weight:600">${escAttr(l.n)}</td>
-        <td class="lft">${lqBadge(l.lv)}${qual==="auto"&&l.crmLv!==l.lv?`<div style="font-size:9.5px;color:var(--neutro);margin-top:3px">CRM: ${escAttr((LQ_LEVEL_BY_ID[l.crmLv]||LQ_LEVEL_BY_ID.nc).name)}</div>`:""}</td>
+        <td class="lft celda-fuerte">${escAttr(l.n)}</td>
+        <td class="lft">${lqBadge(l.lv)}${qual==="auto"&&l.crmLv!==l.lv?`<div style="font-size:var(--fs-xs);color:var(--neutro);margin-top:3px">CRM: ${escAttr((LQ_LEVEL_BY_ID[l.crmLv]||LQ_LEVEL_BY_ID.nc).name)}</div>`:""}</td>
         <td class="lft">${l.pstage
-          ? `<b>${escAttr(l.pstage)}</b>${l.ost&&l.ost!=="open"?` <span style="font-size:10px;color:var(--neutro)">(${escAttr(l.ost)})</span>`:""}<div style="font-size:10px;color:var(--neutro)">${escAttr(l.pipe)}</div>`
-          : `<span style="color:var(--neutro)">${escAttr(l.st)}</span><div style="font-size:10px;color:var(--neutro)">sin oportunidad · señal de tags</div>`}</td>
-        <td class="lft"><span class="lq-tags" title="${escAttr(l.ad||"")}">${escAttr(l.ad)||"—"}</span>${l.grp?`<div style="font-size:10px;color:var(--neutro)">${escAttr(l.grp)}</div>`:""}</td>
+          ? `<b>${escAttr(l.pstage)}</b>${l.ost&&l.ost!=="open"?` <span class="txt-micro">(${escAttr(l.ost)})</span>`:""}<div class="txt-micro">${escAttr(l.pipe)}</div>`
+          : `<span style="color:var(--neutro)">${escAttr(l.st)}</span><div class="txt-micro">sin oportunidad · señal de tags</div>`}</td>
+        <td class="lft"><span class="lq-tags" title="${escAttr(l.ad||"")}">${escAttr(l.ad)||"—"}</span>${l.grp?`<div class="txt-micro">${escAttr(l.grp)}</div>`:""}</td>
         <td class="lft"><span class="lq-tags" title="${escAttr(l.awhy||"")}">${escAttr(l.awhy)||"—"}</span></td>
         <td class="lft"><span class="lq-tags" title="${escAttr(l.tags)}">${escAttr(l.tags)||"—"}</span></td>
         <td class="lft">${escAttr(agg.users[l.u]||"—")}</td>
@@ -3964,7 +3986,7 @@ function lqRender(){
 function lqAdsSection(agg, rangoSet){
   const rows = (agg.adw||[]).filter(a=>rangoSet.has(a.wk));
   if(!rows.length) return "";
-  return `<h3 style="font-family:var(--serif);color:var(--verde-prof);font-size:20px;margin:24px 0 6px">Datos de campañas</h3>
+  return `<h3 style="font-family:var(--serif);color:var(--verde-prof);font-size:var(--fs-xl);margin:24px 0 6px">Datos de campañas</h3>
     <p class="hint" style="margin-top:0">Inversión y desempeño por campaña desde Windsor.ai. Haz clic en una campaña para desplegar sus anuncios por plataforma. Respeta el rango de semanas, el filtro de plataforma y el buscador de arriba.</p>
     ${lqAdsTree(agg, rangoSet)}`;
 }
@@ -4289,7 +4311,7 @@ function slaAsesorSection(agg){
     ${slaState.asesor?`<button class="lt-btn" id="sla-asesor-clear">Ver a todos</button>`:""}
   </div>`;
 
-  let html = `<h3 style="font-family:var(--serif);color:var(--verde-prof);font-size:20px;margin:22px 0 6px">Desempeño del asesor</h3>
+  let html = `<h3 class="h-sec">Desempeño del asesor</h3>
     <p class="hint" style="margin-top:0">Cinco sub-notas independientes en escala 1-5, calculadas del feed real del CRM. Solo cuentan las <b>acciones manuales del asesor</b>: llamadas suyas, WhatsApp que escribió, y SMS o email escritos a mano. Se excluyen workflows, campañas, envíos masivos y lo que entra por un proveedor externo vía API. La nota global es el promedio de las sub-notas disponibles y nunca se muestra sola; una sub-nota sin dato queda N/A y no la baja.</p>
     ${selHtml}
     <div class="table-scroll" style="margin-bottom:8px"><table class="cons">
@@ -4297,12 +4319,12 @@ function slaAsesorSection(agg){
         ${SLA_DIMS.map(d=>`<th title="${escAttr(d.label)} · umbrales ${d.thr.join("/")}%">${escAttr(d.label.split(" ")[0])}</th>`).join("")}
         <th>Nota global</th><th title="SQL Selvadentro×4 + SQL×3 + CQL×1 sobre el total">Índice calidad</th>
         <th title="Percentil de su tasa de oportunidades vs. percentil de la calidad de lead que recibió">Resultado ajustado</th></tr>
-      ${tbody || `<tr><td colspan="10" class="lft" style="color:var(--neutro);font-style:italic">Sin leads en el rango.</td></tr>`}
+      ${tbody || `<tr><td colspan="10" class="lft txt-nota">Sin leads en el rango.</td></tr>`}
     </table></div>`;
 
   const fichas = slaState.asesor ? rows.filter(r=>r.u===slaState.asesor) : [];
   if(!slaState.asesor && rows.length){
-    html += `<p class="hint" style="margin-top:-2px">Elige un asesor arriba —o haz clic en su fila— para ver su ficha: sus tiempos, sus cinco sub-notas y de dónde sale cada una.</p>`;
+    html += `<p class="hint pegada">Elige un asesor arriba —o haz clic en su fila— para ver su ficha: sus tiempos, sus cinco sub-notas y de dónde sale cada una.</p>`;
   }
   html += fichas.map(r=>{
     const c=r.c;
@@ -4318,11 +4340,11 @@ function slaAsesorSection(agg){
       <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px">
         <h4 style="margin:0">${escAttr(name(r.u))}</h4>
         ${c.small?'<span class="tag-sm">muestra pequeña — interpretar con cautela</span>':''}
-        <span style="margin-left:auto;font-size:12px;color:var(--neutro)">Nota global <b style="font-size:20px;color:var(--verde-prof)">${c.global==null?"—":c.global.toFixed(1)}</b>/5</span>
+        <span style="margin-left:auto;font-size:var(--fs-s);color:var(--neutro)">Nota global <b style="font-size:var(--fs-xl);color:var(--verde-prof)">${c.global==null?"—":c.global.toFixed(1)}</b>/5</span>
       </div>
       <div class="lq-sub" style="margin-bottom:10px">N = ${c.N} leads · OPPs: ${c.opp} (${Math.round(c.oppRate)}%) · citas: ${c.showed}/${c.citas} asistidas · índice de calidad: ${c.qIndex==null?"—":Math.round(c.qIndex)+"/100"} · break up: ${c.bk} de ${c.bkDen} ${c.desc?"descalificados":"leads"}</div>
       ${bars}
-      <div style="font-size:11.5px;font-weight:600;color:var(--neutro);margin:12px 0 4px">Distribución de velocidad de primer contacto</div>
+      <div style="font-size:var(--fs-s);font-weight:600;color:var(--neutro);margin:12px 0 4px">Distribución de velocidad de primer contacto</div>
       <div class="lq-qbar">${dist.map(([k,,cl])=>`<span style="width:${c.pcts[k]}%;background:${cl}"></span>`).join("")}</div>
       <div class="lq-legend-dots">${dist.map(([k,lbl,cl])=>`<span><i style="background:${cl};display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px"></i>${lbl} ${Math.round(c.pcts[k])}%</span>`).join("")}</div>
     </div>`;
@@ -4469,16 +4491,16 @@ function slaRender(){
       const u60 = ss.length ? Math.round(ss.filter(x=>x<=60*60000).length/ss.length*100)+"%" : "—";
       const z = cd.length ? Math.round(cd.filter(l=>l.z48).length/cd.length*100) : null;
       const sh = arr.reduce((a,l)=>a+l.ap.sh,0), ns = arr.reduce((a,l)=>a+l.ap.ns,0);
-      return `<tr><td class="name">${escAttr(labelFn(k))}</td><td>${arr.length}${arr.length-cd.length?`<span style="color:var(--neutro);font-size:10px"> (${arr.length-cd.length} s/d)</span>`:""}</td>
+      return `<tr><td class="name">${escAttr(labelFn(k))}</td><td>${arr.length}${arr.length-cd.length?`<span style="color:var(--neutro);font-size:var(--fs-xs)"> (${arr.length-cd.length} s/d)</span>`:""}</td>
         <td class="pct">${pcti(cd.filter(l=>l.fo).length,cd.length)}</td>
         <td class="pct">${pcti(cd.filter(l=>l.fi).length,cd.length)}</td>
         <td>${fmtDur(slaMedian(sa))}</td><td>${fmtDur(slaMedian(ss))}</td><td class="pct">${u15}</td><td class="pct">${u60}</td>
         <td class="pct" style="${z!=null?(z>=40?"color:var(--verde-prof);font-weight:600":"color:var(--rojo)"):""}">${z==null?"—":z+"%"}</td>
         <td>${arr.filter(l=>!l.ad).reduce((a,l)=>a+l.ap.tot,0)}</td><td class="pct">${(sh+ns)?pcti(sh,sh+ns):"—"}</td></tr>`;
     }).join("");
-    return `<div class="table-scroll" style="margin-bottom:18px"><table class="cons">
+    return `<div class="table-scroll mb-sec"><table class="cons">
       <tr><th class="lft">${title}</th><th>Leads</th><th>1er toque</th><th>Efectivos</th><th>Med. intento</th><th>Med. efectivo</th><th>≤15m</th><th>≤60m</th><th>Cita ≤48h</th><th>Citas</th><th>Show</th></tr>
-      ${rows || `<tr><td colspan="9" class="lft" style="color:var(--neutro);font-style:italic">Sin datos.</td></tr>`}
+      ${rows || `<tr><td colspan="9" class="lft txt-nota">Sin datos.</td></tr>`}
     </table></div>`;
   };
   if(sinDatos){
@@ -4500,19 +4522,19 @@ function slaRender(){
   }).sort((a,b)=>(a.lm||a.created)-(b.lm||b.created));
   const staleRows = stale.slice(0,40).map(l=>{
     const days = Math.floor((now-(l.lm||l.created))/86400e3);
-    return `<tr><td class="lft" style="font-weight:600">${escAttr(l.n)}</td><td class="lft">${escAttr(name(l.u))}</td><td class="lft">${escAttr(l.canal)}</td><td class="lft">${l.lm?"último mensaje":"nunca contactado"}</td><td style="color:var(--rojo);font-weight:700">${days} días</td></tr>`;
+    return `<tr><td class="lft celda-fuerte">${escAttr(l.n)}</td><td class="lft">${escAttr(name(l.u))}</td><td class="lft">${escAttr(l.canal)}</td><td class="lft">${l.lm?"último mensaje":"nunca contactado"}</td><td style="color:var(--rojo);font-weight:700">${days} días</td></tr>`;
   }).join("");
-  html += `<div class="rep-section" style="margin-bottom:18px"><h3>Más de 7 días sin toque · ${stale.length} lead${stale.length!==1?"s":""}</h3>
+  html += `<div class="rep-section mb-sec"><h3>Más de 7 días sin toque · ${stale.length} lead${stale.length!==1?"s":""}</h3>
     <table class="rep"><thead><tr><th class="lft">Lead</th><th class="lft">Asesor</th><th class="lft">Canal</th><th class="lft">Estado</th><th class="lft">Sin toque</th></tr></thead>
-    <tbody>${staleRows || `<tr><td colspan="5" class="lft" style="color:var(--neutro);font-style:italic">Ninguno — todos los leads del rango tienen un toque en los últimos 7 días.</td></tr>`}</tbody></table>
+    <tbody>${staleRows || `<tr><td colspan="5" class="lft txt-nota">Ninguno — todos los leads del rango tienen un toque en los últimos 7 días.</td></tr>`}</tbody></table>
     ${stale.length>40?`<p class="hint">…y ${stale.length-40} más.</p>`:""}</div>`;
 
   // --- OPPs y WONs por asesor (rango)
   const oppRows = Object.entries(agg.byRepOpp).sort((a,b)=>b[1].opp-a[1].opp).map(([u,b])=>
     `<tr><td class="name">${escAttr(name(u))}</td><td>${b.opp}</td><td>${b.won}</td><td>${fmtMoney(b.wv)}</td></tr>`).join("");
-  html += `<div class="table-scroll" style="margin-bottom:18px"><table class="cons">
+  html += `<div class="table-scroll mb-sec"><table class="cons">
     <tr><th class="lft">Asesor</th><th>Oportunidades creadas</th><th>WONs</th><th>Valor WON</th></tr>
-    ${oppRows || `<tr><td colspan="4" class="lft" style="color:var(--neutro);font-style:italic">Sin oportunidades en el rango.</td></tr>`}
+    ${oppRows || `<tr><td colspan="4" class="lft txt-nota">Sin oportunidades en el rango.</td></tr>`}
   </table></div>`;
 
   const conHand = leads.filter(l=>l.hand).length;
@@ -4663,7 +4685,7 @@ function renderDirAnalitica(prefix, chsSel, weekSet, tabName){
   const state = ANAL_DIR[prefix];
   const { weeks, byMetric } = dirWeeklySeries(chsSel, weekSet);
   if(!weeks.length){ host.innerHTML = ''; return; }
-  const html = [`<h3 style="font-family:var(--serif);color:var(--verde-prof);font-size:20px;margin:24px 0 6px">Analítica del embudo</h3><p class="hint" style="margin-top:0">Serie semanal agregada de los canales seleccionados. Clic para expandir y pedir conclusión con IA.</p><div class="anal-grid">`];
+  const html = [`<h3 style="font-family:var(--serif);color:var(--verde-prof);font-size:var(--fs-xl);margin:24px 0 6px">Analítica del embudo</h3><p class="hint" style="margin-top:0">Serie semanal agregada de los canales seleccionados. Clic para expandir y pedir conclusión con IA.</p><div class="anal-grid">`];
   METRIC_KEYS.forEach((m, i) => {
     const values = byMetric[m];
     const total = values.reduce((a,b)=>a+b,0);
@@ -4891,7 +4913,7 @@ function renderAnalitica(){
       <div class="ac-title">${f.l}</div>
       <div class="ac-total">Total del rango: <b>${totalTxt}</b> · ${weeks.length} sem.</div>
       <canvas id="${canvasId}"></canvas>
-      ${expanded ? `<div class="anal-actions"><button class="btn btn-olive" data-analyze="${f.k}">Analizar con IA</button>${f.meta!=null?`<span style="font-size:12px;color:var(--neutro)">Meta mensual: <b>${f.meta}</b></span>`:''}</div>${conc?`<div class="anal-conc">${escAttr(conc)}</div>`:''}` : ''}
+      ${expanded ? `<div class="anal-actions"><button class="btn btn-olive" data-analyze="${f.k}">Analizar con IA</button>${f.meta!=null?`<span style="font-size:var(--fs-s);color:var(--neutro)">Meta mensual: <b>${f.meta}</b></span>`:''}</div>${conc?`<div class="anal-conc">${escAttr(conc)}</div>`:''}` : ''}
     </div>`;
   }).join("");
   grid.innerHTML = cards;
@@ -5140,15 +5162,15 @@ function metaRowHtml(ch, fk, label, m, isCustom, money){
   const showLock = isProt && !unlocked;
   const showUnlock = isProt && unlocked;
   const lockIcon = showLock
-    ? `<span class="meta-lock" data-lock-fk="${fk}" title="Requerido por Dirección · Click para permitir borrar" style="margin-right:4px;font-size:12px;cursor:pointer;user-select:none">🔒</span>`
-    : (showUnlock ? `<span class="meta-lock" data-lock-fk="${fk}" title="Desbloqueado · Click para volver a proteger" style="margin-right:4px;font-size:12px;cursor:pointer;user-select:none">🔓</span>` : "");
+    ? `<span class="meta-lock" data-lock-fk="${fk}" title="Requerido por Dirección · Click para permitir borrar" style="margin-right:4px;font-size:var(--fs-s);cursor:pointer;user-select:none">🔒</span>`
+    : (showUnlock ? `<span class="meta-lock" data-lock-fk="${fk}" title="Desbloqueado · Click para volver a proteger" style="margin-right:4px;font-size:var(--fs-s);cursor:pointer;user-select:none">🔓</span>` : "");
   const canDelete = !isProt || unlocked;
   const delBtnHtml = canDelete
     ? `<button class="meta-del" type="button" title="Borrar KPI">Borrar</button>`
     : `<button class="meta-del" type="button" disabled title="Requerido por Dirección — desbloquea el candado primero" style="opacity:.35;cursor:not-allowed">Borrar</button>`;
   const leftPad = isProt ? 46 : 28;
   return `<tr data-ch="${ch}" data-k="${fk}" data-custom="${isCustom?1:0}" data-protected="${isProt?1:0}" draggable="true" style="cursor:move">
-    <td><span class="meta-drag" title="Arrastra a otra sección" draggable="false" style="cursor:grab;padding:4px 6px;display:inline-block;font-size:14px;color:var(--neutro)">⠿</span>${lockIcon}<input class="meta-name" type="text" draggable="false" value="${escAttr(label)}${money?' ($)':''}" data-orig="${escAttr(label)}" style="width:calc(100% - ${leftPad}px)"></td>
+    <td><span class="meta-drag" title="Arrastra a otra sección" draggable="false" style="cursor:grab;padding:4px 6px;display:inline-block;font-size:var(--fs-md);color:var(--neutro)">⠿</span>${lockIcon}<input class="meta-name" type="text" draggable="false" value="${escAttr(label)}${money?' ($)':''}" data-orig="${escAttr(label)}" style="width:calc(100% - ${leftPad}px)"></td>
     <td class="right"><input class="meta-num" type="number" draggable="false" step="${money?'0.01':'1'}" placeholder="—" value="${numV}"></td>
     <td class="right"><span class="meta-pct-wrap"><input class="meta-pct" type="number" draggable="false" step="0.01" placeholder="—" value="${pctV}"><span>%</span></span></td>
     <td class="right">${delBtnHtml}</td>
@@ -5172,7 +5194,7 @@ function renderMetasBody(ch){
       }
       return metaRowHtml(ch, f.k, m.label || f.l, m, isFieldCustom, !!f.money);
     }).join("");
-    const delBtn = s.__custom_section ? `<button class="sec-delete" data-sec-id="${escAttr(s.__id)}" type="button" title="Borrar sección" style="margin-left:auto; background:transparent; border:1px solid rgba(255,255,255,.3); color:#fff; border-radius:6px; padding:3px 9px; cursor:pointer; font-size:11px;">✕ Borrar sección</button>` : '';
+    const delBtn = s.__custom_section ? `<button class="sec-delete" data-sec-id="${escAttr(s.__id)}" type="button" title="Borrar sección" style="margin-left:auto; background:transparent; border:1px solid rgba(255,255,255,.3); color:#fff; border-radius:6px; padding:3px 9px; cursor:pointer; font-size:var(--fs-xs);">✕ Borrar sección</button>` : '';
     return `<div class="section meta-section" data-section-id="${escAttr(s.__id)}" data-section-title="${escAttr(s.__id)}">
       <h3 style="display:flex; align-items:center;">
         <span class="section-drag" title="Arrastra para reordenar" draggable="true">⠿</span>
@@ -5194,7 +5216,7 @@ function renderMetasBody(ch){
     <h3><span class="dot"></span>Crear nueva sección</h3>
     <div class="fields" style="padding:14px 20px 18px;">
       <div style="display:flex; gap:10px; align-items:center;">
-        <input id="new-sec-name" type="text" placeholder="Nombre de la sección (ej. 'Eventos VIP')" style="flex:1; font-family:var(--sans); font-size:14px; padding:9px 12px; border:1px solid var(--linea); border-radius:8px; background:var(--crema);">
+        <input id="new-sec-name" type="text" placeholder="Nombre de la sección (ej. 'Eventos VIP')" style="flex:1; font-family:var(--sans); font-size:var(--fs-md); padding:9px 12px; border:1px solid var(--linea); border-radius:8px; background:var(--crema);">
         <button class="btn btn-primary" id="new-sec-save" type="button">Crear sección</button>
       </div>
       <p class="hint">Una sección custom es un grupo de KPIs vacío. Aparece como dropzone para arrastrar KPIs, y como opción en "Agregar KPI personalizado". Se puede renombrar y borrar.</p>
@@ -5232,7 +5254,7 @@ function renderMetasBody(ch){
     <div class="fields" style="padding:14px 20px 18px;">
       <p class="hint" style="margin-top:0;">Estos KPIs se ocultaron pero conservan sus datos históricos. Restaurar los vuelve a mostrar en Ingreso de datos, Reportes y Base de datos.</p>
       <ul style="list-style:none; padding:0; margin:6px 0 0; display:flex; flex-direction:column; gap:6px;">
-        ${hiddenEntries.map(([k,l])=>`<li style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--crema-2); border:1px solid var(--linea); border-radius:8px; padding:8px 12px;"><span>${escAttr(l)}</span><button class="btn" data-restore-key="${escAttr(k)}" type="button" style="padding:5px 12px; font-size:12.5px;">Restaurar</button></li>`).join("")}
+        ${hiddenEntries.map(([k,l])=>`<li style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--crema-2); border:1px solid var(--linea); border-radius:8px; padding:8px 12px;"><span>${escAttr(l)}</span><button class="btn" data-restore-key="${escAttr(k)}" type="button" style="padding:5px 12px; font-size:var(--fs-sm);">Restaurar</button></li>`).join("")}
       </ul>
     </div>
   </div>` : "";
@@ -5608,7 +5630,7 @@ async function renderDBTable(ch){
     } else if(inWindow){
       actions = `<button class="db-load" data-ch="${ch}" data-key="${escAttr(key)}">Editar</button>`;
     } else {
-      actions = `<span style="color:var(--neutro);font-size:11px">—</span>`;
+      actions = `<span style="color:var(--neutro);font-size:var(--fs-xs)">—</span>`;
     }
     return `<tr><td class="lft">${rec.semana||""}</td>${dimCells}${valCells}<td class="lft note" title="${safe}">${safe}</td><td class="right" style="white-space:nowrap">${actions}</td></tr>`;
   }).join("");
@@ -6209,19 +6231,19 @@ function diagSeccionPermisos(){
                     "Campos personalizados":"Sin esto no se puede leer la calificación, el presupuesto ni el horizonte del lead.",
                     "Oportunidades":"Sin esto no hay OPPs ni WONs en ningún reporte." };
   const filas = pr.map(p=>`<tr>
-    <td class="lft" style="font-weight:600">${escAttr(p.nombre)}</td>
+    <td class="lft celda-fuerte">${escAttr(p.nombre)}</td>
     <td>${diagOk(p.ok)}</td>
-    <td class="lft" style="font-size:12px;color:var(--neutro)">${escAttr(p.ok ? (p.ms+" ms") : (p.nota||""))}</td>
-    <td class="lft" style="font-size:12px">${!p.ok && critico[p.nombre] ? `<span style="color:var(--rojo)">${escAttr(critico[p.nombre])}</span>` : ""}</td>
+    <td class="lft" style="font-size:var(--fs-s);color:var(--neutro)">${escAttr(p.ok ? (p.ms+" ms") : (p.nota||""))}</td>
+    <td class="lft" style="font-size:var(--fs-s)">${!p.ok && critico[p.nombre] ? `<span class="txt-rojo">${escAttr(critico[p.nombre])}</span>` : ""}</td>
   </tr>`).join("");
   const fallan = pr.filter(p=>!p.ok).length;
   const resumen = fallan
     ? `<div class="lq-meth" style="border-color:var(--rojo);background:#F2CFC9">⚠ <b>${fallan}</b> de ${pr.length} pruebas fallan. Mientras eso siga así, los reportes que dependen de ellas muestran ceros que <b>no</b> son resultados reales.</div>`
     : `<div class="lq-meth" style="border-color:var(--olivo)">✓ El token tiene permiso para todo lo que la app necesita.</div>`;
   return `<h3 class="diag-h">Permisos del token de GoHighLevel</h3>
-    <p class="hint" style="margin-top:-2px">Se llama a cada endpoint de verdad y se reporta cuál responde. No hace falta que nadie lea la pantalla de ajustes.</p>
+    <p class="hint pegada">Se llama a cada endpoint de verdad y se reporta cuál responde. No hace falta que nadie lea la pantalla de ajustes.</p>
     ${resumen}
-    <div class="table-scroll" style="margin-bottom:18px"><table class="cons">
+    <div class="table-scroll mb-sec"><table class="cons">
       <tr><th class="lft">Qué se probó</th><th>Estado</th><th class="lft">Detalle</th><th class="lft">Si falla</th></tr>${filas}
     </table></div>`;
 }
@@ -6242,10 +6264,10 @@ function diagSeccionCampos(){
   ];
   const resumenClaves = claves.map(([lbl,rx])=>{
     const hit = buscar(rx);
-    if(!hit.length) return `<tr><td class="lft" style="font-weight:600">${escAttr(lbl)}</td><td class="lft" style="color:var(--rojo)">No existe en el CRM</td><td>—</td><td class="lft"></td></tr>`;
+    if(!hit.length) return `<tr><td class="lft celda-fuerte">${escAttr(lbl)}</td><td class="lft txt-rojo">No existe en el CRM</td><td>—</td><td class="lft"></td></tr>`;
     return hit.map(c=>{
       const st = llenos[c.id];
-      return `<tr><td class="lft" style="font-weight:600">${escAttr(lbl)}</td>
+      return `<tr><td class="lft celda-fuerte">${escAttr(lbl)}</td>
         <td class="lft">${escAttr(c.nombre)} <span class="lq-sub">${escAttr(c.tipo||"")}</span></td>
         <td>${st ? `${diagBar(st.pct)} <b>${st.pct}%</b>` : "<span class='lq-sub'>sincroniza para medir</span>"}</td>
         <td class="lft lq-sub">${escAttr((c.opciones||[]).join(" · ").slice(0,120))}</td></tr>`;
@@ -6256,8 +6278,8 @@ function diagSeccionCampos(){
       return `<tr><td class="lft lq-sub">—</td><td class="lft">${escAttr(c.nombre)}</td>
         <td>${st ? `${diagBar(st.pct)} ${st.pct}%` : "—"}</td><td class="lft lq-sub">${escAttr((c.opciones||[]).join(" · ").slice(0,90))}</td></tr>`; }).join("");
   return `<h3 class="diag-h">Campos del CRM · ${campos.length} en total</h3>
-    <p class="hint" style="margin-top:-2px">Arriba, los campos de los que dependen las reglas de calificación. El porcentaje es cuántos leads sincronizados lo traen lleno: un campo que existe pero nadie llena vale lo mismo que un campo que no existe.</p>
-    <div class="table-scroll" style="margin-bottom:18px"><table class="cons">
+    <p class="hint pegada">Arriba, los campos de los que dependen las reglas de calificación. El porcentaje es cuántos leads sincronizados lo traen lleno: un campo que existe pero nadie llena vale lo mismo que un campo que no existe.</p>
+    <div class="table-scroll mb-sec"><table class="cons">
       <tr><th class="lft">La app busca</th><th class="lft">Campo encontrado</th><th>Qué tan lleno</th><th class="lft">Opciones</th></tr>
       ${resumenClaves}
       <tr class="total"><td colspan="4" class="lft">Los demás campos del CRM</td></tr>
@@ -6279,13 +6301,13 @@ function diagSeccionPipelines(){
       const et = muerta ? `<span class="lq-badge" style="background:#8a8a8a">Terminal · fuera</span>`
                : esOpp ? `<span class="lq-badge" style="background:var(--cobre)">Cuenta como OPP</span>`
                : `<span class="lq-sub">antes de OPP</span>`;
-      return `<tr><td style="width:40px">${e.pos+1}</td><td class="lft" style="font-weight:600">${escAttr(e.nombre)}</td><td class="lft">${et}</td></tr>`;
+      return `<tr><td style="width:40px">${e.pos+1}</td><td class="lft celda-fuerte">${escAttr(e.nombre)}</td><td class="lft">${et}</td></tr>`;
     }).join("");
     return `<div style="margin-bottom:14px"><div style="font-weight:600;color:var(--verde-prof);margin-bottom:5px">${escAttr(p.nombre)}</div>
       <div class="table-scroll"><table class="cons"><tr><th>#</th><th class="lft">Etapa</th><th class="lft">Cómo la cuenta la app</th></tr>${filas}</table></div></div>`;
   }).join("");
   return `<h3 class="diag-h">Pipelines y etapas</h3>
-    <p class="hint" style="margin-top:-2px">Los nombres reales de tu CRM, en orden, y cómo los interpreta la app hoy. <b>OPP</b> arranca en la primera etapa de seguimiento y las etapas terminales negativas quedan fuera aunque estén al final del tablero.</p>
+    <p class="hint pegada">Los nombres reales de tu CRM, en orden, y cómo los interpreta la app hoy. <b>OPP</b> arranca en la primera etapa de seguimiento y las etapas terminales negativas quedan fuera aunque estén al final del tablero.</p>
     ${bloques}`;
 }
 
@@ -6293,15 +6315,15 @@ function diagSeccionAtribucion(){
   const a = lqState.agg && lqState.agg.atrib;
   if(!a) return `<h3 class="diag-h">Atribución de los anuncios</h3>
     <p class="hint">Sincroniza Calidad de Leads para medir qué porcentaje de leads pagados llega con campaña, anuncio y conjunto.</p>`;
-  const fila = (lbl,n,pct,nota)=>`<tr><td class="lft" style="font-weight:600">${escAttr(lbl)}</td>
+  const fila = (lbl,n,pct,nota)=>`<tr><td class="lft celda-fuerte">${escAttr(lbl)}</td>
     <td>${diagBar(pct)} <b>${pct}%</b></td><td>${n} de ${a.pagados}</td><td class="lft lq-sub">${escAttr(nota)}</td></tr>`;
   const veredicto = a.campPct >= 70
     ? `<div class="lq-meth" style="border-color:var(--olivo)">✓ Los anuncios <b>sí</b> están pasando la campaña. El desglose por campaña es confiable.</div>`
     : `<div class="lq-meth" style="border-color:var(--rojo);background:#F2CFC9">⚠ Solo <b>${a.campPct}%</b> de los leads pagados trae campaña. <b>Esta es la respuesta a "¿los anuncios están pasando UTMs?": no.</b> Hasta que se configuren los parámetros UTM en Meta Ads y Google Ads, el desglose por campaña, conjunto y anuncio va a seguir saliendo casi vacío.</div>`;
   return `<h3 class="diag-h">Atribución de los anuncios</h3>
-    <p class="hint" style="margin-top:-2px">De los ${a.total} leads sincronizados, ${a.pagados} vienen de Meta o Google. Esto mide cuántos traen de dónde salieron.</p>
+    <p class="hint pegada">De los ${a.total} leads sincronizados, ${a.pagados} vienen de Meta o Google. Esto mide cuántos traen de dónde salieron.</p>
     ${veredicto}
-    <div class="table-scroll" style="margin-bottom:18px"><table class="cons">
+    <div class="table-scroll mb-sec"><table class="cons">
       <tr><th class="lft">Qué trae el lead</th><th>Cobertura</th><th>Leads</th><th class="lft">Para qué sirve</th></tr>
       ${fila("Campaña (utm_campaign)", a.camp, a.campPct, "Sin esto no se sabe qué campaña generó el lead")}
       ${fila("Anuncio (utm_content)", a.ad, a.adPct, "Sin esto no hay desglose por anuncio")}
@@ -6313,16 +6335,16 @@ function diagSeccionCuentas(){
   const c = diagState.cuentas;
   if(!c) return "";
   if(!c.configurado) return `<h3 class="diag-h">Cuentas de anuncios</h3><div class="lq-meth">Windsor no está configurado (falta WINDSOR_API_KEY).</div>`;
-  const fila = (lbl,x)=> x ? `<tr><td class="lft" style="font-weight:600">${escAttr(lbl)}</td><td class="lft">${escAttr(x.cuenta||"—")}</td><td class="lft">${escAttr(x.moneda||"—")}</td><td class="lft">${escAttr(x.zona||"—")}</td></tr>`
-                           : `<tr><td class="lft" style="font-weight:600">${escAttr(lbl)}</td><td colspan="3" class="lft lq-sub">Sin datos en los últimos 7 días</td></tr>`;
+  const fila = (lbl,x)=> x ? `<tr><td class="lft celda-fuerte">${escAttr(lbl)}</td><td class="lft">${escAttr(x.cuenta||"—")}</td><td class="lft">${escAttr(x.moneda||"—")}</td><td class="lft">${escAttr(x.zona||"—")}</td></tr>`
+                           : `<tr><td class="lft celda-fuerte">${escAttr(lbl)}</td><td colspan="3" class="lft lq-sub">Sin datos en los últimos 7 días</td></tr>`;
   const monedas = [c.meta&&c.meta.moneda, c.google&&c.google.moneda].filter(Boolean);
   const aviso = monedas.length>1 && new Set(monedas).size>1
     ? `<div class="lq-meth" style="border-color:var(--cobre)">⚠ Las cuentas facturan en monedas distintas (${escAttr([...new Set(monedas)].join(" y "))}). La inversión total y el costo por lead están sumando monedas diferentes.</div>`
     : monedas.length ? `<div class="lq-meth" style="border-color:var(--olivo)">✓ Ambas cuentas facturan en <b>${escAttr(monedas[0])}</b>: la inversión se puede sumar sin convertir.</div>` : "";
   return `<h3 class="diag-h">Cuentas de anuncios</h3>
-    <p class="hint" style="margin-top:-2px">Moneda y zona horaria leídas directo de las plataformas. Esto responde las dos preguntas que estaban en la lista de Elsa.</p>
+    <p class="hint pegada">Moneda y zona horaria leídas directo de las plataformas. Esto responde las dos preguntas que estaban en la lista de Elsa.</p>
     ${aviso}
-    <div class="table-scroll" style="margin-bottom:18px"><table class="cons">
+    <div class="table-scroll mb-sec"><table class="cons">
       <tr><th class="lft">Plataforma</th><th class="lft">Cuenta</th><th class="lft">Moneda</th><th class="lft">Zona horaria</th></tr>
       ${fila("Meta Ads", c.meta)}${fila("Google Ads", c.google)}
     </table></div>`;
@@ -6332,9 +6354,9 @@ function diagSeccionMensajes(){
   const pr = (diagState.pruebas||[]).find(p=>p.nombre==="Mensajes de conversación");
   if(!pr || !pr.ok || !pr.datos) return "";
   const d = pr.datos;
-  const av = (b, si, no)=> b ? `<span style="color:var(--verde-ok-tx)">✓ ${escAttr(si)}</span>` : `<span style="color:var(--rojo)">✗ ${escAttr(no)}</span>`;
+  const av = (b, si, no)=> b ? `<span style="color:var(--verde-ok-tx)">✓ ${escAttr(si)}</span>` : `<span class="txt-rojo">✗ ${escAttr(no)}</span>`;
   return `<h3 class="diag-h">De qué depende el SLA por asesor</h3>
-    <p class="hint" style="margin-top:-2px">Para separar lo que escribió una persona de lo que mandó una automatización, la app necesita dos claves en cada mensaje. Esto comprueba si llegan.</p>
+    <p class="hint pegada">Para separar lo que escribió una persona de lo que mandó una automatización, la app necesita dos claves en cada mensaje. Esto comprueba si llegan.</p>
     <div class="lq-meth">
       ${av(d.traeUserId, "Los mensajes traen usuario: se puede atribuir el trabajo a cada asesor.", "Los mensajes NO traen usuario: sin esto todo el contacto manual se cuenta como automatización y el SLA por asesor mide ruido.")}
       <br>${av(d.traeSource, "Los mensajes traen origen: se pueden excluir workflows y campañas.", "Los mensajes NO traen origen: no se puede distinguir un workflow de un mensaje escrito a mano.")}
@@ -6361,7 +6383,7 @@ function diagSeccionHorario(){
     const dentro = h>=ini && h<=fin;
     return `<div style="display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px">
       <div style="width:15px;height:${alto}px;background:${dentro?"var(--olivo)":"var(--linea)"};border-radius:2px" title="${h}:00 · ${n} acciones"></div>
-      <span style="font-size:8.5px;color:var(--neutro)">${h}</span></div>`;
+      <span style="font-size:var(--fs-xs);color:var(--neutro)">${h}</span></div>`;
   }).join("");
   const DIAS=["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
   const dow = agg.dow||[];
@@ -6375,7 +6397,7 @@ function diagSeccionHorario(){
     : "24/7 — sin ventana laboral";
   const fuera = tot ? Math.round(hrs.reduce((a,n,h)=>a+((h<8||h>20)?n:0),0)/tot*100) : 0;
   return `<h3 class="diag-h">Horario real de trabajo</h3>
-    <p class="hint" style="margin-top:-2px">Medido de ${tot.toLocaleString()} acciones manuales de los asesores en el rango del último reporte. El reloj del SLA ya no depende de esto: se decidió medir 24/7. Sirve para entender cómo trabaja el equipo.</p>
+    <p class="hint pegada">Medido de ${tot.toLocaleString()} acciones manuales de los asesores en el rango del último reporte. El reloj del SLA ya no depende de esto: se decidió medir 24/7. Sirve para entender cómo trabaja el equipo.</p>
     <div class="lq-meth">
       <b>Configurado hoy:</b> ${escAttr(cfg)} — el reloj corre desde que entra el lead, sin perdonar noches ni fines de semana.
       <br><b>Observado:</b> el 90% de la actividad ocurre entre las <b>${ini}:00</b> y las <b>${fin}:59</b>, hora de Tulum.
@@ -6402,13 +6424,13 @@ function diagSeccionValores(){
   const listaPrecio = distintos <= Math.max(8, vals.length*0.15);
   const filas = top.map(([v,n])=>`<tr><td class="lft">${fmtMoney(+v)}</td><td>${n}</td><td>${Math.round(n/vals.length*100)}%</td></tr>`).join("");
   return `<h3 class="diag-h">Qué significa el monto de una oportunidad</h3>
-    <p class="hint" style="margin-top:-2px">La regla de <b>SQL Selvadentro</b> usa el monto de la oportunidad como presupuesto del prospecto cuando el campo de presupuesto viene vacío. Si el equipo carga ahí el precio de lista del lote, casi todo supera el umbral y la calificación se infla.</p>
+    <p class="hint pegada">La regla de <b>SQL Selvadentro</b> usa el monto de la oportunidad como presupuesto del prospecto cuando el campo de presupuesto viene vacío. Si el equipo carga ahí el precio de lista del lote, casi todo supera el umbral y la calificación se infla.</p>
     <div class="lq-meth" style="border-color:${listaPrecio?"var(--cobre)":"var(--olivo)"}">
       ${listaPrecio
         ? `⚠ <b>Se parece a precio de lista.</b> ${vals.length} oportunidades con valor, pero solo <b>${distintos}</b> montos distintos, y los ${top.length} más comunes cubren el ${pctRep}%. Eso es un catálogo, no presupuestos declarados por prospectos. Vale la pena confirmarlo con Dirección Comercial antes de fiarse del tramo SQL Selvadentro.`
         : `✓ <b>Se parece a presupuesto real.</b> ${vals.length} oportunidades con valor y <b>${distintos}</b> montos distintos: la dispersión es la de cifras declaradas caso por caso, no la de un catálogo de precios.`}
     </div>
-    <div class="table-scroll" style="margin-bottom:18px"><table class="cons">
+    <div class="table-scroll mb-sec"><table class="cons">
       <tr><th class="lft">Monto más repetido</th><th>Veces</th><th>% de las oportunidades</th></tr>${filas}
     </table></div>`;
 }
@@ -6424,9 +6446,9 @@ function diagSeccionGlosario(){
     `<tr><td class="lft"><b>${sigla}</b></td><td class="lft" style="white-space:normal">${donde}</td>`
     + `<td class="lft" style="white-space:normal;line-height:1.5">${dice}</td></tr>`;
   return `<h3 class="diag-h">Glosario: qué mide cada cifra</h3>
-  <p class="hint" style="margin-top:-2px">Las tres pantallas que reportan ventas cerradas miden cosas distintas, y las tres son correctas.
+  <p class="hint pegada">Las tres pantallas que reportan ventas cerradas miden cosas distintas, y las tres son correctas.
   Por eso ya no se llaman igual: si dos tabs dan cifras diferentes para la misma semana, aquí está por qué.</p>
-  <div class="table-scroll" style="margin-bottom:18px"><table class="cons" style="table-layout:fixed;width:100%">
+  <div class="table-scroll mb-sec"><table class="cons" style="table-layout:fixed;width:100%">
     <colgroup><col style="width:16%"><col style="width:22%"><col></colgroup>
     <thead><tr><th class="lft">Cifra</th><th class="lft">Dónde sale</th><th class="lft">Qué cuenta exactamente</th></tr></thead>
     <tbody>
