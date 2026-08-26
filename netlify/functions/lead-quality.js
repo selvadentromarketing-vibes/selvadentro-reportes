@@ -200,9 +200,14 @@ async function spend({ start, end }) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(start)) || !/^\d{4}-\d{2}-\d{2}$/.test(String(end))) {
     throw Object.assign(new Error("start y end requeridos (YYYY-MM-DD)"), { status: 400 });
   }
-  const url = `https://connectors.windsor.ai/all?api_key=${encodeURIComponent(WINDSOR_KEY)}` +
-    `&date_from=${start}&date_to=${end}&fields=date,source,campaign,spend,clicks,impressions,currency`;
-  const resp = await fetch(url, { headers: { Accept: "application/json" } });
+  // El super-conector /all no garantiza `currency` (Meta lo llama currency, Google
+  // account_currency_code). Se pide, y si el API lo rechaza se reintenta sin él en vez
+  // de perder toda la inversión.
+  const base = `https://connectors.windsor.ai/all?api_key=${encodeURIComponent(WINDSOR_KEY)}` +
+    `&date_from=${start}&date_to=${end}&fields=date,source,campaign,spend,clicks,impressions`;
+  let url = base + ",currency";
+  let resp = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!resp.ok && resp.status === 400) resp = await fetch(base, { headers: { Accept: "application/json" } });
   if (!resp.ok) {
     const detail = await resp.text();
     const err = new Error(`Windsor ${resp.status}`);
