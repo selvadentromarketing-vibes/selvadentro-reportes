@@ -28,7 +28,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
     --cobre-tx:#A65F22; --cobre-tx-hover:#8E4F1B;
     /* Estos tres se escribían a mano por todo el archivo (var(--rojo) 21 veces) en vez de
        ser variables, que es justo lo que hace que una paleta se erosione. */
-    --rojo:#a94436; --olivo-hover:#566034; --gris-suave:#8a8a8a; --cobre-hover:#bb7536;
+    --rojo:#a94436; --olivo-hover:#566034; --gris-suave:#6e6e6e; --cobre-hover:#bb7536;
     --crema:#FAF8F3; --crema-2:#F1ECE1; --linea:#E3DBCC; --texto:#2E332B; --gris-input:#ECECEC;
     --verde-ok-bg:#CBDDC0; --verde-ok-tx:#3C5A2E; --rojo-no-bg:#F2CFC9; --rojo-no-tx:#9B3B2E; --neutro:#5F6459; --logo:#EFE7D6;
     --serif:"Cardo",Georgia,serif; --sans:"Lexend",system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -153,7 +153,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
     background:var(--crema-2); border:1px solid var(--linea); border-left:4px solid var(--olivo);
     border-radius:var(--r-m); padding:10px 14px; margin:0 0 14px; font-size:var(--fs-sm); color:var(--texto); }
   .sistema-hdr b{ font-family:var(--serif); font-size:var(--fs-lg); color:var(--verde-prof); font-weight:700; }
-  .sistema-hdr .sh-sep{ color:var(--gris-suave); }
+  .sistema-hdr .sh-sep{ color:var(--neutro); }
   .sistema-hdr .sh-nota{ color:var(--neutro); font-size:var(--fs-s); }
   /* Utilidades para los estilos en línea que más se repetían DENTRO de plantillas de JS:
      ahí no llega ninguna hoja de estilos, así que cambiar la apariencia obligaba a cazar
@@ -351,7 +351,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   /* ---- User badge en topbar ---- */
   .user-badge{ display:flex; align-items:center; gap:10px; font-size:var(--fs-s); color:var(--logo); margin-left:auto; padding-left:18px; }
   .user-badge .email{ opacity:.9; }
-  .user-badge .role{ font-size:var(--fs-xs); letter-spacing:1.2px; text-transform:uppercase; background:var(--cobre); color:#fff; padding:2px 8px; border-radius:var(--r-m); font-weight:700; }
+  .user-badge .role{ font-size:var(--fs-xs); letter-spacing:1.2px; text-transform:uppercase; background:var(--cobre-tx); color:#fff; padding:2px 8px; border-radius:var(--r-m); font-weight:700; }
   .user-badge .role.user{ background:var(--olivo); }
   .user-badge .logout{ background:transparent; border:1px solid rgba(239,231,214,.4); color:var(--logo); border-radius:var(--r-s); padding:5px 11px; font-family:var(--sans); font-size:var(--fs-xs); cursor:pointer; letter-spacing:.4px; }
   .user-badge .logout:hover{ background:rgba(239,231,214,.12); }
@@ -367,7 +367,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .usr-action:hover{ background:var(--crema-2); }
   .usr-action.danger{ color:var(--rojo-no-tx); }
   .usr-action.danger:hover{ background:var(--rojo-no-bg); border-color:var(--rojo-no-bg); }
-  .usr-action.save{ color:#fff; background:var(--cobre); border-color:var(--cobre); }
+  .usr-action.save{ color:#fff; background:var(--cobre-tx); border-color:var(--cobre-tx); }
   .usr-action.save:hover{ background:var(--cobre-hover); }
   .new-user-row{ background:var(--crema-2); }
   .new-user-row td{ border-bottom:none; }
@@ -399,7 +399,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .meta-drag:hover{ color:var(--cobre); }
   tr.dragging{ opacity:.4; }
   .section.drop-target{ outline:2px dashed var(--cobre); outline-offset:-2px; background:rgba(207,133,67,0.05); }
-  .section.drop-target h3{ background:var(--cobre); }
+  .section.drop-target h3{ background:var(--cobre-tx); }
   /* drag y rename de secciones */
   .meta-section.dragging-section{ opacity:.4; }
   .meta-section.drop-section-before{ border-top:3px solid var(--cobre); margin-top:-3px; }
@@ -488,7 +488,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   /* ---- Rúbrica de desempeño del asesor ---- */
   .sla-pill{ display:inline-block; min-width:28px; padding:3px 9px; border-radius:var(--r-pill); font-weight:700; color:#fff; font-size:var(--fs-s); }
   .sla-pill.s5{ background:var(--verde-prof); } .sla-pill.s4{ background:#5aa08f; }
-  .sla-pill.s3{ background:var(--cobre); } .sla-pill.s2{ background:#c9743a; }
+  .sla-pill.s3{ background:var(--cobre-tx); } .sla-pill.s2{ background:#a95d24; }
   .sla-pill.s1{ background:var(--rojo); } .sla-pill.na{ background:#9aa39d; }
   .tag-up,.tag-mid,.tag-dn,.tag-sm{ display:inline-block; padding:2px 8px; border-radius:var(--r-s); font-size:var(--fs-xs); font-weight:700; }
   .tag-up{ background:#e4f0ec; color:var(--verde-prof); } .tag-mid{ background:#f3ecd9; color:#8a6a1f; }
@@ -526,7 +526,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .lq-subtab:hover{ border-color:var(--cobre); }
   .lq-subtab.active{ background:#fff; border-color:var(--cobre); box-shadow:0 2px 6px rgba(70,82,65,.08); }
   .lq-subtab .ls-n{ display:flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:var(--arena,#e0d8c6); color:var(--verde-prof); font-size:var(--fs-xs); font-weight:700; flex:none; }
-  .lq-subtab.active .ls-n{ background:var(--cobre); color:#fff; }
+  .lq-subtab.active .ls-n{ background:var(--cobre-tx); color:#fff; }
   .lq-subtab b{ display:block; font-size:var(--fs-sm); color:var(--verde-prof); font-weight:600; line-height:1.25; }
   .lq-subtab i{ display:block; font-size:var(--fs-xs); color:var(--neutro); font-style:normal; }
   /* ---- Reporte combinado ---- */
@@ -6344,8 +6344,8 @@ function diagSeccionPipelines(){
     const filas = p.etapas.map(e=>{
       const esOpp = lqIsOppStage2({p:p.nombre, s:e.nombre, i:e.pos}, th);
       const muerta = LQ_RX_MUERTA.test(e.nombre||"");
-      const et = muerta ? `<span class="lq-badge" style="background:#8a8a8a">Terminal · fuera</span>`
-               : esOpp ? `<span class="lq-badge" style="background:var(--cobre)">Cuenta como OPP</span>`
+      const et = muerta ? `<span class="lq-badge" style="background:var(--gris-suave)">Terminal · fuera</span>`
+               : esOpp ? `<span class="lq-badge" style="background:var(--cobre-tx)">Cuenta como OPP</span>`
                : `<span class="lq-sub">antes de OPP</span>`;
       return `<tr><td style="width:40px">${e.pos+1}</td><td class="lft celda-fuerte">${escAttr(e.nombre)}</td><td class="lft">${et}</td></tr>`;
     }).join("");
