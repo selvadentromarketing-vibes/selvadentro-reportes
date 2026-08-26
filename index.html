@@ -793,6 +793,8 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
         <button class="btn btn-olive" id="db-get">Buscar</button>
         <div class="grp"><label>Registros</label><div class="semana-badge" id="db-count">—</div></div>
         <div class="spacer"></div>
+        <button class="btn btn-ghost" id="db-csv" title="Exporta a CSV los registros del canal seleccionado">Exportar CSV</button>
+        <button class="btn btn-ghost" id="db-json" title="Descarga un respaldo con todos los canales, asesores y metas">Respaldo JSON</button>
       </div>
       <p class="hint" id="db-hint">Registros guardados de cada canal. <b>Admin</b>: Editar/Duplicar/Borrar cualquier registro. <b>User</b>: solo Editar y solo de la semana actual o la anterior. El CSV exporta el canal actual; el backup JSON incluye todos los canales más asesores y metas.</p>
       <div id="db-table-wrap" class="table-scroll"><table class="cons" id="db-table"></table></div>
@@ -1287,6 +1289,9 @@ function setAuthToken(t){ AUTH_TOKEN = t || null; try{ if(t) localStorage.setIte
 let AUTH_EXPIRED_HANDLED = false;
 function handleAuthExpired(){
   if(AUTH_EXPIRED_HANDLED) return; AUTH_EXPIRED_HANDLED = true;
+  // saveWeek le dice al usuario "lo capturado sigue en pantalla, si recargas se pierde" —
+  // y esto recargaba. Ahora el borrador se guarda antes, y al volver a entrar se ofrece.
+  try{ if(typeof guardarBorrador==="function"){ ingSucio = true; guardarBorrador(); } }catch(e){}
   setAuthToken(null); writeSession(null); location.reload();
 }
 async function kvCall(body){
@@ -1331,6 +1336,20 @@ async function sDel(k){
 // pueda distinguir "no hay datos" de "no se pudieron leer los datos".
 let LECTURA_FALLIDA = false;
 const sReadFailed = ()=>LECTURA_FALLIDA;
+// Franja fija arriba cuando no se pudieron leer los datos guardados.
+function avisarLecturaFallida(){
+  if(document.getElementById("aviso-lectura")) return;
+  const d = document.createElement("div");
+  d.id = "aviso-lectura";
+  d.style.cssText = "position:sticky;top:0;z-index:120;background:#F2CFC9;color:#9B3B2E;"
+    + "border-bottom:2px solid #a94436;padding:10px 18px;font-size:13.5px;display:flex;"
+    + "align-items:center;gap:12px;font-family:var(--sans)";
+  d.innerHTML = '<span><b>No se pudieron cargar los datos guardados.</b> '
+    + 'Lo que ves puede estar incompleto o desactualizado.</span>'
+    + '<button class="btn btn-ghost" id="aviso-lectura-retry" style="padding:5px 12px;font-size:12px">Reintentar</button>';
+  document.getElementById("app")?.prepend(d);
+  document.getElementById("aviso-lectura-retry").onclick = ()=>location.reload();
+}
 const sReadReset  = ()=>{ LECTURA_FALLIDA = false; };
 async function sGet(k){
   try{ if(hasStore){ const r=await STORE.get(k); return r?JSON.parse(r.value):null; } }
@@ -1441,10 +1460,77 @@ function fillForm(rec){
   updateSemanaBadge();
 }
 function clearForm(){ allFields().forEach(f=>{ const el=document.getElementById("in_"+f.k); if(el) el.value=""; }); document.getElementById("txt-notas").value=""; document.getElementById("txt-aprendizajes").value=""; document.getElementById("txt-cambios").value=""; const respEl=document.getElementById("ing-responsable"); if(respEl) respEl.value=defaultResp(); }
+/* --- Red de seguridad del formulario de captura ---------------------------------------
+   Capturar una semana son decenas de campos numéricos y había cuatro formas de perderlos
+   sin una sola confirmación: Limpiar, cambiar de canal, que venciera la sesión, y guardar
+   encima de un registro existente sin saber que ya había datos. Ahora: borrador en
+   localStorage con cada cambio, aviso al salir, y confirmación antes de pisar. */
+const BORRADOR_KEY = "selvadentro:borrador";
+let ingSucio = false;                      // hay algo escrito sin guardar
+// Confirma antes de reemplazar un registro que ya tiene datos.
+function ingSobrescribirOk(previo, dv, w){
+  const conDatos = Object.values((previo && previo.valores) || {}).some(v=>Number(v)!==0);
+  if(!conDatos) return true;
+  const quien = dv.length ? " · " + dv.join(" · ") : "";
+  return confirm(`Ya hay datos guardados para ${w}${quien}.\n\n`
+    + `Si guardas ahora, se reemplazan por lo que hay en pantalla. `
+    + `Para ver lo que ya estaba, cancela y pulsa el registro en "Registros guardados".\n\n¿Reemplazar?`);
+}
+// Antes, elegir una semana que YA tenía datos abría el formulario en blanco: el camino
+// natural —semana, asesor, capturar— llevaba a pisar un registro completo con uno parcial.
+// fillForm ya existía y solo se usaba desde los chips de abajo; ahora también aquí.
+function cargarRegistroDeSeleccion(){
+  const w = currentWeekId(); if(!w) return;
+  if(ingSucio && ingTieneAlgo()){
+    if(!confirm("Tienes captura sin guardar.\n\nSi cambias de semana o de asesor se reemplaza por lo que haya guardado. ¿Continuar?")){ return; }
+  }
+  let dv; try{ dv = curDimVals(); }catch(e){ return; }
+  const rec = recGet(recKey(w, dv));
+  if(rec){ fillForm(rec); borrarBorrador(); toast("Registro cargado — " + w + (dv.length?(" · "+dv.join(" · ")):"")); }
+  else { clearForm(); borrarBorrador(); }
+}
+function ingKeyActual(){
+  const w = currentWeekId(); if(!w) return null;
+  try{ return CH + "|" + w + "|" + curDimVals().join("__"); }catch(e){ return null; }
+}
+function guardarBorrador(){
+  if(!ingSucio) return;
+  const k = ingKeyActual(); if(!k) return;
+  try{ localStorage.setItem(BORRADOR_KEY, JSON.stringify({ k, ts:Date.now(), form:gatherForm() })); }catch(e){}
+}
+function borrarBorrador(){ ingSucio=false; try{ localStorage.removeItem(BORRADOR_KEY); }catch(e){} }
+function leerBorrador(){
+  try{ const s=localStorage.getItem(BORRADOR_KEY); return s?JSON.parse(s):null; }catch(e){ return null; }
+}
+// ¿Hay algo escrito? (para no molestar con confirmaciones sobre un formulario vacío)
+function ingTieneAlgo(){
+  const f = gatherForm();
+  if(Object.values(f.valores||{}).some(v=>Number(v)!==0)) return true;
+  return !!(f.notas||f.aprendizajes||f.cambios);
+}
+// Ofrece recuperar lo capturado si la sesión se cayó o se cerró la pestaña a la mitad.
+function ofrecerBorrador(){
+  const b = leerBorrador(); if(!b || !b.form) return;
+  if(b.k !== ingKeyActual()) return;                       // es de otra semana/canal
+  if(ingTieneAlgo()) return;                                // ya hay algo escrito: no pisarlo
+  const cuando = crmAgo(b.ts||Date.now());
+  if(confirm(`Tienes captura sin guardar de ${cuando} en esta semana.\n\n¿La recupero?`)){
+    fillForm(b.form); ingSucio = true; toast("Borrador recuperado — revisa y pulsa Guardar");
+  } else { borrarBorrador(); }
+}
+window.addEventListener("beforeunload", (e)=>{
+  if(!ingSucio) return;
+  guardarBorrador();
+  e.preventDefault(); e.returnValue = "";
+});
+
 async function saveWeek(){
   const w=currentWeekId(); if(!w){ toast("Selecciona la fecha de inicio primero"); return; }
   if(!isWeekEditable(w)){ toast("Solo puedes guardar la semana actual o la anterior"); return; }
   const dv=curDimVals(); const k=recKey(w,dv); const form=gatherForm();
+  // Pisar un registro existente ya no es silencioso.
+  const previo = recGet(k);
+  if(previo && !ingSobrescribirOk(previo, dv, w)) return;
   recSet(k, form);
   try{
     await sSet(k, form);
@@ -1455,6 +1541,7 @@ async function saveWeek(){
     return;
   }
   if(form.responsable && form.responsable !== LAST_RESP[CH]){ LAST_RESP[CH]=form.responsable; try{ await saveLastResp(); }catch(e){} }
+  borrarBorrador();
   toast("Guardado ✓ "+w+(dv.length?(" · "+dv.join(" · ")):"")); renderChips();
 }
 function renderChips(){
@@ -1758,8 +1845,9 @@ document.querySelectorAll(".subtab[data-subtab]").forEach(el=>el.onclick=()=>{
   el.classList.add("active");
   VENTAS_SUBTAB=el.dataset.subtab;
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
-  document.getElementById("view-"+VENTAS_SUBTAB).classList.add("active");
+  document.getElementById("view-"+VENTAS_SUBTAB)?.classList.add("active");
   if(VENTAS_SUBTAB==="analitica") renderAnalitica();
+  if(VENTAS_SUBTAB==="ingreso") setTimeout(ofrecerBorrador, 60);
   navPush({ tab: "ventas", subtab: VENTAS_SUBTAB });
 });
 function showMarketing(){ const f=document.getElementById("mkt-frame"); if(f && (!f.src || f.src==="about:blank" || f.src.endsWith("about:blank"))) f.src="marketing.html"; }
@@ -1964,6 +2052,19 @@ const CRM_SRC_LABELS = { ig:"Instagram", fb:"Facebook", facebook:"Facebook", ins
 const crmWeekOf = semanaISOTulum;   // antes leía en UTC: ver semanaISOTulum
 function crmAgo(ts){ const m=Math.round((Date.now()-ts)/60000); if(m<1) return "ahora mismo"; if(m<60) return `hace ${m} min`; const h=Math.floor(m/60); if(h<24) return `hace ${h} h`; return new Date(ts).toLocaleString("es-MX",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}); }
 
+// Aviso de sincronización incompleta. Lo tenía solo Calidad de Leads; ahora es compartido,
+// porque el problema es el mismo en los tres motores: si una parte no se pudo traer, los
+// ceros de la pantalla son datos que faltan y no resultados, y quien lee el cache después
+// no tiene forma de saberlo. El aviso viaja DENTRO del agregado, así que lo ve todo el
+// equipo y no solo quien pulsó el botón.
+function bannerIncompleto(fallos, queRehacer){
+  if(!(fallos||[]).length) return "";
+  return `<div class="lq-meth" style="border-color:#a94436;background:#F2CFC9">
+    ⚠ <b>Esta sincronización quedó incompleta.</b> No se pudo traer: ${escAttr(fallos.join(" · "))}.
+    Los ceros y los guiones de abajo son datos que faltan, <b>no</b> resultados reales. Vuelve a pulsar
+    <b>${escAttr(queRehacer)}</b> cuando se resuelva.</div>`;
+}
+
 async function crmFn(body){
   const r = await fetch("/.netlify/functions/ghl-report", { method:"POST", headers:{"Content-Type":"application/json", "Authorization":"Bearer "+AUTH_TOKEN}, body:JSON.stringify(body) });
   const d = await r.json().catch(()=>({}));
@@ -2076,7 +2177,8 @@ function crmRender(){
     <tbody>${rows || '<tr><td colspan="2" class="lft" style="color:var(--neutro);font-style:italic">Sin datos en el rango.</td></tr>'}</tbody></table></div>`;
   const tables = `<div class="crm-tables">${tbl("Oportunidades por fuente (rango)","Fuente",srcRows)}${tbl("Oportunidades por asesor (rango)","Asesor",asrRows)}</div>`;
 
-  document.getElementById("crm-content").innerHTML = kpis + tables + pipeCards.join("");
+  document.getElementById("crm-content").innerHTML =
+    bannerIncompleto(agg.fallos, "Sincronizar CRM") + kpis + tables + pipeCards.join("");
 }
 
 async function crmSync(){
@@ -2098,11 +2200,19 @@ async function crmSync(){
     }while(cursor);
     bar.style.width="100%"; lbl.textContent="Procesando…";
     crmState.agg = buildCrmAgg(boot, opps);
+    crmState.agg.fallos = [];                 // recorrido completo: sin huecos
     sSet(CRM_AGG_KEY, crmState.agg).catch(e=>toast("Cache del CRM no guardado: "+(e.message||e)));
     crmPopulateWeeks(); crmRender();
     toast("CRM sincronizado ✓ "+opps.length.toLocaleString()+" oportunidades");
   }catch(e){
+    // El recorrido es todo-o-nada: si falla, el agregado que queda en pantalla es el ANTERIOR.
+    // Antes solo salía un toast pasajero y quien llegaba después leía datos viejos como si
+    // fueran de hoy. Ahora se marca el agregado para que el aviso viaje con él.
     toast("Error al sincronizar CRM: "+(e.message||e));
+    if(crmState.agg){
+      crmState.agg.fallos = ["la sincronización más reciente falló (" + (e.message||e) + ")"];
+      crmRender();
+    }
   }finally{
     crmState.syncing=false; btn.disabled=false; btn.textContent="Sincronizar CRM";
     setTimeout(()=>{ prog.style.display="none"; bar.style.width="0%"; }, 600);
@@ -2783,10 +2893,7 @@ function lqQualityTree(agg, leads, rangoSet){
     ⚠ <b>Las cuentas de anuncios facturan en monedas distintas</b> (${escAttr((agg.monedas||[]).join(" y "))}).
     La inversión, el costo por lead y el costo por lead calificado están sumando monedas diferentes:
     tómalos como referencia, no como cifra exacta, hasta definir una moneda única o un tipo de cambio.</div>` : "";
-  const incompleto = (agg.fallos||[]).length ? `<div class="lq-meth" style="border-color:#a94436;background:#F2CFC9">
-    ⚠ <b>Esta sincronización quedó incompleta.</b> No se pudo traer: ${escAttr(agg.fallos.join(" · "))}.
-    Los ceros y los guiones de abajo son datos que faltan, <b>no</b> resultados reales. Vuelve a pulsar
-    <b>Sincronizar leads</b> cuando se resuelva.</div>` : "";
+  const incompleto = bannerIncompleto(agg.fallos, "Sincronizar leads");
   const aviso = gap ? `<div class="lq-meth">⚠ <b>${gap}</b> de ${pagados} leads de Meta / Google llegaron <b>sin campaña en la atribución</b> (utm_campaign vacío) y se agrupan en "${LQ_SIN_CAMP}".
     Las campañas de la cuenta de anuncios sí aparecen abajo con su inversión, aunque no tengan leads empatados. Mientras los anuncios no pasen los parámetros UTM
     (utm_campaign, utm_content, utm_term) al formulario, no se puede saber qué campaña, conjunto o anuncio generó cada lead.</div>` : "";
@@ -3947,7 +4054,10 @@ function slaRender(){
   const kpi = (v,l)=>`<div class="crm-kpi"><div class="k-val">${v}</div><div class="k-lbl">${l}</div></div>`;
   const conDatos = leads.filter(l=>!l.sd);
   const sinDatos = leads.length - conDatos.length;
-  let html = `<div class="crm-kpis">
+  // El aviso de sincronización incompleta va ARRIBA de todo: si faltan conversaciones, la
+  // nota de los asesores está subestimada y eso hay que verlo antes que los números.
+  let html = bannerIncompleto(agg.fallos, "Generar reporte");
+  html += `<div class="crm-kpis">
     ${kpi(leads.length.toLocaleString(),"Leads en el rango")}
     ${kpi(pcti(conDatos.filter(l=>l.fo).length,conDatos.length),"Con primer toque")}
     ${kpi(pcti(conDatos.filter(l=>l.fi).length,conDatos.length),"Contactados efectivos")}
@@ -4060,6 +4170,8 @@ async function slaSync(){
         bar=document.getElementById("sla-progress-bar"), lbl=document.getElementById("sla-progress-lbl");
   btn.disabled=true; btn.textContent="Generando…"; prog.style.display="block"; bar.style.width="2%";
   try{
+    const fallos = [];      // qué partes del barrido no se pudieron traer (viaja en el agregado)
+    let lotesFallidos = 0, leadsSinBarrer = 0;
     const rango = slaRangeWeeks();
     const b0 = lqWeekBounds(rango[0]), b1 = lqWeekBounds(rango[rango.length-1]);
     lbl.textContent="Trayendo leads del rango…";
@@ -4077,7 +4189,12 @@ async function slaSync(){
       try{
         const res = await slaFn({action:"sweep", ids});
         (res.results||[]).forEach(r=>{ sweepMap[r.id]=r; });
-      }catch(e){ /* lote fallido: los leads quedan sin datos de conversación */ }
+      }catch(e){
+        // Un lote fallido deja a esos leads sin conversaciones, y sin conversaciones se leen
+        // como "nunca los tocó": el asesor baja de nota por un error de red. Se cuenta y se
+        // reporta en el encabezado del reporte en vez de desaparecer.
+        lotesFallidos++; leadsSinBarrer += ids.length;
+      }
       const done=Math.min(i+8,contactsArr.length);
       bar.style.width=(10+Math.round(done/Math.max(1,contactsArr.length)*70))+"%";
       lbl.textContent=`Analizando conversaciones y citas… ${done} de ${contactsArr.length}`;
@@ -4091,12 +4208,21 @@ async function slaSync(){
     bar.style.width="94%"; lbl.textContent="Resolviendo asesores…";
     let usersMap={};
     let fieldsArr = [];
-    try{ const u = await slaFn({action:"users"}); usersMap = u.users || {}; fieldsArr = u.fields || []; }catch(e){}
+    try{ const u = await slaFn({action:"users"}); usersMap = u.users || {}; fieldsArr = u.fields || []; }
+    catch(e){ fallos.push("los nombres de los asesores (aparecerán como identificadores)"); }
     bar.style.width="100%"; lbl.textContent="Procesando…";
+    if(lotesFallidos){
+      fallos.push(`las conversaciones y citas de ${leadsSinBarrer} lead${leadsSinBarrer!==1?"s":""} `
+        + `(${lotesFallidos} lote${lotesFallidos!==1?"s":""} falló${lotesFallidos!==1?"":""}) — `
+        + `sus asesores salen con menos actividad de la real`);
+    }
     slaState.agg = buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr);
+    slaState.agg.fallos = fallos;
     sSet(SLA_AGG_KEY, slaState.agg).catch(e=>toast("Cache del reporte no guardado: "+(e.message||e)));
     slaPopulateWeeks(); slaRender();
-    toast("Reporte SLA generado ✓ "+contactsArr.length+" leads analizados");
+    toast(fallos.length
+      ? `Reporte SLA generado con huecos ⚠ ${contactsArr.length} leads`
+      : `Reporte SLA generado ✓ ${contactsArr.length} leads analizados`);
   }catch(e){
     toast("Error al generar el reporte SLA: "+(e.message||e));
   }finally{
@@ -5106,6 +5232,13 @@ function renderDB(){
       dbShowFrame(true, modKey);
     };
     document.getElementById("db-get").onclick=()=>{ if(sel.value) renderDBTable(sel.value); else if(selM.value) dbShowFrame(true, selM.value); };
+    // El texto de ayuda de esta pantalla prometía CSV y respaldo JSON desde siempre, y las dos
+    // funciones estaban escritas y completas — solo que ningún botón las llamaba nunca.
+    document.getElementById("db-csv").onclick=()=>{
+      if(!sel.value){ toast("Elige primero un canal de Ventas"); return; }
+      dbExportCSV(sel.value);
+    };
+    document.getElementById("db-json").onclick=()=>dbExportJSON();
     dbBuilt=true;
   }
   if(sel.value){ dbShowFrame(false); renderDBTable(sel.value); }
@@ -5124,12 +5257,14 @@ function dbShowFrame(show, modKey){
     if(hint) hint.style.display="";
     if(countLbl) countLbl.style.display="";
     if(getBtn) getBtn.style.display="";
+    ["db-csv","db-json"].forEach(id=>{ const b=document.getElementById(id); if(b) b.style.display=""; });
     return;
   }
   wrap.style.display="none";
   if(hint) hint.style.display="none";
   if(countLbl) countLbl.style.display="none";
   if(getBtn) getBtn.style.display="none";
+  ["db-csv","db-json"].forEach(id=>{ const b=document.getElementById(id); if(b) b.style.display="none"; });
   frame.style.display="block";
   const apply = ()=>{
     const w = frame.contentWindow;
@@ -5230,6 +5365,7 @@ async function switchChannel(ch){
   document.getElementById("ing-dims").innerHTML = dims.map((d,i)=>{ const vals = d.id==="asesor" ? activeAdvisorNames() : d.values; return `<div class="grp"><label>${d.label}</label><select id="ing-dim-${i}">${vals.map(v=>`<option>${v}</option>`).join("")}</select></div>`; }).join("");
   document.getElementById("rep-dims").innerHTML = dims.map((d,i)=>{ const vals = d.id==="ciudad" ? d.values.filter(v=>v!=="General") : d.values; return `<div class="grp"><label>${d.label}</label><select id="rep-dim-${i}"><option value="__todos">Todos</option>${vals.map(v=>`<option value="${v}">${v}</option>`).join("")}</select></div>`; }).join("");
   renderIngresoForm(); clearForm();
+  // (el aviso de captura sin guardar lo da switchChannelSeguro, antes de llegar aquí)
   renderChips();
   const keys=recList(recPrefix());
   const weeks=[...new Set(keys.map(k=>parseRecKey(k).w))].sort();
@@ -5245,15 +5381,41 @@ async function init(){
   setupBrandPhrase(); loadLogo();
   const sel=document.getElementById("canal-select");
   populateCanalSelect();
-  sel.addEventListener("change",()=>switchChannel(sel.value));
+  let canalPrevio = sel.value;
+  sel.addEventListener("change",()=>{
+    // switchChannel llama a clearForm(): antes bastaba con tocar este desplegable para
+    // borrar un formulario a medio llenar, en silencio.
+    if(ingSucio && ingTieneAlgo() &&
+       !confirm("Tienes captura sin guardar en esta semana.\n\nSi cambias de reporte se pierde. ¿Continuar?")){
+      sel.value = canalPrevio; return;
+    }
+    borrarBorrador(); canalPrevio = sel.value; switchChannel(sel.value);
+  });
+
+  // Delegado en el contenedor: los campos se re-crean en cada render, los manejadores no.
+  const marcarSucio = ()=>{ ingSucio = true; clearTimeout(window.__bt); window.__bt=setTimeout(guardarBorrador, 400); };
+  document.getElementById("ing-sections")?.addEventListener("input", marcarSucio);
+  ["txt-notas","txt-aprendizajes","txt-cambios","ing-responsable"].forEach(id=>{
+    document.getElementById(id)?.addEventListener("input", marcarSucio);
+  });
 
   const ingIni=document.getElementById("ing-inicio"), ingFin=document.getElementById("ing-fin");
-  ingIni.addEventListener("change",()=>{ const d=parseD(ingIni.value); if(d){ const mon=mondayOf(d); ingIni.value=toISO(mon); ingFin.value=toISO(sundayOf(mon)); } updateSemanaBadge(); });
+  ingIni.addEventListener("change",()=>{
+    const d=parseD(ingIni.value); if(d){ const mon=mondayOf(d); ingIni.value=toISO(mon); ingFin.value=toISO(sundayOf(mon)); }
+    updateSemanaBadge();
+    cargarRegistroDeSeleccion();
+  });
+  // Cambiar de asesor o ciudad también debe traer el registro de esa combinación.
+  document.getElementById("ing-dims")?.addEventListener("change", cargarRegistroDeSeleccion);
 
   document.getElementById("btn-guardar").onclick=saveWeek;
   document.getElementById("btn-guardar2").onclick=saveWeek;
-  document.getElementById("btn-limpiar").onclick=clearForm;
-  document.getElementById("btn-limpiar2").onclick=clearForm;
+  const limpiarConfirm = ()=>{
+    if(ingTieneAlgo() && !confirm("¿Limpiar el formulario?\n\nSe borra lo que está en pantalla. Lo ya guardado no se toca.")) return;
+    clearForm(); borrarBorrador();
+  };
+  document.getElementById("btn-limpiar").onclick=limpiarConfirm;
+  document.getElementById("btn-limpiar2").onclick=limpiarConfirm;
   document.getElementById("btn-generar").onclick=generarReporte;
 
   document.getElementById("adv-add-btn").onclick=()=>{
@@ -5290,7 +5452,12 @@ async function init(){
       if(active && active.id==="view-resultados"){ await showResultados(); document.querySelector(".canal-wrap").style.display="none"; }
       else if(active && active.id==="view-dircom"){ await showDirCom(); document.querySelector(".canal-wrap").style.display="none"; }
       else if(active && active.id==="view-db"){ renderDB(); if(dbLastCh && CHANNELS[dbLastCh]) await renderDBTable(dbLastCh); }
-    }catch(e){}
+    }catch(e){ LECTURA_FALLIDA = true; console.error("Fallo al cargar los datos guardados", e); }
+    // La bandera existía y se levantaba bien; sReadFailed()/sReadReset() estaban escritos.
+    // Nadie los consultaba jamás, así que un backend caído se veía igual que "todavía no hay
+    // datos": la app mostraba el histórico incrustado en el archivo y nada de lo capturado
+    // después. marketing.html sí avisaba; este lado no.
+    if(sReadFailed()) avisarLecturaFallida();
   })();
 }
 
