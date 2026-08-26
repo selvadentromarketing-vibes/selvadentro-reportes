@@ -140,14 +140,30 @@ async function leads({ start, end, searchAfter }) {
 
 // Todas las oportunidades del CRM, adelgazadas al mínimo para el join con leads:
 // contactId, estatus, fecha de creación y valor. Mismo patrón de cursor que ghl-report.
-async function opps({ startAfter, startAfterId }) {
+// `since` (epoch ms) acota el recorrido: una oportunidad no puede existir antes que su
+// contacto, así que filtrar desde el inicio de la ventana no pierde ninguna oportunidad
+// de los leads analizados. Antes se recorría TODO el histórico del CRM en cada
+// sincronización — con auto-refresco cada 30 min por usuario — solo para descartarlo al
+// filtrar por semana. Si el API rechaza el filtro, se reintenta sin él.
+async function opps({ startAfter, startAfterId, since }) {
   const out = [];
   let cursor = startAfter && startAfterId ? { startAfter, startAfterId } : null;
   let total = 0;
+  let usarFiltro = !!since;
   for (let i = 0; i < 6; i++) {
-    let qs = `location_id=${LOCATION_ID}&limit=100&getCalendarEvents=true`;
+    const base = `location_id=${LOCATION_ID}&limit=100&getCalendarEvents=true`;
+    let qs = base + (usarFiltro ? `&date=${encodeURIComponent(since)}` : "");
     if (cursor) qs += `&startAfter=${encodeURIComponent(cursor.startAfter)}&startAfterId=${encodeURIComponent(cursor.startAfterId)}`;
-    const data = await ghl(`/opportunities/search?${qs}`);
+    let data;
+    try {
+      data = await ghl(`/opportunities/search?${qs}`);
+    } catch (e) {
+      if (!usarFiltro || e.status !== 400) throw e;
+      usarFiltro = false;                       // el API no acepta el formato: seguir sin filtro
+      let q2 = base;
+      if (cursor) q2 += `&startAfter=${encodeURIComponent(cursor.startAfter)}&startAfterId=${encodeURIComponent(cursor.startAfterId)}`;
+      data = await ghl(`/opportunities/search?${q2}`);
+    }
     const batch = data.opportunities || [];
     batch.forEach((o) => {
       // Citas embebidas (si el API las devuelve): señal fuerte de calificación
@@ -185,7 +201,7 @@ async function spend({ start, end }) {
     throw Object.assign(new Error("start y end requeridos (YYYY-MM-DD)"), { status: 400 });
   }
   const url = `https://connectors.windsor.ai/all?api_key=${encodeURIComponent(WINDSOR_KEY)}` +
-    `&date_from=${start}&date_to=${end}&fields=date,source,campaign,spend,clicks,impressions`;
+    `&date_from=${start}&date_to=${end}&fields=date,source,campaign,spend,clicks,impressions,currency`;
   const resp = await fetch(url, { headers: { Accept: "application/json" } });
   if (!resp.ok) {
     const detail = await resp.text();
@@ -202,13 +218,22 @@ async function spend({ start, end }) {
     spend: Number(r.spend) || 0,
     clicks: Number(r.clicks) || 0,
     impr: Number(r.impressions) || 0,
+    cur: String(r.currency || "").toUpperCase(),   // sin esto se sumaban pesos con dólares
   })).filter((r) => r.spend || r.clicks || r.impr);
-  return { configured: true, rows };
+  // Monedas distintas en la misma suma = total sin sentido. Se reporta para avisarlo.
+  const monedas = [...new Set(rows.map((r) => r.cur).filter(Boolean))];
+  return { configured: true, rows, monedas };
 }
 
+// Windsor limita a 600 peticiones/min y 10k/día. Un 429 sin reintento apagaba la
+// inversión de toda la pestaña; ahora se espera y se reintenta una vez, igual que GHL.
 async function windsorGet(connector, params) {
   const url = `https://connectors.windsor.ai/${connector}?api_key=${encodeURIComponent(WINDSOR_KEY)}&${params}`;
-  const resp = await fetch(url, { headers: { Accept: "application/json" } });
+  let resp = await fetch(url, { headers: { Accept: "application/json" } });
+  if (resp.status === 429) {
+    await new Promise((r) => setTimeout(r, 1500));
+    resp = await fetch(url, { headers: { Accept: "application/json" } });
+  }
   if (!resp.ok) {
     const detail = await resp.text();
     const err = new Error(`Windsor ${connector} ${resp.status}`);

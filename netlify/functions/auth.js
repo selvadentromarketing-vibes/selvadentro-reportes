@@ -10,6 +10,31 @@
 
 const S = require("./lib/shared.js");
 
+// Freno de fuerza bruta. La instancia de la function se recicla, así que esto no es
+// un candado perfecto — pero corta el intento rápido y repetido desde una misma IP,
+// que es lo que antes no tenía ningún límite.
+const INTENTOS = new Map();
+const VENTANA_MS = 10 * 60 * 1000;   // 10 minutos
+const MAX_INTENTOS = 8;
+
+function ipDe(event) {
+  const h = event.headers || {};
+  return (h["x-nf-client-connection-ip"] || h["x-forwarded-for"] || "sin-ip").split(",")[0].trim();
+}
+function frenado(ip) {
+  const e = INTENTOS.get(ip);
+  if (!e) return false;
+  if (Date.now() - e.t > VENTANA_MS) { INTENTOS.delete(ip); return false; }
+  return e.n >= MAX_INTENTOS;
+}
+function fallo(ip) {
+  const e = INTENTOS.get(ip);
+  if (!e || Date.now() - e.t > VENTANA_MS) INTENTOS.set(ip, { n: 1, t: Date.now() });
+  else e.n++;
+  if (INTENTOS.size > 5000) INTENTOS.clear();   // techo de memoria
+}
+const exito = (ip) => INTENTOS.delete(ip);
+
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return S.corsPreflight();
   if (event.httpMethod !== "POST") return S.json(405, { error: "Method not allowed" });
@@ -36,16 +61,23 @@ exports.handler = async (event) => {
     if (body.action === "login") {
       const { email, pass } = body;
       if (!email || !pass) return S.json(400, { error: "Faltan email o contraseña" });
+      const ip = ipDe(event);
+      if (frenado(ip)) {
+        return S.json(429, { error: "Demasiados intentos fallidos. Espera 10 minutos y vuelve a intentar." });
+      }
       const users = await S.getUsers();
       const u = S.findUser(users, email);
       // Invitado que todavía no abre su liga: no tiene hash. Decirlo, en vez de
       // mandarlo a adivinar una contraseña que nunca existió.
       if (u && !u.hash) {
+        // invitación pendiente: no cuenta como intento fallido de contraseña
         return S.json(403, { error: "Tu invitación sigue pendiente: abre la liga que te mandaron para definir tu contraseña. Si ya venció, pide una nueva." });
       }
       if (!u || S.sha256Hex(u.salt, pass) !== u.hash) {
+        fallo(ip);
         return S.json(401, { error: "Email o contraseña incorrectos" });
       }
+      exito(ip);
       return S.json(200, sessionShape(u));
     }
 

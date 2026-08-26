@@ -43,7 +43,14 @@ exports.handler = async (event) => {
   }
   if (event.httpMethod !== "POST") return json(405, { error: "Method not allowed" });
   if (!API_KEY) return json(500, { error: "ANTHROPIC_API_KEY no configurada en el entorno" });
-  if (!S.authFromEvent(event)) return json(401, { error: "Sesión inválida o expirada" });
+  // Antes bastaba con tener sesión: cualquier usuario podía disparar llamadas a Claude
+  // sin límite. Ahora exige el canal correspondiente, igual que el resto de reportes.
+  const session = S.authFromEvent(event);
+  if (!session) return json(401, { error: "Sesión inválida o expirada" });
+  const ch = session.channels || [];
+  if (session.role !== "admin" && !["direccion_general","direccion_comercial"].some((c) => ch.includes(c))) {
+    return json(403, { error: "Sin acceso a los reportes de Dirección" });
+  }
 
   let payload;
   try { payload = JSON.parse(event.body || "{}"); } catch { return json(400, { error: "JSON inválido" }); }

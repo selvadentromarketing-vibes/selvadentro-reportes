@@ -245,14 +245,26 @@ async function users() {
   return { users: map, fields };
 }
 
-async function opps({ startAfter, startAfterId }) {
+async function opps({ startAfter, startAfterId, since }) {
   const out = [];
   let cursor = startAfter && startAfterId ? { startAfter, startAfterId } : null;
   let total = 0;
+  // Mismo acotado que en lead-quality: solo el rango analizado, no el CRM entero.
+  let usarFiltro = !!since;
   for (let i = 0; i < 6; i++) {
-    let qs = `location_id=${LOCATION_ID}&limit=100`;
+    const base = `location_id=${LOCATION_ID}&limit=100`;
+    let qs = base + (usarFiltro ? `&date=${encodeURIComponent(since)}` : "");
     if (cursor) qs += `&startAfter=${encodeURIComponent(cursor.startAfter)}&startAfterId=${encodeURIComponent(cursor.startAfterId)}`;
-    const data = await ghl(`/opportunities/search?${qs}`);
+    let data;
+    try {
+      data = await ghl(`/opportunities/search?${qs}`);
+    } catch (e) {
+      if (!usarFiltro || e.status !== 400) throw e;
+      usarFiltro = false;
+      let q2 = base;
+      if (cursor) q2 += `&startAfter=${encodeURIComponent(cursor.startAfter)}&startAfterId=${encodeURIComponent(cursor.startAfterId)}`;
+      data = await ghl(`/opportunities/search?${q2}`);
+    }
     const batch = data.opportunities || [];
     batch.forEach((o) => out.push({
       u: o.assignedTo || "",

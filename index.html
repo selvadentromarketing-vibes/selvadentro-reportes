@@ -723,7 +723,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
         <div class="grp"><label>Marketing</label><select id="metas-marketing"></select></div>
         <div class="spacer"></div>
       </div>
-      <p class="hint" id="metas-hint">Define la <b>meta mensual</b> de cada KPI. Se guarda automáticamente y el reporte del canal la usa, ajustada al periodo (meta mensual ÷ 4 × semanas evaluadas). Deja en blanco para no fijar meta.</p>
+      <p class="hint" id="metas-hint">Define la <b>meta mensual</b> de cada KPI. Se guarda automáticamente y el reporte del canal la usa, ajustada al periodo (meta mensual ÷ 4.35 semanas × semanas evaluadas). Deja en blanco para no fijar meta.</p>
       <div id="metas-body"></div>
       <iframe id="mkt-metas-frame" src="about:blank" style="display:none;width:100%;min-height:800px;border:none;background:var(--crema);border-radius:12px"></iframe>
     </div>
@@ -1484,7 +1484,11 @@ async function generarReporte(){
   }
 
   const hasMetas=flds.some(f=>f.meta!=null);
-  const metaPeriodo=meta=>meta==null?null:(meta/4*nWeeks);
+  // Prorrateo de meta mensual a periodo. Asumir 4 semanas infla la meta ~25% en rangos
+// largos (un mes son 4.345 semanas en promedio), lo que ponía el semáforo en rojo
+// antes de tiempo. SEMANAS_MES = 365.25/7/12.
+const SEMANAS_MES = 4.348;
+const metaPeriodo=meta=>meta==null?null:(meta/SEMANAS_MES*nWeeks);
   const cumpCell=(val,meta)=>{ const mp=metaPeriodo(meta); if(mp==null) return '<td></td><td></td><td></td>'; if(mp===0) return `<td>${meta}</td><td>0</td><td><span class="cump no">Sin Datos</span></td>`; const pct=val/mp,cls=pct>=1?"ok":"no"; return `<td>${meta}</td><td>${(+mp.toFixed(2))}</td><td><span class="cump ${cls}">${fmtPct(pct)}</span></td>`; };
   const getv=spec=>Array.isArray(spec)?spec.reduce((acc,k)=>acc+(sum[k]||0),0):(sum[spec]||0);
   const convVal=c=>{ const den=getv(c.den),num=getv(c.num); if(!den) return `<span class="cump no">Sin Datos</span>`; const pct=num/den,cls=pct>=c.target?"ok":"no"; return `<span class="cump ${cls}">${fmtPct(pct)}</span>`; };
@@ -1790,7 +1794,7 @@ async function renderResultados(){
   let rows=""; const tot={}; METRIC_KEYS.forEach(m=>tot[m]=0); let totMeta=0; const nW=weekSet.size;
   for(const ch of Object.keys(CHANNELS)){
     const m=await channelMetrics(ch,weekSet); METRIC_KEYS.forEach(k=>tot[k]+=m[k]); const meta=CHANNEL_META[ch].won; totMeta+=meta;
-    const metaPer=meta/4*nW;
+    const metaPer=meta/SEMANAS_MES*nW;
     rows+=`<tr><td class="name">${CHANNELS[ch].name}</td><td>${m.leads}</td><td>${m.zooms}</td><td>${m.tours}</td><td>${m.opp}</td><td>${m.opp_zooms}</td><td>${m.opp_tours}</td><td>${m.apartados}</td><td>${m.won}</td><td>${fmtMoney(m.ingresos)}</td><td>${pctTxt(m.won,m.opp)}</td><td>${meta}</td><td>${estadoDot(m.leads,m.won,metaPer)}</td></tr>`;
   }
   cont.innerHTML=`
@@ -1803,7 +1807,7 @@ async function renderResultados(){
     <div class="table-scroll"><table class="cons">
       <thead><tr><th class="lft">Canal</th><th>Leads</th><th>Zooms</th><th>Tours</th><th>OPP</th><th>OPP de zooms</th><th>OPP de tours</th><th>Apartado</th><th>WON</th><th>Ingresos</th><th>Cierre %</th><th>Meta WON mensual</th><th>Estado</th></tr></thead>
       <tbody>${rows}
-        <tr class="total"><td class="lft">Total</td><td>${tot.leads}</td><td>${tot.zooms}</td><td>${tot.tours}</td><td>${tot.opp}</td><td>${tot.opp_zooms}</td><td>${tot.opp_tours}</td><td>${tot.apartados}</td><td>${tot.won}</td><td>${fmtMoney(tot.ingresos)}</td><td>${pctTxt(tot.won,tot.opp)}</td><td>${totMeta}</td><td>${estadoDot(tot.leads,tot.won,totMeta/4*nW)}</td></tr>
+        <tr class="total"><td class="lft">Total</td><td>${tot.leads}</td><td>${tot.zooms}</td><td>${tot.tours}</td><td>${tot.opp}</td><td>${tot.opp_zooms}</td><td>${tot.opp_tours}</td><td>${tot.apartados}</td><td>${tot.won}</td><td>${fmtMoney(tot.ingresos)}</td><td>${pctTxt(tot.won,tot.opp)}</td><td>${totMeta}</td><td>${estadoDot(tot.leads,tot.won,totMeta/SEMANAS_MES*nW)}</td></tr>
       </tbody></table></div>`;
   ANAL_DIR.res.expanded=null;
   renderDirAnalitica("res", chsSel, weekSet, "Dirección General");
@@ -1816,7 +1820,7 @@ async function renderDirCom(){
   const chsSel=[...dcState.chs];
   const f={}; METRIC_KEYS.forEach(m=>f[m]=0); let metaWonSel=0;
   for(const ch of chsSel){ const m=await channelMetrics(ch,weekSet); METRIC_KEYS.forEach(k=>f[k]+=m[k]); metaWonSel+=CHANNEL_META[ch].won; }
-  const metaWonPeriodo = +(metaWonSel/4*nW).toFixed(2);
+  const metaWonPeriodo = +(metaWonSel/SEMANAS_MES*nW).toFixed(2);
   const fechas = wk.length? `${fechaIniW(wk[0])} → ${fechaFinW(wk[wk.length-1])}`:"—";
   const perCh=[]; const tot={}; METRIC_KEYS.forEach(m=>tot[m]=0); let totMetaWon=0, totMix=0;
   for(const ch of Object.keys(CHANNELS)){ const m=await channelMetrics(ch,weekSet); perCh.push({ch,m}); METRIC_KEYS.forEach(k=>tot[k]+=m[k]); totMetaWon+=CHANNEL_META[ch].won; totMix+=CHANNEL_META[ch].mix; }
@@ -1832,8 +1836,8 @@ async function renderDirCom(){
       <td>${m.opp_14}</td>
       <td>${m.apartados}</td><td class="pct">${pctTxt(m.apartados,m.leads)}</td>
       <td>${m.won}</td><td>${fmtMoney(m.ingresos)}</td><td class="pct">${pctTxt(m.won,m.leads)}</td>
-      <td>${(meta.mix*100).toFixed(0)}%</td><td>${meta.won}</td><td class="pct">${pctTxt(m.won,meta.won/4*nW)}</td>
-      <td>${estadoDot(m.leads,m.won,meta.won/4*nW)}</td></tr>`;
+      <td>${(meta.mix*100).toFixed(0)}%</td><td>${meta.won}</td><td class="pct">${pctTxt(m.won,meta.won/SEMANAS_MES*nW)}</td>
+      <td>${estadoDot(m.leads,m.won,meta.won/SEMANAS_MES*nW)}</td></tr>`;
   }
   const totRow=`<tr class="total"><td class="lft">Total</td>
     <td>${tot.leads}</td><td class="pct">${pctTxt(tot.leads,tot.leads)}</td>
@@ -1845,8 +1849,8 @@ async function renderDirCom(){
     <td>${tot.opp_14}</td>
     <td>${tot.apartados}</td><td class="pct">${pctTxt(tot.apartados,tot.leads)}</td>
     <td>${tot.won}</td><td>${fmtMoney(tot.ingresos)}</td><td class="pct">${pctTxt(tot.won,tot.leads)}</td>
-    <td>${(totMix*100).toFixed(0)}%</td><td>${totMetaWon}</td><td class="pct">${pctTxt(tot.won,totMetaWon/4*nW)}</td>
-    <td>${estadoDot(tot.leads,tot.won,totMetaWon/4*nW)}</td></tr>`;
+    <td>${(totMix*100).toFixed(0)}%</td><td>${totMetaWon}</td><td class="pct">${pctTxt(tot.won,totMetaWon/SEMANAS_MES*nW)}</td>
+    <td>${estadoDot(tot.leads,tot.won,totMetaWon/SEMANAS_MES*nW)}</td></tr>`;
   cont.innerHTML=`
     <div class="rep-head"><div class="ttl">Reporte · Dirección Comercial</div>
       <div class="meta-line">Canales: ${chsSel.map(c=>CHANNELS[c].name).join(" | ")||"—"} · ${wk.length} semana(s) · ${fechas}</div></div>
@@ -2674,6 +2678,10 @@ function lqQualityTree(agg, leads, rangoSet){
     <td>${leads.reduce((a,l)=>a+(l.o||0),0)}</td><td>${leads.reduce((a,l)=>a+(l.w||0),0)}</td>
     <td>${spT?fmtMoney(spT):"—"}</td><td>—</td></tr>`;
   const pagados = leads.filter(l=>l.fuente==="Meta"||l.fuente==="Google").length;
+  const multiMoneda = (agg.monedas||[]).length > 1 ? `<div class="lq-meth" style="border-color:var(--cobre)">
+    ⚠ <b>Las cuentas de anuncios facturan en monedas distintas</b> (${escAttr((agg.monedas||[]).join(" y "))}).
+    La inversión, el costo por lead y el costo por lead calificado están sumando monedas diferentes:
+    tómalos como referencia, no como cifra exacta, hasta definir una moneda única o un tipo de cambio.</div>` : "";
   const incompleto = (agg.fallos||[]).length ? `<div class="lq-meth" style="border-color:#a94436;background:#F2CFC9">
     ⚠ <b>Esta sincronización quedó incompleta.</b> No se pudo traer: ${escAttr(agg.fallos.join(" · "))}.
     Los ceros y los guiones de abajo son datos que faltan, <b>no</b> resultados reales. Vuelve a pulsar
@@ -2681,7 +2689,7 @@ function lqQualityTree(agg, leads, rangoSet){
   const aviso = gap ? `<div class="lq-meth">⚠ <b>${gap}</b> de ${pagados} leads de Meta / Google llegaron <b>sin campaña en la atribución</b> (utm_campaign vacío) y se agrupan en "${LQ_SIN_CAMP}".
     Las campañas de la cuenta de anuncios sí aparecen abajo con su inversión, aunque no tengan leads empatados. Mientras los anuncios no pasen los parámetros UTM
     (utm_campaign, utm_content, utm_term) al formulario, no se puede saber qué campaña, conjunto o anuncio generó cada lead.</div>` : "";
-  return incompleto + aviso + `<div class="table-scroll" style="margin-bottom:8px"><table class="cons lq-tree">
+  return incompleto + multiMoneda + aviso + `<div class="table-scroll" style="margin-bottom:8px"><table class="cons lq-tree">
     <tr><th class="lft">Campaña / conjunto / anuncio</th><th class="lft">Familia</th>
       ${LQ_COLS.map(L=>`<th title="${L.name}">${L.short}</th>`).join("")}
       <th>Total</th><th>Calif.</th><th>%</th><th title="OPP = oportunidad real de cierre: Seguimiento de OPP, Carta oferta, Apartado o posterior. La cotización enviada aún no cuenta.">OPPs</th><th title="WON = venta cerrada">WONs</th><th>Inversión</th><th>Costo/lead</th></tr>
@@ -2973,10 +2981,27 @@ function lqConclusionesSection(){
   return html;
 }
 
-async function lqAnalizar(){
+const LQ_IA_KEY = "lq:ia:v1:";
+const LQ_IA_TTL = 12*3600e3;          // 12 h: el rango no cambia tanto como para pagar de nuevo
+
+// Devuelve el análisis guardado de este rango si sigue vigente
+async function lqIaCache(rango){
+  const etq = rango.length ? `${rango[0]} → ${rango[rango.length-1]}` : "—";
+  try{
+    const c = await sGet(LQ_IA_KEY + etq);
+    if(c && c.ts && (Date.now()-c.ts) < LQ_IA_TTL) return c;
+  }catch(e){}
+  return null;
+}
+
+async function lqAnalizar(forzar){
   const btn=document.getElementById("lq-ia-btn"); if(btn){ btn.disabled=true; btn.textContent="Analizando…"; }
   try{
     const rango = lqRangeWeeks();
+    if(!forzar){
+      const cache = await lqIaCache(rango);
+      if(cache){ lqState.ia = cache; lqRender(); return; }
+    }
     // El cruce vive en la pestaña Reporte Combinado; si aún no se ha visitado, se
     // calcula aquí para no mandar un payload vacío al análisis.
     if(!lqState._combo){
@@ -3017,7 +3042,10 @@ async function lqAnalizar(){
                       const seen=new Set(); let n=0; Object.values(g).filter(x=>x.length>1).forEach(x=>{ const k=x.map(y=>y.n).sort().join("|"); if(!seen.has(k)){ seen.add(k); n++; } }); return n; })() },
     };
     const res = await lqFn2("/.netlify/functions/lq-analyze", payload);
-    lqState.ia = { ...res, ts: Date.now() };
+    lqState.ia = { ...res, ts: Date.now(), rango: payload.rango };
+    // Compartido en el kv: el análisis de un rango se paga UNA vez para todo el equipo,
+    // no una por usuario y por recarga.
+    sSet(LQ_IA_KEY + payload.rango, lqState.ia).catch(()=>{});
     lqRender();
   }catch(e){
     toast("No se pudo analizar: "+(e.message||e));
@@ -3049,7 +3077,7 @@ function lqRender(){
   let html = `<div class="crm-kpis">
     ${kpi(leads.length.toLocaleString(),"Leads en el rango")}
     ${LQ_LEVELS.filter(L=>L.id!=="nc"||tot.nc).map(L=>kpi((tot[L.id]||0).toLocaleString(), L.name)).join("")}
-    ${kpi(oppTot.toLocaleString(),"OPPs · cotizaciones enviadas")}
+    ${kpi(oppTot.toLocaleString(),"OPPs · oportunidades reales de cierre")}
     ${kpi(wonTot.toLocaleString(),"WONs de estos leads")}
   </div>`;
   const SUB = lqState.sub || "datos";
@@ -3310,7 +3338,8 @@ function lqRender(){
 
   document.getElementById("lq-content").innerHTML = out;
   if(SUB==="combinado") setTimeout(lqDrawCharts, 30);
-  const iaBtn=document.getElementById("lq-ia-btn"); if(iaBtn) iaBtn.onclick=lqAnalizar;
+  const iaBtn=document.getElementById("lq-ia-btn");
+  if(iaBtn) iaBtn.onclick=()=>lqAnalizar(!!lqState.ia);   // "Volver a analizar" salta el cache
   document.querySelectorAll("[data-lq-sub]").forEach(el=>el.onclick=()=>{ lqState.sub=el.dataset.lqSub; lqRender(); });
   document.querySelectorAll("[data-lq-level]").forEach(b=>b.onclick=()=>{ lqState.level=b.dataset.lqLevel; lqRender(); });
   document.querySelectorAll("[data-lq-plat]").forEach(b=>b.onclick=()=>{ lqState.plat=b.dataset.lqPlat; lqRender(); });
@@ -3366,6 +3395,7 @@ async function lqSync(){
   if(lqState.syncing) return;
   lqState.syncing = true;
   const fallos = [];                 // qué partes de la sincronización no se pudieron traer
+  let monedas = [];                  // monedas que reporta Windsor (si son varias, no se pueden sumar)
   const btn=document.getElementById("lq-refresh"), prog=document.getElementById("lq-progress"),
         bar=document.getElementById("lq-progress-bar"), lbl=document.getElementById("lq-progress-lbl");
   btn.disabled=true; btn.textContent="Sincronizando…"; prog.style.display="block"; bar.style.width="3%";
@@ -3390,7 +3420,7 @@ async function lqSync(){
     try{
       let oc=null, seen=0;
       do{
-        const res = await lqFn({action:"opps", ...(oc||{})});
+        const res = await lqFn({action:"opps", since: String(Date.parse(b0.startISO)||""), ...(oc||{})});
         for(const o of res.opps){
           if(!o.ct) continue;
           const b = oppsByContact[o.ct] = oppsByContact[o.ct] || {o:0,pr:0,w:0,v:0,ov:0,s:"",sc:0,st:"",ap:{tot:0,sh:0,ns:0}};
@@ -3410,7 +3440,7 @@ async function lqSync(){
     bar.style.width="92%"; lbl.textContent="Consultando inversión y anuncios (Windsor)…";
     let spendRows=[], adRows=[];
     if(boot.windsor){
-      try{ const sp = await lqFn({action:"spend", start:b0.startYMD, end:b1.endYMD}); spendRows = sp.rows||[]; }
+      try{ const sp = await lqFn({action:"spend", start:b0.startYMD, end:b1.endYMD}); spendRows = sp.rows||[]; monedas = sp.monedas||[]; }
       catch(e){ fallos.push("inversión de Windsor (la columna Inversión sale vacía)"); toast("Windsor no respondió: "+(e.message||e)); }
       try{ const ad = await lqFn({action:"ads", start:b0.startYMD, end:b1.endYMD}); adRows = ad.ads||[]; }
       catch(e){ fallos.push("detalle por anuncio de Windsor (no hay conjuntos ni anuncios)"); toast("Detalle por anuncio no disponible: "+(e.message||e)); }
@@ -3423,6 +3453,7 @@ async function lqSync(){
     // cache lo vea en pantalla. Antes el error era solo un toast pasajero que veía
     // quien pulsó Sincronizar, y el resto del equipo leía los ceros como si fueran datos.
     lqState.agg.fallos = fallos;
+    lqState.agg.monedas = monedas;
     lqPersist(lqState.agg);
     lqPopulateWeeks(); lqRender();
     toast("Leads sincronizados ✓ "+rawLeads.length.toLocaleString()+" contactos");
@@ -3919,7 +3950,7 @@ async function slaSync(){
     bar.style.width="84%"; lbl.textContent="Trayendo oportunidades…";
     const oppsArr=[]; let oc=null;
     do{
-      const res = await slaFn({action:"opps", ...(oc||{})});
+      const res = await slaFn({action:"opps", since: String(Date.parse(b0.startISO)||""), ...(oc||{})});
       oppsArr.push(...res.opps); oc = res.cursor;
     }while(oc);
     bar.style.width="94%"; lbl.textContent="Resolviendo asesores…";
