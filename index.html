@@ -705,6 +705,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
         <div class="grp"><label>Qué es esto</label><div class="semana-badge">Lo que la app ya sabe de tu CRM</div></div>
         <div class="spacer"></div>
         <button class="btn btn-olive" id="diag-run">Probar conexiones</button>
+        <button class="btn btn-ghost" id="diag-copy" style="display:none">Copiar resumen</button>
       </div>
       <p class="hint">Esta pantalla responde sola varias preguntas que antes había que ir a preguntarle a alguien: qué permisos trae el token, qué campos existen en GoHighLevel y quién los llena, cómo se llaman las etapas del pipeline, y qué porcentaje de leads llega con atribución. Los porcentajes salen de la última sincronización de Calidad de Leads.</p>
       <div id="diag-content"><div class="empty-rep">Pulsa <b>Probar conexiones</b> para revisar los permisos del token y leer la configuración del CRM.</div></div>
@@ -5780,9 +5781,104 @@ function diagSeccionValores(){
     </table></div>`;
 }
 
+// Resumen en texto plano del diagnóstico, para pegarlo en un chat sin capturas.
+function diagTexto(){
+  const L = [];
+  L.push("DIAGNÓSTICO · Sistema de Reportes Selvadentro");
+  L.push("Generado: " + new Date().toLocaleString("es-MX"));
+  L.push("");
+
+  const pr = diagState.pruebas || [];
+  if(pr.length){
+    L.push("== PERMISOS DEL TOKEN DE GOHIGHLEVEL ==");
+    pr.forEach(p=> L.push(`  ${p.ok ? "OK  " : "FALLA"}  ${p.nombre}${p.ok ? "" : "  → " + (p.nota||"")}`));
+    L.push("");
+  }
+
+  const msgs = pr.find(p=>p.nombre==="Mensajes de conversación");
+  if(msgs && msgs.ok && msgs.datos){
+    L.push("== DE QUÉ DEPENDE EL SLA POR ASESOR ==");
+    L.push("  Los mensajes traen usuario (userId): " + (msgs.datos.traeUserId ? "SÍ" : "NO"));
+    L.push("  Los mensajes traen origen (source):  " + (msgs.datos.traeSource ? "SÍ" : "NO"));
+    if((msgs.datos.tipos||[]).length) L.push("  Tipos vistos: " + msgs.datos.tipos.join(", "));
+    L.push("");
+  }
+
+  const campos = (pr.find(p=>p.nombre==="Campos personalizados")||{}).datos || [];
+  if(campos.length){
+    const llenos = {}; ((lqState.agg && lqState.agg.campos)||[]).forEach(c=>{ llenos[c.id]=c; });
+    L.push(`== CAMPOS DEL CRM (${campos.length}) ==`);
+    campos.forEach(c=>{
+      const st = llenos[c.id];
+      const op = (c.opciones||[]).length ? "  [" + c.opciones.join(" | ") + "]" : "";
+      L.push(`  ${st ? String(st.pct).padStart(3)+"% lleno" : "   sin medir"}  ${c.nombre}${op}`);
+    });
+    L.push("");
+  }
+
+  const pipes = (pr.find(p=>p.nombre==="Pipelines y etapas")||{}).datos || [];
+  if(pipes.length){
+    const stages = {};
+    pipes.forEach(p=>p.etapas.forEach(e=>{ stages[e.id]={p:p.nombre,s:e.nombre,i:e.pos}; }));
+    const th = lqOppThresholds(stages);
+    L.push("== PIPELINES Y ETAPAS ==");
+    pipes.forEach(p=>{
+      L.push("  " + p.nombre + ":");
+      p.etapas.forEach(e=>{
+        const esOpp = lqIsOppStage2({p:p.nombre,s:e.nombre,i:e.pos}, th);
+        const muerta = LQ_RX_MUERTA.test(e.nombre||"");
+        L.push(`    ${e.pos+1}. ${e.nombre}  →  ${muerta ? "terminal, fuera" : esOpp ? "CUENTA COMO OPP" : "antes de OPP"}`);
+      });
+    });
+    L.push("");
+  }
+
+  const a = lqState.agg && lqState.agg.atrib;
+  if(a){
+    L.push("== ATRIBUCIÓN DE LOS ANUNCIOS ==");
+    L.push(`  Leads sincronizados: ${a.total} · de pago (Meta/Google): ${a.pagados}`);
+    L.push(`  Traen campaña:  ${a.camp} (${a.campPct}%)`);
+    L.push(`  Traen anuncio:  ${a.ad} (${a.adPct}%)`);
+    L.push(`  Traen conjunto: ${a.grp} (${a.grpPct}%)`);
+    L.push(`  → ¿Los anuncios pasan UTMs? ${a.campPct>=70 ? "SÍ" : "NO"}`);
+    L.push("");
+  } else {
+    L.push("== ATRIBUCIÓN ==");
+    L.push("  Sin medir: falta pulsar Sincronizar leads en Calidad de Leads.");
+    L.push("");
+  }
+
+  const c = diagState.cuentas;
+  if(c && c.configurado){
+    L.push("== CUENTAS DE ANUNCIOS ==");
+    if(c.meta)   L.push(`  Meta:   ${c.meta.cuenta} · moneda ${c.meta.moneda||"?"} · zona ${c.meta.zona||"?"}`);
+    if(c.google) L.push(`  Google: ${c.google.cuenta} · moneda ${c.google.moneda||"?"} · zona ${c.google.zona||"?"}`);
+    L.push("");
+  }
+
+  const hrs = slaState.agg && slaState.agg.hrs;
+  if(hrs && hrs.some(n=>n)){
+    const tot = hrs.reduce((x,y)=>x+y,0);
+    const fuera = Math.round(hrs.reduce((x,n,h)=>x+((h<8||h>20)?n:0),0)/tot*100);
+    L.push("== HORARIO REAL ==");
+    L.push(`  ${tot} acciones manuales medidas · ${fuera}% fuera de 8:00–20:00`);
+    L.push("");
+  }
+  return L.join("\n");
+}
+
 function renderDiag(){
   const host = document.getElementById("diag-content"); if(!host) return;
   const dr = document.getElementById("diag-run"); if(dr) dr.onclick = diagRun;
+  const dc = document.getElementById("diag-copy");
+  if(dc){
+    dc.style.display = diagState.pruebas ? "" : "none";
+    dc.onclick = async ()=>{
+      const t = diagTexto();
+      try{ await navigator.clipboard.writeText(t); toast("Resumen copiado ✓ pégalo en el chat"); }
+      catch(_){ prompt("Copia este resumen:", t); }
+    };
+  }
   if(!isAdmin()){ host.innerHTML = `<div class="empty-rep">Solo administradores.</div>`; return; }
   if(!diagState.pruebas){
     host.innerHTML = `<div class="empty-rep">Pulsa <b>Probar conexiones</b> para revisar los permisos del token y leer la configuración del CRM.</div>`;
