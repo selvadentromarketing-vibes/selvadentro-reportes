@@ -300,12 +300,16 @@ async function diag() {
 
   // Un contacto real para poder probar mensajes y citas (dependen de un id)
   let contactoId = "";
+  let candidatos = [];
   const pContactos = await probar("Contactos", async () => {
     const d = await ghl("/contacts/search", {
       method: "POST",
-      body: { locationId: LOCATION_ID, pageLimit: 1, sort: [{ field: "dateAdded", direction: "desc" }] },
+      body: { locationId: LOCATION_ID, pageLimit: 20, sort: [{ field: "dateAdded", direction: "desc" }] },
     });
     const c = (d.contacts || [])[0];
+    // Se guardan varios: el más reciente puede no tener ninguna conversación con
+    // mensajes de verdad, y entonces la prueba de mensajes no mide nada.
+    candidatos = (d.contacts || []).map((x) => x && x.id).filter(Boolean);
     if (c && c.id) contactoId = c.id;
     // Qué claves trae de verdad un contacto: cierra la duda de si llegan assignedTo,
     // phone y los campos de nombre, que el esquema documentado no lista.
@@ -352,23 +356,40 @@ async function diag() {
   if (contactoId) {
     let convId = "";
     pConv = await probar("Conversaciones", async () => {
-      const d = await ghl(`/conversations/search?locationId=${LOCATION_ID}&contactId=${encodeURIComponent(contactoId)}&limit=1`);
-      const cv = (d.conversations || [])[0];
-      if (cv && cv.id) convId = cv.id;
-      return { conversaciones: (d.conversations || []).length };
+      // Se recorren varios contactos hasta encontrar uno con conversación: así la
+      // prueba de mensajes mide algo real y no un contacto recién creado y sin tocar.
+      let vistos = 0, conConv = 0;
+      for (const id of candidatos.slice(0, 8)) {
+        const d = await ghl(`/conversations/search?locationId=${LOCATION_ID}&contactId=${encodeURIComponent(id)}&limit=5`);
+        const cvs = d.conversations || [];
+        vistos++;
+        if (cvs.length) {
+          conConv++;
+          if (!convId) { convId = cvs[0].id; contactoId = id; }
+        }
+      }
+      return { contactosRevisados: vistos, conConversacion: conConv };
     });
     if (convId) {
       pMsgs = await probar("Mensajes de conversación", async () => {
-        const d = await ghl(`/conversations/${encodeURIComponent(convId)}/messages?limit=5`);
+        const d = await ghl(`/conversations/${encodeURIComponent(convId)}/messages?limit=50`);
         const arr = Array.isArray(d.messages) ? d.messages : (d.messages && d.messages.messages) || [];
-        const m = arr[0];
+        // Los TYPE_ACTIVITY_* son registros de actividad del CRM, no mensajes de nadie:
+        // nunca traen userId. Si se miden ellos, el diagnóstico concluye "los mensajes
+        // no traen usuario" cuando en realidad no se miró ningún mensaje.
+        const reales = arr.filter((x) => x && !/^TYPE_ACTIVITY/i.test(String(x.messageType || "")));
+        const sal = reales.filter((x) => x && x.direction === "outbound");
+        const base = sal.length ? sal : reales;
         return {
           mensajes: arr.length,
-          // De estas dos claves depende TODO el SLA por asesor
-          traeUserId: arr.some((x) => x && x.userId),
-          traeSource: arr.some((x) => x && x.source),
+          reales: reales.length,
+          salientes: sal.length,
+          // De estas dos claves depende TODO el SLA por asesor. Solo tienen sentido
+          // medidas sobre mensajes SALIENTES reales.
+          traeUserId: base.length ? base.some((x) => x.userId) : null,
+          traeSource: base.length ? base.some((x) => x.source) : null,
           tipos: [...new Set(arr.map((x) => x && x.messageType).filter(Boolean))],
-          claves: m ? Object.keys(m).sort() : [],
+          claves: base[0] ? Object.keys(base[0]).sort() : [],
         };
       });
     }
