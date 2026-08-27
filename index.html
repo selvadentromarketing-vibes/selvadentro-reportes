@@ -845,6 +845,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
         <div class="grp"><label>Qué es esto</label><div class="semana-badge">Lo que la app ya sabe de tu CRM</div></div>
         <div class="spacer"></div>
         <button class="btn btn-olive" id="diag-run">Probar conexiones</button>
+        <button class="btn btn-ghost" id="diag-copy" style="display:none">Copiar resumen</button>
       </div>
       <p class="hint">Esta pantalla responde sola varias preguntas que antes había que ir a preguntarle a alguien: qué permisos trae el token, qué campos existen en GoHighLevel y quién los llena, cómo se llaman las etapas del pipeline, y qué porcentaje de leads llega con atribución. Los porcentajes salen de la última sincronización de Calidad de Leads.</p>
       <div id="diag-content"><div class="empty-rep">Pulsa <b>Probar conexiones</b> para revisar los permisos del token y leer la configuración del CRM.</div></div>
@@ -2678,7 +2679,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v7";   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
+const LQ_AGG_KEY = "lq:agg:v8";   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 // (LQ_TZ y LQ_TZ_MS ahora viven junto al resto de helpers de fecha, arriba)
@@ -2720,12 +2721,46 @@ async function lqFn(body){
 }
 
 // Campo de calificación y campos de enriquecimiento, autodetectados por nombre.
-function lqDetectFields(fields){
-  const find = (re)=>{ const f=(fields||[]).find(f=>re.test(f.name||"")); return f ? {id:f.id, name:f.name} : null; };
+// El CRM de Selvadentro tiene 110 campos y varios duplicados para lo mismo: hay tres
+// de presupuesto ("¿Cual es el presupuesto del cliente?" 0% lleno, "Presupuesto /
+// Budget" 7%, "Budget Range" 41%) y dos de horizonte ("Horizonte de inversión" 8%,
+// "Investment Timeline" 47%). Quedarse con el PRIMERO que empata elegía justo los
+// vacíos. Con las estadísticas de llenado se elige el que la gente realmente usa.
+// Campos personalizados que llevan la atribución. En este CRM son la fuente buena:
+// el objeto attributionSource de GoHighLevel llega casi siempre vacío.
+function lqDetectAtrib(fields){
+  const exact = (name)=>{ const f=(fields||[]).find(f=>String(f.name||"").trim().toLowerCase()===name); return f?{id:f.id}:null; };
+  const rx = (re)=>{ const f=(fields||[]).find(f=>re.test(String(f.name||"").trim())); return f?{id:f.id}:null; };
+  return {
+    camp:   exact("utm_campaign"),
+    campAlt: exact("campaign"),
+    ad:     exact("utm_content"),
+    grp:    exact("utm_term"),
+    src:    exact("utm_source"),
+    srcAlt: exact("session source"),
+    med:    exact("utm_medium") || exact("medium"),
+    medAlt: exact("medium"),
+    fbclid: rx(/^fbclid$/i),
+  };
+}
+
+function lqDetectFields(fields, llenos){
+  const pct = {}; (llenos||[]).forEach(c=>{ pct[c.id] = c.pct||0; });
+  const find = (re)=>{
+    const cand = (fields||[]).filter(f=>re.test(f.name||""));
+    if(!cand.length) return null;
+    // El más poblado gana; sin estadísticas todavía, el primero.
+    cand.sort((a,b)=>(pct[b.id]||0)-(pct[a.id]||0));
+    const f = cand[0];
+    return { id:f.id, name:f.name, pct: pct[f.id] };
+  };
   return {
     calif: find(/calificaci[oó]n.*lead|lead.*calificaci[oó]n/i) || find(/calificaci[oó]n/i),
     pres:  find(/presupuesto|budget/i),
-    hor:   find(/horizonte|plazo|timeline/i),
+    hor:   find(/horizonte|timeline|plazo/i),
+    desc:  find(/raz[oó]n de descarte|motivo.*descalific|descalificaci[oó]n/i),
+    segSem: find(/semanas con seguimiento|seguimiento[_ ]semanal/i),
+    segMes: find(/meses con seguimiento|seguimiento[_ ]mensual/i),
   };
 }
 
@@ -2758,10 +2793,12 @@ function lqParseMoney(s){
 function lqParseMonths(s){
   const t = String(s||"").toLowerCase();
   if(!t) return null;
-  if(/inmediat|ya|ahora|urgent/.test(t)) return 0;
+  // "Immediately" es una opción real del campo Investment Timeline (47% lleno)
+  if(/inmediat|immediat|\bya\b|ahora|urgent|asap/.test(t)) return 0;
   const yr = t.match(/(\d+)\s*(años?|year)/);
   if(yr) return Number(yr[1])*12;
-  const mo = t.match(/(\d+)\s*(meses?|month)/);
+  // "12+ meses": el "+" entre el número y la unidad rompía el match y devolvía null
+  const mo = t.match(/(\d+)\s*\+?\s*(meses?|month)/);
   if(mo) return Number(mo[1]);
   const rango = t.match(/(\d+)\s*[-–a]\s*(\d+)/);
   if(rango) return Number(rango[2]);          // extremo alto del rango
@@ -2840,15 +2877,23 @@ function lqAutoQualify(l){
   return {lv:"cql", why};
 }
 
+// Las opciones REALES del campo "Calificación del lead" en el CRM de Selvadentro son:
+// Raw Lead · New Lead · CQL · MQL · SQL · SQL Selvadentro · Opportunity · Client ·
+// Disqualified. Antes solo se reconocían cuatro: "Disqualified", "Raw Lead",
+// "New Lead", "Opportunity" y "Client" caían todas en "Sin calificar", así que un
+// lead DESCALIFICADO se contaba como si nadie lo hubiera calificado.
 function lqClassify(cfVal){
-  const raw = String(cfVal || "").toLowerCase();
+  const raw = String(cfVal || "").toLowerCase().trim();
   if(!raw) return "nc";
   if(raw.includes("selvadentro")) return "sqls";
-  if(raw.includes("descal") || raw.includes("no calif")) return "desc";
+  if(/descal|disqualif|no calif/.test(raw)) return "desc";
+  // Opportunity y Client van por encima de SQL: ya pasaron de largo el embudo
+  if(/\bclient\b|cliente\b|\bwon\b|ganad/.test(raw)) return "sqls";
+  if(/opportunity|oportunidad/.test(raw)) return "sql";
   if(raw.includes("sql")) return "sql";
   if(raw.includes("mql")) return "mql";
   if(raw.includes("cql")) return "cql";
-  if(raw.includes("nuevo")) return "nuevo";
+  if(/nuevo|new lead|raw lead|\braw\b/.test(raw)) return "nuevo";
   return "nc";
 }
 
@@ -2903,10 +2948,26 @@ function lqSourceCamp(lead){
 const LQ_RX_OPP = /\bopp\b|carta\s*oferta|apartad|contrat|negocia|cierre|ganad|won|deposit/i;
 // Etapas que quedan explícitamente FUERA aunque estén cerca de la cotización.
 const LQ_RX_NO_OPP = /cotiza|propuesta|quote|proposal/i;
-// Etapas terminales negativas: aunque estén al final del tablero (y por tanto
-// "después" del umbral), un lead perdido o descalificado no es una oportunidad
-// de cierre. Se excluyen por nombre, no por posición.
-const LQ_RX_MUERTA = /perdid|lost|descalific|no calific|abandon|nurtur|sin inter[eé]s|basura|spam|duplicad/i;
+// Etapas que NO son una oportunidad de cierre, aunque estén después del umbral en el
+// tablero. El diagnóstico del 2026-08-26 destapó el problema: el pipeline "Seguimiento
+// de ventas" tiene después de "Seguimiento de OPP" varias cubetas que no son
+// oportunidades — "Largo plazo", "Rescate", "Corretaje" y hasta "Redes sociales" en la
+// posición 26 — y todas se contaban como OPP solo por estar al final. Se excluyen por
+// nombre, no por posición.
+const LQ_RX_MUERTA = new RegExp([
+  // terminales negativas
+  "perdid","lost","descalific","disqualif","no calific","abandon","sin inter[eé]s","basura","spam","duplicad","no show",
+  // cubetas de nutrición o espera: siguen vivas pero no son cierre
+  "nurtur","largo plazo","long term","rescate","reactiva",
+  // cubetas de enrutamiento, no etapas del embudo
+  "corretaje","redes sociales","sin respuesta","reagendar",
+].join("|"), "i");
+// Pipelines que NO son embudo de venta sino proceso posterior al cierre. En el
+// diagnóstico del 2026-08-26 el pipeline "Legal" contaba sus 8 etapas como OPP —
+// desde "Pago de apartado" hasta "Escrituración" — pero ahí ya hay venta hecha: son
+// WON en trámite, no oportunidades por cerrar, y se sumaban dos veces.
+const LQ_RX_PIPE_NO_FUNNEL = /legal|jur[ií]dic|escritur|postventa|post-?venta|cobranza|administra/i;
+
 function lqOppThresholds(stages){
   const byPipe = {};
   for(const [id, st] of Object.entries(stages||{})){
@@ -2930,11 +2991,28 @@ function lqOppStageNames(stages, th){
 }
 function lqIsOppStage2(st, th){
   if(!st) return false;
+  if(LQ_RX_PIPE_NO_FUNNEL.test(st.p||"")) return false;   // trámite post-venta, no embudo
   const n = st.s || "";
-  if(LQ_RX_MUERTA.test(n)) return false;
   const t = th[st.p||""];
+  // Antes del umbral nunca es OPP, sin importar el nombre. Las exclusiones por nombre
+  // solo aplican de ahí en adelante: así "Zoom no show / reagendar", que está mucho
+  // antes del umbral, no se etiqueta como terminal cuando en realidad sigue vivo.
+  if(t != null && (st.i ?? 0) < t) return false;
+  if(LQ_RX_MUERTA.test(n)) return false;
   if(t == null) return LQ_RX_OPP.test(n) && !LQ_RX_NO_OPP.test(n);
-  return (st.i ?? 0) >= t;
+  return true;
+}
+// Cómo etiquetar una etapa en el Diagnóstico: distingue "todavía no llega" de
+// "está después pero no cuenta" y de "este pipeline no es embudo".
+function lqEtiquetaEtapa(st, th){
+  if(LQ_RX_PIPE_NO_FUNNEL.test(st.p||"")) return { txt:"proceso post-venta", cls:"gris" };
+  const t = th[st.p||""];
+  // Pipeline sin ninguna etapa de OPP (p.ej. reclutamiento de brokers): decirlo, en vez
+  // de etiquetar sus etapas como si no contaran por su nombre.
+  if(t == null && !lqIsOppStage2(st, th)) return { txt:"pipeline sin etapa de OPP", cls:"sub" };
+  if(t != null && (st.i ?? 0) < t) return { txt:"antes de OPP", cls:"sub" };
+  if(LQ_RX_MUERTA.test(st.s||"")) return { txt:"no cuenta", cls:"gris" };
+  return lqIsOppStage2(st, th) ? { txt:"CUENTA COMO OPP", cls:"opp" } : { txt:"antes de OPP", cls:"sub" };
 }
 function lqIsOppStage(stageId, stages, th){
   return lqIsOppStage2((stages||{})[stageId], th);
@@ -2987,7 +3065,23 @@ function lqCoberturaAtrib(rawLeads){
 }
 
 function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
-  const F = lqDetectFields(boot.fields);
+  const llenos = lqCamposLlenos(boot, rawLeads);
+  const F = lqDetectFields(boot.fields, llenos);
+  const A = lqDetectAtrib(boot.fields);
+  // La atribución REAL de Selvadentro no viaja en attributionSource (13% de cobertura)
+  // sino en campos personalizados: utm_campaign 38%, utm_content 38%, Campaign 43%,
+  // Medium 56%, Session source 56%. Se completa lo que falta desde ahí.
+  rawLeads.forEach(l=>{
+    l.attr = l.attr || {};
+    const cf = (f)=> f && l.cf ? String(l.cf[f.id]||"").trim() : "";
+    if(!l.attr.camp) l.attr.camp = cf(A.camp) || cf(A.campAlt);
+    if(!l.attr.ad)   l.attr.ad   = cf(A.ad);
+    if(!l.attr.grp)  l.attr.grp  = cf(A.grp);
+    if(!l.attr.src)  l.attr.src  = cf(A.src) || cf(A.srcAlt);
+    if(!l.attr.med)  l.attr.med  = cf(A.med) || cf(A.medAlt);
+    // Un FBCLID sin nada más ya dice que el lead vino de Meta
+    if(!l.attr.src && cf(A.fbclid)) l.attr.src = "facebook";
+  });
   const O = oppsByContact || {};
   const leads = rawLeads.map(l=>{
     const tagsLower = (l.tags||[]).map(x=>String(x).toLowerCase());
@@ -6342,11 +6436,10 @@ function diagSeccionPipelines(){
   const th = lqOppThresholds(stages);
   const bloques = pipes.map(p=>{
     const filas = p.etapas.map(e=>{
-      const esOpp = lqIsOppStage2({p:p.nombre, s:e.nombre, i:e.pos}, th);
-      const muerta = LQ_RX_MUERTA.test(e.nombre||"");
-      const et = muerta ? `<span class="lq-badge" style="background:var(--gris-suave)">Terminal · fuera</span>`
-               : esOpp ? `<span class="lq-badge" style="background:var(--cobre-tx)">Cuenta como OPP</span>`
-               : `<span class="lq-sub">antes de OPP</span>`;
+      const lab = lqEtiquetaEtapa({p:p.nombre, s:e.nombre, i:e.pos}, th);
+      const et = lab.cls==="opp" ? `<span class="lq-badge" style="background:var(--cobre-tx)">Cuenta como OPP</span>`
+               : lab.cls==="gris" ? `<span class="lq-badge" style="background:var(--gris-suave)">${escAttr(lab.txt)}</span>`
+               : `<span class="lq-sub">${escAttr(lab.txt)}</span>`;
       return `<tr><td style="width:40px">${e.pos+1}</td><td class="lft celda-fuerte">${escAttr(e.nombre)}</td><td class="lft">${et}</td></tr>`;
     }).join("");
     return `<div style="margin-bottom:14px"><div style="font-weight:600;color:var(--verde-prof);margin-bottom:5px">${escAttr(p.nombre)}</div>
@@ -6364,8 +6457,10 @@ function diagSeccionAtribucion(){
   const fila = (lbl,n,pct,nota)=>`<tr><td class="lft celda-fuerte">${escAttr(lbl)}</td>
     <td>${diagBar(pct)} <b>${pct}%</b></td><td>${n} de ${a.pagados}</td><td class="lft lq-sub">${escAttr(nota)}</td></tr>`;
   const veredicto = a.campPct >= 70
-    ? `<div class="lq-meth" style="border-color:var(--olivo)">✓ Los anuncios <b>sí</b> están pasando la campaña. El desglose por campaña es confiable.</div>`
-    : `<div class="lq-meth" style="border-color:var(--rojo);background:#F2CFC9">⚠ Solo <b>${a.campPct}%</b> de los leads pagados trae campaña. <b>Esta es la respuesta a "¿los anuncios están pasando UTMs?": no.</b> Hasta que se configuren los parámetros UTM en Meta Ads y Google Ads, el desglose por campaña, conjunto y anuncio va a seguir saliendo casi vacío.</div>`;
+    ? `<div class="lq-meth" style="border-color:var(--olivo)">✓ Los anuncios <b>sí</b> están pasando la campaña (${a.campPct}%). El desglose por campaña es confiable.</div>`
+    : a.campPct >= 25
+    ? `<div class="lq-meth" style="border-color:var(--cobre)">◑ Los anuncios pasan la campaña <b>a medias</b>: ${a.campPct}% de los leads pagados la trae. El desglose por campaña sirve para comparar, pero <b>${100-a.campPct}% de los leads sigue cayendo en "(sin campaña atribuida)"</b>, así que los totales por campaña están por debajo de la realidad. Vale la pena revisar qué anuncios o formularios no están pasando los parámetros.</div>`
+    : `<div class="lq-meth" style="border-color:var(--rojo);background:#F2CFC9">⚠ Solo <b>${a.campPct}%</b> de los leads pagados trae campaña: los anuncios <b>no</b> están pasando los parámetros. El desglose por campaña, conjunto y anuncio va a salir casi vacío hasta que se configuren en Meta Ads y Google Ads.</div>`;
   return `<h3 class="diag-h">Atribución de los anuncios</h3>
     <p class="hint pegada">De los ${a.total} leads sincronizados, ${a.pagados} vienen de Meta o Google. Esto mide cuántos traen de dónde salieron.</p>
     ${veredicto}
@@ -6404,8 +6499,12 @@ function diagSeccionMensajes(){
   return `<h3 class="diag-h">De qué depende el SLA por asesor</h3>
     <p class="hint pegada">Para separar lo que escribió una persona de lo que mandó una automatización, la app necesita dos claves en cada mensaje. Esto comprueba si llegan.</p>
     <div class="lq-meth">
-      ${av(d.traeUserId, "Los mensajes traen usuario: se puede atribuir el trabajo a cada asesor.", "Los mensajes NO traen usuario: sin esto todo el contacto manual se cuenta como automatización y el SLA por asesor mide ruido.")}
-      <br>${av(d.traeSource, "Los mensajes traen origen: se pueden excluir workflows y campañas.", "Los mensajes NO traen origen: no se puede distinguir un workflow de un mensaje escrito a mano.")}
+      ${d.traeUserId===null
+        ? `<span style="color:var(--cobre)">⚠ No se pudo medir: en la muestra no hubo ningún mensaje real (solo registros de actividad del CRM). Vuelve a probar cuando haya conversaciones con mensajes.</span>`
+        : av(d.traeUserId, "Los mensajes traen usuario: se puede atribuir el trabajo a cada asesor.", "Los mensajes NO traen usuario: sin esto todo el contacto manual se cuenta como automatización y el SLA por asesor mide ruido.")}
+      <br>${d.traeSource===null ? `<span class="lq-sub">Origen: sin medir por lo mismo.</span>`
+        : av(d.traeSource, "Los mensajes traen origen: se pueden excluir workflows y campañas.", "Los mensajes NO traen origen: no se puede distinguir un workflow de un mensaje escrito a mano.")}
+      <br><span class="lq-sub">Muestra: ${d.mensajes||0} registros · ${d.reales||0} mensajes reales · ${d.salientes||0} salientes.</span>
       ${(d.tipos||[]).length ? `<br><span class="lq-sub">Tipos vistos en la muestra: ${escAttr(d.tipos.join(", "))}</span>` : ""}
     </div>`;
 }
@@ -6519,9 +6618,104 @@ function diagSeccionGlosario(){
   </div>`;
 }
 
+// Resumen en texto plano del diagnóstico, para pegarlo en un chat sin capturas.
+function diagTexto(){
+  const L = [];
+  L.push("DIAGNÓSTICO · Sistema de Reportes Selvadentro");
+  L.push("Generado: " + new Date().toLocaleString("es-MX"));
+  L.push("");
+
+  const pr = diagState.pruebas || [];
+  if(pr.length){
+    L.push("== PERMISOS DEL TOKEN DE GOHIGHLEVEL ==");
+    pr.forEach(p=> L.push(`  ${p.ok ? "OK  " : "FALLA"}  ${p.nombre}${p.ok ? "" : "  → " + (p.nota||"")}`));
+    L.push("");
+  }
+
+  const msgs = pr.find(p=>p.nombre==="Mensajes de conversación");
+  if(msgs && msgs.ok && msgs.datos){
+    L.push("== DE QUÉ DEPENDE EL SLA POR ASESOR ==");
+    const tri = (v)=> v===null ? "SIN MEDIR (no hubo mensajes reales en la muestra)" : (v ? "SÍ" : "NO");
+    L.push("  Los mensajes traen usuario (userId): " + tri(msgs.datos.traeUserId));
+    L.push("  Los mensajes traen origen (source):  " + tri(msgs.datos.traeSource));
+    L.push(`  Muestra: ${msgs.datos.mensajes||0} registros, ${msgs.datos.reales||0} mensajes reales, ${msgs.datos.salientes||0} salientes`);
+    if((msgs.datos.tipos||[]).length) L.push("  Tipos vistos: " + msgs.datos.tipos.join(", "));
+    L.push("");
+  }
+
+  const campos = (pr.find(p=>p.nombre==="Campos personalizados")||{}).datos || [];
+  if(campos.length){
+    const llenos = {}; ((lqState.agg && lqState.agg.campos)||[]).forEach(c=>{ llenos[c.id]=c; });
+    L.push(`== CAMPOS DEL CRM (${campos.length}) ==`);
+    campos.forEach(c=>{
+      const st = llenos[c.id];
+      const op = (c.opciones||[]).length ? "  [" + c.opciones.join(" | ") + "]" : "";
+      L.push(`  ${st ? String(st.pct).padStart(3)+"% lleno" : "   sin medir"}  ${c.nombre}${op}`);
+    });
+    L.push("");
+  }
+
+  const pipes = (pr.find(p=>p.nombre==="Pipelines y etapas")||{}).datos || [];
+  if(pipes.length){
+    const stages = {};
+    pipes.forEach(p=>p.etapas.forEach(e=>{ stages[e.id]={p:p.nombre,s:e.nombre,i:e.pos}; }));
+    const th = lqOppThresholds(stages);
+    L.push("== PIPELINES Y ETAPAS ==");
+    pipes.forEach(p=>{
+      L.push("  " + p.nombre + ":");
+      p.etapas.forEach(e=>{
+        L.push(`    ${e.pos+1}. ${e.nombre}  →  ${lqEtiquetaEtapa({p:p.nombre,s:e.nombre,i:e.pos}, th).txt}`);
+      });
+    });
+    L.push("");
+  }
+
+  const a = lqState.agg && lqState.agg.atrib;
+  if(a){
+    L.push("== ATRIBUCIÓN DE LOS ANUNCIOS ==");
+    L.push(`  Leads sincronizados: ${a.total} · de pago (Meta/Google): ${a.pagados}`);
+    L.push(`  Traen campaña:  ${a.camp} (${a.campPct}%)`);
+    L.push(`  Traen anuncio:  ${a.ad} (${a.adPct}%)`);
+    L.push(`  Traen conjunto: ${a.grp} (${a.grpPct}%)`);
+    L.push(`  → ¿Los anuncios pasan UTMs? ${a.campPct>=70 ? "SÍ" : a.campPct>=25 ? "A MEDIAS ("+a.campPct+"%)" : "NO"}`);
+    L.push("");
+  } else {
+    L.push("== ATRIBUCIÓN ==");
+    L.push("  Sin medir: falta pulsar Sincronizar leads en Calidad de Leads.");
+    L.push("");
+  }
+
+  const c = diagState.cuentas;
+  if(c && c.configurado){
+    L.push("== CUENTAS DE ANUNCIOS ==");
+    if(c.meta)   L.push(`  Meta:   ${c.meta.cuenta} · moneda ${c.meta.moneda||"?"} · zona ${c.meta.zona||"?"}`);
+    if(c.google) L.push(`  Google: ${c.google.cuenta} · moneda ${c.google.moneda||"?"} · zona ${c.google.zona||"?"}`);
+    L.push("");
+  }
+
+  const hrs = slaState.agg && slaState.agg.hrs;
+  if(hrs && hrs.some(n=>n)){
+    const tot = hrs.reduce((x,y)=>x+y,0);
+    const fuera = Math.round(hrs.reduce((x,n,h)=>x+((h<8||h>20)?n:0),0)/tot*100);
+    L.push("== HORARIO REAL ==");
+    L.push(`  ${tot} acciones manuales medidas · ${fuera}% fuera de 8:00–20:00`);
+    L.push("");
+  }
+  return L.join("\n");
+}
+
 function renderDiag(){
   const host = document.getElementById("diag-content"); if(!host) return;
   const dr = document.getElementById("diag-run"); if(dr) dr.onclick = diagRun;
+  const dc = document.getElementById("diag-copy");
+  if(dc){
+    dc.style.display = diagState.pruebas ? "" : "none";
+    dc.onclick = async ()=>{
+      const t = diagTexto();
+      try{ await navigator.clipboard.writeText(t); toast("Resumen copiado ✓ pégalo en el chat"); }
+      catch(_){ mostrarTexto("Copia este resumen y pégalo en el chat:", t, { titulo:"Resumen del diagnóstico" }); }
+    };
+  }
   if(!isAdmin()){ host.innerHTML = `<div class="empty-rep">Solo administradores.</div>`; return; }
   // El glosario no depende de las pruebas de conexión: se muestra siempre.
   if(!diagState.pruebas){

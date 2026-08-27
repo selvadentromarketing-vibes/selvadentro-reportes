@@ -92,6 +92,10 @@ const AUTO_SOURCES = new Set(["workflow", "campaign", "bulk_actions", "automatio
 const CANALES_MANUALES = new Set(["call", "whatsapp", "sms", "email"]);
 
 function isManual(m) {
+  // El diagnóstico del 2026-08-26 encontró TYPE_CAMPAIGN_CALL en el feed real: es una
+  // llamada disparada por una campaña, no un asesor marcando. Cualquier TYPE_CAMPAIGN_*
+  // queda fuera por tipo, sin depender de que `source` venga bien poblado.
+  if (/^TYPE_CAMPAIGN/i.test(String(m.messageType || m.type || ""))) return false;
   const src = String(m.source || "").toLowerCase();
   if (AUTO_SOURCES.has(src)) return false;
   if (!CANALES_MANUALES.has(chanOf(m))) return false;   // formularios, webchat, etc. no son acción del asesor
