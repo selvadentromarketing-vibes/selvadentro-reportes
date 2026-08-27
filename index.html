@@ -2776,6 +2776,7 @@ function lqDetectFields(fields, llenos){
   };
   return {
     calif: find(/calificaci[oó]n.*lead|lead.*calificaci[oó]n/i) || find(/calificaci[oó]n/i),
+    fuente: find(/^fuente del lead$/i) || find(/fuente del lead/i),
     pres:  find(/presupuesto|budget/i),
     hor:   find(/horizonte|timeline|plazo/i),
     desc:  find(/raz[oó]n de descarte|motivo.*descalific|descalificaci[oó]n/i),
@@ -3084,6 +3085,41 @@ function lqCoberturaAtrib(rawLeads){
            grp:  con("grp"),  grpPct:  Math.round(con("grp")/d*100) };
 }
 
+/* --- El canal de negocio de un lead, leído del CRM -------------------------------------
+   Los siete canales de Ventas (Brokers, Paid Orgánico, Seminarios…) se capturaban a mano
+   porque la app no sabía deducirlos: lqSourceCamp solo distingue Meta / Google / Webinar /
+   orgánico, que es la FUENTE del anuncio, no el canal del negocio. Pero el CRM sí lo tiene:
+   el campo "Fuente del lead" usa casi el mismo vocabulario que los canales de la app.
+   Medido sobre 2,849 contactos de 90 días (agosto 2026): el campo viene lleno en el 47% y
+   sus valores se reparten Meta Ads 1049 · RRSS Orgánicas 98 · Google Ads 92 · Seminarios de
+   inversión 48 · Prospección propia 27 · Otro 10 · Llamada entrante 4 · Importación 4 ·
+   Website 3 · Programa de referidos 1 · Broker 1.
+   Los tags son el segundo intento cuando el campo viene vacío. Devuelve null cuando no hay
+   señal: inventar un canal es peor que no saberlo, porque el número acabaría en Dirección. */
+const LQ_FUENTE_CANAL = [
+  [/^meta ads$|^google ads$|^rrss org|^website$/i, "paid_organico"],
+  [/seminario/i,                                    "seminarios"],
+  [/prospecci[oó]n/i,                               "pd_leads"],
+  [/referido/i,                                     "referidos"],
+  [/^broker/i,                                      "brokers"],
+];
+const LQ_TAG_CANAL = [
+  [/^broker(-|$)|^zoom-con-broker$/,     "brokers"],
+  [/^seminario-|^webinar[- ]|webinar$/,  "seminarios"],
+  [/^referidos?$|^referral-lead$/,       "referidos"],
+  [/^prospeccion-directa$/,              "pd_leads"],
+  [/^vip$|embajador/,                    "rp_vip"],
+];
+function lqCanalDeNegocio(lead, F){
+  const v = F && F.fuente && lead.cf ? String(lead.cf[F.fuente.id] || "").trim() : "";
+  if(v){ const r = LQ_FUENTE_CANAL.find(([re])=>re.test(v)); if(r && CHANNELS[r[1]]) return { ch:r[1], via:"campo" }; }
+  const tags = (lead.tags||[]).map(x=>String(x).toLowerCase());
+  for(const [re, ch] of LQ_TAG_CANAL){
+    if(tags.some(t=>re.test(t)) && CHANNELS[ch]) return { ch, via:"tag" };
+  }
+  return { ch:null, via:v ? "campo sin canal" : "sin señal" };
+}
+
 function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
   const llenos = lqCamposLlenos(boot, rawLeads);
   const F = lqDetectFields(boot.fields, llenos);
@@ -3109,6 +3145,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
     const sc = lqSourceCamp(l);
     const op = O[l.id] || null;
     const stg = op && op.s ? (boot.stages||{})[op.s] : null;
+    const cn = lqCanalDeNegocio(l, F);
     return {
       // Etapa REAL del pipeline de GoHighLevel (si el lead tiene oportunidad);
       // pst = etiqueta de tags, que solo se usa cuando no hay oportunidad.
@@ -3122,11 +3159,12 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
       tags:(l.tags||[]).join(", ").slice(0,140),
       pres: F.pres ? (l.cf[F.pres.id]||"") : "",
       hor:  F.hor  ? (l.cf[F.hor.id] ||"") : "",
+      ch: cn.ch, chVia: cn.via,          // canal de negocio deducido del CRM (o null)
     };
   }).filter(l=>l.wk);
   // Calificación automática por reglas (independiente del campo que llena el equipo)
   leads.forEach(l=>{ const a = lqAutoQualify(l); l.alv = a.lv; l.awhy = a.why.join(" · ").slice(0,180); });
-  return { ts:Date.now(), users:boot.users||{}, califField:F.calif, windsor:!!boot.windsor,
+  return { ts:Date.now(), users:boot.users||{}, califField:F.calif, fuenteField:F.fuente, windsor:!!boot.windsor,
            oppStages: lqOppStageNames(boot.stages, lqOppThresholds(boot.stages)),
            stages: boot.stages||{},
            campos: lqCamposLlenos(boot, rawLeads),
@@ -6699,16 +6737,90 @@ function renderDiag(){
     };
   }
   if(!isAdmin()){ host.innerHTML = `<div class="empty-rep">Solo administradores.</div>`; return; }
-  // El glosario no depende de las pruebas de conexión: se muestra siempre.
+  // Ni el glosario ni la comparación por canal dependen de las pruebas de conexión: el
+  // primero no consulta nada y la segunda se alimenta de la sincronización de Calidad de
+  // Leads, que es otra. Esconderlas detrás del botón las volvía invisibles.
   if(!diagState.pruebas){
-    host.innerHTML = diagSeccionGlosario()
+    host.innerHTML = diagSeccionGlosario() + diagSeccionCanales()
       + `<div class="empty-rep">Pulsa <b>Probar conexiones</b> para revisar los permisos del token y leer la configuración del CRM.</div>`;
     return;
   }
-  host.innerHTML = diagSeccionGlosario()
+  host.innerHTML = diagSeccionGlosario() + diagSeccionCanales()
                  + diagSeccionPermisos() + diagSeccionMensajes() + diagSeccionCampos()
                  + diagSeccionPipelines() + diagSeccionAtribucion() + diagSeccionCuentas()
                  + diagSeccionHorario() + diagSeccionValores();
+}
+
+/* --- Capturado a mano contra lo que el CRM sabe solo ----------------------------------
+   La app nació capturando los siete canales a mano y hoy casi todo está automatizado, así
+   que la pregunta obvia es cuáles de esas pantallas de captura sobran. No se puede contestar
+   leyendo el código: depende de si el CRM trae la señal del canal y de si esa señal coincide
+   con lo que el equipo escribe. Esta tabla pone las dos cifras lado a lado, por canal y
+   sobre el mismo rango de semanas, para poder retirar la captura de un canal cuando se vea
+   que sobra —y solo entonces. Un canal que aquí sale en cero desde el CRM NO está
+   automatizado, por mucho que el resto del sistema lo esté. */
+function diagSeccionCanales(){
+  const agg = lqState.agg;
+  if(!agg || !agg.leads || !agg.leads.length){
+    return `<h3 class="diag-h">Captura manual contra CRM, por canal</h3>
+      <p class="hint pegada">Sincroniza <b>Calidad de Leads</b> para comparar lo que el equipo captura cada semana con lo que el CRM ya sabe por su cuenta.</p>`;
+  }
+  const semanas = [...new Set(agg.leads.map(l=>l.wk))].filter(Boolean).sort();
+  const rango = semanas.slice(-12);
+  const enRango = new Set(rango);
+  const weekSet = new Set(rango);
+  const crm = {};
+  Object.keys(CHANNELS).forEach(k=>crm[k]={leads:0,opp:0,won:0});
+  let sinCanal = 0, porCampo = 0, porTag = 0;
+  agg.leads.forEach(l=>{
+    if(!enRango.has(l.wk)) return;
+    if(l.chVia === "campo") porCampo++; else if(l.chVia === "tag") porTag++;
+    if(!l.ch || !crm[l.ch]){ sinCanal++; return; }
+    crm[l.ch].leads++; crm[l.ch].opp += (l.o||0); crm[l.ch].won += (l.w||0);
+  });
+  const { perCh } = metricsPorCanal(weekSet, []);
+  const manualDe = Object.fromEntries(perCh.map(x=>[x.ch, x.m]));
+
+  const filas = Object.keys(CHANNELS).map(k=>{
+    const m = manualDe[k] || {leads:0,opp:0,won:0}, c = crm[k];
+    let veredicto, cls;
+    if(!c.leads && !m.leads){ veredicto = "sin datos en el rango"; cls = "sub"; }
+    else if(!c.leads){ veredicto = "el CRM no lo ve — la captura es el único registro"; cls = "mal"; }
+    else if(!m.leads){ veredicto = "solo el CRM — ya no se captura"; cls = "bien"; }
+    else {
+      const d = Math.round(Math.abs(c.leads - m.leads) / Math.max(m.leads, 1) * 100);
+      if(d <= 10){ veredicto = `coinciden (±${d}%) — la captura se puede retirar`; cls = "bien"; }
+      else { veredicto = `difieren ${d}% — revisar antes de retirar la captura`; cls = "medio"; }
+    }
+    const color = cls==="bien" ? "var(--verde-prof)" : cls==="mal" ? "var(--rojo)" : cls==="medio" ? "var(--cobre-tx)" : "var(--neutro)";
+    return `<tr><td class="lft celda-fuerte">${escAttr(CHANNELS[k].name)}</td>
+      <td>${m.leads}</td><td>${m.opp}</td><td>${m.won}</td>
+      <td>${c.leads}</td><td>${c.opp}</td><td>${c.won}</td>
+      <td class="lft" style="white-space:normal;color:${color};font-weight:600">${veredicto}</td></tr>`;
+  }).join("");
+
+  const total = porCampo + porTag + sinCanal;
+  const pc = (n)=> total ? Math.round(n/total*100)+"%" : "—";
+  const kpi = (v,l)=>`<div class="crm-kpi"><div class="k-val">${v}</div><div class="k-lbl">${l}</div></div>`;
+  return `<h3 class="diag-h">Captura manual contra CRM, por canal</h3>
+  <p class="hint pegada">${rango.length===1 ? `Semana ${escAttr(rango[0]||"—")}` : `Últimas ${rango.length} semanas sincronizadas (${escAttr(rango[0]||"—")} → ${escAttr(rango[rango.length-1]||"—")})`}.
+  Izquierda: lo que el equipo capturó en <b>Ingreso de datos</b>. Derecha: lo que el CRM atribuye solo, leyendo el campo
+  <b>"${escAttr(agg.fuenteField?.name || "Fuente del lead")}"</b> y, si viene vacío, los tags.</p>
+  <div class="crm-kpis">
+    ${kpi(pc(porCampo), "Leads con canal por el campo")}
+    ${kpi(pc(porTag),   "Recuperados por tags")}
+    <div class="crm-kpi"><div class="k-val" style="${sinCanal?'color:var(--rojo)':''}">${pc(sinCanal)}</div><div class="k-lbl">Sin señal de canal</div></div>
+  </div>
+  <div class="table-scroll mb-sec"><table class="cons">
+    <thead><tr><th class="lft" rowspan="2">Canal</th><th colspan="3">Capturado a mano</th><th colspan="3">Lo que ve el CRM</th><th class="lft" rowspan="2">Veredicto</th></tr>
+    <tr><th>Leads</th><th>OPP</th><th>WON</th><th>Leads</th><th>OPP</th><th>WON</th></tr></thead>
+    <tbody>${filas}</tbody></table></div>
+  <div class="lq-meth" style="border-color:var(--cobre);margin-bottom:22px">
+    <b>Cómo se lee.</b> "Coinciden" significa que ese canal se puede dejar de capturar: el CRM da la misma cifra solo.
+    "El CRM no lo ve" significa lo contrario — si se retira esa captura, ese canal aparece en cero en los reportes de
+    Dirección, y en cero se ve exactamente igual que un canal que de verdad no vendió nada.
+    Subir el porcentaje del campo <b>"Fuente del lead"</b> en GoHighLevel es lo que mueve esta tabla.
+  </div>`;
 }
 
 /* ===================== ADMIN PANEL ===================== */
