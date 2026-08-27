@@ -654,18 +654,14 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
       </button>
     </div>
     <div class="main">
+  <!-- Tres grupos, no siete pestañas. Desempeño de Ventas y CRM en vivo son partes de
+       Ventas; Calidad de Leads es parte de Marketing; y las dos Direcciones son dos vistas
+       del mismo reporte. Cada grupo trae sus sub-pestañas en la única fila de la app. -->
   <div class="tabs" role="tablist" aria-label="Secciones">
-    <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="resultados">Dirección General</button>
-    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="dircom">Dirección Comercial</button>
-    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="ventas">Ventas</button>
-    <!-- Estos dos reportes vivían escondidos dentro de un desplegable ("Reporte" / "Módulo"):
-         nadie busca un reporte completo dentro de un selector que en apariencia elige canal.
-         Son dos vistas de peso propio, así que son dos pestañas. -->
-    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="sla">Desempeño de Ventas</button>
-    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="crm">CRM en vivo</button>
-    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="lq">Calidad de Leads</button>
-    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="marketing">Marketing</button>
-    <div class="canal-wrap">
+    <button type="button" class="tab" role="tab" aria-selected="false" data-grupo="direccion">Dirección</button>
+    <button type="button" class="tab" role="tab" aria-selected="false" data-grupo="ventas">Ventas</button>
+    <button type="button" class="tab" role="tab" aria-selected="false" data-grupo="marketing">Marketing</button>
+    <div class="canal-wrap" style="display:none">
       <span class="lbl">Canal</span>
       <select id="canal-select"></select>
     </div>
@@ -674,19 +670,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
       <select id="mkt-select"></select>
     </div>
   </div>
-  <div class="subtabs" id="ventas-subtabs" role="tablist" aria-label="Sub-secciones de Ventas" style="display:none">
-    <button type="button" class="subtab" role="tab" aria-selected="false" data-subtab="ingreso">Ingreso de datos</button>
-    <button type="button" class="subtab active" role="tab" aria-selected="true" data-subtab="reporte">Reporte</button>
-    <button type="button" class="subtab" role="tab" aria-selected="false" data-subtab="analitica">Analítica</button>
-  </div>
-  <!-- Marketing traía su propia fila de pestañas dentro del iframe, con estas mismas tres
-       etiquetas: dos filas idénticas a dos alturas de la pantalla. Ahora la sub-navegación
-       de Marketing vive aquí, en la única barra de sub-pestañas de la app. -->
-  <div class="subtabs" id="mkt-subtabs" role="tablist" aria-label="Sub-secciones de Marketing" style="display:none">
-    <button type="button" class="subtab active" role="tab" aria-selected="true" data-mktview="ingreso">Ingreso de datos</button>
-    <button type="button" class="subtab" role="tab" aria-selected="false" data-mktview="reporte">Reporte</button>
-    <button type="button" class="subtab" role="tab" aria-selected="false" data-mktview="analitica">Analítica</button>
-  </div>
+  <div class="subtabs" id="sub-bar" role="tablist" aria-label="Sub-secciones" style="display:none"></div>
 
   <div class="wrap">
     <!-- ============ INGRESO ============ -->
@@ -759,7 +743,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
     </div>
 
     <!-- ============ RESULTADOS (DIRECCIÓN GENERAL) ============ -->
-    <div class="view active" id="view-resultados">
+    <div class="view" id="view-resultados">
       <div class="periodo">
         <div class="grp"><label>Semana inicio</label><select id="res-sem-ini"></select></div>
         <div class="grp"><label>Semana fin</label><select id="res-sem-fin"></select></div>
@@ -2001,7 +1985,135 @@ function mostrarTexto(mensaje, texto, { titulo="" } = {}){
   });
 }
 function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"),2200); }
-let VENTAS_SUBTAB = "reporte";
+/* ===================== Navegación =====================
+   La barra principal llegó a tener siete pestañas, y dos de ellas —Desempeño de Ventas y
+   Calidad de Leads— no son departamentos: son partes de Ventas y de Marketing. Antes vivían
+   escondidas dentro de un desplegable, que era peor; la respuesta no era sacarlas del grupo
+   sino hacerlas visibles DENTRO de él. Ahora hay tres grupos, cada uno con sus sub-pestañas,
+   y una sola fila de sub-pestañas en toda la app.
+   Todo lo que navega sale de esta tabla: los botones, los permisos, el historial y la URL. */
+const NAV_GRUPOS = [
+  { id:"direccion", name:"Dirección", subs:[
+    { id:"general",   name:"General",             view:"resultados", ver:()=>navPermiso("direccion_general"),   abrir:()=>showResultados() },
+    { id:"comercial", name:"Comercial",           view:"dircom",     ver:()=>navPermiso("direccion_comercial"), abrir:()=>showDirCom() },
+  ]},
+  // `canal` y `modulo` van por sub-pestaña, no por grupo: Desempeño de Ventas y CRM en vivo
+  // leen el CRM entero y Calidad de Leads también, así que ahí el selector de Canal no elige
+  // nada — y un control que no hace nada es peor que no tenerlo.
+  { id:"ventas", name:"Ventas", subs:[
+    { id:"ingreso",   name:"Ingreso de datos",    view:"ingreso",    canal:true, ver:()=>navConCanal(), abrir:()=>setTimeout(ofrecerBorrador, 60) },
+    { id:"reporte",   name:"Reporte",             view:"reporte",    canal:true, ver:()=>navConCanal() },
+    { id:"analitica", name:"Analítica",           view:"analitica",  canal:true, ver:()=>navConCanal(), abrir:()=>renderAnalitica() },
+    { id:"desempeno", name:"Desempeño de Ventas", view:"sla",        ver:()=>puedeVerDesempeno(), abrir:()=>showSLA() },
+    { id:"crm",       name:"CRM en vivo",         view:"crm",        ver:()=>navPermiso("crm_live"), abrir:()=>showCRM() },
+  ]},
+  { id:"marketing", name:"Marketing", subs:[
+    { id:"ingreso",   name:"Ingreso de datos",    mkt:"ingreso",     modulo:true, ver:()=>navPermiso("marketing","mkt_rrss") },
+    { id:"reporte",   name:"Reporte",             mkt:"reporte",     modulo:true, ver:()=>navPermiso("marketing","mkt_rrss") },
+    { id:"analitica", name:"Analítica",           mkt:"analitica",   modulo:true, ver:()=>navPermiso("marketing","mkt_rrss") },
+    { id:"calidad",   name:"Calidad de Leads",    view:"lq",         ver:()=>navPermiso("marketing","mkt_lq"), abrir:()=>showLQ() },
+  ]},
+];
+// El sidebar son pantallas sueltas, sin sub-pestañas: configuración y administración.
+const NAV_SIDEBAR = { metas:()=>renderMetas(), asesores:()=>renderAdvisors(), db:()=>renderDB(), diag:()=>renderDiag(), admin:()=>renderAdmin() };
+const MKT_VISTAS_PROPIAS = ["ingreso","reporte","analitica"];
+
+let NAV_GRUPO = null;                                   // grupo abierto, o null si es el sidebar
+let NAV_LATERAL = null;                                  // botón del sidebar abierto
+const NAV_ULTIMA = { direccion:"general", ventas:"reporte", marketing:"reporte" };  // memoria por grupo
+let VENTAS_SUBTAB = "reporte";                           // lo siguen leyendo switchChannel y dbLoad
+
+function navPermiso(...claves){
+  if(typeof isAdmin === "function" && isAdmin()) return true;
+  const tengo = new Set(typeof sessionChannels === "function" ? sessionChannels() : []);
+  return claves.some(k => tengo.has(k));
+}
+// Las vistas por canal solo tienen sentido si al usuario le queda algún canal de datos.
+const navConCanal = ()=> navPermiso(...DATA_CH_KEYS);
+const navGrupo    = (id)=> NAV_GRUPOS.find(g=>g.id===id);
+// Sub-pestañas que este usuario puede ver. Una sub sin `ver` la ve cualquiera.
+const navSubsVis  = (g)=> (g ? g.subs.filter(sb=>{ try{ return sb.ver ? sb.ver() : true; }catch(e){ return true; } }) : []);
+const navGruposVis= ()=> NAV_GRUPOS.filter(g=>navSubsVis(g).length);
+
+function navPintarGrupos(){
+  const vis = new Set(navGruposVis().map(g=>g.id));
+  document.querySelectorAll("[data-grupo]").forEach(b=>{
+    b.style.display = vis.has(b.dataset.grupo) ? "" : "none";
+    const on = b.dataset.grupo === NAV_GRUPO;
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-selected", on ? "true" : "false");
+  });
+  document.querySelectorAll(".side-btn[data-tab]").forEach(b=>{
+    b.classList.toggle("active", b.dataset.tab === NAV_LATERAL);
+  });
+}
+function navPintarSubs(g, subId){
+  const bar = document.getElementById("sub-bar"); if(!bar) return;
+  const subs = navSubsVis(g);
+  if(!g || subs.length < 2){ bar.style.display="none"; bar.innerHTML=""; return; }
+  bar.style.display = "flex";
+  bar.setAttribute("aria-label", "Sub-secciones de " + g.name);
+  bar.innerHTML = subs.map(sb=>
+    `<button type="button" class="subtab${sb.id===subId?" active":""}" role="tab" `
+    + `aria-selected="${sb.id===subId?"true":"false"}" data-sub="${sb.id}">${escAttr(sb.name)}</button>`).join("");
+  bar.querySelectorAll("[data-sub]").forEach(b=>b.onclick=()=>navIr(g.id, b.dataset.sub));
+}
+
+/* Único camino de entrada a cualquier vista de grupo. */
+function navIr(grupoId, subId, push){
+  const g = navGrupo(grupoId); if(!g) return false;
+  const subs = navSubsVis(g); if(!subs.length) return false;
+  const sub = subs.find(x=>x.id===subId) || subs.find(x=>x.id===NAV_ULTIMA[g.id]) || subs[0];
+
+  NAV_GRUPO = g.id; NAV_LATERAL = null; NAV_ULTIMA[g.id] = sub.id;
+  if(g.id === "ventas") VENTAS_SUBTAB = sub.id;
+
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  navPintarGrupos(); navPintarSubs(g, sub.id);
+
+  const cw = document.querySelector(".canal-wrap"); if(cw) cw.style.display = sub.canal  ? "flex" : "none";
+  const mw = document.querySelector(".mkt-wrap");   if(mw) mw.style.display = sub.modulo ? "flex" : "none";
+
+  if(sub.mkt){
+    // Vista que vive dentro del iframe de marketing.html
+    document.getElementById("view-marketing")?.classList.add("active");
+    populateMktSelect();
+    showMarketing(sub.mkt);
+    const selM = document.getElementById("mkt-select");
+    if(selM && selM.value) mktFrameUsar(w=>w.mktSetActive(selM.value), mktFrameFallo);
+  } else {
+    mktHostMostrar(false);
+    document.getElementById("view-" + sub.view)?.classList.add("active");
+  }
+  try{ if(sub.abrir) sub.abrir(); }catch(e){ console.error("nav", g.id, sub.id, e); }
+  if(push !== false) navPush({ tab:g.id, subtab:sub.id });
+  return true;
+}
+/* Pantallas del sidebar: sin sub-pestañas y sin selector de canal. */
+function navIrLateral(tab, push){
+  const render = NAV_SIDEBAR[tab]; if(!render) return false;
+  NAV_GRUPO = null; NAV_LATERAL = tab;
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  navPintarGrupos(); navPintarSubs(null, null);
+  const cw = document.querySelector(".canal-wrap"); if(cw) cw.style.display = "none";
+  const mw = document.querySelector(".mkt-wrap");   if(mw) mw.style.display = "none";
+  if(!["metas","db"].includes(tab)) mktHostMostrar(false);
+  document.getElementById("view-" + tab)?.classList.add("active");
+  try{ render(); }catch(e){ console.error("nav lateral", tab, e); }
+  if(push !== false) navPush({ tab, subtab:null });
+  return true;
+}
+document.querySelectorAll("[data-grupo]").forEach(b=>b.onclick=()=>navIr(b.dataset.grupo));
+document.querySelectorAll(".side-btn[data-tab]").forEach(b=>b.onclick=()=>navIrLateral(b.dataset.tab));
+
+// La primera vista visible para este usuario, cuando la actual deja de estarlo.
+function navPrimeraVisible(){
+  const g = navGruposVis()[0];
+  if(g) return navIr(g.id, NAV_ULTIMA[g.id], false);   // navIr cae a la 1ª permitida si esa no lo está
+  const t = Object.keys(NAV_SIDEBAR).find(k=>document.querySelector(`.side-btn[data-tab="${k}"]`)?.style.display !== "none");
+  return t ? navIrLateral(t, false) : false;
+}
+
 const NAV_HIST = { stack: [], idx: -1, silent: false };
 function navPush(entry){
   if(NAV_HIST.silent) return;
@@ -2017,12 +2129,10 @@ function navPush(entry){
 /* --- La vista en la URL --------------------------------------------------------------
    No había ninguna ruta: la URL decía lo mismo pasara lo que pasara. Consecuencias diarias:
    no se podía mandar por WhatsApp un enlace a una vista, recargar volvía siempre al inicio,
-   y el Atrás REAL del navegador —el reflejo de cualquiera— sacaba de la app entera. Los
-   botones ←/→ propios enseñaban que había historial y luego el del navegador se comportaba
-   distinto: dos historiales que no coincidían. Ahora la vista vive en el hash. */
+   y el Atrás REAL del navegador —el reflejo de cualquiera— sacaba de la app entera. */
 let NAV_HASH_PROPIO = false;
 function navEscribirHash(entry){
-  const h = "#/" + entry.tab + (entry.tab === "ventas" && entry.subtab ? "/" + entry.subtab : "");
+  const h = "#/" + entry.tab + (entry.subtab ? "/" + entry.subtab : "");
   if(location.hash === h) return;
   NAV_HASH_PROPIO = true;                       // no reaccionar a nuestro propio cambio
   try{ history.pushState(null, "", h); }catch(e){ location.hash = h; }
@@ -2032,21 +2142,17 @@ function navLeerHash(){
   const m = (location.hash || "").match(/^#\/([a-z_]+)(?:\/([a-z_]+))?/i);
   return m ? { tab: m[1], subtab: m[2] || null } : null;
 }
-// Aplica una vista sin volver a empujarla al historial (viene del historial).
+// Aplica una vista sin volver a empujarla al historial (viene del historial o de la URL).
 function navAplicar(entry){
   if(!entry) return false;
-  const el = document.querySelector('.tab[data-tab="'+entry.tab+'"], .side-btn[data-tab="'+entry.tab+'"]');
-  if(!el) return false;
   NAV_HIST.silent = true;
   try{
-    if(entry.tab === "ventas" && entry.subtab) VENTAS_SUBTAB = entry.subtab;
-    el.click();
-    if(entry.tab === "ventas" && entry.subtab){
-      const st = document.querySelector('.subtab[data-subtab="'+entry.subtab+'"]');
-      if(st) st.click();
-    }
+    const ok = navGrupo(entry.tab) ? navIr(entry.tab, entry.subtab, false) : navIrLateral(entry.tab, false);
+    // Una liga compartida puede apuntar a una vista que este usuario no tiene permitida.
+    // Abrirle la primera que sí puede ver es mejor que dejarlo mirando una pantalla vacía.
+    if(!ok) navPrimeraVisible();
+    return ok;
   } finally { NAV_HIST.silent = false; navUpdateButtons(); }
-  return true;
 }
 window.addEventListener("popstate", ()=>{ if(!NAV_HASH_PROPIO) navAplicar(navLeerHash()); });
 window.addEventListener("hashchange", ()=>{ if(!NAV_HASH_PROPIO) navAplicar(navLeerHash()); });
@@ -2060,86 +2166,25 @@ function navGo(delta){
   if(target < 0 || target >= NAV_HIST.stack.length) return;
   NAV_HIST.idx = target;
   const e = NAV_HIST.stack[target];
-  NAV_HIST.silent = true;
-  try {
-    if(e.tab === "ventas" && e.subtab){ VENTAS_SUBTAB = e.subtab; }
-    const el = document.querySelector('.tab[data-tab="'+e.tab+'"], .side-btn[data-tab="'+e.tab+'"]');
-    if(el) el.click();
-    if(e.tab === "ventas" && e.subtab){ const st = document.querySelector('.subtab[data-subtab="'+e.subtab+'"]'); if(st) st.click(); }
-  } finally { NAV_HIST.silent = false; navUpdateButtons(); }
+  navAplicar(e);
+  // navAplicar va en silencio (no vuelve a empujar al historial) y el hash lo escribía
+  // navPush, así que los botones ←/→ propios cambiaban la vista y dejaban la URL vieja:
+  // copiarla en ese momento daba un enlace a otra pantalla. Aquí se escribe a mano.
+  navEscribirHash(e);
 }
-function mktIsActive(){ return document.querySelector('.tab[data-tab="marketing"]').classList.contains("active"); }
-function mktFrameApi(){ const f=document.getElementById("mkt-frame"); return f && f.contentWindow ? f.contentWindow : null; }
-document.querySelectorAll("[data-tab]").forEach(el=>el.onclick=()=>{
-  const tab=el.dataset.tab;
-  // El sidebar tenía un atajo: estando en Marketing, "Metas" y "Base de datos" no llevaban
-  // a esas pantallas sino que cambiaban la vista del iframe sin salir de Marketing. Un mismo
-  // botón con dos destinos según de dónde vinieras. Ahora siempre lleva a la pantalla, y es
-  // el desplegable de arriba —con el encabezado que dice qué sistema es— el que elige.
-  document.querySelectorAll("[data-tab]").forEach(t=>{ t.classList.remove("active"); if(t.hasAttribute("aria-selected")) t.setAttribute("aria-selected","false"); });
-  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
-  el.classList.add("active");
-  if(el.hasAttribute("aria-selected")) el.setAttribute("aria-selected","true");
-  // Las tres búsquedas de abajo van con guarda: este manejador ya apagó todas las vistas,
-  // así que si algo devuelve null y lanza, la pantalla se queda en blanco sin encender ninguna.
-  if(tab==="ventas"){
-    const vSub = document.getElementById("view-"+VENTAS_SUBTAB);
-    if(vSub) vSub.classList.add("active");
-    else { VENTAS_SUBTAB="reporte"; document.getElementById("view-reporte")?.classList.add("active"); }
-    const st=document.getElementById("ventas-subtabs"); if(st) st.style.display="flex";
-    if(VENTAS_SUBTAB==="analitica") renderAnalitica();
-  } else {
-    document.getElementById("view-"+tab)?.classList.add("active");
-    const st=document.getElementById("ventas-subtabs"); if(st) st.style.display="none";
-  }
-  if(tab!=="marketing"){ const mb=document.getElementById("mkt-subtabs"); if(mb) mb.style.display="none"; }
-  if(!["marketing","metas","db"].includes(tab)) mktHostMostrar(false);
-  const dir = ["resultados","dircom","crm","marketing","sla","lq","asesores","metas","db","admin","diag"].includes(tab);
-  const cw=document.querySelector(".canal-wrap"); if(cw) cw.style.display = dir?"none":"flex";
-  const mw=document.querySelector(".mkt-wrap");   if(mw) mw.style.display = (tab==="marketing")?"flex":"none";
-  if(tab==="resultados") showResultados();
-  if(tab==="dircom") showDirCom();
-  if(tab==="crm") showCRM();
-  if(tab==="sla") showSLA();
-  if(tab==="lq") showLQ();
-  if(tab==="marketing"){
-    populateMktSelect();
-    const sel=document.getElementById("mkt-select");
-    showMarketing();
-    aplicarModuloMkt(sel ? sel.value : "rrss");
-    const api=mktFrameApi();
-    if(api && typeof api.mktGetView==="function") window.mktViewChanged(api.mktGetView());
-    if(api && typeof api.mktGetActive==="function"){ const cur=api.mktGetActive(); if(sel && cur) sel.value=cur; }
-  }
-  if(tab==="asesores") renderAdvisors();
-  if(tab==="metas") renderMetas();
-  if(tab==="db") renderDB();
-  if(tab==="admin") renderAdmin();
-  if(tab==="diag") renderDiag();
-  navPush({ tab, subtab: tab==="ventas" ? VENTAS_SUBTAB : null });
-});
 document.getElementById("nav-back")?.addEventListener("click", ()=>navGo(-1));
 document.getElementById("nav-fwd")?.addEventListener("click", ()=>navGo(1));
-// Sincroniza el estado visual del sidebar cuando el iframe de marketing cambia de vista
-window.mktViewChanged=function(v){ mktSubtabsSync(v); };
-// Refleja en la barra de sub-pestañas del padre la vista que el iframe tiene abierta.
-function mktSubtabsSync(v){
-  const bar = document.getElementById("mkt-subtabs"); if(!bar) return;
-  bar.style.display = (mktIsActive() && MKT_VISTAS_PROPIAS.includes(v)) ? "flex" : "none";
-  bar.querySelectorAll("[data-mktview]").forEach(b=>{
-    const on = b.dataset.mktview === v;
-    b.classList.toggle("active", on);
-    b.setAttribute("aria-selected", on ? "true" : "false");
-  });
-}
-document.querySelectorAll("#mkt-subtabs [data-mktview]").forEach(b=>b.onclick=()=>{
-  const api = mktFrameApi();
-  if(api && typeof api.mktShowView === "function") api.mktShowView(b.dataset.mktview);
-  mktSubtabsSync(b.dataset.mktview);
-});
-window.mktActiveChanged=function(id){
-  const sel=document.getElementById("mkt-select");
-  if(sel && sel.value!==id && [...sel.options].some(o=>o.value===id)) sel.value=id;
+
+const mktIsActive = ()=> NAV_GRUPO === "marketing";
+// El iframe avisa cuando cambia de vista por su cuenta; la barra del padre lo refleja.
+window.mktViewChanged = function(v){
+  if(NAV_GRUPO !== "marketing" || !MKT_VISTAS_PROPIAS.includes(v)) return;
+  const g = navGrupo("marketing");
+  if(NAV_ULTIMA.marketing !== v){ NAV_ULTIMA.marketing = v; navPintarSubs(g, v); }
+};
+window.mktActiveChanged = function(id){
+  const sel = document.getElementById("mkt-select");
+  if(sel && sel.value !== id && [...sel.options].some(o=>o.value===id)) sel.value = id;
 };
 function populateMktSelect(){
   const sel=document.getElementById("mkt-select"); if(!sel) return;
@@ -2151,31 +2196,10 @@ function populateMktSelect(){
   if(cur && list.some(m=>m.id===cur)) sel.value = cur;
 }
 document.getElementById("mkt-select")?.addEventListener("change", ()=>{
-  aplicarModuloMkt(document.getElementById("mkt-select").value);
+  const id = document.getElementById("mkt-select").value;
+  if(id) mktFrameUsar(w=>w.mktSetActive(id), mktFrameFallo);
 });
-// Calidad de Leads dejó de vivir aquí: ahora es una pestaña propia. El desplegable de
-// Módulo solo elige entre los módulos que sí viven dentro del iframe.
-function aplicarModuloMkt(id){
-  const vmk = document.getElementById("view-marketing");
-  if(vmk) vmk.classList.add("active");
-  mktHostMostrar(true);
-  // Marketing no comparte pantalla con Ventas: apagar sus vistas y sus sub-pestañas.
-  document.getElementById("ventas-subtabs").style.display = "none";
-  document.querySelectorAll("#view-ingreso,#view-reporte,#view-analitica,#view-sla,#view-lq")
-    .forEach(v=>v.classList.remove("active"));
-  if(!id) return;
-  mktFrameUsar(w=>w.mktSetActive(id), mktFrameFallo);
-}
-document.querySelectorAll(".subtab[data-subtab]").forEach(el=>el.onclick=()=>{
-  document.querySelectorAll(".subtab[data-subtab]").forEach(t=>{ t.classList.remove("active"); t.setAttribute("aria-selected","false"); });
-  el.classList.add("active"); el.setAttribute("aria-selected","true");
-  VENTAS_SUBTAB=el.dataset.subtab;
-  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
-  document.getElementById("view-"+VENTAS_SUBTAB)?.classList.add("active");
-  if(VENTAS_SUBTAB==="analitica") renderAnalitica();
-  if(VENTAS_SUBTAB==="ingreso") setTimeout(ofrecerBorrador, 60);
-  navPush({ tab: "ventas", subtab: VENTAS_SUBTAB });
-});
+
 /* --- El único iframe de marketing.html ------------------------------------------------
    Había tres (Marketing, Metas y Base de datos), cada uno cargando el mismo documento de
    120 KB con su propia copia de Chart.js, su propia hoja de fuentes y su propio arranque
@@ -2221,18 +2245,14 @@ function mktFrameFallo(){
   aviso.style.display = "";
 }
 // El iframe traía su propia barra de pestañas y su propia barra de periodo: dentro de
-// Marketing salía una segunda fila con las MISMAS tres etiquetas que Ventas. metasShowFrame
-// y dbShowFrame ya pedían modo embebido; esta era la única puerta que no lo hacía.
-const MKT_VISTAS_PROPIAS = ["ingreso","reporte","analitica"];
-function showMarketing(){
+// Marketing salía una segunda fila con las MISMAS tres etiquetas que Ventas. Con modo
+// embebido las oculta y su sub-navegación la lleva la barra del padre.
+function showMarketing(vista){
   mktHostMostrar(true);
   mktFrameUsar(w=>{
     w.mktSetEmbedMode(true);
-    // Si venimos de Metas o Base de datos el iframe se quedó en esas vistas; la pestaña
-    // Marketing muestra las suyas.
-    let v = w.mktGetView();
-    if(!MKT_VISTAS_PROPIAS.includes(v)){ v = "ingreso"; w.mktShowView(v); }
-    mktSubtabsSync(v);
+    const v = MKT_VISTAS_PROPIAS.includes(vista) ? vista : "ingreso";
+    if(w.mktGetView() !== v) w.mktShowView(v);
   }, mktFrameFallo);
 }
 
@@ -5734,8 +5754,7 @@ async function dbLoad(chKey, key){
   const rec=recGet(key); if(!rec) return;
   document.getElementById("canal-select").value=chKey;
   await switchChannel(chKey);
-  VENTAS_SUBTAB="ingreso"; document.querySelector('.subtab[data-subtab="ingreso"]').classList.add("active"); document.querySelector('.subtab[data-subtab="reporte"]').classList.remove("active"); document.querySelector('.tab[data-tab="ventas"]').click();
-  document.querySelector(".canal-wrap").style.display="flex";
+  navIr("ventas", "ingreso");
   fillForm(rec);
   toast("Registro cargado en Ingreso ✓"); window.scrollTo({top:0,behavior:"smooth"});
 }
@@ -5743,8 +5762,7 @@ async function dbDuplicate(chKey, key){
   const rec=recGet(key); if(!rec) return;
   document.getElementById("canal-select").value=chKey;
   await switchChannel(chKey);
-  VENTAS_SUBTAB="ingreso"; document.querySelector('.subtab[data-subtab="ingreso"]').classList.add("active"); document.querySelector('.subtab[data-subtab="reporte"]').classList.remove("active"); document.querySelector('.tab[data-tab="ventas"]').click();
-  document.querySelector(".canal-wrap").style.display="flex";
+  navIr("ventas", "ingreso");
   fillForm(rec);
   // Limpiar fechas para forzar elegir una nueva semana (si no, sobrescribe el original)
   document.getElementById("ing-inicio").value="";
@@ -5860,33 +5878,31 @@ function dbShowFrame(show, modKey){
 }
 
 function applyTabsVisibility(){
-  const rules = [
-    { tab: "metas",     visible: isAdmin() },
-    { tab: "asesores",  visible: isAdmin() || CH !== "brokers" },
+  // El sidebar tiene sus dos reglas propias; los grupos y sus sub-pestañas sacan las suyas
+  // de NAV_GRUPOS, así que repintarlos ya aplica los permisos.
+  const reglas = [
+    { tab:"metas",    visible: isAdmin() },
+    { tab:"asesores", visible: isAdmin() || CH !== "brokers" },
   ];
-  let activeHidden = false;
-  for(const { tab, visible } of rules){
+  let seFue = false;
+  for(const { tab, visible } of reglas){
     const btn = document.querySelector(`.side-btn[data-tab="${tab}"]`);
     if(!btn) continue;
     btn.style.display = visible ? "" : "none";
-    if(!visible && btn.classList.contains("active")){
-      btn.classList.remove("active");
-      document.getElementById("view-"+tab)?.classList.remove("active");
-      activeHidden = true;
-    }
+    if(!visible && NAV_LATERAL === tab) seFue = true;
   }
-  if(activeHidden){
-    const firstTab = document.querySelector(".tabs .tab:not([style*='display: none'])");
-    if(firstTab){
-      firstTab.classList.add("active");
-      document.getElementById("view-"+firstTab.dataset.tab)?.classList.add("active");
-      document.querySelector(".canal-wrap").style.display = ["resultados","dircom"].includes(firstTab.dataset.tab) ? "none" : "flex";
-    }
-  }
+  navPintarGrupos();
+  const g = NAV_GRUPO ? navGrupo(NAV_GRUPO) : null;
+  const subsVis = navSubsVis(g);
+  if(g) navPintarSubs(g, NAV_ULTIMA[NAV_GRUPO]);
+  // Si lo que está abierto dejó de estar permitido —o no hay nada abierto todavía— hay que
+  // llevar a una pantalla que sí lo esté: apagar sin encender deja la app en blanco.
+  const subSigueViva = g && subsVis.some(sb=>sb.id === NAV_ULTIMA[NAV_GRUPO]);
+  if(seFue || !document.querySelector(".view.active") || (g && !subSigueViva)) navPrimeraVisible();
 }
 
-// Desempeño de Ventas: volvió a ser una pestaña propia. Estuvo escondido como un "canal"
-// sintético dentro del desplegable de Ventas, donde nadie lo encontraba.
+// Desempeño de Ventas: sub-pestaña de Ventas, que es de donde es. Estuvo escondido como un
+// "canal" sintético dentro de un desplegable, donde nadie lo encontraba.
 function puedeVerDesempeno(){
   if(isAdmin()) return true;
   const ch = sessionChannels();
@@ -5902,7 +5918,7 @@ function populateCanalSelect(){
 // ¿Está abierta la pestaña Ventas? switchChannel también corre al arrancar y al
 // cambiar de canal estando en otra pestaña; sin este guardia encendía las sub-pestañas
 // y el reporte de Ventas ENCIMA de Marketing.
-const ventasAbierto = ()=> !!document.querySelector('.tab[data-tab="ventas"].active');
+const ventasAbierto = ()=> NAV_GRUPO === "ventas";
 
 async function switchChannel(ch){
   if(ventasAbierto() && !document.querySelector("#view-ingreso.active,#view-reporte.active,#view-analitica.active")){
@@ -5999,10 +6015,12 @@ async function init(){
   for(const k in SEEDMAP){ if(!(k in RECCACHE)) RECCACHE[k]=SEEDMAP[k]; }
   const firstCh = Object.keys(CHANNELS)[0];
   if(firstCh){ await switchChannel(firstCh); }
-  document.querySelector(".canal-wrap").style.display="none";
-  const activeView = document.querySelector(".view.active");
-  if(activeView?.id === "view-dircom") await showDirCom();
-  else if(activeView?.id === "view-resultados") await showResultados();
+  // Con la semilla ya en caché se abre la vista: la de la URL si el enlace trae una
+  // (compartido por WhatsApp o una recarga), si no la primera que este usuario puede ver.
+  // Antes esto dependía de qué .view traía `active` en el HTML; ahora lo decide la
+  // navegación, que es la única que sabe qué tiene permitido cada quien.
+  const deLaUrl = navLeerHash();
+  if(!(deLaUrl && navAplicar(deLaUrl))) navPrimeraVisible();
 
   // 2) En segundo plano: carga datos guardados (autoridad), persiste semillas faltantes y re-pinta si cambió algo
   (async()=>{
@@ -6012,10 +6030,9 @@ async function init(){
       resState.built=false; dcState.built=false; dbBuilt=false; metasBuilt=false;
       await switchChannel(CH);
       refreshAdvisorDropdowns();
-      const active=document.querySelector(".view.active");
-      if(active && active.id==="view-resultados"){ await showResultados(); document.querySelector(".canal-wrap").style.display="none"; }
-      else if(active && active.id==="view-dircom"){ await showDirCom(); document.querySelector(".canal-wrap").style.display="none"; }
-      else if(active && active.id==="view-db"){ renderDB(); if(dbLastCh && CHANNELS[dbLastCh]) await renderDBTable(dbLastCh); }
+      // Con los datos guardados ya en caché, repintar lo que esté abierto.
+      if(NAV_GRUPO === "direccion") navIr("direccion", NAV_ULTIMA.direccion, false);
+      else if(NAV_LATERAL === "db"){ renderDB(); if(dbLastCh && CHANNELS[dbLastCh]) await renderDBTable(dbLastCh); }
     }catch(e){ LECTURA_FALLIDA = true; console.error("Fallo al cargar los datos guardados", e); }
     // La bandera existía y se levantaba bien, y sReadFailed() estaba escrito.
     // Nadie los consultaba jamás, así que un backend caído se veía igual que "todavía no hay
@@ -6034,7 +6051,6 @@ let USERS = [];           // [{ email, salt, hash, role, channels, password? }]
 const DATA_CH_KEYS = ["brokers","paid_organico","seminarios","referidos","pd_leads","pd_brokers","rp_vip"];
 // Calidad de Leads vive dentro de Marketing y Desempeño de Ventas dentro de Ventas,
 // así que sus canales ya no abren una pestaña propia: abren la pestaña contenedora.
-const DIR_TABS = { direccion_general:"resultados", direccion_comercial:"dircom", crm_live:"crm", marketing:"marketing", sla_view:"sla", mkt_lq:"lq" };
 const MKT_CH_KEYS = ["mkt_rrss","mkt_lq"];   // PPC Ads y CRM Manager se retiraron
 const SLA_CH_KEY = "sla_view";               // abre "Desempeño de Ventas" dentro de Ventas
 const VENTAS_CH_KEYS = [...DATA_CH_KEYS, "direccion_general", "direccion_comercial", "crm_live", SLA_CH_KEY];
@@ -6062,41 +6078,12 @@ function applyChannelFilter(){
   // Sync los sets de selección de Dirección General/Comercial con los canales sobrevivientes
   if(typeof resState !== "undefined" && resState && resState.chs){ resState.chs = new Set(Object.keys(CHANNELS)); }
   if(typeof dcState !== "undefined" && dcState && dcState.chs){ dcState.chs = new Set(Object.keys(CHANNELS)); }
-  // Tabs sintéticos (reportes consolidados de dirección)
-  let activeHidden = false;
-  for(const [chKey, tab] of Object.entries(DIR_TABS)){
-    let visible;
-    if(chKey === 'marketing'){
-      // Calidad de Leads ya tiene pestaña propia, así que Marketing depende de los módulos
-      // que de verdad viven dentro del iframe.
-      visible = allowed.has('marketing') || allowed.has('mkt_rrss');
-    } else if(chKey === SLA_CH_KEY){
-      visible = puedeVerDesempeno();
-    } else if(chKey === 'mkt_lq'){
-      visible = allowed.has('marketing') || allowed.has('mkt_lq');
-    } else {
-      visible = allowed.has(chKey);
-    }
-    if(!visible){
-      const el = document.querySelector(`.tab[data-tab="${tab}"]`);
-      if(el){
-        el.style.display = "none";
-        if(el.classList.contains("active")){
-          el.classList.remove("active");
-          document.getElementById("view-"+tab)?.classList.remove("active");
-          activeHidden = true;
-        }
-      }
-    }
-  }
-  if(activeHidden){
-    const firstVisible = [...document.querySelectorAll(".tabs .tab")].find(t => t.style.display !== "none");
-    if(firstVisible){
-      firstVisible.classList.add("active");
-      document.getElementById("view-"+firstVisible.dataset.tab)?.classList.add("active");
-    }
-  }
+  // Los permisos de cada grupo y de cada sub-pestaña viven en NAV_GRUPOS (la función `ver`
+  // de cada una), así que aquí basta con repintar: antes había una segunda tabla —DIR_TABS—
+  // que decía lo mismo con otras palabras y se desincronizaba al mover una pestaña de sitio.
+  applyTabsVisibility();
 }
+
 // Se reemplaza .shell (barra lateral + contenido), no solo .main: la barra lateral es
 // hermana de .main, así que antes sobrevivía intacta —con sus manejadores, que se enlazan
 // una sola vez al arrancar— y al pulsar cualquiera de sus botones el manejador buscaba
@@ -6183,12 +6170,7 @@ async function onAuthenticated(){
   applyChannelFilter();
   applyTabsVisibility();
   if(!isAdmin() && sessionChannels().length === 0){ showNoAccessScreen(); return; }
-  await init();
-  // Si la URL trae una vista (enlace compartido o recarga), abrirla. Si el usuario no
-  // tiene permiso para esa pestaña, navAplicar no encuentra el botón y se queda donde init
-  // lo dejó, que es el comportamiento correcto.
-  const deLaUrl = navLeerHash();
-  if(deLaUrl) navAplicar(deLaUrl);
+  await init();   // init abre la vista (la de la URL, o la primera permitida)
 }
 
 // Llama a la function de auth. El login ocurre 100% en el servidor: el cliente
