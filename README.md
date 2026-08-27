@@ -5,7 +5,7 @@ Producción: https://team.selvadentrotulum.com (Netlify site: `slvd-reportes`).
 
 ## Arquitectura
 
-- **Frontend**: dos páginas estáticas ([index.html](index.html) ventas/dirección, [marketing.html](marketing.html) embebida como iframe). Sin build.
+- **Frontend**: dos páginas estáticas ([index.html](index.html) ventas/dirección, [marketing.html](marketing.html) embebida en un **único** iframe que comparten las pantallas de Marketing, Metas y Base de datos). Sin build.
 - **Datos**: tabla `slvd_kv` (key/value JSON) en Supabase **con RLS activado y sin policies**:
   el anon key público no puede leer ni escribir nada. Todo el acceso pasa por la function
   `kv` con sesión firmada; la function llama al RPC `slvd_kv_op`, protegido por un secreto
@@ -182,10 +182,11 @@ llaman distinto y el glosario completo vive en la pestaña **Diagnóstico**:
 noche caían en semanas distintas según la pestaña. El agregado del CRM subió a
 `crm:agg:v2` para forzar la reconstrucción del cache que quedó agrupado con el reloj viejo.
 
-## SLA y Seguimiento (Anexo 1 del proceso comercial)
+## Desempeño de Ventas (Anexo 1 del proceso comercial)
 
-Pestaña **SLA y Seguimiento** — el reporte semanal de disciplina comercial, directo
-del CRM y con nombres:
+Pestaña **Desempeño de Ventas** en la barra principal (antes "SLA y Seguimiento", y
+un tiempo escondida como canal sintético dentro del desplegable de Ventas) — el
+reporte semanal de disciplina comercial, directo del CRM y con nombres:
 
 - **SLA de primera respuesta** por asesor y por canal, con la definición del Anexo 1:
   se mide del alta del lead hasta el **contacto efectivo** (el lead respondió), no

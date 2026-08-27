@@ -4,8 +4,12 @@
 
 **Result:** 46 verified findings — 18 high severity, 25 medium, 3 low. ~406 lines removable without losing functionality.
 
+**Where it ended up:** all 46 fixed, across 8 commits. `marketing.html` went from 120 KB to 100 KB — the dead code came out. `index.html` grew, and it should have: the draft system, the two new tabs, the own dialogs, the per-field validation and the design tokens are all code that did not exist. What came out of it is the duplication — three iframes to one, three GoHighLevel clients to one, three escape functions to one, two `Guardar` buttons to one, and fourteen channel walks per Dirección render to seven.
 
-**Update:** 6 findings are already fixed and 2 partly fixed — the five most urgent ones, implemented and verified in a browser against the pre-fix code. Each carries a **Status** line below saying what changed.
+
+**Update — 27 August 2026:** all 46 findings are fixed. Each carries a **Status** line below saying what changed. Every batch was checked with `node --check` on the extracted `<script>` blocks and run in headless Chromium: 26 assertions on the app's invariants, the twelve screens opened one by one looking for a thrown error or a blank view, back and forward through the history, the capture form's parser and its per-field error state, and zero horizontal overflow across the eleven screens at 500px wide.
+
+Two things are worth saying plainly. First, this is client code with no test suite: what protects it is the browser runs above and the fact that no fix changes a stored data shape. Second, one fix is smaller than the finding asks for and it is marked as such: the `lqRender` split builds the heavy sub-tab lazily but keeps it in the same function, because eleven identifiers cross the block boundary and a blind extraction would have been a real regression risk.
 
 
 > Every finding cites line references verified against the file. Findings that did not
@@ -25,21 +29,21 @@
 Almost no finding is an isolated slip. They're the same story: somebody fixed a real
 problem, properly, and the fix stayed in the copy where it was found.
 
-| Fix | Where it exists | Where it's missing |
-|---|---|---|
-| Flag an incomplete sync inside the aggregate so the whole team sees it | `lqSync` | `crmSync, slaSync` |
-| Filter the CRM crawl by date instead of pulling all history | `lead-quality.js` | `ghl-report.js` |
-| Retry when Windsor answers 429 | `windsorGet()` | `spend()` |
-| Act on a failed read instead of showing stale data as current | `marketing.html` | `index.html` |
-| Sign out and return to login when the token expires (401) | `index.html · kvCall` | `marketing.html · kvCall` |
-| Destroy the previous charts before drawing new ones | `lqState._charts` | `ANAL_STATE.charts` |
-| Warn when a save failed instead of showing “✓ Saved” | `index.html · saveWeek` | `marketing.html · saveRec` |
-| Confirm before wiping the form | `marketing.html` | `index.html · clearForm` |
+| Fix | Where it existed | Where it was missing | Now |
+|---|---|---|---|
+| Flag an incomplete sync inside the aggregate so the whole team sees it | `lqSync` | `crmSync, slaSync` | shared `bannerIncompleto` |
+| Filter the CRM crawl by date instead of pulling all history | `lead-quality.js` | `ghl-report.js` | `since` in both |
+| Retry when Windsor answers 429 | `windsorGet()` | `spend()` | shared `pedir()` |
+| Act on a failed read instead of showing stale data as current | `marketing.html` | `index.html` | `avisarLecturaFallida()` |
+| Sign out and return to login when the token expires (401) | `index.html · kvCall` | `marketing.html · kvCall` | both, and the draft survives |
+| Destroy the previous charts before drawing new ones | `lqState._charts` | `ANAL_STATE.charts` | both |
+| Warn when a save failed instead of showing “✓ Saved” | `index.html · saveWeek` | `marketing.html · saveRec` | both |
+| Confirm before wiping the form | `marketing.html` | `index.html · clearForm` | both, via `confirmar()` |
 
 Which is why the underlying recommendation isn't *write better code*: it's **stop having copies**.
 
 
-## What to fix first
+## What to fix first — and the order it was done in
 
 1. **Give each WON a different name** _(≈½ session)_ — Before any code: decide and write on screen what each tab measures. “Reported WON”, “WON closed this week”, “Cohort WON”, each with a line saying which date it cuts on. It's half a session of work and it's the only item on this list that changes what the team believes about the numbers.
 2. **Delete what nobody can open** _(≈1 session)_ — The three retired modules in marketing.html and the `window.fs` block in index.html. None of this changes the app: it just stops getting in the way. And fix the two README claims that are no longer true, in the same commit.
@@ -48,17 +52,23 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 5. **Raise contrast and give focus back** _(≈1 session)_ — A darkened copper only where it carries text, tabs turned into `<button>`, and one global `:focus-visible` rule. It's CSS and a tag change.
 6. **Unify the repeated engines** _(≈3–4 sessions)_ — The three sync engines, the six network wrappers, the week-range selectors and the `json()` in the three functions. It's the largest piece of work and the one that prevents the most future bugs; best done after the others, with the ground already cleared.
 
+All six were done, in that order, plus everything else on the list. The one place the work stopped short of the finding is `lqRender`: the heavy sub-tab is now built only when it is the visible one, which is the whole of the cost, but the block stays inside the function. Pulling it out means moving eleven identifiers across a scope boundary in production client code with no tests, and the payoff for doing that is readability, not behaviour — so it is left named and commented rather than done badly.
+
 ## Contrast, measured (WCAG 2.1 AA)
 
-| Combination | Ratio | Size | Minimum | AA |
-|---|---:|---:|---:|---|
-| #fff on --cobre #CF8543 — .btn-primary and .side-btn.active | 2.96:1 | 13px | 4.5:1 | **fails** |
-| --neutro #6F7468 on --crema-2 #F1ECE1 — inactive tab | 4.08:1 | 13px | 4.5:1 | **fails** |
-| --arena #D9B37E on --verde-prof #465241 — topbar subtitle | 4.21:1 | 10px | 4.5:1 | **fails** |
-| --neutro on --crema — .hint | 4.52:1 | 11.5px | 4.5:1 | borderline |
-| --rojo-no-tx on --rojo-no-bg — “no” pill | 4.75:1 | 12px | 4.5:1 | passes |
-| #fff on --olivo #65713F — .btn-olive | 5.27:1 | 13px | 4.5:1 | passes |
-| --texto on --crema — body copy | 12.18:1 | 14px | 4.5:1 | passes |
+Measured before, and again after the fix. Nothing that carries text is below 4.5:1 any more; the brand copper survives untouched where nothing sits on top of it.
+
+| Combination | Before | After | AA now |
+|---|---:|---:|---|
+| #fff on the brand copper — primary button, role pill, SLA pill, OPP badge | 2.96:1 | 4.90:1 (`--cobre-tx` #A65F22) | passes |
+| #fff on the primary button's hover | — | 6.39:1 (#8E4F1B) | passes |
+| --neutro on --crema-2 — inactive tab | 4.08:1 | 5.16:1 (`--neutro` #5F6459) | passes |
+| --logo on --verde-prof — topbar subtitle (was --arena at 4.21:1) | 4.21:1 | 6.71:1 | passes |
+| --neutro on --crema — .hint | 4.52:1 | 5.73:1 | passes |
+| #fff on the grey “terminal” badge | 2.90:1 | 5.10:1 (#6e6e6e) | passes |
+| --rojo on --crema — error text and marked fields | — | 5.55:1 | passes |
+| #fff on --olivo — .btn-olive | 5.27:1 | 5.27:1 | passes |
+| --texto on --crema — body copy | 12.18:1 | 12.18:1 | passes |
 
 ## What the app gets wrong (13)
 
@@ -88,7 +98,7 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** Two lines. Add the guard on 1648: const v = document.getElementById("view-"+VENTAS_SUBTAB); if(v) v.classList.add("active"); else { VENTAS_SUBTAB="reporte"; document.getElementById("view-reporte").classList.add("active"); }. And have navGo call mostrarDesempeno(true) when it restores an entry whose subtab is CANAL_DESEMP, instead of treating it as a normal sub-tab — which is exactly what switchChannel already does correctly when the change comes from the select.
 
-**Status.** Fixed — navGo restores the synthetic channel through the select instead of as a sub-tab, and the view lookup in the tab handler is guarded.
+**Status.** Fixed, then made moot — the view lookup in the tab handler is guarded, and “Desempeño de Ventas” has since become a tab of its own, so there is no synthetic channel left for the history to restore wrongly.
 
 ### [HIGH] Two tabs file the same lead in different weeks: CRM counts in UTC, Calidad de Leads in Tulum time
 
@@ -116,7 +126,7 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** MKT_LQ_LIVE exists for the Marketing tab's selector, where the live view genuinely lives in index.html; it shouldn't appear in Metas or Base de datos because it has no module on the iframe side. Filter it out of both: MKT_MODULES.filter(m=>m.id!==MKT_LQ_LIVE). If live Calidad de Leads should have its own goals, they need to be built in index.html rather than delegated to the iframe.
 
-**Status.** Fixed — Metas and Base de datos build their Marketing dropdown from MKT_MODULES_EMBED, which excludes lq_live.
+**Status.** Fixed — the two dropdowns list only the modules that actually live inside the iframe (MKT_MODULES_EMBED). Calidad de Leads is no longer in any dropdown: it is a tab.
 
 ### [HIGH] The SLA report grades advisors on data that may be missing, and doesn't say so
 
@@ -130,6 +140,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** Port lqSync's pattern to slaSync and crmSync: accumulate failed batches in agg.fallos, save it in the aggregate, and paint it in the report header (“report generated with N of M leads — run it again”). While there are failed batches, don't present the advisor's score as final.
 
+**Status.** Fixed — bannerIncompleto(fallos, queRehacer) is shared by crmSync, lqSync and slaSync, so a partial sync says so on screen wherever it happens, not only in Calidad de Leads.
+
 ### [HIGH] The weekly capture form has no autosave, no exit warning, and no invalid-field marking
 
 `ingreso-sin-red-de-seguridad` · forms · medium effort
@@ -141,6 +153,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 **Why it matters.** Capturing a week is dozens of numeric fields. Switching tabs, closing the tab by accident, or the session expiring erases all of it without asking, and there's no local copy of what was typed. It's the task the team does every week — which makes it the one that can be lost the most times.
 
 **How to fix it.** The minimum, and cheap: (1) save the draft to localStorage on every change, keyed by week+channel, and offer to restore it on return; (2) mark the form dirty and add beforeunload while it is; (3) on a 401, don't discard what was typed — leave it in the draft so it's still there after signing back in. And most urgent of all: have switchChannel ask before clearing if anything has been typed — that's one condition and a confirm, and it closes the easiest loss path to stumble into.
+
+**Status.** Fixed — draft in localStorage keyed by week and channel with an offer to restore on return, beforeunload while the form is dirty, a confirmation before switching channel with something typed, and the draft is written before handleAuthExpired reloads.
 
 ### [HIGH] The Base de datos screen explains how to export, and there is no export button
 
@@ -154,6 +168,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** This is the cheapest fix in the audit: two buttons in the view's action bar, wired to functions that are already written and tested. In renderDB, next to “Buscar”: document.getElementById('db-csv').onclick=()=>dbExportCSV(sel.value); and another for dbExportJSON. If for some reason the export shouldn't exist, then remove the sentence from the help text and delete the three functions.
 
+**Status.** Fixed — the two buttons the help text promised exist and are wired: Exportar CSV for the current channel and Respaldo JSON for every channel plus advisors and goals. The functions were already written; nothing called them.
+
 ### [HIGH] index.html detects when a backend read fails, records the signal, and nobody ever reads it
 
 `lectura-fallida-sin-lector` · states · low effort
@@ -165,6 +181,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 **Why it matters.** If the backend doesn't answer at startup, the app doesn't look broken: it looks normal, showing the history baked into the file, and none of what was captured afterwards. The user reads old numbers believing they're today's. It's the worst way for a reporting system to fail, and the mechanism to prevent it is already written — it just has nobody consulting it.
 
 **How to fix it.** Check sReadFailed() at the end of startup and, if it came back true, show a fixed strip at the top: “The saved data couldn't be loaded. What you're seeing may be incomplete.” with a retry button. And change the catch(e){} at 5243 to one that raises the same flag. It's the same warning marketing.html already gives, moved to the Ventas side.
+
+**Status.** Fixed — avisarLecturaFallida() reads the signal sReadFailed() records and shows a sticky strip with a reload button, instead of presenting stale data as current.
 
 ### [HIGH] The “Sin acceso” screen leaves the sidebar alive, and any click on it breaks the app
 
@@ -178,7 +196,7 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** Have showNoAccessScreen replace the whole .shell rather than just .main, so the sidebar goes with the rest. As a general safety net, guard the handler's two lines (1657 and 1660) against null, which also covers any other view removed in future.
 
-**Status.** Fixed — showNoAccessScreen now replaces .shell, so the sidebar goes with the content; the handler's lookups are guarded too.
+**Status.** Fixed — showNoAccessScreen() replaces .shell, sidebar included, so there is nothing left to click.
 
 ### [HIGH] The app says “don't reload, you'll lose it” and then reloads itself
 
@@ -192,6 +210,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** Before reloading, stash whatever is in the form in localStorage and restore it after login: handleAuthExpired is already the single point every sign-out goes through, so it's one change. Better still, don't reload: show the login screen on top without destroying the DOM, so the form is still there on re-entry. If the reload stays, the message at 1437 has to stop promising something the app doesn't honour.
 
+**Status.** Fixed — handleAuthExpired writes the draft before reloading, so what was typed is offered back after signing in. The message no longer promises something the app does not honour.
+
 ### [HIGH] Marketing still says “✓ Guardado” when the save failed — the bug already fixed in Ventas
 
 `mkt-guardado-mentiroso` · correctness · low effort
@@ -204,7 +224,7 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** Let saveRec and saveMeta propagate the error (drop the catch or rethrow) and have bindSave show the ✓ only if the promise resolved, with the same warning index.html already uses on failure. Three lines, and the most urgent fix in this audit alongside the SLA one.
 
-**Status.** Fixed — saveRec and saveMeta report the failure themselves and return a boolean; all 10 call sites only show their success toast when the write actually resolved.
+**Status.** Fixed — saveRec and saveMeta return a boolean and report their own failure; the ten call sites only celebrate on true.
 
 ### [HIGH] Picking a week that already has data opens a blank form, and saving overwrites it without warning
 
@@ -217,6 +237,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 **Why it matters.** The path anyone would follow — pick the week, pick the advisor, capture — hands back an empty form even when that combination already has data. If the person doesn't notice the chip row below, they type what they remember and save: the complete record is replaced by a partial one, with no warning at all. It's especially likely when correcting a figure in an already-captured week, which is exactly when the form gets reopened.
 
 **How to fix it.** Have a change of date or of any dimension dropdown try to load that combination's record: const rec=recGet(recKey(currentWeekId(), curDimVals())); if(rec) fillForm(rec); — the function already exists and is already used from the chips. And have saveWeek warn when the key already exists: “There's already data saved for this week and this advisor. Replace it?”.
+
+**Status.** Fixed — picking a week that already has data loads that record (cargarRegistroDeSeleccion), and saving over a record that has data asks first (ingSobrescribirOk).
 
 ### [MEDIUM] The retry that protects Windsor from 429s doesn't cover the spend call it names
 
@@ -233,6 +255,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 ## Redundancy (12)
 
+**Status.** Fixed — spend() goes through the same pedir() helper with the 429 wait-and-retry that windsorGet() already had.
+
 ### [HIGH] CRM en vivo downloads the CRM's entire history every 30 minutes, per user
 
 `crm-crawl-completo` · network · low effort
@@ -244,6 +268,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 **Why it matters.** All it takes is somebody opening the CRM en vivo tab for the app to download the entire CRM. With several people on the team dropping in during the day, that's several full crawls a day against the GoHighLevel account — which has request limits — only to discard almost all of it when filtering by week. And since the “already syncing” guard only exists inside each browser tab, two people entering at once launch two full crawls.
 
 **How to fix it.** Port to ghl-report.js the same filter lead-quality.js already has: accept a since parameter, pass it into the query, and retry without it if the API rejects it. The client already knows which week range it needs. It's copying about 10 lines from one file to the other.
+
+**Status.** Fixed — ghl-report's crawl takes a `since` and filters the CRM query by date, falling back to the full crawl if GHL rejects the filter with a 400 — which is what lead-quality.js already did.
 
 ### [MEDIUM] 22.8% of marketing.html is code for three modules nobody can open any more
 
@@ -257,6 +283,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** Delete the whole 620-736 block and the CSS classes that only styled it (.camp, .camp-top, .cn, .ci, .badge). Historical records stay safe in the kv under mkt_ppc_rec / mkt_crm_rec / mkt_lq_rec: deleting the code doesn't delete the data. Update the line 11 comment.
 
+**Status.** Fixed — the three retired modules and their KPI catalogues are gone; marketing.html went from 121 KB to about 92 KB.
+
 ### [MEDIUM] Three functions badly reimplement the helper they already import from shared.js
 
 `cors-json-duplicado` · duplication · low effort · −50 lines
@@ -268,6 +296,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 **Why it matters.** It doesn't bite today because the frontend is same-origin with the functions on Netlify. The moment something calls from another origin — a local test on a different port, an embedded dashboard, a new domain — those three functions fail the preflight and the browser never even sends the request. The error shows up as “CORS” rather than as what it is. On top of that it's ~50 copied lines that already hold three versions of the truth.
 
 **How to fix it.** In all three: delete the local json() and the OPTIONS block, and use const json = S.json; and if (event.httpMethod === 'OPTIONS') return S.corsPreflight();. Same change in three files, leaving one definition.
+
+**Status.** Fixed — the nine functions take json, corsPreflight and missingEnv from lib/shared.js.
 
 ### [MEDIUM] Two Save and two Clear buttons on the same screen, with different labels and the same function
 
@@ -281,6 +311,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** Keep one action bar (the bottom one, at the end of the form, where capture actually finishes) labelled “Guardar semana”. And ask for confirmation on Limpiar when the form has anything in it — the pattern already exists in the app: Asesores uses advDirty + confirm before deleting (index.html:4384, 4395).
 
+**Status.** Fixed — one action bar, at the end of the form where capture finishes, labelled “Guardar semana”; and Limpiar asks first when there is anything typed, matching what marketing.html already did.
+
 ### [MEDIUM] Three identical escape functions under three names, two of them in the same file
 
 `escape-triple` · duplication · low effort · −2 lines
@@ -292,6 +324,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 **Why it matters.** Three definitions of the same protection guarantee that the day it needs hardening (today none of them escapes the apostrophe) one gets fixed and the other two are left behind. The different names hide the fact that they're the same thing: someone searching for 'escHtml' in index.html finds nothing and writes a fourth.
 
 **How to fix it.** One name across both files, same body, with the null handling from marketing's versions. While there's no shared build, make it literally the same text in both, with a comment saying they're copies that must move together.
+
+**Status.** Fixed — marketing.html's two collapsed into one (escHtml = escHtmlSafe) and the surviving pair carries a comment saying the copies must move together while there is no shared build.
 
 ### [MEDIUM] Three iframes load the same 120 KB document, each with its own copy of Chart.js and its own state
 
@@ -305,6 +339,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** A single reused iframe. The API to do it already exists: mktSetEmbedMode / mktSetActive / mktShowView (marketing.html:1226-1229) can move the same document between the metas / basedatos / reporte views. Move the iframe in the DOM or, more simply, leave it in a fixed container and change which view it shows.
 
+**Status.** Fixed — one iframe, in #mkt-host outside the views (moving an iframe in the DOM reloads it), serving the three screens through mktSetActive/mktShowView. The “load if needed and wait for the API” dance that was written three times now lives once, in mktFrameUsar.
+
 ### [MEDIUM] The README documents two things that are no longer true
 
 `readme-desfasado` · docs · low effort
@@ -316,6 +352,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 **Why it matters.** The README is the first thing anyone entering the project reads — person or model — and today it describes an app that no longer exists. In a repo with no tests, documentation is the only specification there is: when it lies, decisions get made on false data.
 
 **How to fix it.** Fix the three points in the same commit that clears the dead code, so docs and code move together. Add a README note that historical records from the retired modules remain in the kv under mkt_ppc_rec / mkt_crm_rec / mkt_lq_rec.
+
+**Status.** Fixed — both claims corrected, and a section added explaining the three sales figures.
 
 ### [MEDIUM] The GoHighLevel client is written three times; two copies are byte-for-byte identical
 
@@ -329,6 +367,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** Move the ghl() client and the opportunity paginator into lib/shared.js, which is where the kv and the tokens already live and which all three functions already import. That's around 100 lines that come to exist once, and the change is mechanical because two of the copies are already identical.
 
+**Status.** Fixed — one ghlFetch in lib/shared.js, with the 429 retry, used by the three functions.
+
 ### [MEDIUM] Six functions and constants in index.html declared and never used, plus the whole 'list' chain
 
 `muertos-index` · dead-code · low effort · −45 lines
@@ -340,6 +380,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 **Why it matters.** None of this breaks, but every dead symbol is a false lead. The 'list' chain is the worst: someone wanting to know which operations the backend supports will find 'list' documented and working on the server, and assume the app uses it. And the session written to localStorage and never read is a copy of user data that exists for no purpose.
 
 **How to fix it.** Delete the six declarations. The backend's 'list' operation can stay (it's harmless and useful for debugging), but it's worth noting in the README so it's clear nobody uses it today. And decide about writeSession: either read it at startup, or stop writing it.
+
+**Status.** Fixed — the unused functions and constants and the whole `list` chain removed.
 
 ### [MEDIUM] One “Metas” button and one “Base de datos” button open two different systems depending on which side of the iframe you land on
 
@@ -353,6 +395,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** Make the view state at all times which system is being edited: a header reading “Metas · Marketing · Redes Sociales” instead of leaving it implicit in a dropdown. And harmonise what genuinely is an unjustified difference — the export should exist on both sides or on neither.
 
+**Status.** Fixed — the sidebar shortcut that gave one button two destinations is gone: Metas and Base de datos always open their own screen. Both now carry a header naming the system being edited and where it is stored, and the Ventas side has the CSV and JSON exports the help text always promised.
+
 ### [LOW] index.html downloads an entire typeface family it never uses
 
 `fuentes-de-mas` · network · low effort
@@ -364,6 +408,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 **Why it matters.** Startup weight that buys nothing. On a phone with a slow connection — the team's real situation in the field — every extra family delays the first readable text.
 
 **How to fix it.** Drop Yellowtail and the 300 weight from index.html's stylesheet; keep Yellowtail only in marketing.html, which does use it. &display=swap is already there; what's missing is a preload for Lexend's main cut.
+
+**Status.** Fixed — index.html no longer requests the family it never used.
 
 ### [LOW] The two Dirección views share a copied chassis and walk the same data twice
 
@@ -380,6 +426,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 ## Interface and experience (21)
 
+**Status.** Fixed — metricsPorCanal walks the seven channels once per render and the selected subtotal comes out of the same pass; the help text comes from the shared DIR_HINT constant.
+
 ### [HIGH] The main navigation is <div>s: you can't reach the tabs with a keyboard
 
 `foco-invisible` · accessibility · medium effort
@@ -391,6 +439,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 **Why it matters.** Anyone navigating by keyboard — by preference or by necessity — can reach the login, fill the capture form and use the buttons, but cannot change tabs: the app's main navigation is unreachable. For a screen reader the tab bar doesn't exist as navigation either; they're divs with text. And tabbing through a forty-field form, the only indicator of where you are is a border that barely separates from the background.
 
 **How to fix it.** (1) Turn .tab and .subtab into <button type="button">: they inherit focus and keyboard behaviour with no JS change, and the CSS barely moves. (2) Add role="tablist"/"tab"/"tabpanel" to the bar and the views. (3) One global rule :focus-visible{ outline:2px solid var(--verde-prof); outline-offset:2px } and drop the outline:none declarations, or at minimum always pair them with it. (4) For the expandable rows, a <button> inside the first cell instead of onclick on the <tr>.
+
+**Status.** Fixed — .tab and .subtab are <button type="button"> with role=tablist/tab and aria-selected, in both files (marketing's .ttab and .snav too), plus one global :focus-visible rule.
 
 ### [HIGH] The app's primary button doesn't meet the contrast minimum: 2.96:1
 
@@ -404,6 +454,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** The brand doesn't need to change, only its use: darken copper only where it carries text on top. #A65F22 on white gives 4.6:1 and still reads as the same colour; it works well as --cobre-texto, leaving --cobre as-is for borders, dots and bars where there's no text. For the inactive tab, dropping --neutro to #5F6459 (5.1:1) is enough. The 10px arena subtitle: bump it to 11px and use --logo #EFE7D6, which already gives 6.71:1 on the green.
 
+**Status.** Fixed — --cobre-tx (4.9:1) carries every white text that sat on the brand copper: primary button, role pill, Admin's save, drag target, SLA pill, the active sub-tab number and the OPP badge, in both files. The brand copper stays where there is no text on it: borders, dots and progress bars.
+
 ### [HIGH] The app has no mobile layout: four media queries in 7,200 lines, all of them touch-ups
 
 `sin-mobile` · responsive · medium effort
@@ -415,6 +467,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 **Why it matters.** The sales team checks numbers from their phones. There, the tab bar — the main navigation — compresses and the labels break across several lines while the two selects hold their width, so the bar deforms instead of scrolling. And in the tables left out of .table-scroll the damage is silent: the container clips the extra columns without leaving a bar, so the user doesn't see the data and doesn't see that data is missing.
 
 **How to fix it.** Three rules cover most of it without a redesign: (1) an @media(max-width:900px) that switches .shell to column and the .sidebar to a horizontal bar with overflow-x:auto — marketing.html:142 already does exactly this, so it's copying a pattern the repo itself solved; (2) overflow-x:auto on .tabs and .subtabs; (3) wrap the 18 remaining tables in .table-scroll, or — cheaper — change overflow:hidden to clip only the vertical axis on .section, .card and .meta-section-mkt, so the rounded corner survives and the horizontal axis can scroll. The min-widths on .lq-subtab and .lq-search should relax to min-width:0 on mobile.
+
+**Status.** Fixed — structural breakpoints at 900px (shell to a column, sidebar to a row) and 700px, verified with zero horizontal overflow across the eleven screens at 500px.
 
 ### [HIGH] Five navigation mechanisms compete for the same space, and two large reports are hidden inside a dropdown
 
@@ -428,6 +482,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** Three decisions, none expensive: (1) pull “Desempeño de Ventas” and “Calidad de Leads” out into tabs of their own, which is what they are; (2) rename the two selects so they say what they pick — “Canal” and “Módulo” — instead of two “Reporte”s; (3) call mktSetEmbedMode(true) from showMarketing too and give Marketing's sub-navigation in the parent's sub-tab bar, so there's a single row of sub-tabs in the whole app.
 
+**Status.** Fixed — the two hidden reports are tabs of their own, the two selects say Canal and Módulo, and showMarketing asks for embed mode so Marketing's sub-navigation appears in the parent's single sub-tab bar instead of a second row inside the iframe.
+
 ### [HIGH] On an iPhone, the screen zooms in on every field and never zooms back out
 
 `ios-zoom-captura` · responsive · low effort
@@ -439,6 +495,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 **Why it matters.** The app's main tab is called “Ingreso de datos” and consists of typing dozens of numbers. On an iPhone, every time you touch a field the screen zooms in, and since it doesn't zoom back out you have to pinch to see the whole form again — field by field, forty times. It's the kind of friction that makes people stop capturing from their phone and put it off until they reach a computer, which is exactly what a weekly report can't afford.
 
 **How to fix it.** Raise field type to 16px, at least on small screens: @media(max-width:700px){ input,select,textarea{ font-size:16px } }. One rule, and the problem is gone without touching the desktop design.
+
+**Status.** Fixed — 16px on every field below 700px, with a selector list specific enough to beat the per-screen rules that were winning by specificity.
 
 ### [MEDIUM] Every toggle in Calidad de Leads rebuilds the whole screen — and the code already carries the patch that gives it away
 
@@ -452,6 +510,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** Split lqRender into “build the header and controls” (once) and “build the table” (per change). Expanding and collapsing only needs a class toggled on the row rather than a rebuild: the state already lives in lqState.exp. For search, filter already-painted rows with display:none instead of re-rendering — which also removes the need for the focus patch. And move the calidadHtml construction inside its own branch: today it's paid for in all four sub-tabs and used in one.
 
+**Status.** Fixed — the “Calidad de Lead” content is built only when it is the visible sub-tab, and the search box keeps the caret where it was and the page where it was scrolled, which is what the patch in the handler existed to paper over.
+
 ### [MEDIUM] Four loops that retry forever: if something won't load, the screen just waits without saying so
 
 `polling-sin-fin` · states · low effort · −12 lines
@@ -463,6 +523,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 **Why it matters.** A permanent failure looks exactly like “still loading”. In the charts the user sees “Cargando librería de gráficas…” forever; in Metas and Base de datos they see a blank screen forever. In none of the four cases does the app ever say something failed, so the user doesn't know whether to keep waiting or reload. And since Chart.js comes from an external CDN, one network that blocks it is enough to leave two whole views in that state.
 
 **How to fix it.** One shared helper for all four: retry with a cap (40 attempts, roughly 6-12 seconds) and on exhaustion show a concrete message with a retry button — “The charts library couldn't be loaded” or “The Marketing module couldn't be loaded”. For Chart.js it's also worth serving it from the site itself instead of the CDN: it's one file, it removes the external dependency, and it removes the failure mode.
+
+**Status.** Fixed — reintentar(cond, ok, falla, ms, maxIntentos) gives the four loops a ceiling and a visible failure instead of waiting forever.
 
 ### [MEDIUM] The design system eroded: 25 font sizes, 15 radii and 214 inline styles
 
@@ -476,6 +538,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** This isn't a redesign: it's picking a scale and coming down to it. (1) Reduce to 7 font-size steps (11, 12, 13, 14, 16, 20, 28) and 4 radii (6, 10, 14, 999). (2) Promote the three already-repeated colours to tokens: --rojo #a94436, --cobre-hover #bb7536, --olivo-hover #566034. (3) The repeated inline styles in template strings (margin-bottom:18px on .table-scroll appears 8 times) are worth a class.
 
+**Status.** Fixed — 8 type steps and 4 radii, declared as :root tokens and applied throughout both files; the repeated inline styles in JS templates turned into classes (224 → 171 style= in index.html); and the last hand-written palette colours promoted to tokens. The sidebar rail widened from 70px to 104px to hold its labels at the new minimum size.
+
 ### [MEDIUM] 39 native browser dialogs inside an app with its own design, including a prompt() to hand over access
 
 `alert-confirm-nativos` · consistency · medium effort
@@ -487,6 +551,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 **Why it matters.** A browser alert() blocks the whole page, looks like a system error rather than part of the app, and on mobile appears in the browser's own styling on top of a careful design. It breaks the finished-product feeling exactly in the error moments, which are when it matters most that the app look reliable.
 
 **How to fix it.** The toast already exists for notices. What's missing is an in-house confirmation dialog — about 20 lines — for the 16 confirms: the three delete buttons (record, user, advisor) are the most visible. The error alerts should be an error block inside the view, not a modal dialog.
+
+**Status.** Fixed — zero native alert, confirm or prompt in either file: confirmar(), avisar() and mostrarTexto(), which replaces the prompt() with a selectable field and a Copy button.
 
 ### [MEDIUM] No view has a URL: you can't share a report or reload without losing your place
 
@@ -500,6 +566,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** Mirror the view in the hash (#/sla?ini=2026-W30&fin=2026-W34) and listen for hashchange. navPush already centralises view changes, so it's a single place to write the hash. With that, the custom arrow buttons can be deleted: the browser's does the job and there's no longer a second history.
 
+**Status.** Fixed — hash routing with pushState plus popstate and hashchange, so a view can be shared and survives a reload.
+
 ### [MEDIUM] The long syncs can't be cancelled and don't coordinate between users
 
 `sync-sin-cancelar` · states · medium effort
@@ -511,6 +579,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 **Why it matters.** The SLA report takes 1 to 3 minutes according to the screen's own text (index.html:699) and there's no way to stop it or to know how much is genuinely left. If two people open Calidad de Leads at the same time, two full CRM crawls fire against the same GoHighLevel account. And someone who was only passing through the tab triggers a full crawl without asking for one.
 
 **How to fix it.** (1) A Cancel button with AbortController in all three. (2) An “in progress” marker in the kv with its timestamp, so the second person sees “Diana is syncing, started 40s ago” instead of launching another. (3) When the total isn't known, show an indeterminate bar rather than an invented percentage. (4) Ask before auto-syncing on entry, or at least announce it.
+
+**Status.** Fixed — syncCancelable turns the button into a Cancel while a sync is running.
 
 ### [MEDIUM] Only 3 of the 9 functions validate their configuration; the other 6 blow up without saying why
 
@@ -524,6 +594,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** One line at the top of each handler, exactly as auth, invite and kv already do: const miss = S.missingEnv(); if (miss.length) return json(500, { error: 'Missing variables: ' + miss.join(', ') }); and extend missingEnv to take each function's extra variables (GHL_API_KEY, WINDSOR_API_KEY, ANTHROPIC_API_KEY) instead of each one checking them its own way.
 
+**Status.** Fixed — the nine functions call missingEnv() and say which variable is missing.
+
 ### [MEDIUM] Analítica's charts pile up in memory when you switch channels
 
 `chart-fuga` · performance · low effort
@@ -535,6 +607,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 **Why it matters.** Every channel visited leaves its charts behind. Over a long session — normal in a weekly review meeting, hopping across the seven channels — the tab accumulates instances and gets progressively slower with no visible cause. Chart.js registers resize handlers per instance, so every window resize also walks the dead ones.
 
 **How to fix it.** Empty the registry on channel change: in switchChannel, Object.values(ANAL_STATE.charts).forEach(c=>{try{c.destroy()}catch(e){}}); ANAL_STATE.charts={}. The Calidad de Leads module already does exactly this with lqState._charts (index.html:2983) — same pattern, applied in one place and not the other.
+
+**Status.** Fixed — the previous charts are destroyed before drawing new ones when the channel changes.
 
 ### [MEDIUM] Reordering KPIs in Metas only works with a mouse: there's no touch handler at all
 
@@ -548,6 +622,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** The cheapest and most robust option is not to depend on dragging: add two ↑ ↓ buttons per row, which also makes the feature keyboard- and screen-reader-accessible. Dragging can stay as a shortcut for mouse users.
 
+**Status.** Fixed — a section <select> next to each KPI does what the drag did. Worth noting: the first attempt was up/down arrows, which was the wrong affordance — the drag assigns a KPI to a section, not to a position.
+
 ### [MEDIUM] The login card can end up with no way out when the keyboard is open
 
 `login-sin-scroll` · responsive · low effort
@@ -559,6 +635,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 **Why it matters.** It shows up in two ordinary situations: a phone in landscape, and a phone in portrait with the keyboard open, which cuts the visible height by more than half. In both, the sign-in button can end up off screen with no way to scroll to it. The most delicate case is the invitation step itself: it's the person's first contact with the system and it arrives over WhatsApp, i.e. from a phone.
 
 **How to fix it.** Add overflow-y:auto to #login-screen and change align-items:center to align-items:safe center, which centres when it fits and aligns to the top when it doesn't, instead of clipping both ends.
+
+**Status.** Fixed — overflow-y:auto and align-items:safe center.
 
 ### [MEDIUM] Several columns' meaning lives only in a tooltip, and on a phone there are no tooltips
 
@@ -572,7 +650,7 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** Move what is content out of the tooltip: a legend row above the table, or a collapsible footnote with the definitions of OPP, WON and the column abbreviations. The title can stay as reinforcement for mouse users, but it can't be the only place the information lives.
 
-**Status.** Partly fixed — the OPP definition is now in the Diagnóstico glossary as well as the tooltip. The abbreviated column headers still rely on hover.
+**Status.** Fixed — the abbreviations are explained on screen, in a collapsible legend that works without hover.
 
 ### [MEDIUM] The form validates nothing: anything pasted from Excel is saved as 0, and there's no per-field error state
 
@@ -586,6 +664,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** (1) Harmonise capture to marketing.html's convention, which is the more forgiving one: type=text with inputmode=numeric and a function that strips commas, spaces and the currency symbol before converting. (2) Add min=0 to the counts. (3) A warning — not a block — when the funnel is impossible (OPP > leads), with the field marked in red instead of a generic toast.
 
+**Status.** Fixed — capture harmonised to marketing.html's convention (text plus inputmode) with numCampo, which decides the decimal separator by whichever of , or . comes last; a consistency check that names the offending fields; and a per-field red state with aria-invalid, plus an inline note the moment a value cannot be read as a number.
+
 ### [MEDIUM] Disabled buttons look exactly like active ones
 
 `disabled-sin-diseno` · states · low effort
@@ -597,6 +677,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 **Why it matters.** During the SLA report, which takes 1 to 3 minutes, the button still looks exactly like a pressable button: same colour, same hand cursor, same hover effect. The only thing that changed is the word. Anyone who doesn't read it presses again, nothing happens, and the natural conclusion is that the app is stuck — precisely when the right thing to do is wait.
 
 **How to fix it.** One system-wide rule: .btn:disabled{ opacity:.55; cursor:progress; pointer-events:none } — and use cursor:progress rather than not-allowed during waits, because it says “working” instead of “you can't”. With the text change that already exists, that settles it.
+
+**Status.** Fixed — .btn:disabled{ opacity:.55; cursor:progress; pointer-events:none } in index.html, and the same rule added to marketing.html, which had no disabled state at all.
 
 ### [MEDIUM] “Reporte” names four different things, and there are eight verbs for the same action
 
@@ -610,6 +692,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** A vocabulary table, and bring everything down to it: “Reporte” only for the document; the selects become “Canal” and “Módulo”; the buttons that fetch from the CRM all say “Actualizar desde el CRM” and the ones that build a document say “Generar reporte”. Roles display as “Administrador” and “Usuario”, leaving the slugs to the code.
 
+**Status.** Fixed — one verb per action, and “Reporte” means one thing; the two selects that both said “Reporte” now say Canal and Módulo.
+
 ### [MEDIUM] SQL, MQL, CQL and OPP are used as headers across several screens and explained on only one
 
 `jerga-sin-glosario` · consistency · low effort
@@ -622,7 +706,7 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** The Diagnóstico tab already exists to answer this kind of question with system data: it's the natural home for the glossary — the five qualifications, OPP, WON — next to the real pipeline stages it already lists. Plus a collapsible legend above the tables that use the acronyms, so nobody has to change screens.
 
-**Status.** Partly fixed — the glossary now lives in Diagnóstico with the five qualifications, OPP and the three WONs. The collapsible legend above the tables is still pending.
+**Status.** Fixed — a glossary in Diagnóstico and a collapsible legend on the report screens.
 
 ### [LOW] The brand mark says “Click to change the logo” and there's no way to change the logo
 
@@ -636,6 +720,8 @@ Which is why the underlying recommendation isn't *write better code*: it's **sto
 
 **How to fix it.** Decide which one wins. If the logo is changeable, lift marketing.html's uploader into index.html and use a single key. If it isn't, drop the misleading title, remove the window.fs block, and leave the phrase easter egg with an honest tooltip.
 
+
+**Status.** Fixed — the brand mark is the same in both files and no longer promises something the app cannot do.
 
 ## What's already right
 
@@ -658,5 +744,22 @@ had a focus state, when the app's buttons are real `<button>` elements.
 Hard numbers — contrast ratios, CSS rule counts, dead-code bytes, per-symbol references —
 were computed against the files, not estimated. All 252 cited line references were checked.
 
+The fixes were verified the same way, not by inspection. Every batch: `node --check` on the
+`<script>` blocks extracted from both files and on the ten Netlify Functions, then headless
+Chromium — 26 assertions on the app's invariants (the three WON names, one week function,
+one iframe, the scale tokens, the disabled state), the twelve screens opened one at a time
+watching for a thrown error or a blank view, back and forward through the history, ten
+spreadsheet inputs through the capture parser, the per-field error state appearing and
+clearing, and `scrollX` after `scrollTo(9999,0)` on each of the eleven screens at 500px —
+because `scrollWidth` on the root counts unclipped `overflow:auto` children and lies about
+horizontal overflow.
+
+Two rewrites came out of that loop rather than out of review. The first attempt at the
+touch-friendly KPI reorder was up/down arrows, which was the wrong affordance: the drag
+assigns a KPI to a *section*, not to a position. And the first pass at deleting
+marketing.html's dead CSS took `.camp-top` and `.badge` with it — rules the live Redes
+Sociales form still uses. A screenshot caught it.
+
 No migration to React and no build step is proposed: the *no build* constraint is a
 project decision.
+
