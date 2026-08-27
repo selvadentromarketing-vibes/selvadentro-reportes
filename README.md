@@ -96,6 +96,20 @@ Pestaña **CRM en vivo** en la barra principal:
   volver a consultar el CRM. Las barras por etapa muestran las oportunidades abiertas hoy.
 - **Permisos**: canal `crm_live` en el panel de administración (grupo Ventas).
 
+## Canal de negocio: de dónde sale cada lead
+
+Los siete canales de Ventas (Brokers, Paid Orgánico, Seminarios…) se capturaban a mano
+porque la app no sabía deducirlos. Ahora sí: `lqCanalDeNegocio` lee el campo personalizado
+**"Fuente del lead"** de GoHighLevel y lo traduce al canal; si viene vacío, lo intenta por
+tags; si tampoco, devuelve `null` (nunca inventa un canal, porque ese número acabaría en
+Dirección pareciendo un hecho).
+
+Hoy eso cubre bien un canal de siete: el campo viene lleno en el 47% de los contactos y en
+los canales que no son publicidad casi nunca. **Diagnóstico → "Captura manual contra CRM,
+por canal"** compara semana a semana lo capturado contra lo que el CRM atribuye solo, con un
+veredicto por canal, para poder retirar la captura de un canal cuando de verdad sobre.
+Lo que falta hacer en el CRM está en [docs/ghl-canales-spec-2026-08.md](docs/ghl-canales-spec-2026-08.md).
+
 ## Calidad de Leads (GoHighLevel + Windsor.ai)
 
 Pestaña **Calidad de Leads** en la barra principal — versión en vivo del reporte
