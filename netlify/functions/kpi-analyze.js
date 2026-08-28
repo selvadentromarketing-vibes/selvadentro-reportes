@@ -21,25 +21,19 @@ const S = require("./lib/shared.js");
 
 const API_KEY = process.env.ANTHROPIC_API_KEY;
 
-const json = (status, body) => ({
-  statusCode: status,
-  headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-  body: JSON.stringify(body),
-});
+const json = S.json;      // una sola definición, en lib/shared.js
 
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") {
-    return {
-      statusCode: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-      },
-      body: "",
-    };
+    return S.corsPreflight();   // permite Authorization, que esta function exige
   }
   if (event.httpMethod !== "POST") return json(405, { error: "Method not allowed" });
+  // SESSION_SECRET hace falta para verificar el token de sesión, y sin ella
+  // crypto.createHmac lanza y la function responde 502 SIN cabeceras CORS: el navegador
+  // reporta un error de CORS en vez de decir que falta una variable. Solo tres de las
+  // nueve functions comprobaban esto.
+  const miss = S.missingEnv();
+  if (miss.length) return json(500, { error: "Faltan env vars: " + miss.join(", ") });
   if (!API_KEY) return json(500, { error: "ANTHROPIC_API_KEY no configurada en el entorno" });
   // Antes bastaba con tener sesión: cualquier usuario podía disparar llamadas a Claude
   // sin límite. Ahora exige el canal correspondiente, igual que el resto de reportes.

@@ -16,38 +16,11 @@ const S = require("./lib/shared.js");
 
 const API_KEY = process.env.GHL_API_KEY;
 const LOCATION_ID = process.env.GHL_LOCATION_ID;
-const BASE = "https://services.leadconnectorhq.com";
 const PAGES_PER_CALL = 6;
 
-const json = (status, body) => ({
-  statusCode: status,
-  headers: {
-    "Content-Type": "application/json",
-    "Cache-Control": "no-store",
-    "Access-Control-Allow-Origin": "*",
-  },
-  body: JSON.stringify(body),
-});
+const json = S.json;      // una sola definición, en lib/shared.js
 
-async function ghl(path) {
-  let resp = await fetch(BASE + path, {
-    headers: { Authorization: "Bearer " + API_KEY, Version: "2021-07-28", Accept: "application/json" },
-  });
-  if (resp.status === 429) {
-    await new Promise((r) => setTimeout(r, 1200));
-    resp = await fetch(BASE + path, {
-      headers: { Authorization: "Bearer " + API_KEY, Version: "2021-07-28", Accept: "application/json" },
-    });
-  }
-  if (!resp.ok) {
-    const detail = await resp.text();
-    const err = new Error(`GHL ${resp.status} en ${path.split("?")[0]}`);
-    err.status = resp.status;
-    err.detail = detail.slice(0, 400);
-    throw err;
-  }
-  return resp.json();
-}
+const ghl = S.ghlFetch;   // cliente compartido (lib/shared.js)
 
 const slim = (o) => ({
   p: o.pipelineId || "",
@@ -80,16 +53,32 @@ async function bootstrap() {
   return { pipelines, users };
 }
 
-async function crawl({ startAfter, startAfterId, pages }) {
+// `since`: epoch ms desde el que interesan las oportunidades. Sin él, esta función recorría
+// TODO el histórico del CRM en cada sincronización — y showCRM la dispara sola cada 30 min
+// por usuario — solo para descartar casi todo al filtrar por semana en el navegador. El
+// arreglo ya existía en lead-quality.js (ver el comentario de su `opps`) y nunca se trajo
+// aquí. Si el API rechaza el formato del filtro, se reintenta sin él, igual que allá.
+async function crawl({ startAfter, startAfterId, pages, since }) {
   const maxPages = Math.min(Number(pages) || PAGES_PER_CALL, 8);
   const opps = [];
   let cursor = startAfter && startAfterId ? { startAfter, startAfterId } : null;
   let total = 0;
+  let usarFiltro = !!since;
 
   for (let i = 0; i < maxPages; i++) {
-    let qs = `location_id=${LOCATION_ID}&limit=100`;
+    const base = `location_id=${LOCATION_ID}&limit=100`;
+    let qs = base + (usarFiltro ? `&date=${encodeURIComponent(since)}` : "");
     if (cursor) qs += `&startAfter=${encodeURIComponent(cursor.startAfter)}&startAfterId=${encodeURIComponent(cursor.startAfterId)}`;
-    const data = await ghl(`/opportunities/search?${qs}`);
+    let data;
+    try {
+      data = await ghl(`/opportunities/search?${qs}`);
+    } catch (e) {
+      if (!usarFiltro || e.status !== 400) throw e;
+      usarFiltro = false;                       // el API no acepta el formato: seguir sin filtro
+      let q2 = base;
+      if (cursor) q2 += `&startAfter=${encodeURIComponent(cursor.startAfter)}&startAfterId=${encodeURIComponent(cursor.startAfterId)}`;
+      data = await ghl(`/opportunities/search?${q2}`);
+    }
     const batch = data.opportunities || [];
     batch.forEach((o) => opps.push(slim(o)));
     total = (data.meta && data.meta.total) || total;
@@ -102,17 +91,15 @@ async function crawl({ startAfter, startAfterId, pages }) {
 
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") {
-    return {
-      statusCode: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-      },
-      body: "",
-    };
+    return S.corsPreflight();   // permite Authorization, que esta function exige
   }
   if (event.httpMethod !== "POST") return json(405, { error: "Method not allowed" });
+    // SESSION_SECRET hace falta para verificar el token de sesión, y sin ella
+  // crypto.createHmac lanza y la function responde 502 SIN cabeceras CORS: el navegador
+  // reporta un error de CORS en vez de decir que falta una variable. Solo tres de las
+  // nueve functions comprobaban esto.
+  const miss = S.missingEnv();
+  if (miss.length) return json(500, { error: "Faltan env vars: " + miss.join(", ") });
   if (!API_KEY || !LOCATION_ID) return json(500, { error: "GHL_API_KEY / GHL_LOCATION_ID no configuradas en el entorno" });
 
   const session = S.authFromEvent(event);

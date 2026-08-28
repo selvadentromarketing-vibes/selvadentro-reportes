@@ -5,7 +5,7 @@ Producción: https://team.selvadentrotulum.com (Netlify site: `slvd-reportes`).
 
 ## Arquitectura
 
-- **Frontend**: dos páginas estáticas ([index.html](index.html) ventas/dirección, [marketing.html](marketing.html) embebida como iframe). Sin build.
+- **Frontend**: dos páginas estáticas ([index.html](index.html) ventas/dirección, [marketing.html](marketing.html) embebida en un **único** iframe que comparten las pantallas de Marketing, Metas y Base de datos). Sin build.
 - **Datos**: tabla `slvd_kv` (key/value JSON) en Supabase **con RLS activado y sin policies**:
   el anon key público no puede leer ni escribir nada. Todo el acceso pasa por la function
   `kv` con sesión firmada; la function llama al RPC `slvd_kv_op`, protegido por un secreto
@@ -96,6 +96,20 @@ Pestaña **CRM en vivo** en la barra principal:
   volver a consultar el CRM. Las barras por etapa muestran las oportunidades abiertas hoy.
 - **Permisos**: canal `crm_live` en el panel de administración (grupo Ventas).
 
+## Canal de negocio: de dónde sale cada lead
+
+Los siete canales de Ventas (Brokers, Paid Orgánico, Seminarios…) se capturaban a mano
+porque la app no sabía deducirlos. Ahora sí: `lqCanalDeNegocio` lee el campo personalizado
+**"Fuente del lead"** de GoHighLevel y lo traduce al canal; si viene vacío, lo intenta por
+tags; si tampoco, devuelve `null` (nunca inventa un canal, porque ese número acabaría en
+Dirección pareciendo un hecho).
+
+Hoy eso cubre bien un canal de siete: el campo viene lleno en el 47% de los contactos y en
+los canales que no son publicidad casi nunca. **Diagnóstico → "Captura manual contra CRM,
+por canal"** compara semana a semana lo capturado contra lo que el CRM atribuye solo, con un
+veredicto por canal, para poder retirar la captura de un canal cuando de verdad sobre.
+Lo que falta hacer en el CRM está en [docs/ghl-canales-spec-2026-08.md](docs/ghl-canales-spec-2026-08.md).
+
 ## Calidad de Leads (GoHighLevel + Windsor.ai)
 
 Pestaña **Calidad de Leads** en la barra principal — versión en vivo del reporte
@@ -114,7 +128,9 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
 - **Cache compartido**: agregado en el kv (`lq:agg:v1`), staleness de 30 min, igual
   que CRM en vivo.
 - **Permisos**: canal `mkt_lq` (o `marketing`, o admin). El módulo manual de
-  Calidad de Leads dentro de Marketing sigue existiendo tal cual.
+  Calidad de Leads dentro de Marketing **se retiró el 2026-08-26** junto con PPC Ads
+  y CRM Manager: los sustituye este motor en vivo. Sus registros históricos siguen
+  guardados en el kv bajo `mkt_lq_rec`, `mkt_ppc_rec` y `mkt_crm_rec`.
 - **Requisito GHL**: el Private Integration Token necesita el scope
   `contacts.readonly` (Settings → Private Integrations → editar → scopes). Sin él,
   la sincronización falla con el detalle del error de GHL visible en pantalla.
@@ -163,10 +179,28 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
   sección **Paid Media en vivo** (estado activo/pausado por anuncio, link de
   preview, inversión y resultados vía Windsor `/facebook` y `/google_ads`).
 
-## SLA y Seguimiento (Anexo 1 del proceso comercial)
+## Las tres cifras de ventas cerradas
 
-Pestaña **SLA y Seguimiento** — el reporte semanal de disciplina comercial, directo
-del CRM y con nombres:
+La app reporta ventas cerradas en tres pantallas y **cada una mide algo distinto**. Las
+tres son correctas; lo que no puede pasar es que se llamen igual. Desde el 2026-08-26 se
+llaman distinto y el glosario completo vive en la pestaña **Diagnóstico**:
+
+| Cifra | Dónde sale | Qué cuenta |
+|---|---|---|
+| **WON reportado** | Dirección General y Comercial | Lo que el equipo captura a mano cada semana en Ingreso de datos. Corta por la semana del reporte. |
+| **WON cerrado** | CRM en vivo | Oportunidades que pasaron a ganada dentro del rango, por su fecha de cambio de estatus. |
+| **WON del cohorte** | Calidad de Leads | Ventas de los leads que **entraron** en la semana, sin importar cuándo se cerraron. |
+
+**Todas las semanas se cuentan en hora Tulum (UTC−5)**, vía `semanaISOTulum`. Antes
+`crmWeekOf` leía en UTC y `lqWeekOf` en hora Tulum, así que los leads del domingo por la
+noche caían en semanas distintas según la pestaña. El agregado del CRM subió a
+`crm:agg:v2` para forzar la reconstrucción del cache que quedó agrupado con el reloj viejo.
+
+## Desempeño de Ventas (Anexo 1 del proceso comercial)
+
+Pestaña **Desempeño de Ventas** en la barra principal (antes "SLA y Seguimiento", y
+un tiempo escondida como canal sintético dentro del desplegable de Ventas) — el
+reporte semanal de disciplina comercial, directo del CRM y con nombres:
 
 - **SLA de primera respuesta** por asesor y por canal, con la definición del Anexo 1:
   se mide del alta del lead hasta el **contacto efectivo** (el lead respondió), no
@@ -217,8 +251,9 @@ secreto), se migraron los datos, y se eliminó la policy abierta de la tabla leg
 que conserva los datos históricos pero ya no es accesible desde fuera.
 
 El backend vive en el proyecto Supabase de Selvadentro (`vsnggxcuznleuvoyoenn`),
-el mismo que usaba la app original. `scripts/migrate-kv.mjs` quedó obsoleto tras el
-cutover (la tabla legacy ya no es legible por REST); se conserva como referencia.
+el mismo que usaba la app original. El script de migración (`scripts/migrate-kv.mjs`)
+quedó obsoleto tras el cutover —la tabla legacy ya no es legible por REST— y se eliminó
+del repo.
 
 ## Notas de seguridad restantes
 

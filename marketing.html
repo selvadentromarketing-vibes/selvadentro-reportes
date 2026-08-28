@@ -8,7 +8,8 @@
 Selvadentro — Sistema de Reportes · MARKETING (embed)
 Layout homologado al multicanal: sidebar (Metas · Responsable · Base Datos),
 tabs (Reporte · Ingreso de datos) + dropdown de REPORTE, periodos como dropdown.
-Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads (semanales)
+Reportes: Redes Sociales (mensual). PPC Ads, CRM Manager y Calidad de Leads manual se
+retiraron el 2026-08-26: los sustituyen Windsor y el motor en vivo de index.html.
 -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,151 +17,175 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
   :root{
-    --verde-prof:#465241; --olivo:#65713F; --cobre:#CF8543; --arena:#D9B37E;
+    /* Escala tipográfica y de radios. El archivo llegó a tener 25 tamaños de letra y 14
+       radios distintos, escritos a mano uno por uno; una escala sana tiene 7 u 8 pasos.
+       Nada de esto se veía roto en ninguna pantalla suelta: se acumulaba. Toda medida
+       nueva sale de aquí. */
+    --fs-xs:11px; --fs-s:12px; --fs-sm:13px; --fs-md:14px;
+    --fs-lg:16px; --fs-xl:20px; --fs-2xl:28px; --fs-3xl:38px;
+    --r-s:6px; --r-m:10px; --r-l:14px; --r-pill:999px;
+    --verde-prof:#465241; --olivo:#65713F; --cobre:#CF8543; --cobre-hover:#8E4F1B; --arena:#D9B37E;
+    /* El cobre de marca da 2.96:1 con texto blanco encima: reprueba el minimo de 4.5:1.
+       --cobre-tx es el mismo color oscurecido (4.9:1) y se usa SOLO donde hay texto. */
+    --cobre-tx:#A65F22;
     --crema:#FAF8F3; --crema-2:#F1ECE1; --linea:#E3DBCC; --texto:#2E332B;
     --verde-ok-bg:#CBDDC0; --verde-ok-tx:#3C5A2E; --rojo-no-bg:#F2CFC9; --rojo-no-tx:#9B3B2E; --neutro:#6F7468; --logo:#EFE7D6;
     --serif:"Cardo",Georgia,serif; --sans:"Lexend",system-ui,-apple-system,"Segoe UI",sans-serif; --script:"Yellowtail",cursive;
     --fb:#3B5BA5; --ig:#C13584; --tt:#10b9bd; --yt:#CF8543; --meta:#3B5BA5; --google:#CF8543; --web:#65713F; --mail:#a45c8a; --otras:#8a7a55;
   }
   *{ box-sizing:border-box; } body{ margin:0; }
-  #app{ font-family:var(--sans); color:var(--texto); background:var(--crema); min-height:100vh; font-size:14px; line-height:1.45; }
+  #app{ font-family:var(--sans); color:var(--texto); background:var(--crema); min-height:100vh; font-size:var(--fs-md); line-height:1.45; }
   /* Topbar y sidebar ocultos porque marketing va embebido dentro del multicanal */
   .topbar{ display:none !important; }
   .sidebar{ display:none !important; }
   body.iframed .tabrow-right{ display:none !important; }
   body.embed .tabrow{ display:none !important; }
-  body.embed .periodbar{ display:none !important; }
+  /* La fila de pestañas del iframe duplicaba las tres etiquetas del padre; se oculta
+     siempre en modo embebido. La barra de periodo NO sobra en Ingreso/Reporte/Analítica,
+     solo en las vistas que no tienen periodo. */
+  body.embed.sin-periodo .periodbar{ display:none !important; }
   body.embed .wrap{ padding:0 4px 40px; max-width:none; }
   .brand{ display:flex; flex-direction:column; align-items:flex-start; line-height:1; cursor:pointer; }
   #brand-logo{ height:50px; display:none; }
-  .brand .name{ font-family:var(--script); font-size:42px; color:var(--logo); line-height:.9; padding-right:6px; }
-  .brand .sub{ font-family:var(--serif); font-size:12px; letter-spacing:6px; text-transform:lowercase; color:var(--logo); margin-top:2px; padding-left:6px; opacity:.92; }
-  .app-title{ text-align:right; } .app-title .t1{ font-family:var(--serif); font-size:20px; } .app-title .t2{ font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--arena); }
+  .brand .name{ font-family:var(--script); font-size:var(--fs-3xl); color:var(--logo); line-height:.9; padding-right:6px; }
+  .brand .sub{ font-family:var(--serif); font-size:var(--fs-s); letter-spacing:6px; text-transform:lowercase; color:var(--logo); margin-top:2px; padding-left:6px; opacity:.92; }
+  .app-title{ text-align:right; } .app-title .t1{ font-family:var(--serif); font-size:var(--fs-xl); } .app-title .t2{ font-size:var(--fs-xs); letter-spacing:3px; text-transform:uppercase; color:var(--arena); }
   .shell{ display:flex; align-items:stretch; min-height:100vh; }
   .sidebar{ background:var(--verde-prof); width:94px; flex:0 0 94px; padding:18px 6px; display:flex; flex-direction:column; gap:6px; }
-  .snav{ color:var(--logo); text-align:center; padding:13px 4px; border-radius:10px; cursor:pointer; font-size:10px; letter-spacing:1px; text-transform:uppercase; font-weight:600; opacity:.85; }
+  /* Estos dos eran <div>: sin tabindex, sin rol y sin manejador de teclado, o sea que con
+     teclado no habia forma de cambiar de vista. Como <button> lo heredan sin tocar JS, pero
+     hay que apagar lo que la regla general de button les impone. */
+  .snav, .ttab{ background:transparent; border:none; font-family:var(--sans); font-weight:600; width:100%; display:block; }
+  :focus-visible{ outline:2px solid var(--verde-prof); outline-offset:2px; border-radius:var(--r-s); }
+  .snav{ color:var(--logo); text-align:center; padding:13px 4px; border-radius:var(--r-m); cursor:pointer; font-size:var(--fs-xs); letter-spacing:1px; text-transform:uppercase; font-weight:600; opacity:.85; }
   .snav svg{ display:block; margin:0 auto 6px; width:22px; height:22px; }
   .snav:hover{ background:rgba(255,255,255,.07); opacity:1; }
-  .snav.active{ background:var(--cobre); color:#fff; opacity:1; }
+  .snav.active{ background:var(--cobre-tx); color:#fff; opacity:1; }
   .main{ flex:1 1 auto; min-width:0; }
   .tabrow{ display:flex; align-items:center; background:var(--crema); padding:0 28px; border-bottom:1px solid var(--linea); }
-  .ttab{ padding:10px 18px; cursor:pointer; font-weight:500; font-size:12px; letter-spacing:.3px; color:var(--neutro); border-bottom:2px solid transparent; user-select:none; transition:.15s; }
+  .ttab{ width:auto; padding:10px 18px; cursor:pointer; font-weight:500; font-size:var(--fs-s); letter-spacing:.3px; color:var(--neutro); border-bottom:2px solid transparent; user-select:none; transition:.15s; }
   .ttab:hover{ color:var(--verde-prof); }
   .ttab.active{ color:var(--verde-prof); border-bottom-color:var(--olivo); }
   .tabrow-right{ margin-left:auto; display:flex; align-items:center; gap:9px; padding:0; }
-  .tabrow-right .sel-green{ padding:8px 34px 8px 16px; font-size:12.5px; font-weight:600; letter-spacing:.4px; border-radius:20px; background-position:right 13px center; }
-  .canal-lbl{ font-size:11px; letter-spacing:1px; color:var(--neutro); font-weight:700; }
-  .sel-green{ appearance:none; -webkit-appearance:none; background-color:var(--olivo); color:#fff; font-weight:600; font-family:var(--sans); border:none; border-radius:999px; padding:11px 42px 11px 20px; font-size:14px; cursor:pointer; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23ffffff' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 16px center; }
-  .sel-light{ appearance:none; -webkit-appearance:none; background-color:var(--crema); color:var(--texto); font-family:var(--sans); border:1px solid var(--linea); border-radius:8px; padding:9px 38px 9px 12px; font-size:14px; cursor:pointer; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23465241' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 14px center; }
+  .tabrow-right .sel-green{ padding:8px 34px 8px 16px; font-size:var(--fs-sm); font-weight:600; letter-spacing:.4px; border-radius:var(--r-pill); background-position:right 13px center; }
+  .canal-lbl{ font-size:var(--fs-xs); letter-spacing:1px; color:var(--neutro); font-weight:700; }
+  .sel-green{ appearance:none; -webkit-appearance:none; background-color:var(--olivo); color:#fff; font-weight:600; font-family:var(--sans); border:none; border-radius:var(--r-pill); padding:11px 42px 11px 20px; font-size:var(--fs-md); cursor:pointer; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23ffffff' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 16px center; }
+  .sel-light{ appearance:none; -webkit-appearance:none; background-color:var(--crema); color:var(--texto); font-family:var(--sans); border:1px solid var(--linea); border-radius:var(--r-m); padding:9px 38px 9px 12px; font-size:var(--fs-md); cursor:pointer; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23465241' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 14px center; }
   .wrap{ max-width:1080px; margin:0 auto; padding:26px 28px 60px; }
-  .periodbar{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; background:#fff; border:1px solid var(--linea); border-radius:12px; padding:14px 18px; margin-bottom:22px; }
-  .periodbar label{ font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--neutro); font-weight:600; }
-  .pill{ font-size:11px; padding:3px 10px; border-radius:999px; background:var(--crema-2); color:var(--neutro); border:1px solid var(--linea); }
-  .card{ background:#fff; border:1px solid var(--linea); border-radius:14px; margin-bottom:20px; overflow:hidden; }
+  .periodbar{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; background:#fff; border:1px solid var(--linea); border-radius:var(--r-l); padding:14px 18px; margin-bottom:22px; }
+  .periodbar label{ font-size:var(--fs-s); text-transform:uppercase; letter-spacing:1px; color:var(--neutro); font-weight:600; }
+  .pill{ font-size:var(--fs-xs); padding:3px 10px; border-radius:var(--r-pill); background:var(--crema-2); color:var(--neutro); border:1px solid var(--linea); }
+  .card{ background:#fff; border:1px solid var(--linea); border-radius:var(--r-l); margin-bottom:20px; overflow:hidden; }
   .card-head{ display:flex; align-items:center; gap:10px; padding:13px 18px; border-bottom:1px solid var(--linea); background:var(--crema-2); }
   .dot{ width:11px; height:11px; border-radius:50%; }
-  .card-head h3{ margin:0; font-family:var(--serif); font-size:17px; font-weight:700; color:var(--verde-prof); }
+  .card-head h3{ margin:0; font-family:var(--serif); font-size:var(--fs-lg); font-weight:700; color:var(--verde-prof); }
   .card-body{ padding:18px; }
-  .subhead{ font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--cobre); font-weight:700; margin:6px 0 12px; }
+  .subhead{ font-size:var(--fs-xs); letter-spacing:1px; text-transform:uppercase; color:var(--cobre); font-weight:700; margin:6px 0 12px; }
   .grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:14px; }
   .field{ display:flex; flex-direction:column; gap:5px; }
-  .field label{ font-size:11.5px; color:var(--neutro); font-weight:500; }
-  .field .calc-tag{ font-size:9.5px; color:var(--olivo); font-weight:600; }
-  .field input{ font-family:var(--sans); font-size:14px; padding:8px 10px; border:1px solid var(--linea); border-radius:8px; background:var(--crema); color:var(--texto); width:100%; }
+  .field label{ font-size:var(--fs-s); color:var(--neutro); font-weight:500; }
+  .field input{ font-family:var(--sans); font-size:var(--fs-md); padding:8px 10px; border:1px solid var(--linea); border-radius:var(--r-m); background:var(--crema); color:var(--texto); width:100%; }
   .field input:focus{ outline:none; border-color:var(--olivo); }
   .field input.auto{ background:#F3F6EF; }
-  .camp{ border:1px solid var(--linea); border-radius:11px; padding:14px; margin-top:12px; background:var(--crema); }
+  .camp{ border:1px solid var(--linea); border-radius:var(--r-m); padding:14px; margin-top:12px; background:var(--crema); }
   .camp-top{ display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
-  .camp-top .badge{ width:26px; height:26px; border-radius:50%; background:var(--arena); color:#fff; font-family:var(--serif); font-weight:700; display:flex; align-items:center; justify-content:center; font-size:14px; flex:0 0 auto; }
-  .camp-top input{ font-family:var(--sans); font-size:13.5px; padding:7px 10px; border:1px solid var(--linea); border-radius:8px; background:#fff; }
-  .camp-top .cn{ flex:2 1 220px; } .camp-top .ci{ flex:1 1 140px; }
-  .camp-name{ font-family:var(--sans); font-size:14px; padding:9px 12px; border:1px solid var(--linea); border-radius:8px; background:#fff; width:100%; margin-bottom:12px; font-weight:600; color:var(--verde-prof); }
+  .camp-top .badge{ width:26px; height:26px; border-radius:50%; background:var(--arena); color:#fff; font-family:var(--serif); font-weight:700; display:flex; align-items:center; justify-content:center; font-size:var(--fs-sm); flex:none; }
+  .camp-top input{ font-family:var(--sans); font-size:var(--fs-md); padding:7px 10px; border:1px solid var(--linea); border-radius:var(--r-m); background:#fff; }
+  .camp-top .cn{ flex:2 1 220px; }
   .notes-grid{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
-  .notes-grid textarea{ font-family:var(--sans); font-size:13px; padding:10px; border:1px solid var(--linea); border-radius:8px; background:var(--crema); resize:vertical; min-height:96px; width:100%; }
+  .notes-grid textarea{ font-family:var(--sans); font-size:var(--fs-sm); padding:10px; border:1px solid var(--linea); border-radius:var(--r-m); background:var(--crema); resize:vertical; min-height:96px; width:100%; }
   .actions{ display:flex; gap:12px; justify-content:flex-end; margin-top:8px; }
-  button{ font-family:var(--sans); cursor:pointer; border:none; border-radius:9px; padding:11px 24px; font-size:14px; font-weight:600; }
-  .btn-prim{ background:var(--cobre); color:#fff; } .btn-prim:hover{ background:#bb7536; }
+  button{ font-family:var(--sans); cursor:pointer; border:none; border-radius:var(--r-m); padding:11px 24px; font-size:var(--fs-md); font-weight:600; }
+  .btn-prim{ background:var(--cobre-tx); color:#fff; } .btn-prim:hover{ background:var(--cobre-hover); }
   .btn-ghost{ background:transparent; color:var(--neutro); border:1px solid var(--linea); } .btn-ghost:hover{ background:var(--crema-2); }
-  .summary{ background:var(--verde-prof); color:var(--crema); border-radius:14px; padding:20px 22px; margin-bottom:22px; }
-  .summary .stitle{ font-family:var(--serif); font-size:15px; color:var(--arena); margin-bottom:6px; }
-  .summary .sresp{ font-size:12px; color:var(--logo); opacity:.85; margin-bottom:14px; }
+  /* El sistema de botones no tenia estado deshabilitado: durante un guardado el boton se veia
+     igual de pulsable que siempre. cursor:progress dice "trabajando", no "no puedes". */
+  button:disabled{ opacity:.55; cursor:progress; pointer-events:none; }
+  .btn-peligro{ background:var(--rojo-no-tx); color:#fff; } .btn-peligro:hover{ background:#83301f; }
+  /* Diálogo propio — copia de index.html; los dos deben moverse juntos. */
+  .modal-fondo{ position:fixed; inset:0; z-index:400; background:rgba(46,51,43,.45);
+                display:flex; align-items:safe center; justify-content:center; padding:24px; overflow-y:auto; }
+  .modal-caja{ background:var(--crema); border:1px solid var(--linea); border-radius:var(--r-l);
+               font-family:var(--sans); padding:26px 28px; max-width:440px; width:100%; box-shadow:0 20px 60px rgba(0,0,0,.3); }
+  .modal-caja h3{ font-family:var(--serif); font-size:var(--fs-xl); color:var(--verde-prof); margin:0 0 10px; }
+  .modal-caja p{ margin:0; font-size:var(--fs-md); line-height:1.55; color:var(--texto); }
+  .modal-btns{ display:flex; gap:10px; justify-content:flex-end; margin-top:22px; flex-wrap:wrap; }
+  .summary{ background:var(--verde-prof); color:var(--crema); border-radius:var(--r-l); padding:20px 22px; margin-bottom:22px; }
+  .summary .stitle{ font-family:var(--serif); font-size:var(--fs-lg); color:var(--arena); margin-bottom:6px; }
+  .summary .sresp{ font-size:var(--fs-s); color:var(--logo); opacity:.85; margin-bottom:14px; }
   .summary-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; }
-  .kpi{ background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:12px 14px; }
-  .kpi .klabel{ font-size:11px; text-transform:uppercase; letter-spacing:.6px; color:var(--arena); }
-  .kpi .kval{ font-family:var(--serif); font-size:25px; font-weight:700; margin-top:3px; }
-  .kpi .kcumpl,.kpi .kdelta{ font-size:12px; margin-top:3px; font-weight:700; }
+  .kpi{ background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12); border-radius:var(--r-m); padding:12px 14px; }
+  .kpi .klabel{ font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.6px; color:var(--arena); }
+  .kpi .kval{ font-family:var(--serif); font-size:var(--fs-2xl); font-weight:700; margin-top:3px; }
+  .kpi .kdelta{ font-size:var(--fs-s); margin-top:3px; font-weight:700; }
   .rtable{ width:100%; border-collapse:collapse; }
-  .rtable td{ padding:9px 10px; border-bottom:1px solid var(--linea); font-size:13.5px; }
+  .rtable td{ padding:9px 10px; border-bottom:1px solid var(--linea); font-size:var(--fs-md); }
   .rtable tr:last-child td{ border-bottom:none; }
   .rtable .kname{ color:var(--texto); font-weight:500; width:40%; }
-  .rtable .kval{ font-family:var(--serif); font-weight:700; font-size:16px; }
+  .rtable .kval{ font-family:var(--serif); font-weight:700; font-size:var(--fs-lg); }
   .rtable .kmeta{ color:var(--neutro); text-align:right; white-space:nowrap; }
-  .rtable .kmeta .mlbl{ font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--arena); display:block; }
+  .rtable .kmeta .mlbl{ font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.5px; color:var(--arena); display:block; }
   .rtable .ccell{ width:120px; text-align:center; }
   .calc-row td{ background:var(--crema); } .calc-row .kname{ font-style:italic; color:var(--olivo); }
-  .cumpl{ display:inline-block; padding:5px 10px; border-radius:7px; font-weight:700; font-size:12.5px; min-width:84px; text-align:center; }
+  .cumpl{ display:inline-block; padding:5px 10px; border-radius:var(--r-s); font-weight:700; font-size:var(--fs-sm); min-width:84px; text-align:center; }
   .cumpl.ok{ background:var(--verde-ok-bg); color:var(--verde-ok-tx); }
   .cumpl.no{ background:var(--rojo-no-bg); color:var(--rojo-no-tx); }
   .cumpl.na{ color:var(--neutro); font-weight:500; }
   .scroll{ overflow-x:auto; }
-  .ctable{ width:100%; border-collapse:collapse; margin-top:10px; font-size:12.5px; }
-  .ctable.wide{ min-width:720px; }
-  .ctable th{ text-align:right; color:var(--neutro); font-weight:600; font-size:10.5px; text-transform:uppercase; letter-spacing:.4px; padding:7px 8px; border-bottom:2px solid var(--linea); }
+  .ctable{ width:100%; border-collapse:collapse; margin-top:10px; font-size:var(--fs-sm); }
+  .ctable th{ text-align:right; color:var(--neutro); font-weight:600; font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.4px; padding:7px 8px; border-bottom:2px solid var(--linea); }
   .ctable th.l, .ctable td.l{ text-align:left; }
   .ctable td{ padding:7px 8px; border-bottom:1px solid var(--linea); text-align:right; }
   .ctable td.l{ font-weight:600; color:var(--verde-prof); }
-  .ctable .kw{ font-size:11px; color:var(--olivo); }
-  .ctable td .chip{ display:inline-block; padding:3px 8px; border-radius:6px; font-weight:700; }
   .ctable td .ok{ background:var(--verde-ok-bg); color:var(--verde-ok-tx); } .ctable td .no{ background:var(--rojo-no-bg); color:var(--rojo-no-tx); } .ctable td .na{ color:var(--neutro); }
-  .ctable tr.best td{ background:#F1F6EC; } .rank{ font-family:var(--serif); color:var(--arena); font-weight:700; }
+  .rank{ font-family:var(--serif); color:var(--arena); font-weight:700; }
   .rnotes{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
-  .rnotes .nblock{ background:var(--crema); border:1px solid var(--linea); border-radius:10px; padding:13px; }
-  .rnotes h5{ margin:0 0 7px; font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--cobre); }
-  .rnotes p{ margin:0; font-size:13px; white-space:pre-wrap; } .empty-note{ color:var(--neutro); font-style:italic; }
-  .metas-hint,.ex-banner{ font-size:12.5px; border-radius:10px; padding:11px 14px; margin-bottom:18px; }
+  .rnotes .nblock{ background:var(--crema); border:1px solid var(--linea); border-radius:var(--r-m); padding:13px; }
+  .rnotes h5{ margin:0 0 7px; font-size:var(--fs-xs); letter-spacing:1px; text-transform:uppercase; color:var(--cobre); }
+  .rnotes p{ margin:0; font-size:var(--fs-sm); white-space:pre-wrap; } .empty-note{ color:var(--neutro); font-style:italic; }
+  .metas-hint{ font-size:var(--fs-sm); border-radius:var(--r-m); padding:11px 14px; margin-bottom:18px; }
   .metas-hint{ color:var(--neutro); background:var(--crema-2); border:1px solid var(--linea); }
-  .meta-section-mkt{ background:#fff; border:1px solid var(--linea); border-radius:12px; margin-bottom:20px; overflow:hidden; box-shadow:0 1px 2px rgba(70,82,65,.05); }
-  .meta-section-mkt .msec-head{ padding:13px 20px; background:var(--olivo); color:#fff; font-family:var(--serif); font-size:16px; font-weight:700; display:flex; align-items:center; gap:9px; }
+  .meta-section-mkt{ background:#fff; border:1px solid var(--linea); border-radius:var(--r-l); margin-bottom:20px; overflow:hidden; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .meta-section-mkt .msec-head{ padding:13px 20px; background:var(--olivo); color:#fff; font-family:var(--serif); font-size:var(--fs-lg); font-weight:700; display:flex; align-items:center; gap:9px; }
   .meta-section-mkt .msec-head .msec-dot{ width:8px; height:8px; border-radius:50%; background:var(--arena); }
   .metas-table-mkt{ width:100%; border-collapse:collapse; }
-  .metas-table-mkt th{ font-size:10px; text-transform:uppercase; letter-spacing:.6px; color:var(--neutro); font-weight:700; padding:9px 14px; border-bottom:1px solid var(--linea); background:var(--crema); text-align:left; }
+  .metas-table-mkt th{ font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.6px; color:var(--neutro); font-weight:700; padding:9px 14px; border-bottom:1px solid var(--linea); background:var(--crema); text-align:left; }
   .metas-table-mkt th.right{ text-align:right; }
   .metas-table-mkt td{ padding:9px 14px; border-bottom:1px dashed var(--crema-2); vertical-align:middle; }
   .metas-table-mkt td.right{ text-align:right; }
   .metas-table-mkt tr:last-child td{ border-bottom:none; }
-  .metas-table-mkt .mt-name{ font-size:13.5px; color:var(--texto); }
-  .metas-table-mkt .mt-hint{ font-size:10.5px; color:var(--olivo); font-weight:600; margin-left:4px; }
-  .metas-table-mkt .mt-num,.metas-table-mkt .mt-pct{ width:110px; font-family:var(--sans); font-size:14px; text-align:right; padding:7px 10px; border:1px solid var(--linea); border-radius:7px; background:var(--crema); color:var(--texto); }
+  .metas-table-mkt .mt-name{ font-size:var(--fs-md); color:var(--texto); }
+  .metas-table-mkt .mt-hint{ font-size:var(--fs-xs); color:var(--olivo); font-weight:600; margin-left:4px; }
+  .metas-table-mkt .mt-num,.metas-table-mkt .mt-pct{ width:110px; font-family:var(--sans); font-size:var(--fs-md); text-align:right; padding:7px 10px; border:1px solid var(--linea); border-radius:var(--r-s); background:var(--crema); color:var(--texto); }
   .metas-table-mkt .mt-num:focus,.metas-table-mkt .mt-pct:focus{ outline:none; border-color:var(--cobre); background:#fff; }
   .metas-table-mkt .mt-pct-wrap{ display:inline-flex; align-items:center; gap:5px; }
-  .metas-table-mkt .mt-pct-wrap span{ color:var(--neutro); font-size:13px; }
-  .metas-table-mkt .mt-del{ background:transparent; border:1px solid var(--linea); color:var(--rojo-no-tx); font-family:var(--sans); font-size:12px; padding:6px 14px; border-radius:6px; cursor:pointer; }
+  .metas-table-mkt .mt-pct-wrap span{ color:var(--neutro); font-size:var(--fs-sm); }
+  .metas-table-mkt .mt-del{ background:transparent; border:1px solid var(--linea); color:var(--rojo-no-tx); font-family:var(--sans); font-size:var(--fs-s); padding:6px 14px; border-radius:var(--r-s); cursor:pointer; }
   .metas-table-mkt .mt-del:hover{ background:var(--rojo-no-bg); border-color:var(--rojo-no-tx); }
-  .ex-banner{ background:#FBF3E6; border:1px solid var(--arena); color:#8a5a23; }
-  .toast{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--verde-prof); color:var(--crema); padding:13px 24px; border-radius:10px; border-left:4px solid var(--cobre); opacity:0; transition:all .25s; font-size:14px; z-index:50; }
+  .toast{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--verde-prof); color:var(--crema); padding:13px 24px; border-radius:var(--r-m); border-left:4px solid var(--cobre); opacity:0; transition:all .25s; font-size:var(--fs-md); z-index:50; }
   .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
   @media(max-width:720px){ .shell{ flex-direction:column; } .sidebar{ width:auto; flex:none; flex-direction:row; justify-content:space-around; padding:8px 6px; } .snav{ flex:1; } .notes-grid,.rnotes{ grid-template-columns:1fr; } }
   .anal-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:14px; margin-top:6px; }
-  .anal-card{ background:#fff; border:1px solid var(--linea); border-radius:12px; padding:14px; cursor:pointer; transition:.15s; box-shadow:0 1px 2px rgba(70,82,65,.05); }
+  .anal-card{ background:#fff; border:1px solid var(--linea); border-radius:var(--r-l); padding:14px; cursor:pointer; transition:.15s; box-shadow:0 1px 2px rgba(70,82,65,.05); }
   .anal-card:hover{ border-color:var(--cobre); transform:translateY(-1px); }
-  .anal-card .ac-title{ font-family:var(--serif); font-size:14px; color:var(--verde-prof); font-weight:700; margin-bottom:6px; line-height:1.2; }
-  .anal-card .ac-total{ font-size:11px; color:var(--neutro); margin-bottom:8px; }
+  .anal-card .ac-title{ font-family:var(--serif); font-size:var(--fs-md); color:var(--verde-prof); font-weight:700; margin-bottom:6px; line-height:1.2; }
+  .anal-card .ac-total{ font-size:var(--fs-xs); color:var(--neutro); margin-bottom:8px; }
   .anal-card canvas{ width:100%!important; height:80px!important; }
   .anal-card.expanded{ grid-column:1/-1; cursor:default; }
   .anal-card.expanded canvas{ height:280px!important; }
-  .anal-card.expanded .ac-title{ font-size:20px; margin-bottom:4px; }
-  .anal-card.expanded .ac-total{ font-size:13px; margin-bottom:14px; }
+  .anal-card.expanded .ac-title{ font-size:var(--fs-xl); margin-bottom:4px; }
+  .anal-card.expanded .ac-total{ font-size:var(--fs-sm); margin-bottom:14px; }
   .anal-actions{ display:flex; gap:10px; align-items:center; margin-top:12px; flex-wrap:wrap; }
-  .anal-conc{ margin-top:14px; padding:14px 16px; background:var(--crema-2); border:1px solid var(--linea); border-radius:10px; font-size:13.5px; line-height:1.5; color:var(--texto); white-space:pre-wrap; }
+  .anal-conc{ margin-top:14px; padding:14px 16px; background:var(--crema-2); border:1px solid var(--linea); border-radius:var(--r-m); font-size:var(--fs-md); line-height:1.5; color:var(--texto); white-space:pre-wrap; }
   .anal-conc.loading{ color:var(--neutro); font-style:italic; }
-  .anal-empty{ background:var(--crema-2); border:1px dashed var(--linea); border-radius:10px; padding:22px; text-align:center; color:var(--neutro); grid-column:1/-1; }
-  .anal-notes-card{ background:#fff; border:1px solid var(--linea); border-radius:14px; padding:18px 20px; margin-top:22px; }
-  .anal-notes-card h3{ font-family:var(--serif); font-size:20px; color:var(--verde-prof); margin:0 0 4px; }
-  .anal-notes-sub{ font-size:12.5px; color:var(--neutro); margin-bottom:14px; }
+  .anal-empty{ background:var(--crema-2); border:1px dashed var(--linea); border-radius:var(--r-m); padding:22px; text-align:center; color:var(--neutro); grid-column:1/-1; }
+  .anal-notes-card{ background:#fff; border:1px solid var(--linea); border-radius:var(--r-l); padding:18px 20px; margin-top:22px; }
+  .anal-notes-card h3{ font-family:var(--serif); font-size:var(--fs-xl); color:var(--verde-prof); margin:0 0 4px; }
+  .anal-notes-sub{ font-size:var(--fs-sm); color:var(--neutro); margin-bottom:14px; }
   .anal-notes-list{ display:flex; flex-direction:column; gap:12px; max-height:420px; overflow-y:auto; padding-right:6px; }
-  .anal-note-entry{ background:var(--crema); border:1px solid var(--linea); border-radius:10px; padding:11px 14px; }
-  .anal-note-entry .ane-head{ font-size:12px; font-weight:700; color:var(--olivo); margin-bottom:5px; }
-  .anal-note-entry .ane-line{ font-size:13px; line-height:1.45; margin-top:3px; color:var(--texto); }
+  .anal-note-entry{ background:var(--crema); border:1px solid var(--linea); border-radius:var(--r-m); padding:11px 14px; }
+  .anal-note-entry .ane-head{ font-size:var(--fs-s); font-weight:700; color:var(--olivo); margin-bottom:5px; }
+  .anal-note-entry .ane-line{ font-size:var(--fs-sm); line-height:1.45; margin-top:3px; color:var(--texto); }
   .anal-note-entry .ane-lbl{ font-weight:700; color:var(--verde-prof); margin-right:4px; }
 </style>
 </head>
@@ -178,15 +203,15 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   <input type="file" id="logo-input" accept="image/*" style="display:none">
   <div class="shell">
     <div class="sidebar">
-      <div class="snav" data-view="metas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>Metas</div>
-      <div class="snav" data-view="responsable"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>Responsable</div>
-      <div class="snav" data-view="basedatos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.6 3.6 3 8 3s8-1.4 8-3V5"/><path d="M4 12c0 1.6 3.6 3 8 3s8-1.4 8-3"/></svg>Base Datos</div>
+      <button type="button" class="snav" data-view="metas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>Metas</button>
+      <button type="button" class="snav" data-view="responsable"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>Responsable</button>
+      <button type="button" class="snav" data-view="basedatos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.6 3.6 3 8 3s8-1.4 8-3V5"/><path d="M4 12c0 1.6 3.6 3 8 3s8-1.4 8-3"/></svg>Base Datos</button>
     </div>
     <div class="main">
-      <div class="tabrow">
-        <div class="ttab" data-view="ingreso">Ingreso de datos</div>
-        <div class="ttab" data-view="reporte">Reporte</div>
-        <div class="ttab" data-view="analitica">Analítica</div>
+      <div class="tabrow" role="tablist" aria-label="Vistas de Marketing">
+        <button type="button" role="tab" class="ttab" data-view="ingreso">Ingreso de datos</button>
+        <button type="button" role="tab" class="ttab" data-view="reporte">Reporte</button>
+        <button type="button" role="tab" class="ttab" data-view="analitica">Analítica</button>
         <div class="tabrow-right"><span class="canal-lbl">REPORTE</span><select id="report-select" class="sel-green"></select></div>
       </div>
       <div class="wrap">
@@ -202,7 +227,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
             <select id="period-fin" class="sel-light"></select>
           </span>
           <span class="pill" id="status-pill">—</span>
-          <span class="pill" style="padding:0;background:transparent;border:none;display:inline-flex;align-items:center;gap:6px;"><span style="font-size:11px;color:var(--neutro);font-weight:700;text-transform:uppercase;letter-spacing:.6px;">Resp.</span><input id="resp-pill-input" type="text" placeholder="Responsable" style="border:1px solid var(--linea);background:var(--crema-2);border-radius:999px;padding:4px 12px;font-family:var(--sans);font-size:12px;color:var(--texto);min-width:180px;outline:none;"></span>
+          <span class="pill" style="padding:0;background:transparent;border:none;display:inline-flex;align-items:center;gap:6px;"><span style="font-size:var(--fs-xs);color:var(--neutro);font-weight:700;text-transform:uppercase;letter-spacing:.6px;">Resp.</span><input id="resp-pill-input" type="text" placeholder="Responsable" style="border:1px solid var(--linea);background:var(--crema-2);border-radius:999px;padding:4px 12px;font-family:var(--sans);font-size:var(--fs-s);color:var(--texto);min-width:180px;outline:none;"></span>
         </div>
         <div id="view-ingreso"></div>
         <div id="view-reporte"></div>
@@ -271,9 +296,9 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   function fillNotes(rec){ setV('x_notas',rec&&rec.notas); setV('x_aprendizajes',rec&&rec.aprendizajes); setV('x_cambios',rec&&rec.cambios); }
   function readNotes(rec){ rec.notas=gv('x_notas'); rec.aprendizajes=gv('x_aprendizajes'); rec.cambios=gv('x_cambios'); }
   function notesBlock(){ return `<div class="card"><div class="card-head"><span class="dot" style="background:var(--olivo)"></span><h3>Cierre del periodo</h3></div><div class="card-body"><div class="notes-grid">
-    <div><label style="font-size:11px;color:var(--neutro);font-weight:600">Notas</label><textarea id="x_notas"></textarea></div>
-    <div><label style="font-size:11px;color:var(--neutro);font-weight:600">3 aprendizajes</label><textarea id="x_aprendizajes"></textarea></div>
-    <div><label style="font-size:11px;color:var(--neutro);font-weight:600">3 cambios</label><textarea id="x_cambios"></textarea></div></div></div></div>`; }
+    <div><label style="font-size:var(--fs-xs);color:var(--neutro);font-weight:600">Notas</label><textarea id="x_notas"></textarea></div>
+    <div><label style="font-size:var(--fs-xs);color:var(--neutro);font-weight:600">3 aprendizajes</label><textarea id="x_aprendizajes"></textarea></div>
+    <div><label style="font-size:var(--fs-xs);color:var(--neutro);font-weight:600">3 cambios</label><textarea id="x_cambios"></textarea></div></div></div></div>`; }
   function notesReport(rec){ return `<div class="card"><div class="card-head"><span class="dot" style="background:var(--olivo)"></span><h3>Cierre del periodo</h3></div><div class="card-body"><div class="rnotes">
     <div class="nblock"><h5>Notas</h5><p class="${rec.notas?'':'empty-note'}">${escHtmlSafe(rec.notas)||'Sin notas'}</p></div>
     <div class="nblock"><h5>3 aprendizajes</h5><p class="${rec.aprendizajes?'':'empty-note'}">${escHtmlSafe(rec.aprendizajes)||'Sin registro'}</p></div>
@@ -310,9 +335,9 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     h += `</table></div></div>`;
     return h;
   }
-  function respBlock(){ return `<div class="card"><div class="card-head"><span class="dot" style="background:var(--meta)"></span><h3>Responsable</h3></div><div class="card-body"><input type="text" id="x_resp" placeholder="Nombre del responsable" style="font-family:var(--sans);font-size:14px;padding:8px 10px;border:1px solid var(--linea);border-radius:8px;background:var(--crema);color:var(--texto);width:100%;max-width:420px;"></div></div>`; }
+  function respBlock(){ return `<div class="card"><div class="card-head"><span class="dot" style="background:var(--meta)"></span><h3>Responsable</h3></div><div class="card-body"><input type="text" id="x_resp" placeholder="Nombre del responsable" style="font-family:var(--sans);font-size:var(--fs-md);padding:8px 10px;border:1px solid var(--linea);border-radius:8px;background:var(--crema);color:var(--texto);width:100%;max-width:420px;"></div></div>`; }
   function fillResp(rec){ const v = (rec && rec.responsable) || RESP[state.active] || ''; setV('x_resp', v); }
-  function readResp(rec){ const v = gv('x_resp'); rec.responsable = v; if(v && v !== RESP[state.active]){ RESP[state.active] = v; try{ window.storage.set('mkt_resp', JSON.stringify(RESP)); }catch(e){} } }
+  function readResp(rec){ const v = gv('x_resp'); rec.responsable = v; if(v && v !== RESP[state.active]){ RESP[state.active] = v; try{ window.storage.set('mkt_resp', JSON.stringify(RESP)); }catch(e){ console.error('No se pudo guardar el responsable', e); } } }
   function noData(p,type){ const r=type==='week'?weekRange(p):ymLabel(p); return `<div class="card"><div class="card-body" style="text-align:center;color:var(--neutro)">No hay datos para <b>${type==='week'?p:r}</b>${type==='week'?' ('+r+')':''}. Captúralos en <b>Ingreso de datos</b>.</div></div>`; }
   function respLine(rec){ const r=(rec&&rec.responsable)||RESP[state.active]||''; return `<div class="sresp">Responsable: ${r&&r.trim()?escHtmlSafe(r):'sin asignar'}</div>`; }
   function cRow(n,v){ return `<tr><td class="kname">${n}</td><td class="kval">${fmt(v)}</td><td class="kmeta"></td><td class="ccell"></td></tr>`; }
@@ -336,6 +361,41 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   function rsFill(rec){ RS_PLAT.forEach(p=>{ const d=(rec&&rec[p.key])||{}; p.fields.forEach(([k])=>setV(`rs_${p.key}_${k}`,d[k])); const t=d.top||[]; for(let i=1;i<=3;i++){ setV(`rs_${p.key}_top${i}_desc`,(t[i-1]||{}).desc); setV(`rs_${p.key}_top${i}_link`,(t[i-1]||{}).link);} }); fillNotes(rec); fillResp(rec); fillCustom(rec); }
   function rsRead(){ const rec={}; RS_PLAT.forEach(p=>{ const d={}; p.fields.forEach(([k])=>d[k]=num(gv(`rs_${p.key}_${k}`))); d.top=[]; for(let i=1;i<=3;i++) d.top.push({desc:gv(`rs_${p.key}_top${i}_desc`),link:gv(`rs_${p.key}_top${i}_link`)}); rec[p.key]=d; }); readNotes(rec); readResp(rec); readCustom(rec); return rec; }
   function escHtmlSafe(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  /* Diálogos propios en lugar de los alert/confirm nativos del navegador. Copia de las
+     funciones de index.html: mientras no haya build compartido, las dos deben moverse
+     juntas. El nativo queda de respaldo si algo fallara al construir el diálogo. */
+  function dialogo({ titulo="", mensaje="", botones=[], respaldo=()=>undefined }){
+    return new Promise((resolve)=>{
+      try{
+        const fondo = document.createElement("div");
+        fondo.className = "modal-fondo";
+        fondo.innerHTML = `<div class="modal-caja" role="dialog" aria-modal="true">
+          ${titulo?`<h3>${escHtmlSafe(titulo)}</h3>`:""}
+          <p>${escHtmlSafe(mensaje).replace(/\n/g,"<br>")}</p>
+          <div class="modal-btns">${botones.join("")}</div></div>`;
+        const cerrar = (v)=>{ document.removeEventListener("keydown", tecla); fondo.remove(); resolve(v); };
+        const tecla = (e)=>{ if(e.key==="Escape") cerrar(false); };
+        fondo.addEventListener("click",(e)=>{
+          if(e.target===fondo) return cerrar(false);
+          const b=e.target.closest("[data-r]"); if(b) cerrar(b.dataset.r==="1");
+        });
+        document.addEventListener("keydown", tecla);
+        document.body.appendChild(fondo);
+        const f = fondo.querySelector('[data-r="1"]'); if(f) f.focus();
+      }catch(e){ resolve(respaldo()); }
+    });
+  }
+  function confirmar(mensaje, { ok="Continuar", cancelar="Cancelar", peligro=false, titulo="" } = {}){
+    return dialogo({ titulo, mensaje, respaldo:()=>window.confirm(mensaje), botones:[
+      `<button type="button" class="btn-ghost" data-r="0">${escHtmlSafe(cancelar)}</button>`,
+      `<button type="button" class="${peligro?"btn-peligro":"btn-prim"}" data-r="1">${escHtmlSafe(ok)}</button>`,
+    ]});
+  }
+  function avisar(mensaje, { titulo="", ok="Entendido" } = {}){
+    return dialogo({ titulo, mensaje, respaldo:()=>{ window.alert(mensaje); return true; }, botones:[
+      `<button type="button" class="btn-prim" data-r="1">${escHtmlSafe(ok)}</button>`,
+    ]});
+  }
   function safeUrl(u){ const s=String(u==null?"":u).trim(); return /^https?:\/\//i.test(s) ? s : ""; }
   function readMetaNum(M, scope, key){ const v = scope==='' ? M.metas[key] : M.metas[scope]?.[key]; if(v==null) return ''; if(typeof v==='object') return v.num ?? ''; return v; }
   function readMetaPct(M, scope, key){ const v = scope==='' ? M.metas.__pct?.[key] : M.metas.__pct?.[scope]?.[key]; return v==null ? '' : v; }
@@ -396,7 +456,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
       const displayLabel = isCustom ? kpi.l : readMetaLabel(M, kpi);
       const origLabel = isCustom ? kpi.l : kpi.label;
       return `<tr data-sec="${escHtmlSafe(kpi.scope||'')}" data-k="${escHtmlSafe(kpi.key||kpi.k)}" data-custom="${isCustom?1:0}" draggable="true" style="cursor:move">
-        <td><span class="mt-drag" draggable="false" style="cursor:grab;padding:2px 6px;color:var(--neutro);user-select:none;font-size:14px">⠿</span><input class="mt-name-inp" type="text" value="${escHtmlSafe(displayLabel)}" data-orig="${escHtmlSafe(origLabel)}" draggable="false" style="border:1px solid transparent;background:transparent;font:inherit;font-size:13.5px;color:var(--texto);padding:5px 8px;border-radius:6px;width:calc(100% - 26px);">${(!isCustom && kpi.hint)?`<span class="mt-hint">${escHtmlSafe(kpi.hint)}</span>`:''}</td>
+        <td><span class="mt-drag" draggable="false" style="cursor:grab;padding:2px 6px;color:var(--neutro);user-select:none;font-size:var(--fs-md)">⠿</span><input class="mt-name-inp" type="text" value="${escHtmlSafe(displayLabel)}" data-orig="${escHtmlSafe(origLabel)}" draggable="false" style="border:1px solid transparent;background:transparent;font:inherit;font-size:var(--fs-md);color:var(--texto);padding:5px 8px;border-radius:6px;width:calc(100% - 26px);">${(!isCustom && kpi.hint)?`<span class="mt-hint">${escHtmlSafe(kpi.hint)}</span>`:''}</td>
         <td class="right"><input class="mt-num" type="number" draggable="false" step="${kpi.money?'0.01':'1'}" placeholder="—" value="${numV===''?'':numV}"></td>
         <td class="right"><span class="mt-pct-wrap"><input class="mt-pct" type="number" draggable="false" step="0.01" placeholder="—" value="${pctV===''?'':pctV}"><span>%</span></span></td>
         <td class="right"><button class="mt-del" type="button">Borrar</button></td>
@@ -408,10 +468,10 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
       const kpis = [...nativesHere, ...customsHere];
       html.push(`<div class="meta-section-mkt" data-sec-id="${escHtmlSafe(info.id)}" draggable="true">
         <div class="msec-head">
-          <span class="msec-drag" draggable="false" style="cursor:grab;color:#fff;user-select:none;font-size:14px;margin-right:6px;opacity:.7">⠿</span>
+          <span class="msec-drag" draggable="false" style="cursor:grab;color:#fff;user-select:none;font-size:var(--fs-md);margin-right:6px;opacity:.7">⠿</span>
           <span class="msec-dot"></span>
-          ${info.isCustom?`<input class="msec-title-inp" type="text" value="${escHtmlSafe(info.title)}" data-orig="${escHtmlSafe(info.title)}" data-sec-id="${escHtmlSafe(info.id)}" style="background:transparent;border:1px solid transparent;color:#fff;font-family:var(--serif);font-size:16px;font-weight:700;padding:2px 8px;border-radius:6px;flex:1">`:`<span style="flex:1">${escHtmlSafe(info.title)}</span>`}
-          ${info.isCustom?`<button class="msec-del" data-sec-id="${escHtmlSafe(info.id)}" style="margin-left:auto;background:transparent;border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px">✕ Borrar sección</button>`:''}
+          ${info.isCustom?`<input class="msec-title-inp" type="text" value="${escHtmlSafe(info.title)}" data-orig="${escHtmlSafe(info.title)}" data-sec-id="${escHtmlSafe(info.id)}" style="background:transparent;border:1px solid transparent;color:#fff;font-family:var(--serif);font-size:var(--fs-lg);font-weight:700;padding:2px 8px;border-radius:6px;flex:1">`:`<span style="flex:1">${escHtmlSafe(info.title)}</span>`}
+          ${info.isCustom?`<button class="msec-del" data-sec-id="${escHtmlSafe(info.id)}" style="margin-left:auto;background:transparent;border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:var(--fs-xs)">✕ Borrar sección</button>`:''}
         </div>
         <table class="metas-table-mkt">
           <thead><tr><th>Nombre del KPI</th><th class="right">Meta numérica</th><th class="right">Meta %</th><th></th></tr></thead>
@@ -429,10 +489,10 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     // 4) Crear nueva sección
     html.push(`<div class="meta-section-mkt"><div class="msec-head"><span class="msec-dot"></span>Crear nueva sección</div>
       <div style="padding:14px 20px 18px;background:#fff;display:flex;gap:10px;align-items:center;">
-        <input id="mkt-new-sec-name" type="text" placeholder="Nombre de la sección (ej. 'Eventos VIP')" style="flex:1;font-family:var(--sans);font-size:14px;padding:9px 12px;border:1px solid var(--linea);border-radius:8px;background:var(--crema);">
+        <input id="mkt-new-sec-name" type="text" placeholder="Nombre de la sección (ej. 'Eventos VIP')" style="flex:1;font-family:var(--sans);font-size:var(--fs-md);padding:9px 12px;border:1px solid var(--linea);border-radius:8px;background:var(--crema);">
         <button class="btn-prim" id="mkt-new-sec-save" type="button">Crear sección</button>
       </div>
-      <p style="font-size:12.5px;color:var(--neutro);margin:0;padding:0 20px 14px;background:#fff;">Una sección custom es un grupo vacío. Aparece como destino para KPIs custom.</p>
+      <p style="font-size:var(--fs-sm);color:var(--neutro);margin:0;padding:0 20px 14px;background:#fff;">Una sección custom es un grupo vacío. Aparece como destino para KPIs custom.</p>
     </div>`);
     // 5) Agregar KPI personalizado
     const allSecs = [...nativeSections.map(s => ({id: s.scope, label: s.title})), ...mktCustomSections(M).map(id => ({id, label: M.metas.__section_labels?.[id] || id}))];
@@ -442,15 +502,15 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
         <thead><tr><th>Nombre del KPI</th><th>Sección destino</th><th class="right">Meta numérica</th><th class="right">Meta %</th><th></th></tr></thead>
         <tbody>
           <tr class="add-kpi-row">
-            <td><input id="mkt-new-kpi-name" type="text" placeholder="Ej. Llamadas semanales" style="width:100%;font-family:var(--sans);font-size:13.5px;padding:7px 9px;border:1px solid var(--linea);border-radius:6px;background:#fff;"></td>
-            <td><select id="mkt-new-kpi-sec" style="width:100%;font-family:var(--sans);font-size:13.5px;padding:7px 9px;border:1px solid var(--linea);border-radius:6px;background:#fff;">${secOptions}</select></td>
+            <td><input id="mkt-new-kpi-name" type="text" placeholder="Ej. Llamadas semanales" style="width:100%;font-family:var(--sans);font-size:var(--fs-md);padding:7px 9px;border:1px solid var(--linea);border-radius:6px;background:#fff;"></td>
+            <td><select id="mkt-new-kpi-sec" style="width:100%;font-family:var(--sans);font-size:var(--fs-md);padding:7px 9px;border:1px solid var(--linea);border-radius:6px;background:#fff;">${secOptions}</select></td>
             <td class="right"><input id="mkt-new-kpi-num" type="number" placeholder="—" class="mt-num" style="background:#fff"></td>
             <td class="right"><span class="mt-pct-wrap"><input id="mkt-new-kpi-pct" type="number" placeholder="—" class="mt-pct" style="background:#fff"><span>%</span></span></td>
             <td class="right"><button class="btn-prim" id="mkt-new-kpi-save" type="button">Guardar KPI</button></td>
           </tr>
         </tbody>
       </table>
-      <p style="font-size:12.5px;color:var(--neutro);margin:0;padding:12px 20px 14px;background:#fff;">Los KPIs personalizados aparecen en Ingreso de datos, Reportes y Base de datos del módulo activo.</p>
+      <p style="font-size:var(--fs-sm);color:var(--neutro);margin:0;padding:12px 20px 14px;background:#fff;">Los KPIs personalizados aparecen en Ingreso de datos, Reportes y Base de datos del módulo activo.</p>
     </div>`);
     host.innerHTML = html.join('');
     // Bindings de filas
@@ -468,27 +528,27 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
         } else {
           writeMetaLabel(M, sec, key, v, nameInp.dataset.orig);
         }
-        await saveMeta(M); showToast('✓ Nombre guardado');
+        if(await saveMeta(M)) showToast('✓ Nombre guardado');
       };
       numInp.onchange = async () => {
         const v = numInp.value.trim();
         if(isCustom){ const it = mktCustomKPIs(M).find(c => c.k === key); if(it) it.meta_num = v === '' ? null : Number(v); }
         else writeMetaNum(M, sec, key, v);
-        await saveMeta(M); showToast('✓ Meta guardada');
+        if(await saveMeta(M)) showToast('✓ Meta guardada');
       };
       pctInp.onchange = async () => {
         const v = pctInp.value.trim();
         if(isCustom){ const it = mktCustomKPIs(M).find(c => c.k === key); if(it) it.meta_pct = v === '' ? null : Number(v); }
         else writeMetaPct(M, sec, key, v);
-        await saveMeta(M); showToast('✓ Meta % guardada');
+        if(await saveMeta(M)) showToast('✓ Meta % guardada');
       };
       delBtn.onclick = async () => {
         if(isCustom){
-          if(!confirm('¿Borrar este KPI personalizado?')) return;
+          if(!await confirmar('No se puede deshacer.', { titulo:'¿Borrar este KPI personalizado?', ok:'Borrar', peligro:true })) return;
           M.metas.__custom = mktCustomKPIs(M).filter(c => c.k !== key);
           if(!M.metas.__custom.length) delete M.metas.__custom;
         } else {
-          if(!confirm('¿Borrar las metas de este KPI?')) return;
+          if(!await confirmar('El KPI se queda; solo se borran sus metas.', { titulo:'¿Borrar las metas de este KPI?', ok:'Borrar', peligro:true })) return;
           writeMetaNum(M, sec, key, null); writeMetaPct(M, sec, key, null);
         }
         await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText);
@@ -516,7 +576,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
         } else {
           setKpiSection(M, { scope: data.sec, key: data.key }, targetSec);
         }
-        await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); showToast('KPI movido ✓');
+        { const ok=await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); if(ok) showToast('KPI movido ✓'); }
       };
     });
     // Drag de secciones para reorder
@@ -553,7 +613,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
         order.splice(fromIdx, 1);
         order.splice(toIdx, 0, draggedId);
         M.metas.__section_order = order;
-        await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); showToast('Sección reordenada ✓');
+        { const ok=await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); if(ok) showToast('Sección reordenada ✓'); }
       };
     });
     // Renombrar sección custom
@@ -563,7 +623,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
         M.metas.__section_labels = M.metas.__section_labels || {};
         if(v === secId) delete M.metas.__section_labels[secId]; else M.metas.__section_labels[secId] = v;
         if(!Object.keys(M.metas.__section_labels).length) delete M.metas.__section_labels;
-        await saveMeta(M); showToast('✓ Sección renombrada');
+        if(await saveMeta(M)) showToast('✓ Sección renombrada');
       };
     });
     // Borrar sección custom
@@ -571,35 +631,35 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
       btn.onclick = async () => {
         const secId = btn.dataset.secId;
         const inside = mktCustomKPIsFor(M, secId);
-        if(inside.length && !confirm(`La sección tiene ${inside.length} KPI(s). Se moverán a "KPIs personalizados" sin sección. ¿Continuar?`)) return;
-        if(!inside.length && !confirm('¿Borrar esta sección?')) return;
+        if(inside.length && !await confirmar(`Tiene ${inside.length} KPI(s). Se moverán a "KPIs personalizados", sin sección.`, { titulo:'Borrar la sección', ok:'Borrar', peligro:true })) return;
+        if(!inside.length && !await confirmar('Está vacía.', { titulo:'¿Borrar esta sección?', ok:'Borrar', peligro:true })) return;
         M.metas.__custom_sections = mktCustomSections(M).filter(id => id !== secId);
         if(!M.metas.__custom_sections.length) delete M.metas.__custom_sections;
         (M.metas.__custom || []).forEach(c => { if(c.section === secId) c.section = null; });
         if(M.metas.__section_labels) delete M.metas.__section_labels[secId];
-        await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); showToast('Sección borrada');
+        { const ok=await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); if(ok) showToast('Sección borrada'); }
       };
     });
     // Crear sección
     document.getElementById('mkt-new-sec-save').onclick = async () => {
       const name = document.getElementById('mkt-new-sec-name').value.trim();
-      if(!name){ alert('Pon un nombre para la sección'); return; }
+      if(!name){ avisar('Pon un nombre para la sección'); return; }
       M.metas.__custom_sections = mktCustomSections(M).slice();
-      if(M.metas.__custom_sections.includes(name) || nativeSections.some(s => s.scope === name)){ alert('Ya existe una sección con ese nombre'); return; }
+      if(M.metas.__custom_sections.includes(name) || nativeSections.some(s => s.scope === name)){ avisar('Ya existe una sección con ese nombre'); return; }
       M.metas.__custom_sections.push(name);
-      await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); showToast(`✓ Sección "${name}" creada`);
+      { const ok=await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); if(ok) showToast(`✓ Sección "${name}" creada`); }
     };
     // Crear KPI personalizado
     document.getElementById('mkt-new-kpi-save').onclick = async () => {
       const name = document.getElementById('mkt-new-kpi-name').value.trim();
-      if(!name){ alert('Pon un nombre para el KPI'); return; }
+      if(!name){ avisar('Pon un nombre para el KPI'); return; }
       const secId = document.getElementById('mkt-new-kpi-sec').value || null;
       const num = document.getElementById('mkt-new-kpi-num').value.trim();
       const pct = document.getElementById('mkt-new-kpi-pct').value.trim();
       const k = 'custom_' + name.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,40) + '_' + Math.random().toString(36).slice(2,6);
       M.metas.__custom = mktCustomKPIs(M).slice();
       M.metas.__custom.push({ k, l: name, meta_num: num === '' ? null : Number(num), meta_pct: pct === '' ? null : Number(pct), section: secId });
-      await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); showToast(`✓ KPI "${name}" agregado`);
+      { const ok=await saveMeta(M); renderMktMetasTable(host, moduleId, nativeSections, hintText); if(ok) showToast(`✓ KPI "${name}" agregado`); }
     };
   }
   function rsMetas(host,M){
@@ -615,123 +675,15 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     let h=`<div class="summary"><div class="stitle">Consolidado Redes Sociales · ${M._rangeLabel||ymLabel(ym)}</div>${respLine(rec)}<div class="summary-grid">`;
     [['Leads orgánicos','leads'],['Alcance total','alcance'],['Interacciones','interacciones'],['Seguidores totales','totalSeg'],['Seguidores nuevos','segNuevos']].forEach(([l,f])=>{ const cur=sum(rec,f); let dt='sin dato previo',dc='var(--arena)'; if(prev){ const d=cur-sum(prev,f); if(d===0)dt='= vs mes anterior'; else{ const pv=sum(prev,f); const pc=pv?Math.round(Math.abs(d)/pv*100):null; dt=(d>0?'▲ +':'▼ −')+fmt(Math.abs(d))+(pc!==null?` (${pc}%)`:''); dc=d>0?'#CBDDC0':'#F2CFC9'; } } h+=`<div class="kpi"><div class="klabel">${l}</div><div class="kval">${fmt(cur)}</div><div class="kdelta" style="color:${dc}">${dt}</div></div>`; });
     h+=`</div></div>`;
-    RS_PLAT.forEach(p=>{ const d=rec[p.key]||{}; const mp=M.metas[p.key]||{}; const pd=(prev&&prev[p.key])||null; h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${p.color}"></span><h3>${p.name}</h3></div><div class="card-body"><table class="rtable">`; p.fields.forEach(([k,l])=>{ const v=num(d[k]); const meta=mp[k]; h+=`<tr><td class="kname">${l}</td><td class="kval">${fmt(v)}</td><td class="kmeta">${metaTxt(meta)}</td><td class="ccell">${meta?cpH(v,meta):''}</td></tr>`; }); const alc=num(d.alcance),inter=num(d.interacciones); const eng=alc>0?inter/alc*100:null; h+=`<tr class="calc-row"><td class="kname">Engagement</td><td class="kval">${eng===null?'—':pct(eng)}</td><td class="kmeta"></td><td class="ccell"></td></tr>`; let base=null; if(p.key==='fb') base=num(d.segMesPasado); else if(pd) base=num(pd.totalSeg); const crec=(base&&base>0)?num(d.segNuevos)/base*100:null; h+=`<tr class="calc-row"><td class="kname">Crecimiento de red</td><td class="kval">${crec===null?'—':pct(crec)}</td><td class="kmeta">${metaTxt(M.metas._crec,{pct:1})}</td><td class="ccell">${crec===null?naP():cpH(crec,M.metas._crec)}</td></tr></table>`; const tops=(d.top||[]).filter(t=>t.desc||t.link); if(tops.length){ h+=`<div class="subhead" style="margin-top:14px">Top publicaciones</div>`; tops.forEach((t,i)=>{ h+=`<div style="padding:7px 0;border-top:1px dashed var(--linea)"><span class="rank">${i+1}</span> ${escHtmlSafe(t.desc)||'(sin descripción)'}`+(safeUrl(t.link)?` · <a href="${escHtmlSafe(safeUrl(t.link))}" target="_blank" rel="noopener" style="color:var(--olivo);font-size:12px;word-break:break-all">${escHtmlSafe(t.link)}</a>`:'')+`</div>`; }); } h+=`</div></div>`; });
+    RS_PLAT.forEach(p=>{ const d=rec[p.key]||{}; const mp=M.metas[p.key]||{}; const pd=(prev&&prev[p.key])||null; h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${p.color}"></span><h3>${p.name}</h3></div><div class="card-body"><table class="rtable">`; p.fields.forEach(([k,l])=>{ const v=num(d[k]); const meta=mp[k]; h+=`<tr><td class="kname">${l}</td><td class="kval">${fmt(v)}</td><td class="kmeta">${metaTxt(meta)}</td><td class="ccell">${meta?cpH(v,meta):''}</td></tr>`; }); const alc=num(d.alcance),inter=num(d.interacciones); const eng=alc>0?inter/alc*100:null; h+=`<tr class="calc-row"><td class="kname">Engagement</td><td class="kval">${eng===null?'—':pct(eng)}</td><td class="kmeta"></td><td class="ccell"></td></tr>`; let base=null; if(p.key==='fb') base=num(d.segMesPasado); else if(pd) base=num(pd.totalSeg); const crec=(base&&base>0)?num(d.segNuevos)/base*100:null; h+=`<tr class="calc-row"><td class="kname">Crecimiento de red</td><td class="kval">${crec===null?'—':pct(crec)}</td><td class="kmeta">${metaTxt(M.metas._crec,{pct:1})}</td><td class="ccell">${crec===null?naP():cpH(crec,M.metas._crec)}</td></tr></table>`; const tops=(d.top||[]).filter(t=>t.desc||t.link); if(tops.length){ h+=`<div class="subhead" style="margin-top:14px">Top publicaciones</div>`; tops.forEach((t,i)=>{ h+=`<div style="padding:7px 0;border-top:1px dashed var(--linea)"><span class="rank">${i+1}</span> ${escHtmlSafe(t.desc)||'(sin descripción)'}`+(safeUrl(t.link)?` · <a href="${escHtmlSafe(safeUrl(t.link))}" target="_blank" rel="noopener" style="color:var(--olivo);font-size:var(--fs-s);word-break:break-all">${escHtmlSafe(t.link)}</a>`:'')+`</div>`; }); } h+=`</div></div>`; });
     h+=customReportSection(rec)+notesReport(rec); host.innerHTML=h;
   }
 
-  /* ===== MÓDULO 2 · PPC ADS (semanal) ===== */
-  const PPC_CF=[['leads','Leads'],['cpl','CPL'],['alcance','Alcance'],['clics','Clics'],['ctr','CTR'],['cpr','CPR']]; const CUR='MXN';
-  const PPC_SEED_METAS={ global:{leadsTotales:12,cplGlobal:800}, meta:{leads:8,cpl:500,ctr:2.5,campanas:3}, google:{leads:3,cpl:1800,ctr:6,campanas:1} };
-  const PPC_MF=[['global','leadsTotales','Leads totales / semana','mín'],['global','cplGlobal','CPL global','máx '+CUR+' · menos mejor'],['meta','leads','Leads de Meta / sem','mín'],['meta','cpl','CPL Meta','máx · menos mejor'],['meta','ctr','CTR Meta','mín %'],['meta','campanas','Campañas activas Meta','mín'],['google','leads','Leads de Google / sem','mín'],['google','cpl','CPL Google','máx · menos mejor'],['google','ctr','CTR Google','mín %'],['google','campanas','Campañas activas Google','mín']];
-  function ppcPlatCard(plt,name,color,nc,isG){ let h=`<div class="card"><div class="card-head"><span class="dot" style="background:${color}"></span><h3>${name}</h3></div><div class="card-body"><div class="subhead">Resumen</div><div class="grid">
-    <div class="field"><label>Leads de ${name}</label><input type="text" inputmode="numeric" id="ppc_${plt}_leads" placeholder="0"></div>
-    <div class="field"><label>Inversión (${CUR})</label><input type="text" inputmode="numeric" id="ppc_${plt}_inv" placeholder="0"></div>
-    <div class="field"><label>CPL <span class="calc-tag">(auto inv÷leads)</span></label><input type="text" inputmode="numeric" id="ppc_${plt}_cpl" class="auto" placeholder="0"></div>
-    <div class="field"><label>Campañas activas</label><input type="text" inputmode="numeric" id="ppc_${plt}_campanas" placeholder="0"></div></div><div class="subhead" style="margin-top:18px">Campañas</div>`;
-    for(let i=1;i<=nc;i++){ h+=`<div class="camp"><div class="camp-top"><span class="badge">${i}</span><input class="cn" id="ppc_${plt}_c${i}_name" placeholder="Nombre campaña ${i}"><input class="ci" id="ppc_${plt}_c${i}_id" placeholder="ID ${i}"></div><div class="grid">`; PPC_CF.forEach(([k,l])=>{ const ca=(k==='ctr'); h+=`<div class="field"><label>${l}${ca?' <span class="calc-tag">(auto)</span>':''}</label><input type="text" inputmode="numeric" id="ppc_${plt}_c${i}_${k}" class="${ca?'auto':''}" placeholder="0"></div>`; }); if(isG) h+=`<div class="field" style="grid-column:1/-1"><label>Top Search Keyword</label><input type="text" id="ppc_${plt}_c${i}_topkw" placeholder="palabra clave top"></div>`; h+=`</div></div>`; } h+=`</div></div>`; return h; }
-  function ppcIngreso(host){ let h=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--cobre)"></span><h3>Totales del periodo</h3></div><div class="card-body"><div class="grid">
-    <div class="field"><label>Leads totales <span class="calc-tag">(auto)</span></label><input type="text" inputmode="numeric" id="ppc_tot_leads" class="auto" placeholder="0"></div>
-    <div class="field"><label>Inversión total (${CUR}) <span class="calc-tag">(auto)</span></label><input type="text" inputmode="numeric" id="ppc_tot_inv" class="auto" placeholder="0"></div></div></div></div>`;
-    h+=ppcPlatCard('meta','Meta ADS','var(--meta)',5,false)+ppcPlatCard('google','Google ADS','var(--google)',2,true)+customIngresoBlock()+respBlock()+notesBlock()+saveBar(); host.innerHTML=h;
-    const aw=(id,fn,deps)=>{ const t=$('#'+id); t.addEventListener('input',()=>t.dataset.auto='0'); deps.forEach(d=>{const e=$('#'+d); if(e)e.addEventListener('input',()=>{ if(t.dataset.auto!=='0'){ const v=fn(); t.value=(v===null?'':fmt(v)); t.dataset.auto='1'; } });}); };
-    aw('ppc_tot_leads',()=>num($('#ppc_meta_leads').value)+num($('#ppc_google_leads').value),['ppc_meta_leads','ppc_google_leads']);
-    aw('ppc_tot_inv',()=>num($('#ppc_meta_inv').value)+num($('#ppc_google_inv').value),['ppc_meta_inv','ppc_google_inv']);
-    ['meta','google'].forEach(p=>{ aw('ppc_'+p+'_cpl',()=>{const l=num($('#ppc_'+p+'_leads').value);return l>0?num($('#ppc_'+p+'_inv').value)/l:null;},['ppc_'+p+'_inv','ppc_'+p+'_leads']); const nc=p==='meta'?5:2; for(let i=1;i<=nc;i++){(function(p,i){aw(`ppc_${p}_c${i}_ctr`,()=>{const a=num($(`#ppc_${p}_c${i}_alcance`).value);return a>0?num($(`#ppc_${p}_c${i}_clics`).value)/a*100:null;},[`ppc_${p}_c${i}_clics`,`ppc_${p}_c${i}_alcance`]);})(p,i);} });
-  }
-  function ppcFill(rec){ setVAuto('ppc_tot_leads',rec&&rec.tot?rec.tot.leads:''); setVAuto('ppc_tot_inv',rec&&rec.tot?rec.tot.inv:''); ['meta','google'].forEach(p=>{ const d=(rec&&rec[p])||{}; setVAuto('ppc_'+p+'_leads',d.leads); setVAuto('ppc_'+p+'_inv',d.inv); setVAuto('ppc_'+p+'_cpl',d.cpl); setVAuto('ppc_'+p+'_campanas',d.campanas); const nc=p==='meta'?5:2; for(let i=1;i<=nc;i++){ const c=(d.camps&&d.camps[i-1])||{}; setV(`ppc_${p}_c${i}_name`,c.name); setV(`ppc_${p}_c${i}_id`,c.id); PPC_CF.forEach(([k])=>setVAuto(`ppc_${p}_c${i}_${k}`,c[k])); if(p==='google') setV(`ppc_${p}_c${i}_topkw`,c.topkw); } }); fillNotes(rec); fillResp(rec); fillCustom(rec); }
-  function ppcRead(){ const rec={tot:{leads:num(gv('ppc_tot_leads')),inv:num(gv('ppc_tot_inv'))}}; ['meta','google'].forEach(p=>{ const d={leads:num(gv('ppc_'+p+'_leads')),inv:num(gv('ppc_'+p+'_inv')),cpl:num(gv('ppc_'+p+'_cpl')),campanas:num(gv('ppc_'+p+'_campanas')),camps:[]}; const nc=p==='meta'?5:2; for(let i=1;i<=nc;i++){ const c={name:gv(`ppc_${p}_c${i}_name`),id:gv(`ppc_${p}_c${i}_id`)}; PPC_CF.forEach(([k])=>c[k]=num(gv(`ppc_${p}_c${i}_${k}`))); if(p==='google')c.topkw=gv(`ppc_${p}_c${i}_topkw`); d.camps.push(c);} rec[p]=d; }); readNotes(rec); readResp(rec); readCustom(rec); return rec; }
-  function ppcMetas(host,M){
-    const scopeLabels = { global:'Totales', meta:'Meta ADS', google:'Google ADS' };
-    const sections = ['global','meta','google'].map(sc => ({
-      scope: sc,
-      title: scopeLabels[sc],
-      kpis: PPC_MF.filter(f=>f[0]===sc).map(f=>({scope:f[0],key:f[1],label:f[2],hint:f[3],money:/CPL|inv/i.test(f[1])}))
-    }));
-    renderMktMetasTable(host, 'ppc', sections, 'Objetivos semanales editables. En <b>CPL</b> la lógica es inversa (verde si el real ≤ meta). Precargados = benchmarks de bienes raíces.');
-  }
-  function ppcReporte(host,w,M){ const rec=M.records[w]; if(!rec){ host.innerHTML=noData(w,'week'); return; } const tl=num(rec.tot.leads),ti=num(rec.tot.inv); const cg=tl>0?ti/tl:0; const mg=M.metas.global;
-    let h=`<div class="summary"><div class="stitle">PPC Ads · ${M._rangeLabel||(w+' · '+weekRange(w))}</div>${respLine(rec)}<div class="summary-grid">`;
-    h+=`<div class="kpi"><div class="klabel">Leads totales</div><div class="kval">${fmt(tl)}</div><div class="kcumpl">${cpH(tl,mg.leadsTotales)}</div></div>`;
-    h+=`<div class="kpi"><div class="klabel">Inversión total</div><div class="kval">${money(ti)}</div><div class="kcumpl" style="color:var(--arena)">presupuesto</div></div>`;
-    h+=`<div class="kpi"><div class="klabel">CPL global</div><div class="kval">${money(cg)}</div><div class="kcumpl">${cpL(cg||null,mg.cplGlobal)}</div></div></div></div>`;
-    [['meta','Meta ADS','var(--meta)'],['google','Google ADS','var(--google)']].forEach(([plt,name,color])=>{ const d=rec[plt]||{}; const m=M.metas[plt]||{}; let a=0,c=0; (d.camps||[]).forEach(x=>{a+=num(x.alcance);c+=num(x.clics);}); const ctr=a>0?c/a*100:null; const cpl=num(d.cpl)||(num(d.leads)>0?num(d.inv)/num(d.leads):0);
-      h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${color}"></span><h3>${name}</h3></div><div class="card-body"><table class="rtable">`;
-      h+=`<tr><td class="kname">Leads</td><td class="kval">${fmt(num(d.leads))}</td><td class="kmeta">${metaTxt(m.leads)}</td><td class="ccell">${cpH(num(d.leads),m.leads)}</td></tr>`;
-      h+=`<tr><td class="kname">Inversión</td><td class="kval">${money(num(d.inv))}</td><td class="kmeta"></td><td class="ccell"></td></tr>`;
-      h+=`<tr><td class="kname">CPL</td><td class="kval">${money(cpl)}</td><td class="kmeta">${metaTxt(m.cpl,{money:1,lower:1})}</td><td class="ccell">${cpL(cpl||null,m.cpl)}</td></tr>`;
-      h+=`<tr><td class="kname">Campañas activas</td><td class="kval">${fmt(num(d.campanas))}</td><td class="kmeta">${metaTxt(m.campanas)}</td><td class="ccell">${cpH(num(d.campanas),m.campanas)}</td></tr>`;
-      h+=`<tr class="calc-row"><td class="kname">CTR ponderado</td><td class="kval">${ctr===null?'—':pct(ctr)}</td><td class="kmeta">${metaTxt(m.ctr,{pct:1})}</td><td class="ccell">${ctr===null?naP():cpH(ctr,m.ctr)}</td></tr>`;
-      h+=`<tr class="calc-row"><td class="kname">Alcance / Clics</td><td class="kval">${fmt(a)} / ${fmt(c)}</td><td class="kmeta"></td><td class="ccell"></td></tr></table>`;
-      const camps=(d.camps||[]).filter(x=>x.name||num(x.leads)||num(x.alcance)||num(x.clics)); const isG=plt==='google';
-      if(camps.length){ h+=`<div class="scroll"><table class="ctable"><tr><th class="l">Campaña</th><th>Leads</th><th>CPL</th><th>Alcance</th><th>Clics</th><th>CTR</th><th>CPR</th>${isG?'<th class="l">Top KW</th>':''}</tr>`; camps.forEach(x=>{ const xc=num(x.ctr)||(num(x.alcance)>0?num(x.clics)/num(x.alcance)*100:0); h+=`<tr><td class="l">${escHtmlSafe(x.name)||'(sin nombre)'}</td><td>${fmt(num(x.leads))}</td><td>${money(num(x.cpl))}</td><td>${fmt(num(x.alcance))}</td><td>${fmt(num(x.clics))}</td><td>${xc?pct(xc):'—'}</td><td>${num(x.cpr)?money(num(x.cpr)):'—'}</td>${isG?`<td class="l kw">${escHtmlSafe(x.topkw)||'—'}</td>`:''}</tr>`; }); h+=`</table></div>`; }
-      h+=`</div></div>`; });
-    h+=customReportSection(rec)+notesReport(rec); host.innerHTML=h;
-  }
-
-  /* ===== MÓDULO 3 · CRM MANAGER (semanal) ===== */
-  const CRM_SRC=[['totales','Leads totales'],['meta','Leads de Meta ADS'],['google','Leads de Google ADS'],['brokers','Leads de brokers'],['referidos','Leads de referidos'],['otras','Leads de otras fuentes']];
-  const CRM_SEG=[{key:'totales',name:'Leads totales',color:'var(--verde-prof)'},{key:'meta',name:'Leads de Meta ADS',color:'var(--meta)'},{key:'google',name:'Leads de Google ADS',color:'var(--google)'},{key:'otras',name:'Leads de otras fuentes',color:'var(--otras)'}];
-  const FUNNEL=[['cql','CQL'],['mql','MQL'],['sql','SQL'],['sqls','SQL Selvadentro'],['corretaje','Corretaje'],['descal','Descalificados']];
-  const CRM_WEB=[['trafico','Tráfico orgánico'],['registros','Registros en formularios'],['seo','Artículos SEO (blog)']];
-  const CRM_EM=[['enviadas','Email enviadas'],['abiertas','Email abiertas'],['click','Email click'],['respuesta','Email con respuesta']];
-  const CRM_MS=[['enviadas','Mensaje enviadas'],['abiertas','Mensaje abiertas'],['click','Mensaje click']];
-  const CRM_SEED_METAS={ funnel:{leadToCQL:35,cqlToMQL:40,mqlToSQL:50,sqlToSQLS:60}, leads:{totales:15}, web:{formConv:2}, email:{open:25,click:3,reply:5}, msg:{open:60,click:10} };
-  const CRM_MF=[['funnel','leadToCQL','Lead → CQL','% mín'],['funnel','cqlToMQL','CQL → MQL','% mín'],['funnel','mqlToSQL','MQL → SQL','% mín'],['funnel','sqlToSQLS','SQL → SQL Selvadentro','% mín'],['leads','totales','Leads totales / semana','mín'],['web','formConv','Conversión de formulario','% mín'],['email','open','Email · Open rate','% mín'],['email','click','Email · Click rate','% mín'],['email','reply','Email · Reply rate','% mín'],['msg','open','Mensaje · Open rate','% mín'],['msg','click','Mensaje · Click rate','% mín']];
-  const CRM_SEED={ '2026-W15':{ src:{totales:20,meta:12,google:5,brokers:2,referidos:1,otras:0}, funnels:{totales:{cql:8,mql:5,sql:3,sqls:1,corretaje:1,descal:6},meta:{cql:5,mql:3,sql:2,sqls:1,corretaje:0,descal:4},google:{cql:2,mql:1,sql:1,sqls:0,corretaje:0,descal:2},otras:{cql:1,mql:1,sql:0,sqls:0,corretaje:0,descal:1}}, web:{trafico:1240,registros:31,seo:3}, email:{enviadas:480,abiertas:134,click:17,respuesta:9}, msg:{enviadas:210,abiertas:145,click:25}, notas:'Semana de EJEMPLO precargada. Sobrescríbela con datos reales.',aprendizajes:'',cambios:'' } };
-  function crmIngreso(host){ let h=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--cobre)"></span><h3>Conteo de leads por fuente</h3></div><div class="card-body"><div class="grid">`; CRM_SRC.forEach(([k,l])=>{ const au=k==='totales'; h+=`<div class="field"><label>${l}${au?' <span class="calc-tag">(auto)</span>':''}</label><input type="text" inputmode="numeric" id="crm_src_${k}" class="${au?'auto':''}" placeholder="0"></div>`; }); h+=`</div></div></div>`; CRM_SEG.forEach(s=>{ h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${s.color}"></span><h3>Embudo · ${s.name}</h3></div><div class="card-body"><div class="grid">`; FUNNEL.forEach(([k,l])=>h+=`<div class="field"><label>${l}</label><input type="text" inputmode="numeric" id="crm_f_${s.key}_${k}" placeholder="0"></div>`); h+=`</div></div></div>`; }); h+=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--web)"></span><h3>Website</h3></div><div class="card-body"><div class="grid">`; CRM_WEB.forEach(([k,l])=>h+=`<div class="field"><label>${l}</label><input type="text" inputmode="numeric" id="crm_web_${k}" placeholder="0"></div>`); h+=`</div></div></div>`; h+=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--mail)"></span><h3>Email &amp; Chat MKT</h3></div><div class="card-body"><div class="subhead">Email</div><div class="grid">`; CRM_EM.forEach(([k,l])=>h+=`<div class="field"><label>${l}</label><input type="text" inputmode="numeric" id="crm_email_${k}" placeholder="0"></div>`); h+=`</div><div class="subhead" style="margin-top:16px">Mensaje / Chat</div><div class="grid">`; CRM_MS.forEach(([k,l])=>h+=`<div class="field"><label>${l}</label><input type="text" inputmode="numeric" id="crm_msg_${k}" placeholder="0"></div>`); h+=`</div></div></div>`; h+=customIngresoBlock()+respBlock()+notesBlock()+saveBar(); host.innerHTML=h; const t=$('#crm_src_totales'); t.addEventListener('input',()=>t.dataset.auto='0'); ['meta','google','brokers','referidos','otras'].forEach(k=>$('#crm_src_'+k).addEventListener('input',()=>{ if(t.dataset.auto!=='0'){ t.value=fmt(['meta','google','brokers','referidos','otras'].reduce((a,x)=>a+num($('#crm_src_'+x).value),0)); t.dataset.auto='1'; } })); }
-  function crmFill(rec){ CRM_SRC.forEach(([k])=>setVAuto('crm_src_'+k,rec&&rec.src?rec.src[k]:'')); CRM_SEG.forEach(s=>{ const f=(rec&&rec.funnels&&rec.funnels[s.key])||{}; FUNNEL.forEach(([k])=>setV(`crm_f_${s.key}_${k}`,f[k])); }); CRM_WEB.forEach(([k])=>setV('crm_web_'+k,rec&&rec.web?rec.web[k]:'')); CRM_EM.forEach(([k])=>setV('crm_email_'+k,rec&&rec.email?rec.email[k]:'')); CRM_MS.forEach(([k])=>setV('crm_msg_'+k,rec&&rec.msg?rec.msg[k]:'')); fillNotes(rec); fillResp(rec); fillCustom(rec); }
-  function crmRead(){ const rec={src:{},funnels:{},web:{},email:{},msg:{}}; CRM_SRC.forEach(([k])=>rec.src[k]=num(gv('crm_src_'+k))); CRM_SEG.forEach(s=>{ rec.funnels[s.key]={}; FUNNEL.forEach(([k])=>rec.funnels[s.key][k]=num(gv(`crm_f_${s.key}_${k}`))); }); CRM_WEB.forEach(([k])=>rec.web[k]=num(gv('crm_web_'+k))); CRM_EM.forEach(([k])=>rec.email[k]=num(gv('crm_email_'+k))); CRM_MS.forEach(([k])=>rec.msg[k]=num(gv('crm_msg_'+k))); readNotes(rec); readResp(rec); readCustom(rec); return rec; }
-  function crmMetas(host,M){
-    const scopeLabels = { funnel:'Embudo de calificación · aplica a los 4 segmentos', leads:'Volumen', web:'Website', email:'Email MKT', msg:'Mensaje / Chat MKT' };
-    const sections = ['funnel','leads','web','email','msg'].map(sc => ({
-      scope: sc, title: scopeLabels[sc],
-      kpis: CRM_MF.filter(f=>f[0]===sc).map(f=>({scope:f[0],key:f[1],label:f[2],hint:f[3]}))
-    }));
-    renderMktMetasTable(host, 'crm', sections, 'Objetivos editables. Las conversiones del embudo se comparan en los 4 segmentos.');
-  }
-  function crmReporte(host,w,M){ const rec=M.records[w]; if(!rec){ host.innerHTML=noData(w,'week'); return; } let h=''; if((rec.notas||'').indexOf('EJEMPLO')>=0) h+=`<div class="ex-banner">⚠️ ${w} trae <b>datos de ejemplo</b>. Sobrescríbelos en Ingreso.</div>`;
-    h+=`<div class="summary"><div class="stitle">CRM Manager · ${M._rangeLabel||(w+' · '+weekRange(w))}</div>${respLine(rec)}<div class="summary-grid">`;
-    h+=`<div class="kpi"><div class="klabel">Leads totales</div><div class="kval">${fmt(num(rec.src.totales))}</div><div class="kcumpl">${M.metas.leads.totales?cpH(num(rec.src.totales),M.metas.leads.totales):'<span style="color:var(--arena)">—</span>'}</div></div>`;
-    [['meta','Meta ADS'],['google','Google ADS'],['brokers','Brokers'],['referidos','Referidos'],['otras','Otras']].forEach(([k,l])=>h+=`<div class="kpi"><div class="klabel">${l}</div><div class="kval">${fmt(num(rec.src[k]))}</div></div>`); h+=`</div></div>`;
-    CRM_SEG.forEach(s=>{ const lead=num(rec.src[s.key]); const f=rec.funnels[s.key]||{}; const mf=M.metas.funnel; h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${s.color}"></span><h3>Embudo · ${s.name}</h3></div><div class="card-body"><table class="rtable">`; FUNNEL.forEach(([k,l])=>h+=cRow(l,num(f[k]))); h+=rRow('Lead → CQL',lead>0?num(f.cql)/lead*100:null,mf.leadToCQL,false)+rRow('CQL → MQL',num(f.cql)>0?num(f.mql)/num(f.cql)*100:null,mf.cqlToMQL,false)+rRow('MQL → SQL',num(f.mql)>0?num(f.sql)/num(f.mql)*100:null,mf.mqlToSQL,false)+rRow('SQL → SQL Selvadentro',num(f.sql)>0?num(f.sqls)/num(f.sql)*100:null,mf.sqlToSQLS,false); h+=`</table></div></div>`; });
-    const web=rec.web||{}; const fc=num(web.trafico)>0?num(web.registros)/num(web.trafico)*100:null; h+=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--web)"></span><h3>Website</h3></div><div class="card-body"><table class="rtable">`+cRow('Tráfico orgánico',num(web.trafico))+cRow('Registros en formularios',num(web.registros))+cRow('Artículos SEO (blog)',num(web.seo))+rRow('Conversión de formulario',fc,M.metas.web.formConv,false)+`</table></div></div>`;
-    const em=rec.email||{},ms=rec.msg||{}; const eo=num(em.enviadas)>0?num(em.abiertas)/num(em.enviadas)*100:null,ec=num(em.enviadas)>0?num(em.click)/num(em.enviadas)*100:null,er=num(em.enviadas)>0?num(em.respuesta)/num(em.enviadas)*100:null; const mo=num(ms.enviadas)>0?num(ms.abiertas)/num(ms.enviadas)*100:null,mc=num(ms.enviadas)>0?num(ms.click)/num(ms.enviadas)*100:null;
-    h+=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--mail)"></span><h3>Email &amp; Chat MKT</h3></div><div class="card-body"><div class="subhead">Email</div><table class="rtable">`+cRow('Enviadas',num(em.enviadas))+cRow('Abiertas',num(em.abiertas))+cRow('Click',num(em.click))+cRow('Con respuesta',num(em.respuesta))+rRow('Open rate',eo,M.metas.email.open,false)+rRow('Click rate',ec,M.metas.email.click,false)+rRow('Reply rate',er,M.metas.email.reply,false)+`</table><div class="subhead" style="margin-top:16px">Mensaje / Chat</div><table class="rtable">`+cRow('Enviadas',num(ms.enviadas))+cRow('Abiertas',num(ms.abiertas))+cRow('Click',num(ms.click))+rRow('Open rate',mo,M.metas.msg.open,false)+rRow('Click rate',mc,M.metas.msg.click,false)+`</table></div></div>`;
-    h+=customReportSection(rec)+notesReport(rec); host.innerHTML=h;
-  }
-
-  /* ===== MÓDULO 4 · CALIDAD DE LEADS POR AD (semanal) ===== */
-  const LQ_SRC=[['totales','Leads totales'],['meta','Leads de Meta ADS'],['google','Leads de Google ADS'],['otras','Leads de otras fuentes']];
-  const LQ_SEG=[{key:'gesp',def:'Google ADS ESP',color:'var(--web)'},{key:'geng',def:'Google ADS ENG',color:'#8a9a55'},{key:'m1',def:'Campaña Meta ADS 1',color:'var(--meta)'},{key:'m2',def:'Campaña Meta ADS 2',color:'var(--meta)'},{key:'m3',def:'Campaña Meta ADS 3',color:'var(--meta)'},{key:'m4',def:'Campaña Meta ADS 4',color:'var(--meta)'},{key:'m5',def:'Campaña Meta ADS 5',color:'var(--meta)'}];
-  const LQ_SEED_METAS={ funnel:{cqlToMQL:40,mqlToSQL:50,sqlToSQLS:60}, quality:{endToEnd:12,descalRate:30}, leads:{totales:15} };
-  const LQ_MF=[['funnel','cqlToMQL','CQL → MQL','% mín'],['funnel','mqlToSQL','MQL → SQL','% mín'],['funnel','sqlToSQLS','SQL → SQL Selvadentro','% mín'],['quality','endToEnd','Calidad (CQL → SQL Selvadentro)','% mín · más alto mejor'],['quality','descalRate','Tasa de descalificación','% máx · menos mejor'],['leads','totales','Leads totales / semana','mín']];
-  const LQ_SEED={ '2026-W15':{ src:{totales:20,meta:12,google:5,otras:3}, names:{gesp:'Google ESP · Lotes inversión',geng:'Google ENG · Investors',m1:'Meta · Cenotes lifestyle',m2:'Meta · Retargeting web',m3:'Meta · Awareness Tulum',m4:'Meta · Broadcast frío',m5:'Campaña Meta ADS 5'}, funnels:{gesp:{cql:4,mql:2,sql:1,sqls:1,corretaje:0,descal:1},geng:{cql:3,mql:1,sql:1,sqls:0,corretaje:0,descal:2},m1:{cql:5,mql:3,sql:2,sqls:1,corretaje:1,descal:1},m2:{cql:4,mql:2,sql:1,sqls:0,corretaje:0,descal:3},m3:{cql:2,mql:1,sql:1,sqls:1,corretaje:0,descal:0},m4:{cql:3,mql:0,sql:0,sqls:0,corretaje:0,descal:3},m5:{cql:0,mql:0,sql:0,sqls:0,corretaje:0,descal:0}}, notas:'Semana de EJEMPLO precargada. Sobrescríbela con datos reales.',aprendizajes:'',cambios:'' } };
-  function lqIngreso(host){ let h=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--cobre)"></span><h3>Conteo de leads</h3></div><div class="card-body"><div class="grid">`; LQ_SRC.forEach(([k,l])=>{ const au=k==='totales'; h+=`<div class="field"><label>${l}${au?' <span class="calc-tag">(auto)</span>':''}</label><input type="text" inputmode="numeric" id="lq_src_${k}" class="${au?'auto':''}" placeholder="0"></div>`; }); h+=`</div></div></div>`; LQ_SEG.forEach(s=>{ h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${s.color}"></span><h3>${s.def}</h3></div><div class="card-body"><input class="camp-name" id="lq_name_${s.key}" placeholder="Nombre del anuncio / campaña"><div class="grid">`; FUNNEL.forEach(([k,l])=>h+=`<div class="field"><label>${l}</label><input type="text" inputmode="numeric" id="lq_f_${s.key}_${k}" placeholder="0"></div>`); h+=`</div></div></div>`; }); h+=customIngresoBlock()+respBlock()+notesBlock()+saveBar(); host.innerHTML=h; const t=$('#lq_src_totales'); t.addEventListener('input',()=>t.dataset.auto='0'); ['meta','google','otras'].forEach(k=>$('#lq_src_'+k).addEventListener('input',()=>{ if(t.dataset.auto!=='0'){ t.value=fmt(['meta','google','otras'].reduce((a,x)=>a+num($('#lq_src_'+x).value),0)); t.dataset.auto='1'; } })); }
-  function lqFill(rec){ LQ_SRC.forEach(([k])=>setVAuto('lq_src_'+k,rec&&rec.src?rec.src[k]:'')); LQ_SEG.forEach(s=>{ setV('lq_name_'+s.key,rec&&rec.names?rec.names[s.key]:''); const f=(rec&&rec.funnels&&rec.funnels[s.key])||{}; FUNNEL.forEach(([k])=>setV(`lq_f_${s.key}_${k}`,f[k])); }); fillNotes(rec); fillResp(rec); fillCustom(rec); }
-  function lqRead(){ const rec={src:{},names:{},funnels:{}}; LQ_SRC.forEach(([k])=>rec.src[k]=num(gv('lq_src_'+k))); LQ_SEG.forEach(s=>{ rec.names[s.key]=gv('lq_name_'+s.key); rec.funnels[s.key]={}; FUNNEL.forEach(([k])=>rec.funnels[s.key][k]=num(gv(`lq_f_${s.key}_${k}`))); }); readNotes(rec); readResp(rec); readCustom(rec); return rec; }
-  function lqMetas(host,M){
-    const scopeLabels = { funnel:'Conversiones del embudo · aplica a todos los anuncios', quality:'Calidad por anuncio', leads:'Volumen' };
-    const sections = ['funnel','quality','leads'].map(sc => ({
-      scope: sc, title: scopeLabels[sc],
-      kpis: LQ_MF.filter(f=>f[0]===sc).map(f=>({scope:f[0],key:f[1],label:f[2],hint:f[3]}))
-    }));
-    renderMktMetasTable(host, 'lq', sections, 'Objetivos editables. En <b>Tasa de descalificación</b> la lógica es inversa (verde si queda por debajo).');
-  }
-  function lqCalc(f){ const cql=num(f.cql),mql=num(f.mql),sql=num(f.sql),sqls=num(f.sqls),des=num(f.descal); return { cqlToMQL:cql>0?mql/cql*100:null, mqlToSQL:mql>0?sql/mql*100:null, sqlToSQLS:sql>0?sqls/sql*100:null, endToEnd:cql>0?sqls/cql*100:null, descalRate:cql>0?des/cql*100:null, hasData:(cql+mql+sql+sqls+num(f.corretaje)+des)>0 }; }
-  function chipH(v,m){ if(v===null)return'<span class="chip na">—</span>'; const c=m?v/m*100:100; return `<span class="chip ${(!m||c>=100)?'ok':'no'}">${pct(v)}</span>`; }
-  function chipL(v,m){ if(v===null)return'<span class="chip na">—</span>'; const ok=(!m)||v<=m; return `<span class="chip ${ok?'ok':'no'}">${pct(v)}</span>`; }
-  function lqReporte(host,w,M){ const rec=M.records[w]; if(!rec){ host.innerHTML=noData(w,'week'); return; } let h=''; if((rec.notas||'').indexOf('EJEMPLO')>=0) h+=`<div class="ex-banner">⚠️ ${w} trae <b>datos de ejemplo</b>. Sobrescríbelos en Ingreso.</div>`;
-    h+=`<div class="summary"><div class="stitle">Calidad de Leads por Ad · ${M._rangeLabel||(w+' · '+weekRange(w))}</div>${respLine(rec)}<div class="summary-grid">`;
-    h+=`<div class="kpi"><div class="klabel">Leads totales</div><div class="kval">${fmt(num(rec.src.totales))}</div><div class="kcumpl">${M.metas.leads.totales?cpH(num(rec.src.totales),M.metas.leads.totales):'<span style="color:var(--arena)">—</span>'}</div></div>`;
-    [['meta','Meta ADS'],['google','Google ADS'],['otras','Otras']].forEach(([k,l])=>h+=`<div class="kpi"><div class="klabel">${l}</div><div class="kval">${fmt(num(rec.src[k]))}</div></div>`); h+=`</div></div>`;
-    const rows=LQ_SEG.map(s=>{ const f=rec.funnels[s.key]||{}; return {name:(rec.names&&rec.names[s.key])||s.def,f,c:lqCalc(f),color:s.color}; });
-    const wd=rows.filter(r=>r.c.hasData).sort((a,b)=>{ const av=a.c.endToEnd===null?-1:a.c.endToEnd,bv=b.c.endToEnd===null?-1:b.c.endToEnd; return bv-av; }); const nd=rows.filter(r=>!r.c.hasData); const ord=wd.concat(nd);
-    h+=`<div class="card"><div class="card-head"><span class="dot" style="background:var(--cobre)"></span><h3>Comparativa por anuncio · rankeada por calidad</h3></div><div class="card-body"><div class="scroll"><table class="ctable wide"><tr><th class="l">#</th><th class="l">Anuncio</th><th>CQL</th><th>MQL</th><th>SQL</th><th>SQL Selv.</th><th>Corr.</th><th>Descal.</th><th>Calidad</th><th>Descal %</th></tr>`;
-    ord.forEach((r,i)=>{ h+=`<tr class="${(i===0&&r.c.hasData)?'best':''}"><td class="l rank">${r.c.hasData?(i+1):'—'}</td><td class="l">${escHtmlSafe(r.name)}</td><td>${fmt(num(r.f.cql))}</td><td>${fmt(num(r.f.mql))}</td><td>${fmt(num(r.f.sql))}</td><td>${fmt(num(r.f.sqls))}</td><td>${fmt(num(r.f.corretaje))}</td><td>${fmt(num(r.f.descal))}</td><td>${chipH(r.c.endToEnd,M.metas.quality.endToEnd)}</td><td>${chipL(r.c.descalRate,M.metas.quality.descalRate)}</td></tr>`; });
-    h+=`</table></div><div style="font-size:11.5px;color:var(--neutro);margin-top:10px">Calidad = SQL Selvadentro ÷ CQL · Descal % = Descalificados ÷ CQL · fila resaltada = mejor calidad.</div></div></div>`;
-    LQ_SEG.forEach(s=>{ const f=rec.funnels[s.key]||{}; const c=lqCalc(f); const nm=(rec.names&&rec.names[s.key])||s.def; h+=`<div class="card"><div class="card-head"><span class="dot" style="background:${s.color}"></span><h3>${escHtmlSafe(nm)}</h3></div><div class="card-body"><table class="rtable">`; FUNNEL.forEach(([k,l])=>h+=cRow(l,num(f[k]))); h+=rRow('CQL → MQL',c.cqlToMQL,M.metas.funnel.cqlToMQL,false)+rRow('MQL → SQL',c.mqlToSQL,M.metas.funnel.mqlToSQL,false)+rRow('SQL → SQL Selvadentro',c.sqlToSQLS,M.metas.funnel.sqlToSQLS,false)+rRow('Calidad (CQL → SQL Selvadentro)',c.endToEnd,M.metas.quality.endToEnd,false)+rRow('Tasa de descalificación',c.descalRate,M.metas.quality.descalRate,true); h+=`</table></div></div>`; });
-    h+=customReportSection(rec)+notesReport(rec); host.innerHTML=h;
-  }
+  /* Aquí vivían los módulos PPC Ads, CRM Manager y Calidad de Leads manual (~27 KB).
+     Se retiraron del registro el 2026-08-26 pero el código se quedó: 113 líneas que el
+     navegador seguía descargando y parseando en cada carga del iframe, sin que nadie
+     pudiera abrirlas. Sus registros históricos siguen en el kv bajo mkt_ppc_rec,
+     mkt_crm_rec y mkt_lq_rec — borrar el código no borra los datos. */
 
   /* ===== Registro de módulos + controlador ===== */
   const MODS={
@@ -775,7 +727,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
 
     if(!leyoOk || !leyoMetas){
       M._lecturaFallida = true;
-      try{ alert("No se pudieron leer los datos guardados de "+M.name+".\n\nNo se escribió nada para no pisar la información real. Recarga la página cuando vuelva la conexión."); }catch(_){}
+      try{ avisar("No se escribió nada para no pisar la información real. Recarga la página cuando vuelva la conexión.", { titulo:"No se pudieron leer los datos de "+M.name }); }catch(_){}
     } else { M._lecturaFallida = false; }
 
     const ks = Object.keys(M.records).sort();
@@ -783,8 +735,29 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
       : (M.period==='week' ? isoWeekOf(new Date())
         : (new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')));
   }
-  async function saveRec(M){ try{ await window.storage.set(M.key,JSON.stringify(M.records)); }catch(e){console.error(e);} }
-  async function saveMeta(M){ try{ await window.storage.set(M.mkey,JSON.stringify(M.metas)); }catch(e){console.error(e);} state.ingresoRendered=null; }
+  // Un guardado que falla NO puede terminar en "✓ Guardado". Antes el error se tragaba en un
+  // console.error, la promesa resolvía normal y quien llamaba celebraba igual: alguien capturaba
+  // el reporte del mes, veía el ✓ verde, cerraba la pestaña y no se había guardado nada. El lado
+  // de Ventas ya lo había arreglado (index.html · saveWeek); esto trae el mismo comportamiento.
+  // Las dos funciones avisan ellas mismas del fallo —para que un sitio de llamada nuevo no pueda
+  // olvidarlo— y devuelven true/false para que quien llama decida si muestra su mensaje de éxito.
+  function avisarFalloGuardado(e, queEs){
+    const detalle = (e && e.message) ? e.message : String(e);
+    console.error('No se pudo guardar ' + queEs, e);
+    showToast('⚠ No se guardó — revisa tu conexión');
+    try{
+      avisar(detalle + '\n\nLo que capturaste sigue en pantalla: revisa tu conexión y vuelve a guardar. ' +
+        'Si recargas la página ahora, se pierde.', { titulo:'NO se guardó ' + queEs + ' en el servidor' });
+    }catch(_){}
+  }
+  async function saveRec(M){
+    try{ await window.storage.set(M.key, JSON.stringify(M.records)); return true; }
+    catch(e){ avisarFalloGuardado(e, 'el reporte de ' + M.name); return false; }
+  }
+  async function saveMeta(M){
+    try{ await window.storage.set(M.mkey, JSON.stringify(M.metas)); state.ingresoRendered=null; return true; }
+    catch(e){ avisarFalloGuardado(e, 'las metas de ' + M.name); return false; }
+  }
 
   function getAllowedMods(){ try{ if(window.parent && window.parent!==window && typeof window.parent.getMktAllowedModules==='function'){ const r = window.parent.getMktAllowedModules(); return r==null ? null : r; } }catch(e){} return null; }
   function orderFiltered(){ const a=getAllowedMods(); return a==null ? ORDER : ORDER.filter(id=>a.includes(id)); }
@@ -923,10 +896,14 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     }
     const inp=$('#resp-pill-input'); if(inp && document.activeElement!==inp){ inp.value = RESP[state.active] || ''; }
   }
-  (function(){ const inp=$('#resp-pill-input'); if(!inp) return; const save=async()=>{ const v=inp.value.trim(); if(v!==(RESP[state.active]||'')){ RESP[state.active]=v; try{ await window.storage.set('mkt_resp', JSON.stringify(RESP)); }catch(e){} showToast('✓ Responsable guardado'); if(state.view==='ingreso'){ const x=$('#x_resp'); if(x) x.value=v; } } }; inp.addEventListener('blur',save); inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); inp.blur(); } }); })();
-  function setNavActive(){ document.querySelectorAll('[data-view]').forEach(el=>el.classList.toggle('active', el.dataset.view===state.view)); }
-  function bindSave(){ const b=$('#btn-save'); if(b) b.onclick=async()=>{ const M=MODS[state.active]; if(!M.pval){alert('Elige periodo.');return;} if(!isPeriodEditable(M, M.pval)){ alert('Solo puedes guardar el periodo actual o el anterior.'); return; } M.records[M.pval]=M.read(); await saveRec(M); updatePill(); showToast('✓ Guardado · '+(M.period==='week'?M.pval:ymLabel(M.pval))); }; const c=$('#btn-clear'); if(c) c.onclick=()=>{ if(confirm('¿Limpiar el formulario? (no borra lo guardado)')) MODS[state.active].fill(null); }; }
-  function renderResponsable(){ let h=`<div class="metas-hint">Escribe el responsable de cada reporte. Aparece junto al periodo y en el encabezado de cada reporte.</div><div class="card"><div class="card-head"><span class="dot" style="background:var(--meta)"></span><h3>Responsable del reporte</h3></div><div class="card-body"><div class="grid">`; ORDER.forEach(id=> h+=`<div class="field"><label>${MODS[id].name}</label><input type="text" id="resp_${id}" value="${(RESP[id]||'').replace(/"/g,'&quot;')}" placeholder="Nombre del responsable"></div>`); h+=`</div></div></div><div class="actions"><button class="btn-prim" id="btn-save-resp">Guardar responsables</button></div>`; $('#view-responsable').innerHTML=h; $('#btn-save-resp').onclick=async()=>{ ORDER.forEach(id=>RESP[id]=$('#resp_'+id).value.trim()); try{await window.storage.set('mkt_resp',JSON.stringify(RESP));}catch(e){} showToast('✓ Responsables guardados'); updatePill(); }; }
+  (function(){ const inp=$('#resp-pill-input'); if(!inp) return; const save=async()=>{ const v=inp.value.trim(); if(v!==(RESP[state.active]||'')){ RESP[state.active]=v; let ok=true; try{ await window.storage.set('mkt_resp', JSON.stringify(RESP)); }catch(e){ ok=false; avisarFalloGuardado(e, 'el responsable'); } if(ok) showToast('✓ Responsable guardado'); if(state.view==='ingreso'){ const x=$('#x_resp'); if(x) x.value=v; } } }; inp.addEventListener('blur',save); inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); inp.blur(); } }); })();
+  function setNavActive(){ document.querySelectorAll('[data-view]').forEach(el=>{
+    const on = el.dataset.view===state.view;
+    el.classList.toggle('active', on);
+    if(el.getAttribute('role')==='tab') el.setAttribute('aria-selected', on ? 'true' : 'false');
+  }); }
+  function bindSave(){ const b=$('#btn-save'); if(b) b.onclick=async()=>{ const M=MODS[state.active]; if(!M.pval){avisar('Elige periodo.');return;} if(!isPeriodEditable(M, M.pval)){ avisar('Solo puedes guardar el periodo actual o el anterior.'); return; } M.records[M.pval]=M.read(); const ok=await saveRec(M); updatePill(); if(ok) showToast('✓ Guardado · '+(M.period==='week'?M.pval:ymLabel(M.pval))); }; const c=$('#btn-clear'); if(c) c.onclick=async()=>{ if(await confirmar('Se borra lo que está en pantalla. Lo que ya guardaste no se toca.', { titulo:'¿Limpiar el formulario?', ok:'Limpiar', peligro:true })) MODS[state.active].fill(null); }; }
+  function renderResponsable(){ let h=`<div class="metas-hint">Escribe el responsable de cada reporte. Aparece junto al periodo y en el encabezado de cada reporte.</div><div class="card"><div class="card-head"><span class="dot" style="background:var(--meta)"></span><h3>Responsable del reporte</h3></div><div class="card-body"><div class="grid">`; ORDER.forEach(id=> h+=`<div class="field"><label>${MODS[id].name}</label><input type="text" id="resp_${id}" value="${(RESP[id]||'').replace(/"/g,'&quot;')}" placeholder="Nombre del responsable"></div>`); h+=`</div></div></div><div class="actions"><button class="btn-prim" id="btn-save-resp">Guardar responsables</button></div>`; $('#view-responsable').innerHTML=h; $('#btn-save-resp').onclick=async()=>{ ORDER.forEach(id=>RESP[id]=$('#resp_'+id).value.trim()); let ok=true; try{await window.storage.set('mkt_resp',JSON.stringify(RESP));}catch(e){ ok=false; avisarFalloGuardado(e, 'los responsables'); } if(ok) showToast('✓ Responsables guardados'); updatePill(); }; }
   function checkAdmin(){ try{ return !!(window.parent && window.parent !== window && typeof window.parent.isMktAdmin === 'function' && window.parent.isMktAdmin()); }catch(e){ return false; } }
   function isPeriodEditable(M, pval){
     if(checkAdmin()) return true;
@@ -958,7 +935,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     if(!keys.length){
       h += `<p style="color:var(--neutro);padding:22px;text-align:center">Aún no hay registros guardados.</p>`;
     } else {
-      h += `<div class="scroll" style="overflow-x:auto"><table class="ctable" style="min-width:900px;font-size:12px">
+      h += `<div class="scroll" style="overflow-x:auto"><table class="ctable" style="min-width:900px;font-size:var(--fs-s)">
         <thead><tr><th class="l">Periodo</th><th class="l">Rango</th><th class="l">Responsable</th>
           ${kpis.map(k=>`<th class="right">${escHtmlSafe(k.label)}</th>`).join('')}
           <th class="l">Notas</th><th class="l" style="min-width:200px">Acciones</th></tr></thead><tbody>`;
@@ -970,21 +947,21 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
         const editable = isPeriodEditable(M, k);
         let actions;
         if(adm){
-          actions = `<button class="btn-ghost db-open" data-k="${k}" style="padding:5px 10px;font-size:11px">Editar</button> <button class="btn-ghost db-dup" data-k="${k}" style="padding:5px 10px;font-size:11px">Duplicar</button> <button class="btn-ghost db-del" data-k="${k}" style="padding:5px 10px;font-size:11px;color:var(--rojo-no-tx);border-color:var(--rojo-no-bg)">✕</button>`;
+          actions = `<button class="btn-ghost db-open" data-k="${k}" style="padding:5px 10px;font-size:var(--fs-xs)">Editar</button> <button class="btn-ghost db-dup" data-k="${k}" style="padding:5px 10px;font-size:var(--fs-xs)">Duplicar</button> <button class="btn-ghost db-del" data-k="${k}" style="padding:5px 10px;font-size:var(--fs-xs);color:var(--rojo-no-tx);border-color:var(--rojo-no-bg)">✕</button>`;
         } else if(editable){
-          actions = `<button class="btn-ghost db-open" data-k="${k}" style="padding:5px 10px;font-size:11px">Editar</button>`;
+          actions = `<button class="btn-ghost db-open" data-k="${k}" style="padding:5px 10px;font-size:var(--fs-xs)">Editar</button>`;
         } else {
-          actions = `<span style="color:var(--neutro);font-size:11px">—</span>`;
+          actions = `<span style="color:var(--neutro);font-size:var(--fs-xs)">—</span>`;
         }
         h += `<tr>
           <td class="l"><b>${period}</b></td>
-          <td class="l" style="font-size:11px;color:var(--neutro)">${rng}</td>
-          <td class="l" style="font-size:11px">${escHtmlSafe(rec.responsable||'—')}</td>
+          <td class="l" style="font-size:var(--fs-xs);color:var(--neutro)">${rng}</td>
+          <td class="l" style="font-size:var(--fs-xs)">${escHtmlSafe(rec.responsable||'—')}</td>
           ${kpis.map(kpi=>{
             const v = Number(getPath(rec, kpi.path) || 0);
             return `<td class="right">${kpi.unit==='MXN'?money(v):fmt(v)}</td>`;
           }).join('')}
-          <td class="l" title="${escHtmlSafe(rec.notas||'')}" style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtmlSafe(notas)}</td>
+          <td class="l" title="${escHtmlSafe(rec.notas||'')}" style="font-size:var(--fs-xs);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtmlSafe(notas)}</td>
           <td class="l" style="white-space:nowrap">${actions}</td>
         </tr>`;
       });
@@ -1001,17 +978,17 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
       // Cambia pval a un periodo vacío editable para no sobrescribir el original
       const now = new Date();
       const target = M.period==='week' ? isoWeekOf(now) : (now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'));
-      if(!isPeriodEditable(M, target)){ alert('No hay un periodo editable disponible para duplicar.'); return; }
+      if(!isPeriodEditable(M, target)){ avisar('No hay un periodo editable disponible para duplicar.'); return; }
       // Coloca el rec en el periodo actual si aún no existe; si existe, pide otro periodo
-      if(M.records[target]){ alert('Ya existe un registro en el periodo actual. Duplica manualmente cambiando el periodo desde Ingreso.'); return; }
+      if(M.records[target]){ avisar('Ya existe un registro en el periodo actual. Duplica manualmente cambiando el periodo desde Ingreso.'); return; }
       M.pval = target; fillPeriodSelect(M);
       // No guardamos aún; solo llenamos el form con los datos duplicados
       state.view = 'ingreso'; state.ingresoRendered = null; renderView();
       setTimeout(()=>{ MODS[moduleId].fill(rec); bindSave(); showToast('Duplicado. Guarda para persistir.'); }, 60);
     });
     $('#view-basedatos').querySelectorAll('.db-del').forEach(b => b.onclick = async () => {
-      if(!confirm('¿Eliminar el registro '+b.dataset.k+'? No se puede deshacer.')) return;
-      delete M.records[b.dataset.k]; await saveRec(M); renderBaseDatos(M); updatePill(); showToast('Registro eliminado');
+      if(!await confirmar('No se puede deshacer.', { titulo:'¿Eliminar el registro '+b.dataset.k+'?', ok:'Eliminar', peligro:true })) return;
+      { delete M.records[b.dataset.k]; const ok=await saveRec(M); renderBaseDatos(M); updatePill(); if(ok) showToast('Registro eliminado'); }
     });
     const ex = $('#db-export'); if(ex) ex.onclick = () => {
       const data = JSON.stringify({reporte:MODS[moduleId].name, records:M.records, metas:M.metas, responsable:RESP[moduleId]||''}, null, 2);
@@ -1023,23 +1000,12 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
   /* ===== ANALÍTICA ===== */
   function getPath(obj, path){ return path.split('.').reduce((o,k)=> (o!=null && o[k]!=null) ? o[k] : 0, obj); }
   const RS_KPIS = []; RS_PLAT.forEach(p => p.fields.forEach(([k, l]) => RS_KPIS.push({ path: `${p.key}.${k}`, label: `${p.name} · ${l}`, unit: '' })));
-  const PPC_KPIS = [
-    { path:'tot.leads', label:'Total · Leads', unit:'' },
-    { path:'tot.inv',   label:'Total · Inversión', unit:'MXN' },
-  ];
-  ['meta','google'].forEach(p => ['leads','inv','cpl','campanas'].forEach(k => PPC_KPIS.push({ path:`${p}.${k}`, label:`${p==='meta'?'Meta ADS':'Google ADS'} · ${k[0].toUpperCase()+k.slice(1)}`, unit:(k==='inv'||k==='cpl')?'MXN':'' })));
-  const CRM_KPIS = [];
-  CRM_SRC.forEach(([k,l]) => CRM_KPIS.push({ path:`src.${k}`, label:`Leads · ${l}`, unit:'' }));
-  CRM_SEG.forEach(s => FUNNEL.forEach(([k,l]) => CRM_KPIS.push({ path:`funnels.${s.key}.${k}`, label:`${s.name} · ${l}`, unit:'' })));
-  CRM_WEB.forEach(([k,l]) => CRM_KPIS.push({ path:`web.${k}`, label:`Website · ${l}`, unit:'' }));
-  CRM_EM.forEach(([k,l]) => CRM_KPIS.push({ path:`email.${k}`, label:`Email · ${l}`, unit:'' }));
-  CRM_MS.forEach(([k,l]) => CRM_KPIS.push({ path:`msg.${k}`, label:`Mensaje · ${l}`, unit:'' }));
-  const LQ_KPIS = [];
-  LQ_SRC.forEach(([k,l]) => LQ_KPIS.push({ path:`src.${k}`, label:`Leads · ${l}`, unit:'' }));
-  LQ_SEG.forEach(s => FUNNEL.forEach(([k,l]) => LQ_KPIS.push({ path:`funnels.${s.key}.${k}`, label:`${s.def} · ${l}`, unit:'' })));
-  const KPIS_BY_MOD = { rrss:RS_KPIS, ppc:PPC_KPIS, crm:CRM_KPIS, lq:LQ_KPIS };
+  // Los catálogos de KPI de PPC Ads, CRM Manager y Calidad de Leads manual se fueron con
+  // sus módulos: KPIS_BY_MOD se consulta por state.active, que solo puede valer "rrss".
+  const KPIS_BY_MOD = { rrss:RS_KPIS };
   const ANAL_MKT = { expanded: null, charts: {}, cache: {}, notesCache: {}, ini: null, fin: null, modKey: null };
-  function escHtml(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  // escHtml era idéntica a escHtmlSafe, en este mismo archivo. Un solo nombre.
+  const escHtml = escHtmlSafe;
   function renderNotesMkt(container, entradas, canalName, cacheKey){
     if(!container) return;
     const cache = ANAL_MKT.notesCache[cacheKey];
@@ -1138,9 +1104,9 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     const html = [
       '<p class="metas-hint">Dashboard de KPIs. Clic en una tarjeta para expandir y pedir conclusión con IA.</p>',
       `<div class="periodo" id="anal-mkt-periodo" style="background:#fff;border:1px solid var(--linea);border-radius:12px;padding:16px 20px;display:flex;flex-wrap:wrap;gap:22px;align-items:flex-end;margin-bottom:14px;box-shadow:0 1px 2px rgba(70,82,65,.05);">
-        <div class="grp" style="display:flex;flex-direction:column;gap:5px;"><label style="font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--neutro);font-weight:600;">${rangeLbl} inicio</label><select id="anal-mkt-ini" style="font-family:var(--sans);font-size:13px;padding:8px 10px;border:1px solid var(--linea);border-radius:8px;background:var(--crema);color:var(--texto);">${optsIni}</select></div>
-        <div class="grp" style="display:flex;flex-direction:column;gap:5px;"><label style="font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--neutro);font-weight:600;">${rangeLbl} fin</label><select id="anal-mkt-fin" style="font-family:var(--sans);font-size:13px;padding:8px 10px;border:1px solid var(--linea);border-radius:8px;background:var(--crema);color:var(--texto);">${optsFin}</select></div>
-        <div class="grp" style="display:flex;flex-direction:column;gap:5px;"><label style="font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--neutro);font-weight:600;">Periodos evaluados</label><div style="font-size:13px;font-weight:600;color:var(--verde-prof);padding:8px 0;">${periodos.length}</div></div>
+        <div class="grp" style="display:flex;flex-direction:column;gap:5px;"><label style="font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.8px;color:var(--neutro);font-weight:600;">${rangeLbl} inicio</label><select id="anal-mkt-ini" style="font-family:var(--sans);font-size:var(--fs-sm);padding:8px 10px;border:1px solid var(--linea);border-radius:8px;background:var(--crema);color:var(--texto);">${optsIni}</select></div>
+        <div class="grp" style="display:flex;flex-direction:column;gap:5px;"><label style="font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.8px;color:var(--neutro);font-weight:600;">${rangeLbl} fin</label><select id="anal-mkt-fin" style="font-family:var(--sans);font-size:var(--fs-sm);padding:8px 10px;border:1px solid var(--linea);border-radius:8px;background:var(--crema);color:var(--texto);">${optsFin}</select></div>
+        <div class="grp" style="display:flex;flex-direction:column;gap:5px;"><label style="font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.8px;color:var(--neutro);font-weight:600;">Periodos evaluados</label><div style="font-size:var(--fs-sm);font-weight:600;color:var(--verde-prof);padding:8px 0;">${periodos.length}</div></div>
       </div>`,
       hayRegistros ? '<div class="anal-grid">' : '<div class="anal-empty" style="margin-bottom:14px">Este módulo aún no tiene datos capturados. El rango se puede seleccionar pero mostrará ceros.</div><div class="anal-grid">'
     ];
@@ -1219,6 +1185,7 @@ Reportes: Redes Sociales (mensual) · PPC Ads · CRM Manager · Calidad de Leads
     else if(state.view==='metas'){ M.metasView($('#view-metas'),M); }
     else if(state.view==='responsable'){ renderResponsable(); }
     else if(state.view==='basedatos'){ renderBaseDatos(M); }
+    document.body.classList.toggle('sin-periodo', ['metas','responsable','basedatos'].includes(state.view));
     updatePill();
     try{ if(window.parent && window.parent!==window && typeof window.parent.mktViewChanged==='function') window.parent.mktViewChanged(state.view); }catch(e){}
   }

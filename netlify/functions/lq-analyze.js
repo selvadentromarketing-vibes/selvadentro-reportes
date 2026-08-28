@@ -19,6 +19,12 @@ const pct = (n, d) => (d ? Math.round((n / d) * 100) + "%" : "—");
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return S.corsPreflight();
   if (event.httpMethod !== "POST") return json(405, { error: "Method not allowed" });
+  // SESSION_SECRET hace falta para verificar el token de sesión, y sin ella
+  // crypto.createHmac lanza y la function responde 502 SIN cabeceras CORS: el navegador
+  // reporta un error de CORS en vez de decir que falta una variable. Solo tres de las
+  // nueve functions comprobaban esto.
+  const miss = S.missingEnv();
+  if (miss.length) return json(500, { error: "Faltan env vars: " + miss.join(", ") });
   if (!API_KEY) return json(500, { error: "ANTHROPIC_API_KEY no configurada en las variables de entorno del site" });
 
   const session = S.authFromEvent(event);

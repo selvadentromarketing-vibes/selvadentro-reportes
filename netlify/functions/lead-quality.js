@@ -36,21 +36,7 @@ const PAGE_SIZE = 100;
 
 const json = S.json;
 
-async function ghl(path, opts) {
-  const headers = { Authorization: "Bearer " + API_KEY, Version: "2021-07-28", Accept: "application/json" };
-  if (opts && opts.body) headers["Content-Type"] = "application/json";
-  const doFetch = () => fetch(BASE + path, { method: opts?.method || "GET", headers, body: opts?.body ? JSON.stringify(opts.body) : undefined });
-  let resp = await doFetch();
-  if (resp.status === 429) { await new Promise((r) => setTimeout(r, 1200)); resp = await doFetch(); }
-  if (!resp.ok) {
-    const detail = await resp.text();
-    const err = new Error(`GHL ${resp.status} en ${path.split("?")[0]}`);
-    err.status = resp.status;
-    err.detail = detail.slice(0, 400);
-    throw err;
-  }
-  return resp.json();
-}
+const ghl = S.ghlFetch;   // cliente compartido (lib/shared.js)
 
 // Última atribución disponible del contacto (utm campaign/source/medium/anuncio),
 // con fallback a la primera; los nombres de propiedad varían entre versiones del API.
@@ -205,9 +191,19 @@ async function spend({ start, end }) {
   // de perder toda la inversión.
   const base = `https://connectors.windsor.ai/all?api_key=${encodeURIComponent(WINDSOR_KEY)}` +
     `&date_from=${start}&date_to=${end}&fields=date,source,campaign,spend,clicks,impressions`;
+  // Reintento de 429 igual que windsorGet: antes esta llamada —la de la inversión, la que el
+  // comentario de windsorGet dice proteger— no lo tenía, y un 429 apagaba la columna entera.
+  const pedir = async (u) => {
+    let r = await fetch(u, { headers: { Accept: "application/json" } });
+    if (r.status === 429) {
+      await new Promise((res) => setTimeout(res, 1500));
+      r = await fetch(u, { headers: { Accept: "application/json" } });
+    }
+    return r;
+  };
   let url = base + ",currency";
-  let resp = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!resp.ok && resp.status === 400) resp = await fetch(base, { headers: { Accept: "application/json" } });
+  let resp = await pedir(url);
+  if (!resp.ok && resp.status === 400) resp = await pedir(base);
   if (!resp.ok) {
     const detail = await resp.text();
     const err = new Error(`Windsor ${resp.status}`);
@@ -470,6 +466,12 @@ async function diag() {
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return S.corsPreflight();
   if (event.httpMethod !== "POST") return json(405, { error: "Method not allowed" });
+    // SESSION_SECRET hace falta para verificar el token de sesión, y sin ella
+  // crypto.createHmac lanza y la function responde 502 SIN cabeceras CORS: el navegador
+  // reporta un error de CORS en vez de decir que falta una variable. Solo tres de las
+  // nueve functions comprobaban esto.
+  const miss = S.missingEnv();
+  if (miss.length) return json(500, { error: "Faltan env vars: " + miss.join(", ") });
   if (!API_KEY || !LOCATION_ID) return json(500, { error: "GHL_API_KEY / GHL_LOCATION_ID no configuradas en el entorno" });
 
   const session = S.authFromEvent(event);
