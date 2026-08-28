@@ -1386,7 +1386,15 @@ function weeksInRange(a,b){ const set=new Set(); if(!a||!b||b<a) return set; con
 function fmtDate(d){ if(!d) return "—"; const dd=String(d.getUTCDate()).padStart(2,"0"),mm=String(d.getUTCMonth()+1).padStart(2,"0"); return `${dd}/${mm}/${d.getUTCFullYear()}`; }
 function fmtMoney(n){ return "$"+(Number(n)||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function fmtPct(x){ return (x*100).toFixed(2)+"%"; }
-function weekLabel(w){ const m=w&&w.match(/^(\d{4})-W(\d+)$/); if(!m) return w; const a=dateOfIsoWeek(+m[1],+m[2]); const b=sundayOf(a); return `${w} · ${fmtDate(a)} → ${fmtDate(b)}`; }
+// La semana en curso está incompleta: marcarla evita compararla con semanas cerradas
+// como si fueran iguales. Sin esto, W35 con 3 días se leía como una caída de 45%
+// contra W34, cuando era puro calendario.
+function semanaEnCurso(w){ return w === isoWeekId(new Date(Date.now()-LQ_TZ_MS)); }
+function weekLabel(w){
+  const m=w&&w.match(/^(\d{4})-W(\d+)$/); if(!m) return w;
+  const a=dateOfIsoWeek(+m[1],+m[2]); const b=sundayOf(a);
+  return `${w} · ${fmtDate(a)} → ${fmtDate(b)}${semanaEnCurso(w)?" · EN CURSO":""}`;
+}
 
 /* ===================== INGRESO FORM ===================== */
 function renderIngresoForm(){
@@ -2085,7 +2093,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v8";   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
+const LQ_AGG_KEY = "lq:agg:v9";   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 const LQ_TZ = "-05:00";                 // Tulum (America/Cancun): UTC-5 fijo, sin DST
@@ -2458,17 +2466,25 @@ function lqCamposLlenos(boot, rawLeads){
 
 // Cobertura de atribución: responde sin preguntarle a nadie si los anuncios están
 // pasando los parámetros UTM.
-function lqCoberturaAtrib(rawLeads){
+function lqCoberturaAtrib(rawLeads, adIdx){
   const pagados = rawLeads.filter(l=>{
     const blob = ((l.src||"")+" "+((l.attr&&l.attr.src)||"")+" "+((l.attr&&l.attr.med)||"")).toLowerCase();
     return /facebook|instagram|meta|google|adwords|gclid|fbclid|ppc|paid/.test(blob);
   });
   const d = pagados.length || 1;
   const con = (k)=> pagados.filter(l=>l.attr && String(l.attr[k]||"").trim()).length;
+  // Un lead "trae conjunto" si lo trae en utm_term O si su utm_content empata con el
+  // nombre de un conjunto de la cuenta, que es como llega en la mayoría de los anuncios.
+  const idx = adIdx || {};
+  const conGrp = pagados.filter(l=>{
+    if(l.attr && String(l.attr.grp||"").trim()) return true;
+    const h = idx[lqNormCamp((l.attr&&l.attr.ad)||"")];
+    return !!(h && (h.tipo==="grp" || h.grp));
+  }).length;
   return { pagados: pagados.length, total: rawLeads.length,
            camp: con("camp"), campPct: Math.round(con("camp")/d*100),
            ad:   con("ad"),   adPct:   Math.round(con("ad")/d*100),
-           grp:  con("grp"),  grpPct:  Math.round(con("grp")/d*100) };
+           grp:  conGrp,      grpPct:  Math.round(conGrp/d*100) };
 }
 
 function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
@@ -2517,7 +2533,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
            oppStages: lqOppStageNames(boot.stages, lqOppThresholds(boot.stages)),
            stages: boot.stages||{},
            campos: lqCamposLlenos(boot, rawLeads),
-           atrib: lqCoberturaAtrib(rawLeads),
+           atrib: lqCoberturaAtrib(rawLeads, lqAdIndex({adw:lqBucketAds(adRows)})),
            weeks:weeks||[], spend:spendRows||[], adw:lqBucketAds(adRows), leads };
 }
 
@@ -2573,12 +2589,19 @@ function lqMatchCamp(windsorCamp, leadCamps){
 // Índice anuncio → conjunto/campaña/plataforma tomado de Windsor: permite atribuir
 // el conjunto (adset / grupo de anuncios) de un lead aunque GoHighLevel solo guarde
 // el nombre del anuncio en la atribución.
+// Índice de nombres de la cuenta de anuncios. Indexa el nombre del ANUNCIO y también
+// el del CONJUNTO, porque en esta cuenta 4 de cada 5 anuncios mandan
+// utm_content={{adset.name}}: lo que llega al CRM como "anuncio" es en realidad el
+// nombre del conjunto. Sin esto el cruce fallaba y el desglose por conjunto salía al 1%.
 function lqAdIndex(agg){
   const m = {};
   for(const a of (agg.adw||[])){
     for(const k of [lqNormCamp(a.name), lqNormCamp(a.id)]){
-      if(k && !m[k]) m[k] = { grp:a.grp||"", camp:a.camp||"", plat:a.plat||"" };
+      if(k && !m[k]) m[k] = { tipo:"ad", grp:a.grp||"", camp:a.camp||"", plat:a.plat||"", name:a.name||"" };
     }
+    const g = lqNormCamp(a.grp);
+    // El conjunto solo se indexa si no choca con el nombre de un anuncio
+    if(g && !m[g]) m[g] = { tipo:"grp", grp:a.grp||"", camp:a.camp||"", plat:a.plat||"", name:a.grp||"" };
   }
   return m;
 }
@@ -2666,6 +2689,12 @@ function lqStatusOf(key, level, idx, adIdx){
   }
   return undefined;
 }
+// Windsor devuelve las ubicaciones crudas: audience_network, threads, unknown. Al cliente
+// se le muestran con nombre legible.
+const LQ_PP_NOMBRES = { facebook:"Facebook", instagram:"Instagram", audience_network:"Audience Network",
+                        threads:"Threads", messenger:"Messenger", unknown:"Sin identificar", "":"" };
+const lqPlats = (arr)=> [...new Set((arr||[]).map(p=>LQ_PP_NOMBRES[String(p).toLowerCase()] || p).filter(Boolean))].join(", ");
+
 const LQ_PLATS_UI = [{id:"all",name:"Todas"},{id:"Meta",name:"Meta"},{id:"Google",name:"Google"},{id:"otras",name:"Otras fuentes"}];
 const lqPlatMatch = (l, p)=> p==="all" ? true : p==="otras" ? (l.fuente!=="Meta" && l.fuente!=="Google") : l.fuente===p;
 
@@ -2734,10 +2763,14 @@ function lqUnionTree(agg, leads, rangoSet, plat){
     if(!C) C = newCamp(l.fuente+" · "+(l.camp||LQ_SIN_CAMP), l.fuente, l.camp||LQ_SIN_CAMP);
     C.leads.push(l);
     const hitAd = adIdx[lqNormCamp(l.ad)] || null;
-    // Sin conjunto atribuido: la pista por tags sirve como sub-agrupación visible
+    // El utm_content del CRM puede traer el nombre del anuncio O el del conjunto (en esta
+    // cuenta casi siempre el del conjunto). Se resuelve contra el catálogo de la cuenta:
+    // si empata con un conjunto, el lead se cuelga del conjunto y no se inventa un anuncio.
+    const esGrp = hitAd && hitAd.tipo === "grp";
     const gname = l.grp || (hitAd && hitAd.grp) || (C.camp===LQ_SIN_CAMP && l.hint ? l.hint : LQ_SIN_GRP);
     const G = newGrp(C, mismo(C.grps, gname)); G.leads.push(l);
-    const A = newAd(G, mismo(G.ads, l.ad || LQ_SIN_AD)); A.leads.push(l);
+    const aname = esGrp ? LQ_SIN_AD : (l.ad || LQ_SIN_AD);
+    const A = newAd(G, mismo(G.ads, aname)); A.leads.push(l);
   }
 
   const ord = (a,b)=> (b.leads.length-a.leads.length) || (b.spend-a.spend);
@@ -2828,6 +2861,11 @@ function lqQualityTree(agg, leads, rangoSet){
     <td><b>${leads.length}</b></td><td>${califT}</td><td class="pct">${leads.length?Math.round(califT/leads.length*100)+"%":"—"}</td>
     <td>${leads.reduce((a,l)=>a+(l.o||0),0)}</td><td>${leads.reduce((a,l)=>a+(l.w||0),0)}</td>
     <td>${spT?fmtMoney(spT):"—"}</td><td>—</td></tr>`;
+  const enCurso = [...rangoSet].filter(semanaEnCurso);
+  const parcial = enCurso.length ? `<div class="lq-meth" style="border-color:var(--cobre)">
+    ⏳ El rango incluye la <b>semana en curso</b> (${escAttr(enCurso[0])}), que todavía no termina.
+    Sus cifras son de los días transcurridos, no de una semana completa: no la compares de tú a tú
+    con las semanas cerradas ni leas su caída como una caída real.</div>` : "";
   const pagados = leads.filter(l=>l.fuente==="Meta"||l.fuente==="Google").length;
   const multiMoneda = (agg.monedas||[]).length > 1 ? `<div class="lq-meth" style="border-color:var(--cobre)">
     ⚠ <b>Las cuentas de anuncios facturan en monedas distintas</b> (${escAttr((agg.monedas||[]).join(" y "))}).
@@ -2840,7 +2878,7 @@ function lqQualityTree(agg, leads, rangoSet){
   const aviso = gap ? `<div class="lq-meth">⚠ <b>${gap}</b> de ${pagados} leads de Meta / Google llegaron <b>sin campaña en la atribución</b> (utm_campaign vacío) y se agrupan en "${LQ_SIN_CAMP}".
     Las campañas de la cuenta de anuncios sí aparecen abajo con su inversión, aunque no tengan leads empatados. Mientras los anuncios no pasen los parámetros UTM
     (utm_campaign, utm_content, utm_term) al formulario, no se puede saber qué campaña, conjunto o anuncio generó cada lead.</div>` : "";
-  return incompleto + multiMoneda + aviso + `<div class="table-scroll" style="margin-bottom:8px"><table class="cons lq-tree">
+  return parcial + incompleto + multiMoneda + aviso + `<div class="table-scroll" style="margin-bottom:8px"><table class="cons lq-tree">
     <tr><th class="lft">Campaña / conjunto / anuncio</th><th class="lft">Familia</th>
       ${LQ_COLS.map(L=>`<th title="${L.name}">${L.short}</th>`).join("")}
       <th>Total</th><th>Calif.</th><th>%</th><th title="OPP = oportunidad real de cierre: Seguimiento de OPP, Carta oferta, Apartado o posterior. La cotización enviada aún no cuenta.">OPPs</th><th title="WON = venta cerrada">WONs</th><th>Inversión</th><th>Costo/lead</th></tr>
@@ -2863,9 +2901,14 @@ function lqAdsTree(agg, rangoSet){
     const C = camps[a.camp||"(sin campaña)"] = camps[a.camp||"(sin campaña)"] || { plat:a.plat, spend:0, impr:0, clicks:0, results:0, ads:{}, pps:new Set() };
     C.spend+=a.spend; C.impr+=a.impr; C.clicks+=a.clicks; C.results+=a.results;
     if(a.pp) C.pps.add(a.pp);
-    const k = (a.name||a.id||"(sin nombre)")+"||"+(a.pp||"");
-    const A = C.ads[k] = C.ads[k] || { name:a.name||a.id||"(sin nombre)", grp:a.grp, pp:a.pp, plat:a.plat, status:a.status, link:a.link, spend:0, impr:0, clicks:0, results:0, _wk:"" };
+    // Clave = ad_id. Antes era nombre + plataforma, y como Windsor parte cada anuncio en
+    // hasta 5 filas (facebook, instagram, audience_network, threads, unknown) la tabla
+    // mostraba 15 "anuncios" donde hay 5, ninguno con su gasto real. Además dos anuncios
+    // distintos de la misma campaña con el mismo nombre se fundían en uno.
+    const k = a.id || (a.name||"(sin nombre)");
+    const A = C.ads[k] = C.ads[k] || { name:a.name||a.id||"(sin nombre)", grp:a.grp, pps:new Set(), plat:a.plat, status:a.status, link:a.link, spend:0, impr:0, clicks:0, results:0, _wk:"" };
     A.spend+=a.spend; A.impr+=a.impr; A.clicks+=a.clicks; A.results+=a.results;
+    if(a.pp) A.pps.add(a.pp);
     if(a.status && a.wk>=A._wk){ A.status=a.status; A._wk=a.wk; }
   }
   const origen = (p)=>`<span class="lq-orig ${p==="Meta"?"meta":"google"}">${escAttr(p==="Meta"?"META":"GOOGLE")}</span>`;
@@ -2881,7 +2924,7 @@ function lqAdsTree(agg, rangoSet){
     const ek = lqExpKey("ads|"+ck);
     body += `<tr class="lq-row d0 clickable" data-lq-exp="${ek}">
       <td class="name" style="padding-left:10px">${lqCaret(ek,true)}${escAttr(ck)} <span class="lq-sub">${adList.length} anuncio(s)</span></td>
-      <td class="lft">${origen(C.plat)}</td><td class="lft">${escAttr([...C.pps].join(", ")||C.plat)}</td>
+      <td class="lft">${origen(C.plat)}</td><td class="lft">${escAttr(lqPlats([...C.pps]) || C.plat)}</td>
       <td>${fmtMoney(C.spend)}</td><td>${C.impr.toLocaleString()}</td><td>${C.clicks.toLocaleString()}</td>
       <td>${C.results||"—"}</td><td>${cpl(C.spend,C.results)}</td><td>${ctr(C.clicks,C.impr)}</td><td>${cpc(C.spend,C.clicks)}</td></tr>`;
     if(!lqIsExp(ek)) continue;
@@ -2889,7 +2932,7 @@ function lqAdsTree(agg, rangoSet){
       body += `<tr class="lq-row d1">
         <td class="name" style="padding-left:44px">${lqDot(lqIsOn(a.status)?true:lqIsOff(a.status)?false:undefined)}${escAttr(a.name)}
           ${a.grp?`<div class="lq-sub">${escAttr(a.grp)}</div>`:""}</td>
-        <td class="lft">${origen(a.plat)}</td><td class="lft">${escAttr(a.pp||a.plat)}</td>
+        <td class="lft">${origen(a.plat)}</td><td class="lft">${escAttr(lqPlats([...(a.pps||[])]) || a.plat)}</td>
         <td>${fmtMoney(a.spend)}</td><td>${a.impr.toLocaleString()}</td><td>${a.clicks.toLocaleString()}</td>
         <td>${a.results||"—"}</td><td>${cpl(a.spend,a.results)}</td><td>${ctr(a.clicks,a.impr)}</td><td>${cpc(a.spend,a.clicks)}</td>
         <td style="display:none"></td></tr>`;

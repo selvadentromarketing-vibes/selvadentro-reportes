@@ -260,8 +260,18 @@ async function ads({ start, end }) {
   }
   const range = `date_from=${start}&date_to=${end}`;
   const num = (x) => Number(x) || 0;
+  // RESULTADOS DE META: `actions_leadgen_grouped` ("Instant Form Leads") devuelve 0 en
+  // toda esta cuenta — 0 contra 24 leads en la semana del 17-23 ago, y 0 contra 352 en
+  // 90 días con 97,546 MXN de gasto. Falla incluso en el único conjunto que sí es
+  // formulario instantáneo. Los leads de Selvadentro se reparten entre pixel web
+  // (OFFSITE_CONVERSIONS, 21 de 24) y formulario nativo (LEAD_GENERATION, 3 de 24), y
+  // `actions_lead` es el único campo que agrega los dos: 21+3=24 exacto, con la misma
+  // granularidad de anuncio y plataforma. Pedir un sub-campo suelto perdería una parte,
+  // y pedir varios y sumarlos duplicaría.
+  // También se pide url_tags: 9 de 11 anuncios escriben utm_content={{adset.name}}, así
+  // que saber qué manda cada anuncio es lo que permite cruzar el lead con el anuncio.
   const [fb, gg] = await Promise.all([
-    windsorGet("facebook", `${range}&fields=date,campaign,adset_name,ad_id,ad_name,publisher_platform,effective_status,ad_preview_shareable_link,spend,impressions,clicks,actions_leadgen_grouped`)
+    windsorGet("facebook", `${range}&fields=date,campaign,adset_name,ad_id,ad_name,publisher_platform,effective_status,ad_preview_shareable_link,url_tags,spend,impressions,clicks,actions_lead`)
       // si el campo de leads no está disponible en la cuenta, degradar sin resultados
       .catch(() => windsorGet("facebook", `${range}&fields=date,campaign,adset_name,ad_id,ad_name,publisher_platform,effective_status,ad_preview_shareable_link,spend,impressions,clicks`).catch(() => [])),
     windsorGet("google_ads", `${range}&fields=date,campaign,ad_group_name,ad_id,ad_name,ad_group_ad_status,ad_final_urls,spend,impressions,clicks,conversions`).catch(() => []),
@@ -271,11 +281,23 @@ async function ads({ start, end }) {
   fb.forEach((r) => rows.push({
     d: r.date || "", plat: "Meta", camp: r.campaign || "", grp: r.adset_name || "", id: String(r.ad_id || ""),
     name: r.ad_name || "", pp: r.publisher_platform || "", status: r.effective_status || "", link: r.ad_preview_shareable_link || "",
-    spend: num(r.spend), impr: num(r.impressions), clicks: num(r.clicks), results: num(r.actions_leadgen_grouped),
+    // Qué manda el anuncio en utm_content: si es {{adset.name}}, el lead del CRM trae el
+    // nombre del CONJUNTO y hay que cruzar por ahí, no por el nombre del anuncio.
+    tags: String(r.url_tags || ""),
+    spend: num(r.spend), impr: num(r.impressions), clicks: num(r.clicks), results: num(r.actions_lead),
   }));
+  // ad_final_urls llega como el TEXTO de un array JSON: '["https://…"]'. El split(",")[0]
+  // devolvía la cadena entera con corchetes y comillas, así que el link salía roto en el
+  // 100% de las filas de Google.
+  const primeraUrl = (v) => {
+    const t = String(v || "").trim();
+    if (!t) return "";
+    try { const a = JSON.parse(t); if (Array.isArray(a) && a.length) return String(a[0]); } catch (e) { /* no era JSON */ }
+    return t.replace(/^[\[\s"']+|[\]\s"']+$/g, "").split(",")[0].trim();
+  };
   gg.forEach((r) => rows.push({
     d: r.date || "", plat: "Google", camp: r.campaign || "", grp: r.ad_group_name || "", id: String(r.ad_id || ""),
-    name: r.ad_name || "", pp: "Google Ads", status: r.ad_group_ad_status || "", link: String(r.ad_final_urls || "").split(",")[0] || "",
+    name: r.ad_name || "", pp: "Google Ads", status: r.ad_group_ad_status || "", link: primeraUrl(r.ad_final_urls),
     spend: num(r.spend), impr: num(r.impressions), clicks: num(r.clicks), results: num(r.conversions),
   }));
   return { configured: true, ads: rows.filter((r) => r.spend || r.clicks || r.impr || r.results) };
