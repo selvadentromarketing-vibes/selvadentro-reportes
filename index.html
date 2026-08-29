@@ -2738,7 +2738,7 @@ function lqWeekBounds(weekId){
   const m = weekId.match(/^(\d{4})-W(\d+)$/); if(!m) return null;
   const mon = dateOfIsoWeek(+m[1], +m[2]), sun = sundayOf(mon);
   const ymd = (d)=>`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}-${String(d.getUTCDate()).padStart(2,"0")}`;
-  return { startISO:`${ymd(mon)}T00:00:00${LQ_TZ}`, endISO:`${ymd(sun)}T23:59:59${LQ_TZ}`, startYMD:ymd(mon), endYMD:ymd(sun) };
+  return { startISO:`${ymd(mon)}T00:00:00${LQ_TZ}`, endISO:`${ymd(sun)}T23:59:59.999${LQ_TZ}`, startYMD:ymd(mon), endYMD:ymd(sun) };
 }
 
 async function lqFn(body){
@@ -3172,14 +3172,16 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
       hs: !!(l.src || (l.attr && (l.attr.camp||l.attr.src))),   // fuente identificada
       o: op ? op.o : 0, pr: op ? op.pr : 0, w: op ? op.w : 0, wv: op ? op.v : 0,   // OPP (cotización) / registros de pipeline / WONs / valor
       ov: op ? op.ov : 0, ap: op ? op.ap : {tot:0,sh:0,ns:0},   // valor máximo de oportunidad y citas
-      tags:(l.tags||[]).join(", ").slice(0,140),
+      tags:(l.tags||[]).join(", "),
       pres: F.pres ? (l.cf[F.pres.id]||"") : "",
       hor:  F.hor  ? (l.cf[F.hor.id] ||"") : "",
       ch: cn.ch, chVia: cn.via,          // canal de negocio deducido del CRM (o null)
     };
   }).filter(l=>l.wk);
-  // Calificación automática por reglas (independiente del campo que llena el equipo)
-  leads.forEach(l=>{ const a = lqAutoQualify(l); l.alv = a.lv; l.awhy = a.why.join(" · ").slice(0,180); });
+  // Calificación automática por reglas (independiente del campo que llena el equipo).
+  // Los tags se truncan DESPUÉS de calificar: recortarlos antes podía comerse el tag de
+  // descalificación o de respuesta de un lead con muchos tags y cambiarle el nivel.
+  leads.forEach(l=>{ const a = lqAutoQualify(l); l.alv = a.lv; l.awhy = a.why.join(" · ").slice(0,180); l.tags = l.tags.slice(0,140); });
   return { ts:Date.now(), users:boot.users||{}, califField:F.calif, fuenteField:F.fuente, windsor:!!boot.windsor,
            oppStages: lqOppStageNames(boot.stages, lqOppThresholds(boot.stages)),
            stages: boot.stages||{},
@@ -3701,8 +3703,11 @@ function lqFamiliaData(agg, leads, rangoSet){
 }
 
 function lqComboSection(agg, leadsAll, rango, rangoSet){
-  const plat = lqState.plat || "all";
-  const leads = leadsAll.filter(l=>lqPlatMatch(l, plat));
+  // Sin filtro de plataforma: esta pestaña no muestra el toggle, y heredar el filtro de
+  // la pestaña Calidad filtraba los LEADS pero no la INVERSIÓN (lqFamiliaData suma todo
+  // agg.adw) — el CPL y el "costo por calificado" salían dividiendo dinero de Meta+Google
+  // entre leads de una sola plataforma, sin que nada en pantalla lo dijera.
+  const leads = leadsAll;
   const fams = lqFamiliaData(agg, leads, rangoSet);
   const keys = Object.keys(fams).sort((a,b)=>(fams[b].inv-fams[a].inv) || (fams[b].leads.length-fams[a].leads.length));
   const invT = keys.reduce((a,k)=>a+fams[k].inv,0);
@@ -3829,9 +3834,11 @@ function lqConclusionesSection(){
 const LQ_IA_KEY = "lq:ia:v1:";
 const LQ_IA_TTL = 12*3600e3;          // 12 h: el rango no cambia tanto como para pagar de nuevo
 
-// Devuelve el análisis guardado de este rango si sigue vigente
+// Devuelve el análisis guardado de este rango si sigue vigente. La clave incluye la
+// fuente de calificación (reglas vs campo del CRM): los números difieren entre las dos
+// y un análisis cacheado de una no sirve para la otra.
 async function lqIaCache(rango){
-  const etq = rango.length ? `${rango[0]} → ${rango[rango.length-1]}` : "—";
+  const etq = (rango.length ? `${rango[0]} → ${rango[rango.length-1]}` : "—") + ":" + (lqState.qual||"auto");
   try{
     const c = await sGet(LQ_IA_KEY + etq);
     if(c && c.ts && (Date.now()-c.ts) < LQ_IA_TTL) return c;
@@ -3847,9 +3854,11 @@ async function lqAnalizar(forzar){
       const cache = await lqIaCache(rango);
       if(cache){ lqState.ia = cache; lqRender(); return; }
     }
-    // El cruce vive en la pestaña Reporte Combinado; si aún no se ha visitado, se
-    // calcula aquí para no mandar un payload vacío al análisis.
-    if(!lqState._combo){
+    // El cruce se recalcula SIEMPRE con el rango y la fuente de calificación vigentes.
+    // Antes se reutilizaba lqState._combo si existía, y ese cache podía venir de un
+    // rango anterior: el análisis se etiquetaba con el rango nuevo pero analizaba los
+    // números del viejo, y así se guardaba en el kv compartido para todo el equipo.
+    {
       const agg = lqState.agg;
       const rangoSet = new Set(rango);
       const qual = lqState.qual || "auto";
@@ -3889,8 +3898,8 @@ async function lqAnalizar(forzar){
     const res = await lqFn2("/.netlify/functions/lq-analyze", payload);
     lqState.ia = { ...res, ts: Date.now(), rango: payload.rango };
     // Compartido en el kv: el análisis de un rango se paga UNA vez para todo el equipo,
-    // no una por usuario y por recarga.
-    sSet(LQ_IA_KEY + payload.rango, lqState.ia).catch(()=>{});
+    // no una por usuario y por recarga. Misma clave que lqIaCache (rango + fuente).
+    sSet(LQ_IA_KEY + payload.rango + ":" + (lqState.qual||"auto"), lqState.ia).catch(()=>{});
     lqRender();
   }catch(e){
     toast("No se pudo analizar: "+(e.message||e));
