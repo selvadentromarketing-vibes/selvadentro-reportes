@@ -182,11 +182,14 @@ async function sweepOne(id) {
           // sumaba al denominador sin sumar al numerador: castigaba justo al asesor
           // que trabaja por teléfono. Lo mismo con "answered".
           const st = String(m.status || "").toLowerCase();
-          if (st === "read" || st === "connected" || st === "answered") out.deliv.read++;
-          else if (st === "delivered" || st === "sent") out.deliv.delivered++;
+          // "sent" NO es entregado: contarlo en el numerador inflaba la actividad
+          // efectiva. Y un status desconocido (p.ej. opened/clicked de email) tampoco
+          // debe caer al denominador sin ir al numerador: se trata como ilegible.
+          if (st === "read" || st === "connected" || st === "answered" || st === "opened" || st === "clicked") out.deliv.read++;
+          else if (st === "delivered") out.deliv.delivered++;
           else if (st === "failed" || st === "undelivered" || st === "no-answer" || st === "busy" || st === "voicemail") out.deliv.failed++;
-          else if (!st) out.deliv.sin++;          // sin status: no se puede juzgar, fuera del %
-          else out.deliv.sent++;
+          else if (st === "sent" || st === "pending" || st === "scheduled" || st === "queued") out.deliv.sent++;
+          else out.deliv.sin++;                   // sin status legible: fuera del %
           if (m.userId) uset.add(m.userId);
         }
       }

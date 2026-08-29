@@ -283,7 +283,14 @@ retiraron el 2026-08-26: los sustituyen Windsor y el motor en vivo de index.html
   function cpH(val,meta){ if(!meta) return ''; if(val===null) return naP(); const c=val/meta*100; return pillSpan(c>=100,pct(c)); }
   function cpL(val,meta){ if(!meta) return ''; if(val===null) return naP(); if(val<=0) return pillSpan(true,'óptimo'); const c=meta/val*100; return pillSpan(c>=100,pct(c)); }
   function metaTxt(meta,opt){ opt=opt||{}; if(!meta) return ''; return `<span class="mlbl">Meta</span>${opt.lower?'≤':''}${opt.money?money(meta):fmt(meta)}${opt.pct?'%':''}`; }
-  function isoWeekOf(d0){ const d=new Date(Date.UTC(d0.getFullYear(),d0.getMonth(),d0.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const w=1+Math.round(((d-ft)/86400000-3+((ft.getUTCDay()+6)%7))/7); return d.getUTCFullYear()+'-W'+String(w).padStart(2,'0'); }
+  // Convención del proyecto: todo en hora Tulum (UTC-5 fijo), nunca el reloj local del
+  // navegador. hoyTulum() devuelve un Date cuyo componente UTC ES la hora Tulum, y
+  // isoWeekOf lee componentes UTC (antes leía los locales: el periodo editable y el
+  // periodo por defecto dependían de la zona horaria de quien abriera la página).
+  const TULUM_MS = 5*3600e3;
+  const hoyTulum = () => new Date(Date.now() - TULUM_MS);
+  const ymTulum = () => { const t = hoyTulum(); return t.getUTCFullYear()+'-'+String(t.getUTCMonth()+1).padStart(2,'0'); };
+  function isoWeekOf(d0){ const d=new Date(Date.UTC(d0.getUTCFullYear(),d0.getUTCMonth(),d0.getUTCDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const w=1+Math.round(((d-ft)/86400000-3+((ft.getUTCDay()+6)%7))/7); return d.getUTCFullYear()+'-W'+String(w).padStart(2,'0'); }
   function weekToMonday(ws){ const m=ws.match(/(\d{4})-W(\d{2})/); if(!m)return null; const y=+m[1],w=+m[2]; const j=new Date(Date.UTC(y,0,4)); const dn=(j.getUTCDay()+6)%7; const w1=new Date(j); w1.setUTCDate(j.getUTCDate()-dn); const mo=new Date(w1); mo.setUTCDate(w1.getUTCDate()+(w-1)*7); return mo; }
   function weekRange(ws){ const mo=weekToMonday(ws); if(!mo)return''; const su=new Date(mo); su.setUTCDate(mo.getUTCDate()+6); const f=d=>String(d.getUTCDate()).padStart(2,'0')+'/'+String(d.getUTCMonth()+1).padStart(2,'0')+'/'+d.getUTCFullYear(); return f(mo)+' → '+f(su); }
   function ymLabel(ym){ if(!ym)return''; const [y,m]=ym.split('-').map(Number); const d=new Date(y,m-1,1); let s=d.toLocaleDateString('es-MX',{month:'long',year:'numeric'}); return s.charAt(0).toUpperCase()+s.slice(1); }
@@ -732,8 +739,7 @@ retiraron el 2026-08-26: los sustituyen Windsor y el motor en vivo de index.html
 
     const ks = Object.keys(M.records).sort();
     M.pval = ks.length ? ks[ks.length-1]
-      : (M.period==='week' ? isoWeekOf(new Date())
-        : (new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')));
+      : (M.period==='week' ? isoWeekOf(hoyTulum()) : ymTulum());
   }
   // Un guardado que falla NO puede terminar en "✓ Guardado". Antes el error se tragaba en un
   // console.error, la promesa resolvía normal y quien llamaba celebraba igual: alguien capturaba
@@ -907,13 +913,13 @@ retiraron el 2026-08-26: los sustituyen Windsor y el motor en vivo de index.html
   function checkAdmin(){ try{ return !!(window.parent && window.parent !== window && typeof window.parent.isMktAdmin === 'function' && window.parent.isMktAdmin()); }catch(e){ return false; } }
   function isPeriodEditable(M, pval){
     if(checkAdmin()) return true;
-    const now = new Date();
+    const now = hoyTulum();
     if(M.period === 'week'){
       const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
       const prev = new Date(today.getTime() - 7*86400000);
       return pval === isoWeekOf(today) || pval === isoWeekOf(prev);
     } else {
-      const cur = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+      const cur = ymTulum();
       const prv = prevYM(cur);
       return pval === cur || pval === prv;
     }
@@ -976,8 +982,7 @@ retiraron el 2026-08-26: los sustituyen Windsor y el motor en vivo de index.html
     $('#view-basedatos').querySelectorAll('.db-dup').forEach(b => b.onclick = () => {
       const rec = M.records[b.dataset.k]; if(!rec) return;
       // Cambia pval a un periodo vacío editable para no sobrescribir el original
-      const now = new Date();
-      const target = M.period==='week' ? isoWeekOf(now) : (now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'));
+      const target = M.period==='week' ? isoWeekOf(hoyTulum()) : ymTulum();
       if(!isPeriodEditable(M, target)){ avisar('No hay un periodo editable disponible para duplicar.'); return; }
       // Coloca el rec en el periodo actual si aún no existe; si existe, pide otro periodo
       if(M.records[target]){ avisar('Ya existe un registro en el periodo actual. Duplica manualmente cambiando el periodo desde Ingreso.'); return; }
@@ -1201,7 +1206,17 @@ retiraron el 2026-08-26: los sustituyen Windsor y el motor en vivo de index.html
   $('#logo-input').onchange=e=>{ const f=e.target.files[0]; if(!f)return; const rd=new FileReader(); rd.onload=async()=>{ setLogo(rd.result); try{await window.storage.set(LOGO_KEY,rd.result);}catch(err){} }; rd.readAsDataURL(f); };
 
   if(window.parent && window.parent !== window) document.body.classList.add('iframed');
-  (async function init(){ for(const id of ORDER){ await loadMod(MODS[id]); } try{ const r=await window.storage.get('mkt_resp'); if(r&&r.value) RESP=JSON.parse(r.value); }catch(e){} try{ const r=await window.storage.get(LOGO_KEY); if(r&&r.value) setLogo(r.value);}catch(e){} const list=orderFiltered(); setActive(list[0]||'rrss'); })();
+  (async function init(){
+    // Solo se cargan los módulos que este usuario puede ver: pedir los demás dispara
+    // 403 del kv y un aviso de "no se pudieron leer los datos" que no le corresponde.
+    for(const id of orderFiltered()){ await loadMod(MODS[id]); }
+    try{ const r=await window.storage.get('mkt_resp'); if(r&&r.value) RESP=JSON.parse(r.value); }catch(e){} try{ const r=await window.storage.get(LOGO_KEY); if(r&&r.value) setLogo(r.value);}catch(e){}const list=orderFiltered();
+    // Sin módulos permitidos NO se cae a 'rrss': un usuario solo-Calidad de Leads
+    // aterrizaba en Redes Sociales, un módulo que no le corresponde (y cuyo kv ahora
+    // le responde 403). Se muestra un aviso en vez de forzar un módulo ajeno.
+    if(list.length) setActive(list[0]);
+    else document.body.innerHTML = '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#666">Tu usuario no tiene módulos de Marketing asignados en esta vista.</div>';
+  })();
 })();
 </script>
 

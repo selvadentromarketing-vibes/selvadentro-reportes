@@ -39,9 +39,13 @@ exports.handler = async (event) => {
   // sin límite. Ahora exige el canal correspondiente, igual que el resto de reportes.
   const session = S.authFromEvent(event);
   if (!session) return json(401, { error: "Sesión inválida o expirada" });
+  // El botón "Analizar con IA" vive en la analítica de Dirección, en la de cada canal
+  // de ventas Y en marketing.html: exigir solo canales de Dirección lo dejaba muerto
+  // (403) para capturistas y marketing, su público principal. Basta con ser un usuario
+  // provisionado (al menos un canal); un token sin canales no ve ninguna vista.
   const ch = session.channels || [];
-  if (session.role !== "admin" && !["direccion_general","direccion_comercial"].some((c) => ch.includes(c))) {
-    return json(403, { error: "Sin acceso a los reportes de Dirección" });
+  if (session.role !== "admin" && !ch.length) {
+    return json(403, { error: "Sin acceso a los análisis con IA" });
   }
 
   let payload;
@@ -51,10 +55,13 @@ exports.handler = async (event) => {
     return json(400, { error: "JSON inválido" });
   }
 
-  const { canal, kpi, unidad, meta, puntos, periodicidad } = payload;
+  const { canal, kpi, unidad, meta, periodicidad } = payload;
+  let { puntos } = payload;
   if (!kpi || !Array.isArray(puntos) || !puntos.length) {
     return json(400, { error: "Se requieren kpi y puntos con al menos 1 registro" });
   }
+  // Tope de tamaño: sin él, un body arbitrario infla el prompt (y la cuenta de la API).
+  puntos = puntos.slice(-160).map((p) => ({ periodo: String(p && p.periodo || "").slice(0, 24), valor: Number(p && p.valor) || 0 }));
 
   const serie = puntos
     .map((p) => `${p.periodo}: ${p.valor}${unidad ? " " + unidad : ""}`)

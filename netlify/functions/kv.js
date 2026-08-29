@@ -22,21 +22,29 @@ const MAX_VAL = 512 * 1024;
 const CANALES_VENTAS = ["brokers", "paid_organico", "seminarios", "referidos", "pd_leads", "pd_brokers", "rp_vip"];
 
 // Prefijo de clave → canales que dan acceso. Quien tenga CUALQUIERA de ellos entra.
-function canalesDeClave(k) {
+// `op` distingue lectura de escritura para las claves compartidas de solo-lectura.
+function canalesDeClave(k, op) {
   const key = String(k || "");
+  // El logo lo muestra index.html a TODOS los usuarios; con el gate mkt_ genérico, un
+  // usuario solo-ventas recibía 403 al cargarlo y la app levantaba la franja roja de
+  // "no se pudieron leer los datos". Lectura libre; escribirlo sigue siendo de marketing.
+  if (key === "mkt_logo" && op !== "set" && op !== "del") return null;
   // Registros de un canal de ventas: "<canal>:week:…" o "<canal>:rec:…"
   const m = key.match(/^([a-z_]+):(?:week|rec|metas|last_resp):/);
   if (m && CANALES_VENTAS.includes(m[1])) return [m[1], "direccion_general", "direccion_comercial"];
   if (key.startsWith("crm:agg")) return ["crm_live", "direccion_comercial"];
   if (key.startsWith("sla:agg")) return ["sla_view", "crm_live", "direccion_comercial"];
-  if (key.startsWith("lq:agg")) return ["mkt_lq", "marketing"];
+  // lq: cubre lq:agg y también lq:ia (el análisis compartido), que antes quedaba sin gate.
+  if (key.startsWith("lq:")) return ["mkt_lq", "marketing"];
+  // Los datos de Redes Sociales son de su módulo: mkt_lq no pinta nada ahí.
+  if (key.startsWith("mkt_rrss")) return ["marketing", "mkt_rrss"];
   if (key.startsWith("mkt_")) return ["marketing", "mkt_rrss", "mkt_lq"];
-  return null;                       // clave compartida (logo, asesores, config): sin restricción
+  return null;                       // clave compartida (asesores, config): sin restricción
 }
 
-function puede(session, k) {
+function puede(session, k, op) {
   if (session.role === "admin") return true;
-  const req = canalesDeClave(k);
+  const req = canalesDeClave(k, op);
   if (!req) return true;
   const tiene = Array.isArray(session.channels) ? session.channels : [];
   return req.some((c) => tiene.includes(c));
@@ -61,7 +69,7 @@ exports.handler = async (event) => {
   if ((op === "get" || op === "set" || op === "del")) {
     if (typeof k !== "string" || !k || k.length > MAX_KEY) return S.json(400, { error: "k inválida" });
     if (k === S.USERS_KEY && session.role !== "admin") return S.json(403, { error: "Solo admin" });
-    if (!puede(session, k)) return S.json(403, { error: "Sin acceso a ese canal" });
+    if (!puede(session, k, op)) return S.json(403, { error: "Sin acceso a ese canal" });
   }
   if (op === "set" && (typeof v !== "string" || v.length > MAX_VAL)) return S.json(400, { error: "v inválida (máx 512KB)" });
   if ((op === "list" || op === "dump")) {
@@ -79,10 +87,10 @@ exports.handler = async (event) => {
     // amplios y el usuario debe recibir lo suyo, no un 403 que rompa la app.
     if (op === "list") {
       const keys = await S.kvList(prefix);
-      return S.json(200, { keys: keys.filter((x) => puede(session, x)) });
+      return S.json(200, { keys: keys.filter((x) => puede(session, x, "get")) });
     }
     const rows = await S.kvDump(prefix);
-    return S.json(200, { rows: rows.filter((r) => puede(session, r && r.k)) });
+    return S.json(200, { rows: rows.filter((r) => puede(session, r && r.k, "get")) });
   } catch (e) {
     return S.json(502, { error: String(e.message || e) });
   }

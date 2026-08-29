@@ -19,27 +19,37 @@ const S = require("./lib/shared.js");
 const SITE_URL = process.env.SITE_URL || "https://team.selvadentrotulum.com";
 const json = S.json;
 
-const ALL_CH = ["brokers","paid_organico","seminarios","referidos","pd_leads","pd_brokers","rp_vip","direccion_general","direccion_comercial","crm_live","marketing","mkt_rrss","mkt_ppc","mkt_crm","mkt_lq"];
+// Mantener en sintonía con ALL_CH_KEYS de index.html: un canal que la UI ofrece pero
+// esta lista no conoce se descartaba EN SILENCIO al crear el usuario (le pasó a
+// sla_view: el admin marcaba "Desempeño de Ventas", veía "Usuario creado ✓" y la
+// persona no podía abrir el reporte).
+const ALL_CH = ["brokers","paid_organico","seminarios","referidos","pd_leads","pd_brokers","rp_vip","direccion_general","direccion_comercial","crm_live","sla_view","marketing","mkt_rrss","mkt_ppc","mkt_crm","mkt_lq"];
 
 const norm = (e) => String(e || "").trim().toLowerCase();
 const linkFor = (email, nonce) => `${SITE_URL}/#invite=${encodeURIComponent(S.signInvite({ email, nonce }))}`;
 
 // El admin se identifica con su token de sesión (Bearer), no reenviando su contraseña.
-function requireAdmin(event) {
+// El token vive 30 días y no hay revocación: además de la firma, se verifica contra el
+// registro que la persona SIGA existiendo y SIGA siendo admin — un admin dado de baja
+// conservaba el poder de crear usuarios hasta que su token venciera.
+async function requireAdmin(event) {
   const session = S.authFromEvent(event);
   if (!session) return { error: json(401, { error: "Sesión inválida o expirada" }) };
   if (session.role !== "admin") return { error: json(403, { error: "Solo administradores" }) };
-  return { session };
+  const users = await S.getUsers();
+  const u = S.findUser(users, session.email);
+  if (!u || u.role !== "admin") return { error: json(403, { error: "Solo administradores" }) };
+  return { session, users };
 }
 
 async function create(event, { email, role, channels }) {
-  const gate = requireAdmin(event);
+  const gate = await requireAdmin(event);
   if (gate.error) return gate.error;
 
   const lc = norm(email);
   if (!lc || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(lc)) return json(400, { error: "Email inválido" });
 
-  const users = await S.getUsers();
+  const users = gate.users;
   if (users.some((u) => norm(u.email) === lc)) return json(409, { error: "Ya existe un usuario con ese email" });
 
   const rol = role === "admin" ? "admin" : "user";
@@ -59,11 +69,11 @@ async function create(event, { email, role, channels }) {
 // Liga nueva para alguien que ya existe: sirve tanto para reinvitar como para
 // restablecer contraseña. Invalida cualquier liga anterior (nonce nuevo).
 async function relink(event, { email }) {
-  const gate = requireAdmin(event);
+  const gate = await requireAdmin(event);
   if (gate.error) return gate.error;
 
   const lc = norm(email);
-  const users = await S.getUsers();
+  const users = gate.users;
   const u = users.find((x) => norm(x.email) === lc);
   if (!u) return json(404, { error: "No existe ese usuario" });
 

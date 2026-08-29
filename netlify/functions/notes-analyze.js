@@ -41,18 +41,28 @@ exports.handler = async (event) => {
   // sin límite. Ahora exige el canal correspondiente, igual que el resto de reportes.
   const session = S.authFromEvent(event);
   if (!session) return json(401, { error: "Sesión inválida o expirada" });
+  // Misma razón que kpi-analyze: la síntesis de notas se ofrece también en la analítica
+  // de canal y en marketing.html, no solo en Dirección. Cualquier usuario provisionado.
   const ch = session.channels || [];
-  if (session.role !== "admin" && !["direccion_general","direccion_comercial"].some((c) => ch.includes(c))) {
-    return json(403, { error: "Sin acceso a los reportes de Dirección" });
+  if (session.role !== "admin" && !ch.length) {
+    return json(403, { error: "Sin acceso a los análisis con IA" });
   }
 
   let payload;
   try { payload = JSON.parse(event.body || "{}"); } catch { return json(400, { error: "JSON inválido" }); }
 
-  const { canal, entradas } = payload;
+  const { canal } = payload;
+  let { entradas } = payload;
   if (!Array.isArray(entradas) || !entradas.length) {
     return json(400, { error: "Se requieren entradas con al menos 1 registro con texto" });
   }
+  // Tope de tamaño: sin él, un body arbitrario infla el prompt (y la cuenta de la API).
+  const rec = (s, n) => String(s || "").slice(0, n);
+  entradas = entradas.slice(0, 120).map((e) => ({
+    periodo: rec(e && e.periodo, 24), canal: rec(e && e.canal, 60), dims: rec(e && e.dims, 80),
+    responsable: rec(e && e.responsable, 60), notas: rec(e && e.notas, 1500),
+    aprendizajes: rec(e && e.aprendizajes, 1500), cambios: rec(e && e.cambios, 1500),
+  }));
 
   const bloque = entradas.map((e) => {
     const partes = [];
