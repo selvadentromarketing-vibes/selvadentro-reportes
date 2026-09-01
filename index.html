@@ -982,16 +982,18 @@ const BROKERS_SECTIONS = [
     {l:"Brokers activos comercialmente", target:0.25, num:"brokers_activos", den:"total_brokers"},
   ]},
   { title:"Pipeline e ingresos", fields:[
-    {k:"leads_registrados", l:"Leads registrados por brokers", meta:30},
-    {k:"zooms_clientes",    l:"Zooms con clientes", meta:8},
-    {k:"tours_clientes",    l:"Tours con clientes", meta:8},
-    {k:"opp_brokers",       l:"OPP por brokers", meta:13},
-    {k:"opp_zooms",         l:"OPP de zooms", meta:null},
-    {k:"opp_tours",         l:"OPP de tours", meta:null},
-    {k:"opp_14dias",        l:"OPP >14 días por brokers", meta:null},
-    {k:"apartados_brokers", l:"Apartados por brokers", meta:null},
-    {k:"won_brokers",       l:"WON por brokers", meta:4},
-    {k:"ingresos",          l:"Ingresos", meta:null, money:true},
+    {k:"leads_registrados",    l:"Leads registrados por brokers", meta:30},
+    {k:"leads_descalificados", l:"Leads descalificados", meta:null},
+    {k:"zooms_clientes",       l:"Zooms con clientes", meta:8},
+    {k:"tours_clientes",       l:"Tours con clientes", meta:8},
+    {k:"opp_brokers",          l:"OPP por brokers", meta:13},
+    {k:"opp_zooms",            l:"OPP de zooms", meta:null},
+    {k:"opp_tours",            l:"OPP de tours", meta:null},
+    {k:"opp_14dias",           l:"OPP >14 días por brokers", meta:null},
+    {k:"opp_activas",          l:"OPP activas", meta:null},
+    {k:"apartados_brokers",    l:"Apartados por brokers", meta:null},
+    {k:"won_brokers",          l:"WON por brokers", meta:4},
+    {k:"ingresos",             l:"Ingresos", meta:null, money:true},
   ], conv:[
     {l:"Presentaciones realizadas → OPP", target:0.15, num:"opp_brokers", den:"presentaciones_totales"},
     {l:"OPP → WON", target:0.30, num:"won_brokers", den:"opp_brokers"},
@@ -1053,8 +1055,9 @@ async function saveAdvisors(){ await sSet("selvadentro:asesores", ADVISOR_LIST);
 
 const PAID_SECTIONS = [
   { title:"Leads", fields:[
-    {k:"leads",          l:"Leads recibidos", meta:null},
-    {k:"leads_contacto", l:"Leads con contacto establecido", meta:null},
+    {k:"leads",                l:"Leads recibidos", meta:null},
+    {k:"leads_contacto",       l:"Leads con contacto establecido", meta:null},
+    {k:"leads_descalificados", l:"Leads descalificados", meta:null},
   ]},
   { title:"Calificación por temperatura", fields:[
     {k:"leads_frios",     l:"Leads fríos", meta:null},
@@ -1086,6 +1089,7 @@ const PAID_SECTIONS = [
     {k:"opp_tours",     l:"OPP de tours", meta:null},
     {k:"opp_next_step", l:"OPP con next step + fecha", meta:null},
     {k:"opp_14dias",    l:"OPP >14 días", meta:null},
+    {k:"opp_activas",   l:"OPP activas", meta:null},
   ], conv:[
     {l:"Zoom → OPP", target:0.15, num:"opp_zooms", den:"zooms_realizados"},
     {l:"Tour → OPP", target:0.20, num:"opp_tours", den:"tours_realizados"},
@@ -1136,8 +1140,9 @@ const REFERIDOS_SECTIONS = [
     {l:"Capacitación → Referidores inscritos", target:0.90, num:"referidores_inscritos", den:"capacitacion_completada"},
   ]},
   { title:"Leads", fields:[
-    {k:"leads",          l:"Leads por referidos", meta:null},
-    {k:"leads_contacto", l:"Leads con contacto", meta:null},
+    {k:"leads",                l:"Leads por referidos", meta:null},
+    {k:"leads_contacto",       l:"Leads con contacto", meta:null},
+    {k:"leads_descalificados", l:"Leads descalificados", meta:null},
   ]},
   { title:"Calificación por temperatura", fields:[
     {k:"leads_frios",     l:"Leads fríos", meta:null},
@@ -1159,6 +1164,7 @@ const REFERIDOS_SECTIONS = [
     {k:"opp_tours",     l:"OPP de tours", meta:null},
     {k:"opp_next_step", l:"OPP con next step + fecha", meta:null},
     {k:"opp_14dias",    l:"OPP >14 días", meta:null},
+    {k:"opp_activas",   l:"OPP activas", meta:null},
   ], conv:[
     {l:"Zooms → OPP", target:0.40, num:"opp_total", den:"zooms_realizados"},
   ]},
@@ -1171,8 +1177,9 @@ const REFERIDOS_SECTIONS = [
 
 const PD_LEADS_SECTIONS = [
   { title:"Leads", fields:[
-    {k:"leads",          l:"Leads", meta:null},
-    {k:"leads_contacto", l:"Leads contactados", meta:null},
+    {k:"leads",                l:"Leads", meta:null},
+    {k:"leads_contacto",       l:"Leads contactados", meta:null},
+    {k:"leads_descalificados", l:"Leads descalificados", meta:null},
   ]},
   { title:"Calificación por temperatura", fields:[
     {k:"leads_frios",     l:"Leads fríos", meta:null},
@@ -1196,6 +1203,7 @@ const PD_LEADS_SECTIONS = [
     {k:"opp_tours",     l:"OPP de tours", meta:null},
     {k:"opp_next_step", l:"OPP con next step + fecha", meta:null},
     {k:"opp_14dias",    l:"OPP >14 días", meta:null},
+    {k:"opp_activas",   l:"OPP activas", meta:null},
   ], conv:[
     {l:"Zooms → OPP", target:0.20, num:"opp_zooms", den:"zooms_realizados"},
     {l:"Tour → OPP", target:0.40, num:"opp_tours", den:"tours_realizados"},
@@ -1218,10 +1226,11 @@ const PD_LEADS_SEED = [
 
 const PD_BROKERS_SECTIONS = [
   { title:"Actividad con brokers", fields:[
-    {k:"eventos_asistidos", l:"Eventos asistidos", meta:null},
-    {k:"brokers_firmados",  l:"Brokers firmados", meta:null},
-    {k:"brokers_activos",   l:"Brokers activos", meta:null},
-    {k:"leads_brokers",     l:"Leads por brokers", meta:null},
+    {k:"eventos_asistidos",    l:"Eventos asistidos", meta:null},
+    {k:"brokers_firmados",     l:"Brokers firmados", meta:null},
+    {k:"brokers_activos",      l:"Brokers activos", meta:null},
+    {k:"leads_brokers",        l:"Leads por brokers", meta:null},
+    {k:"leads_descalificados", l:"Leads descalificados", meta:null},
   ]},
   { title:"Presentaciones", fields:[
     {k:"pres_broker_agendadas",  l:"Presentaciones con broker agendadas", meta:null},
@@ -1244,6 +1253,7 @@ const PD_BROKERS_SECTIONS = [
     {k:"opp_tours",     l:"OPP de tours", meta:null},
     {k:"opp_next_step", l:"OPP con next step + fecha", meta:null},
     {k:"opp_14dias",    l:"OPP >14 días", meta:null},
+    {k:"opp_activas",   l:"OPP activas", meta:null},
   ]},
   { title:"Cierre", fields:[
     {k:"apartados", l:"Apartados", meta:null},
@@ -1264,8 +1274,9 @@ const PD_BROKERS_SEED = [
 
 const SEMINARIOS_SECTIONS = [
   { title:"Leads", fields:[
-    {k:"leads",          l:"Leads", meta:null},
-    {k:"leads_contacto", l:"Leads con contacto", meta:null},
+    {k:"leads",                l:"Leads", meta:null},
+    {k:"leads_contacto",       l:"Leads con contacto", meta:null},
+    {k:"leads_descalificados", l:"Leads descalificados", meta:null},
   ]},
   { title:"Calificación por temperatura", fields:[
     {k:"leads_frios",     l:"Leads fríos", meta:null},
@@ -1301,6 +1312,7 @@ const SEMINARIOS_SECTIONS = [
     {k:"opp_externas",  l:"OPP externas", meta:null},
     {k:"opp_next_step", l:"OPP con next step + fecha", meta:null},
     {k:"opp_14dias",    l:"OPP >14 días", meta:null},
+    {k:"opp_activas",   l:"OPP activas", meta:null},
   ]},
   { title:"Cierre", fields:[
     {k:"apartados", l:"Apartados", meta:null},
@@ -1351,6 +1363,7 @@ const RP_VIP_SECTIONS = [
     {k:"embajadores_capacitados",  l:"Embajadores capacitados", meta:null},
     {k:"embajadores_activos",      l:"Embajadores activos (60 días)", meta:null},
     {k:"leads_embajadores",        l:"Leads por embajadores", meta:null},
+    {k:"leads_descalificados",     l:"Leads descalificados", meta:null},
   ]},
   { title:"Calificación por temperatura", fields:[
     {k:"leads_frios",     l:"Leads fríos", meta:null},
@@ -1369,6 +1382,7 @@ const RP_VIP_SECTIONS = [
     {k:"opp_tours",     l:"OPP de tours", meta:null},
     {k:"opp_next_step", l:"OPP con next step + fecha", meta:null},
     {k:"opp_14dias",    l:"OPP >14 días", meta:null},
+    {k:"opp_activas",   l:"OPP activas", meta:null},
   ]},
   { title:"Cierre", fields:[
     {k:"apartados", l:"Apartados", meta:null},
@@ -1398,6 +1412,22 @@ const CHANNELS = {
   pd_leads:      { name:"Prospección directa leads",   sections:PD_LEADS_SECTIONS, advisors:true, seed:PD_LEADS_SEED },
   pd_brokers:    { name:"Prospección directa brokers", sections:PD_BROKERS_SECTIONS, advisors:true, seed:PD_BROKERS_SEED },
   rp_vip:        { name:"RP VIP",                       sections:RP_VIP_SECTIONS, seed:RP_VIP_SEED },
+};
+
+/* El orden con el que están escritos los vectores `v` de cada semilla. NO se puede deducir
+   del formulario: seedRec los mapeaba por posición contra los campos vigentes, así que
+   insertar un campo a media lista corría cada valor uno y dejaba mal TODAS las semanas
+   sembradas de ese canal, sin nada que lo delatara. Aquí queda congelado el orden con el
+   que se escribieron. Un canal sin semillas no lleva entrada: el respaldo es el orden
+   vigente, que es justo contra el que se escribiría una semilla nueva. Si algún día se
+   reordenan los campos de un canal que YA tiene semillas, esta lista no se toca. */
+const SEED_ORDER = {
+  brokers: ["brokers_contactados","brokers_presentados","brokers_firmados","total_brokers","zooms_realizados","presentaciones_fisicas","recorridos","tours_grupales","presentaciones_totales","eventos_asistidos","eventos_realizados","publicaciones_grupos","brokers_grupos_mes_pasado","brokers_nuevos_grupos","total_brokers_grupo","brokers_interactuan","brokers_activos","brokers_3leads","reuniones_1a1","leads_registrados","zooms_clientes","tours_clientes","opp_brokers","opp_zooms","opp_tours","opp_14dias","apartados_brokers","won_brokers","ingresos"],
+  paid_organico: ["leads","leads_contacto","leads_frios","leads_templados","leads_calientes","web_registrados","web_confirmados","web_asistidos","seg_post_webinar","zooms_agendados","zooms_realizados","tours_agendados","tours_realizados","opp_total","opp_zooms","opp_tours","opp_next_step","opp_14dias","apartados","won","ingresos"],
+  pd_leads: ["leads","leads_contacto","leads_frios","leads_templados","leads_calientes","zooms_agendados","zooms_realizados","tours_agendados","tours_realizados","conversaciones_iniciadas","networking","publicaciones_marca","opp_total","opp_zooms","opp_tours","opp_next_step","opp_14dias","apartados","won","ingresos"],
+  pd_brokers: ["eventos_asistidos","brokers_firmados","brokers_activos","leads_brokers","pres_broker_agendadas","pres_broker_realizadas","pres_cliente_agendadas","pres_cliente_realizadas","zooms_agendados","zooms_realizados","tours_agendados","tours_realizados","opp_total","opp_zooms","opp_tours","opp_next_step","opp_14dias","apartados","won","ingresos"],
+  seminarios: ["leads","leads_contacto","leads_frios","leads_templados","leads_calientes","sem_registrados","sem_confirmados","sem_asistidos","seg_post_seminario","zooms_agendados","zooms_realizados","tours_agendados","tours_realizados","formularios_interes","uno_agendados","uno_realizados","uno_externos","opp_total","opp_zooms","opp_tours","opp_1a1","opp_externas","opp_next_step","opp_14dias","apartados","won","ingresos","ventas_30","ventas_60","ventas_90"],
+  rp_vip: ["prospectos_identificados","reuniones_realizadas","embajadores_incorporados","embajadores_capacitados","embajadores_activos","leads_embajadores","leads_frios","leads_templados","leads_calientes","zooms_agendados","zooms_realizados","tours_agendados","tours_realizados","opp_total","opp_zooms","opp_tours","opp_next_step","opp_14dias","apartados","won","ingresos"],
 };
 let CH = "brokers";
 const sections  = () => CHANNELS[CH].sections;
@@ -1651,6 +1681,11 @@ function ingRevisarCoherencia(form){
   if(leads!=null && opp!=null && opp>leads){ problemas.push(`OPP (${opp}) es mayor que Leads (${leads})`); marca("opp","leads"); }
   if(opp!=null && won!=null && won>opp){     problemas.push(`WON (${won}) es mayor que OPP (${opp})`); marca("won","opp"); }
   if(ap!=null && won!=null && won>ap && ap>0){ problemas.push(`WON (${won}) es mayor que Apartados (${ap})`); marca("won","apartados"); }
+  // Descalificados no pasa por METRIC_MAP: la clave es la misma en los siete canales.
+  // OPP activas NO se compara contra nada: es un saldo vivo del pipeline, no un flujo de
+  // la semana, y legítimamente puede ser mayor que las OPP nuevas o que los leads.
+  const desc = Number(v.leads_descalificados||0);
+  if(leads!=null && desc>leads){ problemas.push(`Leads descalificados (${desc}) es mayor que Leads (${leads})`); campos.add("leads_descalificados"); marca("leads"); }
   Object.entries(v).forEach(([k,val])=>{ if(Number(val)<0){ problemas.push(`hay un valor negativo en "${etiquetaCampo(k)}"`); campos.add(k); } });
   return { mensaje: problemas.length ? "· " + problemas.join("\n· ") : "", campos:[...campos] };
 }
@@ -1779,7 +1814,9 @@ function renderChips(){
 }
 
 /* ===================== SEED ===================== */
-function seedRec(chKey,s){ const ch=CHANNELS[chKey]; const flds=ch.sections.flatMap(x=>x.fields); const valores={}; flds.forEach((f,i)=>valores[f.k]=s.v[i]); const dimVals=[]; if(ch.advisors) dimVals.push(s.asesor||""); if(ch.cities) dimVals.push(s.ciudad||""); return {semana:s.w,inicio:s.ini,fin:s.fin,dimVals,valores,notas:s.n||"",aprendizajes:s.a||"",cambios:s.c||""}; }
+function seedRec(chKey,s){ const ch=CHANNELS[chKey]; const orden=SEED_ORDER[chKey]||ch.sections.flatMap(x=>x.fields).map(f=>f.k);
+  if(s.v && s.v.length!==orden.length) console.warn(`Semilla de ${chKey}: ${s.v.length} valores para ${orden.length} campos — revisa SEED_ORDER.`);
+  const valores={}; orden.forEach((k,i)=>valores[k]=s.v[i]); const dimVals=[]; if(ch.advisors) dimVals.push(s.asesor||""); if(ch.cities) dimVals.push(s.ciudad||""); return {semana:s.w,inicio:s.ini,fin:s.fin,dimVals,valores,notas:s.n||"",aprendizajes:s.a||"",cambios:s.c||""}; }
 let SEEDMAP = {};
 function buildSeedMap(){
   const out={};
