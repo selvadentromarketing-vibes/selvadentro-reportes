@@ -34,6 +34,17 @@ function canalesDeClave(k) {
   return null;                       // clave compartida (logo, asesores, config): sin restricción
 }
 
+// Las metas del negocio las LEE toda la app —salen en Dirección, en Ventas y en cada
+// reporte de canal— así que negar la lectura dejaría las pantallas sin metas. Pero
+// cambiarlas es una decisión de Dirección: la escritura sí se restringe.
+const METAS_KEY = "selvadentro:metas";
+function puedeEscribir(session, k) {
+  if (session.role === "admin") return true;
+  if (String(k) !== METAS_KEY) return true;
+  const tiene = Array.isArray(session.channels) ? session.channels : [];
+  return tiene.includes("direccion_general") || tiene.includes("direccion_comercial");
+}
+
 function puede(session, k) {
   if (session.role === "admin") return true;
   const req = canalesDeClave(k);
@@ -62,6 +73,9 @@ exports.handler = async (event) => {
     if (typeof k !== "string" || !k || k.length > MAX_KEY) return S.json(400, { error: "k inválida" });
     if (k === S.USERS_KEY && session.role !== "admin") return S.json(403, { error: "Solo admin" });
     if (!puede(session, k)) return S.json(403, { error: "Sin acceso a ese canal" });
+    if ((op === "set" || op === "del") && !puedeEscribir(session, k)) {
+      return S.json(403, { error: "Las metas del negocio solo las puede cambiar Dirección" });
+    }
   }
   if (op === "set" && (typeof v !== "string" || v.length > MAX_VAL)) return S.json(400, { error: "v inválida (máx 512KB)" });
   if ((op === "list" || op === "dump")) {

@@ -173,11 +173,50 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
 - **Atribución de anuncio y conjunto**: del `adName`/`utm_content` y
   `adGroupName`/`utm_term` del contacto en GHL; si el conjunto no viene, se deriva
   cruzando el nombre del anuncio contra el catálogo de Windsor (anuncio → conjunto).
+- **Google manda ids, no nombres**: el sufijo de URL final de la cuenta de Google Ads es
+  `utm_campaign={campaignid}&utm_content={adgroupid}&utm_term={keyword}`, así que el lead
+  llega a GHL con `utm_campaign=23715389989`. ValueTrack no tiene un token con el nombre
+  de la campaña, así que no se arregla en Google: `ads()` pide `campaign_id` y
+  `ad_group_id`, y `lqIdIndex` / `lqNombreDeId` traducen el id al nombre antes de cruzar.
+  Sin eso las campañas de Google salían como números (familia "237") y sus columnas de
+  leads y costo en guion. Por lo mismo `utm_term` de Google es la **palabra clave**, no
+  el conjunto: solo se acepta como conjunto si empata con un grupo real de la cuenta.
+- **Auditoría de etiquetado UTM** (`lqAuditUtm`, se ve en **Diagnóstico**): lee lo que
+  manda cada anuncio —`url_tags` en Meta, sufijo de URL final y plantilla de tracking en
+  Google— lo cruza contra los `utm_campaign` que llegan al CRM y dice qué campaña está
+  mal etiquetada y por qué (sin parámetros, valor fijo, `utm_content` con dos
+  significados, plantilla de cuenta que pelea con el sufijo del anuncio, o campaña que
+  gasta sin un solo lead atribuido).
 - **Extras del tab**: OPPs/WONs que produjo cada campaña (join de oportunidades por
-  contactId), comparativa mes anterior vs mes actual, monitor de integridad
+  contactId), comparativa **mes contra mes anclada al final del rango que se está leyendo**
+  (no a la fecha de hoy: abriendo un reporte de agosto comparaba agosto contra septiembre,
+  y el día 2 del mes restaba dos días de datos contra un mes completo; cuando el mes ancla
+  no ha cerrado, los dos meses se cortan al mismo día), monitor de integridad
   (% con fuente/asesor/calificación + posibles duplicados por teléfono/email) y
   sección **Paid Media en vivo** (estado activo/pausado por anuncio, link de
   preview, inversión y resultados vía Windsor `/facebook` y `/google_ads`).
+
+## Metas del negocio
+
+Pantalla **Metas** de la barra lateral. Todo se guarda en la clave `selvadentro:metas`
+del kv y aplica para todo el equipo.
+
+- **Metas por KPI de cada canal** (meta mensual de cada campo, más KPIs personalizados y
+  el orden de las secciones): ya existía.
+- **Metas globales** (`__global`): meta de **WON al mes** y meta del **mix de leads** por
+  canal, más las cuatro **conversiones objetivo** (Zooms → OPP, Tours → OPP,
+  OPP → Apartados, Apartados → WON). Eran las constantes `CHANNEL_META` y `CONV_T`
+  escritas en el código —el comentario decía "editables" desde el primer día pero no
+  tenían pantalla— y cambiar una meta era un cambio de código y un deploy. Ahora las
+  constantes son solo el **valor por defecto**: lo guardado las sobrescribe campo por
+  campo y el botón *Restaurar valores originales* borra el override. Salen en Dirección
+  General, Dirección Comercial y el reporte de cada canal.
+- **Quién puede cambiarlas**: la pantalla estaba condicionada a `isAdmin()`, así que
+  Dirección Comercial no veía el botón —de ahí "no puedo cambiar las metas"—. Ahora la
+  ven `admin`, `direccion_general` y `direccion_comercial`, y `kv.js` aplica la misma
+  regla del lado del servidor: la **lectura** de `selvadentro:metas` queda abierta
+  (las metas salen en casi toda la app y negarla dejaría las pantallas en blanco), la
+  **escritura** solo para esos tres.
 
 ## Las tres cifras de ventas cerradas
 
@@ -209,9 +248,19 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
   **60 min** (handoff por WhatsApp).
 - **Agendamiento**: % de leads con una cita dentro de **48 horas**, contra la meta
   del 40% (verde si se cumple, rojo si no).
+- **Primer toque = acción MANUAL del asesor**, nunca la automatización. La columna
+  contaba cualquier mensaje saliente y marcaba **100% en todos los asesores** — la
+  secuencia de bienvenida le escribe a todos los leads, así que medía el workflow, no al
+  equipo. Ahora hay tres columnas separadas: **1er toque manual** (`foM`: su llamada, su
+  WhatsApp, su SMS o su email escrito a mano), **llamada conectada** (`foC`: llamada con
+  estatus `connected` o `answered` — un intento a buzón es trabajo, no contacto) y el
+  número viejo en gris como referencia. La mediana del primer intento también pasó a
+  medirse contra el toque manual.
 - **Contactados efectivos** (el lead respondió) vs trabajados; **>7 días sin toque**
-  con lista nominal; **citas y show rate** (`showed` ÷ `showed`+`noshow`);
-  **OPPs y WONs por asesor** en el rango.
+  con lista nominal — se mide contra el último toque **real** (acción manual del asesor o
+  respuesta del lead), porque con el último mensaje de cualquier origen un lead abandonado
+  con drip activo nunca aparecía en la lista; **citas y show rate**
+  (`showed` ÷ `showed`+`noshow`); **OPPs y WONs por asesor** en el rango.
 - **Generación bajo demanda** (botón, 1–3 min): recorre conversaciones y citas de
   cada lead del rango en lotes de 8 vía `sla-report`; el resultado se cachea en el
   kv (`sla:agg:v1`) para todo el equipo. Acumulable dentro del mes eligiendo el

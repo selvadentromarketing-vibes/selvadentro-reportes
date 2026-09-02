@@ -8,9 +8,10 @@
 //   { action:"contacts", start, end, searchAfter? }
 //     → { contacts:[{id,n,c,src,u,tags,attr}], total, searchAfter|null }
 //   { action:"sweep", ids:[contactId,...] }   (máx 8 por llamada)
-//     → { results:[{id, fo, fi, lm, foM, days[], calls, chans[], deliv{}, users[], cerr, aerr, ap{}}] }
-//     foM = primer contacto MANUAL (excluye workflows/campañas) · days = días distintos
-//     con contacto manual · calls = intentos de llamada · deliv = estado de entrega
+//     → { results:[{id, fo, fi, lm, foM, foC, days[], calls, callsOk, chans[], deliv{}, users[], cerr, aerr, ap{}}] }
+//     foM = primer contacto MANUAL (excluye workflows/campañas) · foC = primera llamada
+//     CONECTADA · days = días distintos con contacto manual · calls = intentos de llamada ·
+//     callsOk = llamadas conectadas · deliv = estado de entrega
 //     cerr/aerr = no se pudieron leer conversaciones/citas (≠ "no hubo")
 //     fo = primer mensaje SALIENTE (ts) · fi = primer mensaje ENTRANTE (ts)
 //     lm = último mensaje (ts) · ap = citas: total, showed, noshow, futuras, f = cita más temprana (ts)
@@ -137,8 +138,11 @@ async function allMessages(convId) {
 
 async function sweepOne(id) {
   const out = {
-    id, fo: null, fi: null, lm: null, cerr: false, aerr: false,
+    id, fo: null, fi: null, lm: null, li: null, cerr: false, aerr: false,
     foM: null,                            // primer contacto MANUAL (base del SLA del asesor)
+    foC: null,                            // primera llamada del asesor que SÍ conectó
+    lmM: null,                            // ÚLTIMO toque manual (para "días sin toque")
+    callsOk: 0,                           // llamadas manuales conectadas / contestadas
     days: [],                             // días distintos con contacto manual (para la regla de 10 días)
     calls: 0,                             // intentos de llamada manuales
     chans: [],                            // canales usados manualmente
@@ -167,21 +171,31 @@ async function sweepOne(id) {
       for (const m of msgs) {
         const t = ts(m.dateAdded); if (!t) continue;
         if (m.direction === "outbound" && (!out.fo || t < out.fo)) out.fo = t;
-        if (m.direction === "inbound" && (!out.fi || t < out.fi)) out.fi = t;
+        if (m.direction === "inbound") {
+          if (!out.fi || t < out.fi) out.fi = t;
+          if (!out.li || t > out.li) out.li = t;      // última respuesta del lead
+        }
         if (!out.lm || t > out.lm) out.lm = t;
         if (m.direction === "outbound" && isManual(m)) {
           if (!out.foM || t < out.foM) out.foM = t;
+          if (!out.lmM || t > out.lmM) out.lmM = t;   // último toque manual del asesor
           dset.add(dayKey(t));
           const ch = chanOf(m); cset.add(ch);
           if (ch === "call") out.calls++;
           const loc = new Date(t - TZ_MS);
           out.hrs[loc.getUTCHours()]++;
           out.dow[loc.getUTCDay()]++;
+          const st = String(m.status || "").toLowerCase();
+          // Llamada que SÍ entró. Un intento que cayó a buzón es una acción del asesor
+          // pero no es un contacto, y el reporte por asesor no distinguía las dos cosas.
+          if (ch === "call" && (st === "connected" || st === "answered")) {
+            out.callsOk++;
+            if (!out.foC || t < out.foC) out.foC = t;
+          }
           // Actividad efectiva. Una llamada CONECTADA es el caso más efectivo que
           // existe, pero su status es "connected" y antes caía en el else, es decir
           // sumaba al denominador sin sumar al numerador: castigaba justo al asesor
           // que trabaja por teléfono. Lo mismo con "answered".
-          const st = String(m.status || "").toLowerCase();
           if (st === "read" || st === "connected" || st === "answered") out.deliv.read++;
           else if (st === "delivered" || st === "sent") out.deliv.delivered++;
           else if (st === "failed" || st === "undelivered" || st === "no-answer" || st === "busy" || st === "voicemail") out.deliv.failed++;

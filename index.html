@@ -866,6 +866,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
       </div>
       <p class="hint" id="metas-hint">Define la <b>meta mensual</b> de cada KPI. Se guarda automáticamente y el reporte del canal la usa, ajustada al periodo (meta mensual ÷ 4.35 semanas × semanas evaluadas). Deja en blanco para no fijar meta.</p>
       <div class="sistema-hdr" id="metas-sistema" style="display:none"></div>
+      <div id="metas-global"></div>
       <div id="metas-body"></div>
     </div>
 
@@ -2291,12 +2292,19 @@ const METRIC_MAP = {
   pd_brokers:    { leads:"leads_brokers", zooms:"zooms_realizados", tours:"tours_realizados", opp:"opp_total", opp_zooms:"opp_zooms", opp_tours:"opp_tours", opp_14:"opp_14dias", apartados:"apartados", won:"won", ingresos:"ingresos" },
   rp_vip:        { leads:"leads_embajadores", zooms:"zooms_realizados", tours:"tours_realizados", opp:"opp_total", opp_zooms:"opp_zooms", opp_tours:"opp_tours", opp_14:"opp_14dias", apartados:"apartados", won:"won", ingresos:"ingresos" },
 };
-// Metas por canal (editables): won = meta WON mensual · mix = meta del mix de leads
-const CHANNEL_META = {
+/* Metas del negocio: meta WON mensual y meta del mix de leads por canal, más las cuatro
+   conversiones objetivo. Decían "editables" en el comentario desde el primer día, pero
+   nunca tuvieron pantalla: eran constantes en el código y cambiarlas requería un deploy.
+   Ahora son los valores POR DEFECTO y la pantalla de Metas los sobrescribe desde
+   selvadentro:metas.__global. Se conservan los defaults para poder restaurar. */
+const CHANNEL_META_DEF = {
   brokers:{won:4,mix:0.45}, paid_organico:{won:2,mix:0.22}, seminarios:{won:1,mix:0.14},
   referidos:{won:0.5,mix:0.05}, pd_leads:{won:0.5,mix:0.05}, pd_brokers:{won:0.5,mix:0.05}, rp_vip:{won:0.5,mix:0.04},
 };
-const CONV_T = { zo:0.15, to:0.20, oa:0.30, aw:0.80 };
+const CONV_T_DEF = { zo:0.15, to:0.20, oa:0.30, aw:0.80 };
+const CONV_T_LBL = { zo:"Zooms → OPP", to:"Tours → OPP", oa:"OPP → Apartados", aw:"Apartados → WON reportado" };
+let CHANNEL_META = JSON.parse(JSON.stringify(CHANNEL_META_DEF));
+let CONV_T = { ...CONV_T_DEF };
 const METRIC_KEYS = ["leads","zooms","tours","opp","opp_zooms","opp_tours","opp_14","apartados","won","ingresos"];
 
 function chPrefix(chKey){ const c=CHANNELS[chKey]; return (c.advisors||c.cities)?`${chKey}:rec:`:`${chKey}:week:`; }
@@ -2707,7 +2715,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v9";   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
+const LQ_AGG_KEY = "lq:agg:v10";  // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 // (LQ_TZ y LQ_TZ_MS ahora viven junto al resto de helpers de fecha, arriba)
@@ -2866,10 +2874,20 @@ function lqAutoQualify(l){
   if(stage && LQ_RX.desc.test(stage)){ why.push(`etapa del pipeline: "${stage}"`); return {lv:"desc", why}; }
   if(LQ_TAGS_DESC.test(tags)){ why.push("tag de descalificación en el contacto"); return {lv:"desc", why}; }
 
-  // 2) Señal fuerte = cita asistida, venta cerrada o etapa avanzada del pipeline
-  const senalFuerte = ap.sh>0 || l.w>0 || (stage && LQ_RX.fuerte.test(stage));
+  // 2) Señal fuerte = cita asistida, venta cerrada, OPP abierto o etapa avanzada.
+  //
+  // Estar en una etapa de OPP faltaba en esta lista y por eso "erica chin" salía MQL con
+  // la razón "respuesta o interés registrado en el CRM": su etapa es "Seguimiento de OPP"
+  // —la primera etapa que el equipo cuenta como OPP— y LQ_RX.fuerte no la reconoce, pero
+  // LQ_RX.contacto sí (por la palabra "seguimiento"), así que la señal se degradaba a
+  // "respondió". Una oportunidad real de cierre es la señal más fuerte que hay en el CRM,
+  // más que una respuesta, así que se lee del mismo cálculo de OPP que usa todo el reporte
+  // (l.o, que ya aplica el umbral por pipeline y descarta las cubetas que no son embudo).
+  const enOpp = (l.o||0) > 0;
+  const senalFuerte = ap.sh>0 || l.w>0 || enOpp || (stage && LQ_RX.fuerte.test(stage));
   if(ap.sh>0) why.push("asistió a una cita registrada");
   if(l.w>0) why.push("tiene una venta cerrada (WON)");
+  else if(enOpp) why.push(stage ? `oportunidad real de cierre en "${stage}"` : "oportunidad real de cierre abierta");
   else if(stage && LQ_RX.fuerte.test(stage)) why.push(`etapa avanzada: "${stage}"`);
 
   const perfilOk = presupuesto!=null && presupuesto>=LQ_UMBRAL_USD && (hor==null || hor<=LQ_HORIZONTE_M);
@@ -3056,10 +3074,13 @@ function lqBucketAds(adRows){
   for(const r of (adRows||[])){
     const wk = r.d ? lqWeekOf(r.d+"T12:00:00"+LQ_TZ) : null; if(!wk) continue;
     const k = r.plat+"|"+(r.id||r.name)+"|"+(r.pp||"")+"|"+wk;
-    const b = by[k] = by[k] || { wk, plat:r.plat, camp:r.camp, grp:r.grp, id:r.id, name:r.name, pp:r.pp||"", status:r.status, link:r.link, spend:0, impr:0, clicks:0, results:0 };
+    const b = by[k] = by[k] || { wk, plat:r.plat, camp:r.camp, grp:r.grp, id:r.id, name:r.name, pp:r.pp||"", status:r.status, link:r.link,
+                                 cid:r.cid||"", gid:r.gid||"", tags:r.tags||"", plantilla:r.plantilla||"", spend:0, impr:0, clicks:0, results:0 };
     b.spend+=r.spend; b.impr+=r.impr; b.clicks+=r.clicks; b.results+=r.results;
     if(r.status) b.status=r.status;
     if(r.link) b.link=r.link;
+    if(r.tags) b.tags=r.tags;
+    if(r.plantilla) b.plantilla=r.plantilla;
   }
   return Object.values(by);
 }
@@ -3080,6 +3101,127 @@ function lqCamposLlenos(boot, rawLeads){
 
 // Cobertura de atribución: responde sin preguntarle a nadie si los anuncios están
 // pasando los parámetros UTM.
+/* --- Traductor de ids numéricos a nombres -------------------------------------------
+   Google Ads no tiene un token ValueTrack con el NOMBRE de la campaña: el sufijo de URL
+   final de esta cuenta manda `utm_campaign={campaignid}&utm_content={adgroupid}`, así que
+   en GoHighLevel el lead de Google llega con utm_campaign=23715389989 y utm_content=
+   193313814165. El reporte cruzaba esos números contra los nombres legibles que devuelve
+   Windsor y nunca empataban: las campañas de Google aparecían como "23715389989" (familia
+   "237") y sus columnas de leads, alto valor y costo salían en guion. No se arregla en
+   Google —el token de nombre no existe— así que se traduce aquí con los ids que ahora
+   trae cada fila de anuncio. Meta manda nombres y no necesita traducción, pero se indexa
+   igual por si algún anuncio usa {{campaign.id}}.
+   Solo traduce cadenas que son PURO dígito: un nombre de campaña real nunca lo es. */
+function lqIdIndex(adw){
+  const m = {};
+  for(const a of (adw||[])){
+    if(a.cid && /^\d+$/.test(a.cid) && a.camp && !m[a.cid]) m[a.cid] = { tipo:"camp", name:a.camp, plat:a.plat||"" };
+    if(a.gid && /^\d+$/.test(a.gid) && a.grp  && !m[a.gid]) m[a.gid] = { tipo:"grp",  name:a.grp,  plat:a.plat||"" };
+    if(a.id  && /^\d+$/.test(a.id)  && a.name && !m[a.id])  m[a.id]  = { tipo:"ad",   name:a.name, plat:a.plat||"" };
+  }
+  return m;
+}
+// Nombre legible para un valor de UTM: si es un id conocido lo traduce, si no lo deja igual.
+function lqNombreDeId(v, idIdx, tipo){
+  const t = String(v||"").trim();
+  if(!/^\d{5,}$/.test(t)) return t;
+  const h = idIdx[t];
+  return (h && (!tipo || h.tipo===tipo)) ? h.name : t;
+}
+
+/* --- Auditoría de etiquetado UTM, anuncio por anuncio -------------------------------
+   "Qué campañas no tienen bien puesta la atribución" no era una pregunta para nadie del
+   equipo: Meta devuelve url_tags por anuncio y Google devuelve el sufijo de URL final y
+   la plantilla de tracking. Esto lee lo que cada anuncio manda de verdad, lo compara
+   contra lo que llega al CRM y dice qué campaña está mal etiquetada y por qué.
+   Medido en la cuenta el 2026-09-02: los 13 anuncios de Meta mandan utm_campaign=
+   {{campaign.name}}, pero 11 mandan utm_content={{adset.name}} y 2 mandan {{ad.name}};
+   Google manda ids en las dos y además arrastra una plantilla de cuenta vieja que
+   escribe utm_source=adwords&utm_medium=ppc encima del utm_source=google&utm_medium=cpc
+   del sufijo. */
+function lqParseTags(qs){
+  const out = {};
+  String(qs||"").replace(/^[?&]+/,"").split("&").forEach(par=>{
+    const i = par.indexOf("=");
+    if(i < 1) return;
+    const k = par.slice(0,i).trim().toLowerCase();
+    if(k) out[k] = par.slice(i+1).trim();
+  });
+  return out;
+}
+// Qué manda un parámetro: un nombre, un id, un valor fijo o nada.
+function lqTokTipo(v){
+  const t = String(v||"").trim();
+  if(!t) return "falta";
+  if(/\{\{?\s*campaign[._]?name\s*\}?\}|\{campaignname\}/i.test(t)) return "nombre de campaña";
+  if(/\{\{?\s*adset[._]?name\s*\}?\}/i.test(t)) return "nombre de conjunto";
+  if(/\{\{?\s*ad[._]?name\s*\}?\}/i.test(t)) return "nombre de anuncio";
+  if(/\{\{?\s*adgroup(id|name)?\s*\}?\}/i.test(t)) return "id de grupo";
+  if(/\{\{?\s*campaign[._]?id\s*\}?\}|\{campaignid\}/i.test(t)) return "id de campaña";
+  if(/\{\{?\s*ad[._]?id\s*\}?\}/i.test(t)) return "id de anuncio";
+  if(/\{\{?\s*keyword\s*\}?\}/i.test(t)) return "palabra clave";
+  if(/\{\{?[^}]+\}?\}/.test(t)) return "otra variable";
+  return "valor fijo";
+}
+function lqAuditUtm(adw, rawLeads){
+  const porCamp = {};
+  (rawLeads||[]).forEach(l=>{
+    const c = lqNormCamp((l.attr && l.attr.camp) || "");
+    if(c) porCamp[c] = (porCamp[c]||0) + 1;
+  });
+  const camps = {};
+  const vistos = {};
+  for(const a of (adw||[])){
+    const k = (a.plat||"") + "|" + (a.camp||"");
+    const C = camps[k] = camps[k] || { plat:a.plat||"", camp:a.camp||"", cid:a.cid||"", inv:0, res:0,
+      ads:0, sinTags:0, tCamp:{}, tCont:{}, srcs:{}, meds:{}, plantilla:"" };
+    C.inv += a.spend; C.res += a.results;
+    if(!a.cid && C.cid === "") C.cid = "";
+    const idk = k + "|" + (a.id || a.name || "");
+    if(vistos[idk]) continue;      // adw trae una fila por anuncio × semana × ubicación
+    vistos[idk] = 1;
+    C.ads++;
+    if(!String(a.tags||"").trim()){ C.sinTags++; }
+    const t = lqParseTags(a.tags);
+    const suma = (o,v)=>{ if(v) o[v] = (o[v]||0) + 1; };
+    suma(C.tCamp, lqTokTipo(t.utm_campaign));
+    suma(C.tCont, lqTokTipo(t.utm_content));
+    suma(C.srcs, String(t.utm_source||"").trim());
+    suma(C.meds, String(t.utm_medium||"").trim());
+    if(a.plantilla && !C.plantilla) C.plantilla = a.plantilla;
+  }
+  const out = Object.values(camps).sort((x,y)=>y.inv-x.inv).slice(0,40).map(C=>{
+    const leads = porCamp[lqNormCamp(C.camp)] || 0;
+    const fallas = [];
+    const claves = (o)=>Object.keys(o).filter(Boolean);
+    if(C.sinTags === C.ads && C.ads) fallas.push("Ningún anuncio manda parámetros UTM: estos leads no se pueden atribuir a la campaña.");
+    else if(C.sinTags) fallas.push(`${C.sinTags} de ${C.ads} anuncios no mandan parámetros UTM.`);
+    if(C.tCamp["falta"] && C.tCamp["falta"] < C.ads) fallas.push(`${C.tCamp["falta"]} de ${C.ads} anuncios no mandan utm_campaign.`);
+    if(C.tCamp["valor fijo"]) fallas.push("utm_campaign está escrito a mano: no cambia si se duplica la campaña.");
+    if(C.tCamp["id de campaña"]) fallas.push("utm_campaign manda el id numérico de la campaña. Google no tiene una variable con el nombre, así que el reporte lo traduce con los ids de la cuenta; se ve bien pero depende de que Windsor siga sincronizando.");
+    const cont = claves(C.tCont).filter(x=>x!=="falta");
+    if(cont.length > 1) fallas.push(`utm_content no es consistente entre anuncios: unos mandan ${cont.join(", ")}. El reporte no puede saber si el valor es un anuncio o un conjunto.`);
+    if(C.tCont["falta"] === C.ads && C.ads) fallas.push("Ningún anuncio manda utm_content: no hay desglose por anuncio ni por conjunto.");
+    if(claves(C.srcs).length > 1) fallas.push(`utm_source llega con dos valores distintos (${claves(C.srcs).join(", ")}).`);
+    if(claves(C.meds).length > 1) fallas.push(`utm_medium llega con dos valores distintos (${claves(C.meds).join(", ")}).`);
+    // Plantilla de cuenta que reescribe la URL por encima del sufijo del anuncio
+    if(C.plantilla){
+      const pt = lqParseTags(String(C.plantilla).split("?").slice(1).join("?"));
+      const choca = [];
+      ["utm_source","utm_medium","utm_campaign"].forEach(k=>{
+        const enPl = String(pt[k]||"").trim();
+        const enAd = k === "utm_source" ? claves(C.srcs)[0] : k === "utm_medium" ? claves(C.meds)[0] : "";
+        if(enPl && enAd && enPl.toLowerCase() !== enAd.toLowerCase()) choca.push(`${k}: la plantilla manda "${enPl}" y el anuncio "${enAd}"`);
+      });
+      if(choca.length) fallas.push(`Hay una plantilla de tracking a nivel cuenta que pelea con el sufijo del anuncio — ${choca.join(" · ")}. Cuál gana depende del orden en que quede la URL, así que la fuente del lead en el CRM sale inestable.`);
+    }
+    if(C.inv > 0 && leads === 0) fallas.push("Esta campaña gastó y ningún lead del CRM trae su utm_campaign. O el etiquetado no llega, o son leads de formulario nativo (los formularios instantáneos de Meta nunca pasan por una URL, así que no llevan UTM).");
+    return { plat:C.plat, camp:C.camp, cid:C.cid, inv:Math.round(C.inv*100)/100, res:C.res, ads:C.ads, leads,
+             tCamp:claves(C.tCamp), tCont:claves(C.tCont), src:claves(C.srcs), med:claves(C.meds), fallas };
+  });
+  return { camps: out, ts: Date.now() };
+}
+
 function lqCoberturaAtrib(rawLeads, adIdx){
   const pagados = rawLeads.filter(l=>{
     const blob = ((l.src||"")+" "+((l.attr&&l.attr.src)||"")+" "+((l.attr&&l.attr.med)||"")).toLowerCase();
@@ -3140,6 +3282,10 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
   const llenos = lqCamposLlenos(boot, rawLeads);
   const F = lqDetectFields(boot.fields, llenos);
   const A = lqDetectAtrib(boot.fields);
+  const adw0 = lqBucketAds(adRows);
+  const idIdx = lqIdIndex(adw0);
+  // Nombres de conjunto / grupo de anuncios que existen de verdad en las cuentas.
+  const grpSet = new Set(); adw0.forEach(a=>{ if(a.grp) grpSet.add(lqNormCamp(a.grp)); });
   // La atribución REAL de Selvadentro no viaja en attributionSource (13% de cobertura)
   // sino en campos personalizados: utm_campaign 38%, utm_content 38%, Campaign 43%,
   // Medium 56%, Session source 56%. Se completa lo que falta desde ahí.
@@ -3153,6 +3299,20 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
     if(!l.attr.med)  l.attr.med  = cf(A.med) || cf(A.medAlt);
     // Un FBCLID sin nada más ya dice que el lead vino de Meta
     if(!l.attr.src && cf(A.fbclid)) l.attr.src = "facebook";
+    // Google manda ids, no nombres: traducirlos aquí, antes de que el resto del reporte
+    // los use como llave de cruce contra la estructura de la cuenta.
+    l.attr.campId = /^\d{5,}$/.test(String(l.attr.camp||"").trim()) ? String(l.attr.camp).trim() : "";
+    l.attr.camp = lqNombreDeId(l.attr.camp, idIdx, "camp");
+    l.attr.ad   = lqNombreDeId(l.attr.ad,   idIdx);
+    l.attr.grp  = lqNombreDeId(l.attr.grp,  idIdx);
+    // utm_term no significa lo mismo en las dos plataformas: los anuncios de Meta no lo
+    // mandan y el sufijo de Google manda {keyword}, la palabra clave que buscó la persona.
+    // Se estaba leyendo como si fuera el conjunto, así que el desglose "por conjunto" de
+    // Google enlistaba palabras clave. Si lo que llega no es el nombre de un conjunto real
+    // de la cuenta, se guarda como palabra clave y el conjunto se resuelve por utm_content
+    // (que en Google trae el id del grupo y ya quedó traducido arriba).
+    const g = String(l.attr.grp||"").trim();
+    if(g && !grpSet.has(lqNormCamp(g))){ l.attr.kw = g; l.attr.grp = ""; }
   });
   const O = oppsByContact || {};
   const leads = rawLeads.map(l=>{
@@ -3184,8 +3344,9 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
            oppStages: lqOppStageNames(boot.stages, lqOppThresholds(boot.stages)),
            stages: boot.stages||{},
            campos: lqCamposLlenos(boot, rawLeads),
-           atrib: lqCoberturaAtrib(rawLeads, lqAdIndex({adw:lqBucketAds(adRows)})),
-           weeks:weeks||[], spend:spendRows||[], adw:lqBucketAds(adRows), leads };
+           atrib: lqCoberturaAtrib(rawLeads, lqAdIndex({adw:adw0})),
+           utm: lqAuditUtm(adw0, rawLeads),
+           weeks:weeks||[], spend:spendRows||[], adw:adw0, leads };
 }
 
 function lqWeeks(){
@@ -3960,14 +4121,33 @@ function lqRender(){
     }
   }
 
-  // --- Mes anterior vs mes actual (hora Tulum, independiente del rango seleccionado)
+  // --- Mes contra mes (hora Tulum), anclado al rango que se está leyendo.
+  //
+  // Antes se anclaba a Date.now() e ignoraba el rango a propósito. Dos consecuencias, las
+  // dos vistas por el cliente: (1) abriendo el reporte de una semana de agosto la tabla
+  // comparaba agosto contra septiembre —el mes SIGUIENTE al que se está leyendo— y (2) el
+  // día 2 del mes, el "mes actual" traía dos días de datos y se restaba contra un mes
+  // completo: Inversión 48,372 → 337, Leads −162. Ninguna de las dos cifras significaba
+  // nada. Ahora el par de meses sale del final del rango seleccionado, y si ese mes está
+  // incompleto se compara el mismo tramo de días en los dos meses.
   {
     const nowT=new Date(Date.now()-LQ_TZ_MS);
-    const curMo=`${nowT.getUTCFullYear()}-${String(nowT.getUTCMonth()+1).padStart(2,"0")}`;
-    const pvD=new Date(Date.UTC(nowT.getUTCFullYear(), nowT.getUTCMonth()-1, 1));
+    const finYMD = rango.length ? lqWeekBounds(rango[rango.length-1]).endYMD : null;
+    const finT = finYMD ? new Date(finYMD+"T00:00:00Z") : nowT;
+    const ancla = (finT.getTime() > nowT.getTime() || isNaN(finT)) ? nowT : finT;  // nunca el futuro
+    const curMo=`${ancla.getUTCFullYear()}-${String(ancla.getUTCMonth()+1).padStart(2,"0")}`;
+    const pvD=new Date(Date.UTC(ancla.getUTCFullYear(), ancla.getUTCMonth()-1, 1));
     const prevMo=`${pvD.getUTCFullYear()}-${String(pvD.getUTCMonth()+1).padStart(2,"0")}`;
-    const moL=(mo)=>agg.leads.filter(l=>l.mo===mo).map(swap);
-    const moS=(mo)=>(agg.spend||[]).filter(r=>(r.d||"").slice(0,7)===mo).reduce((a,r)=>a+r.spend,0);
+    // ¿El mes ancla está cerrado? Si no, se recorta el mes anterior al mismo día del mes
+    // para que la comparación sea contra el mismo tramo y no contra un mes completo.
+    const ultDia = new Date(Date.UTC(ancla.getUTCFullYear(), ancla.getUTCMonth()+1, 0)).getUTCDate();
+    const corte = ancla.getUTCDate();
+    const parcialMo = corte < ultDia;
+    const diaT=(iso)=>{ const d=new Date(new Date(iso).getTime()-LQ_TZ_MS); return isNaN(d)?99:d.getUTCDate(); };
+    const moL=(mo)=>agg.leads.filter(l=>l.mo===mo && (!parcialMo || diaT(l.c)<=corte)).map(swap);
+    const moS=(mo)=>(agg.spend||[]).filter(r=>(r.d||"").slice(0,7)===mo && (!parcialMo || (Number((r.d||"").slice(8,10))||99)<=corte)).reduce((a,r)=>a+r.spend,0);
+    // El histórico sincronizado son 12 semanas: el mes anterior puede caer fuera y salir corto.
+    const moMin = agg.leads.reduce((m,l)=>(l.mo && (!m || l.mo<m)) ? l.mo : m, null);
     const stats=(mo)=>{ const arr=moL(mo); const c=lqCount(arr); const paid=arr.filter(l=>l.fuente==="Meta"||l.fuente==="Google");
       const sp=moS(mo); const hi=lqHigh(c); const paidHi=lqHigh(lqCount(paid));
       return { n:arr.length, hi, desc:c.desc||0, o:arr.reduce((a,l)=>a+(l.o||0),0), w:arr.reduce((a,l)=>a+(l.w||0),0),
@@ -3984,15 +4164,15 @@ function lqRender(){
         .map(r=>`<tr><td class="name">${escAttr(r.k)}</td><td>${r.na} → ${r.nb}</td><td>${r.ha} → ${r.hb}</td></tr>`).join("");
     })();
     html += `<div class="crm-tables mb-sec">
-      <div class="rep-section" style="margin-bottom:0"><h3>Mes anterior vs mes actual (${prevMo} → ${curMo})</h3>
+      <div class="rep-section" style="margin-bottom:0"><h3>Mes contra mes (${prevMo} → ${curMo}${parcialMo?`, al día ${corte} de cada mes`:""})</h3>
         <div class="table-scroll" style="border:none;box-shadow:none"><table class="cons">
           <tr><th class="lft">Métrica</th><th>${prevMo}</th><th>${curMo}</th><th>Δ</th></tr>
           ${mrow("Leads",A.n,B.n)}${mrow("Alto valor (MQL+)",A.hi,B.hi)}${mrow("Descalificados",A.desc,B.desc)}
           ${mrow("OPPs",A.o,B.o)}${mrow("WONs",A.w,B.w)}
           ${mrow("Inversión",A.sp||null,B.sp||null,true)}${mrow("Costo/lead (pago)",A.cpl,B.cpl,true)}${mrow("Costo/alto valor",A.cph,B.cph,true)}
         </table></div>
-        <p class="hint">Mes calendario en hora Tulum. El mes en curso es parcial hasta que cierre.</p></div>
-      <div class="rep-section" style="margin-bottom:0"><h3>Leads por campaña · ${prevMo} → ${curMo}</h3>
+        <p class="hint">Mes calendario en hora Tulum, tomado del final del rango seleccionado (${rango.length?rango[rango.length-1]:"—"}), no de la fecha de hoy.${parcialMo?` <b>${curMo} aún no cierra</b>: los dos meses se cortan al día ${corte} para comparar el mismo tramo.`:""}${moMin && prevMo<moMin?` ⚠ El histórico sincronizado empieza en ${moMin}, así que ${prevMo} sale incompleto.`:""}</p></div>
+      <div class="rep-section" style="margin-bottom:0"><h3>Leads por campaña · ${prevMo} → ${curMo}${parcialMo?` (al día ${corte})`:""}</h3>
         <div class="table-scroll" style="border:none;box-shadow:none"><table class="cons">
           <tr><th class="lft">Campaña</th><th>Leads</th><th>Alto valor</th></tr>
           ${campRows||'<tr><td class="lft txt-nota" colspan="3">Sin datos.</td></tr>'}
@@ -4343,7 +4523,7 @@ async function showLQ(){
 // Reporte de disciplina comercial directo del CRM: SLA de primera respuesta por
 // asesor y canal, leads >7 días sin toque, trabajados vs contactados efectivos,
 // citas y show rate, y OPPs/WONs por asesor. Con nombres, acumulable por semanas.
-const SLA_AGG_KEY = "sla:agg:v4";   // v4: reloj 24/7 y arranque en el traspaso a ventas
+const SLA_AGG_KEY = "sla:agg:v5";   // v5: primer toque MANUAL y llamada conectada, no el mensaje automático   // v4: reloj 24/7 y arranque en el traspaso a ventas
 const SLA_STALE_MS = 7*86400e3; // "sin toque" = 7 días sin mensaje
 const slaState = { built:false, agg:null, syncing:false, asesor:"" };   // asesor:"" = todo el equipo
 
@@ -4636,14 +4816,25 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr)
     const created = (hand && hand > alta) ? hand : alta;
     // El Anexo 1 define el SLA de primera respuesta contra el CONTACTO EFECTIVO
     // (el lead respondió), no contra el intento. Se miden los dos por separado.
-    const slaAt = (sw.fo && sw.fo>=created) ? sw.fo-created : null;   // hasta el 1er intento
-    const slaEf = (sw.fi && sw.fi>=created) ? sw.fi-created : null;   // hasta la respuesta del lead
+    const slaAt = (sw.foM && sw.foM>=created) ? sw.foM-created : null;  // hasta el 1er intento MANUAL
+    const slaEf = (sw.fi && sw.fi>=created) ? sw.fi-created : null;     // hasta la respuesta del lead
     const z48 = (sw.ap && sw.ap.f && sw.ap.f>=created) ? (sw.ap.f-created) <= 48*3600e3 : false;
     const canal = lqSourceCamp({tags:c.tags, src:c.src, attr:c.attr}).fuente;
     return { n:c.n, wk, canal, u:c.u||"", created, alta,
              // hand = el reloj arrancó en el traspaso a ventas, no en el alta del contacto
              hand: (hand && hand > alta) ? hand : null,
-             fo:sw.fo||null, fi:sw.fi||null, lm:sw.lm||null, slaAt, slaEf, z48,
+             // fo = primer mensaje saliente de CUALQUIER origen, workflows incluidos. Se
+             // conserva para poder mostrar la diferencia con el toque manual, pero NINGÚN
+             // porcentaje de desempeño se calcula con él: por eso el "1er toque" salía
+             // 100% en todos los asesores —la automatización de bienvenida le escribe a
+             // todos los leads— y el número no decía nada del asesor.
+             fo:sw.fo||null, fi:sw.fi||null, lm:sw.lm||null, li:sw.li||null, slaAt, slaEf, z48,
+             foC: sw.foC||null, callsOk: sw.callsOk||0,
+             // lmR = último toque REAL: la última acción manual del asesor o la última
+             // respuesta del lead. lm (cualquier mensaje) dejaba fuera de la lista de
+             // "más de 7 días sin toque" a los leads que solo reciben la secuencia
+             // automática: el drip los mantenía "frescos" y la fuga quedaba invisible.
+             lmR: Math.max(sw.lmM||0, sw.li||0) || null,
              // sd = sin datos de conversación (lote fallido o sin permisos): no es "sin contacto"
              sd: !!(sw.sin || sw.cerr),
              // ad = no se pudieron leer las citas: tampoco es "no tuvo citas". El backend
@@ -4709,12 +4900,13 @@ function slaRender(){
   let html = bannerIncompleto(agg.fallos, "Generar reporte");
   html += `<div class="crm-kpis">
     ${kpi(leads.length.toLocaleString(),"Leads en el rango")}
-    ${kpi(pcti(conDatos.filter(l=>l.fo).length,conDatos.length),"Con primer toque")}
+    ${kpi(pcti(conDatos.filter(l=>l.foM).length,conDatos.length),"Con 1er toque manual del asesor")}
+    ${kpi(pcti(conDatos.filter(l=>l.foC).length,conDatos.length),"Con llamada que sí conectó")}
     ${kpi(pcti(conDatos.filter(l=>l.fi).length,conDatos.length),"Contactados efectivos")}
     ${kpi(fmtDur(slaMedian(slasEf)),"SLA mediana · contacto efectivo")}
     ${kpi(und(15),"≤ 15 min (transferencia)")}
     ${kpi(und(60),"≤ 60 min (WhatsApp)")}
-    ${kpi(fmtDur(slaMedian(slasAt)),"Mediana del 1er intento")}
+    ${kpi(fmtDur(slaMedian(slasAt)),"Mediana del 1er toque manual")}
     ${(()=>{ const n=conDatos.filter(l=>l.z48).length, p=conDatos.length?Math.round(n/conDatos.length*100):0;
       return `<div class="crm-kpi"><div class="k-val" style="color:${p>=40?'var(--verde-prof)':'var(--rojo)'}">${conDatos.length?p+"%":"—"}</div><div class="k-lbl">Cita en ≤48 h · meta 40%</div></div>`; })()}
     ${kpi((apSh+apNs)?pcti(apSh,apSh+apNs):"—","Show rate de citas")}
@@ -4733,15 +4925,21 @@ function slaRender(){
       const z = cd.length ? Math.round(cd.filter(l=>l.z48).length/cd.length*100) : null;
       const sh = arr.reduce((a,l)=>a+l.ap.sh,0), ns = arr.reduce((a,l)=>a+l.ap.ns,0);
       return `<tr><td class="name">${escAttr(labelFn(k))}</td><td>${arr.length}${arr.length-cd.length?`<span style="color:var(--neutro);font-size:var(--fs-xs)"> (${arr.length-cd.length} s/d)</span>`:""}</td>
-        <td class="pct">${pcti(cd.filter(l=>l.fo).length,cd.length)}</td>
+        <td class="pct">${pcti(cd.filter(l=>l.foM).length,cd.length)}</td>
+        <td class="pct">${pcti(cd.filter(l=>l.foC).length,cd.length)}</td>
+        <td class="pct" style="color:var(--neutro)">${pcti(cd.filter(l=>l.fo).length,cd.length)}</td>
         <td class="pct">${pcti(cd.filter(l=>l.fi).length,cd.length)}</td>
         <td>${fmtDur(slaMedian(sa))}</td><td>${fmtDur(slaMedian(ss))}</td><td class="pct">${u15}</td><td class="pct">${u60}</td>
         <td class="pct" style="${z!=null?(z>=40?"color:var(--verde-prof);font-weight:600":"color:var(--rojo)"):""}">${z==null?"—":z+"%"}</td>
         <td>${arr.filter(l=>!l.ad).reduce((a,l)=>a+l.ap.tot,0)}</td><td class="pct">${(sh+ns)?pcti(sh,sh+ns):"—"}</td></tr>`;
     }).join("");
     return `<div class="table-scroll mb-sec"><table class="cons">
-      <tr><th class="lft">${title}</th><th>Leads</th><th>1er toque</th><th>Efectivos</th><th>Med. intento</th><th>Med. efectivo</th><th>≤15m</th><th>≤60m</th><th>Cita ≤48h</th><th>Citas</th><th>Show</th></tr>
-      ${rows || `<tr><td colspan="9" class="lft txt-nota">Sin datos.</td></tr>`}
+      <tr><th class="lft">${title}</th><th>Leads</th>
+        <th title="Primera acción manual del asesor: su llamada, su WhatsApp, su SMS o su email escrito a mano">1er toque manual</th>
+        <th title="Primera llamada del asesor con estatus connected o answered">Llamada conectada</th>
+        <th title="Incluye la automatización de bienvenida: sale ~100% en todos y no mide al asesor" style="color:var(--neutro);font-weight:500">1er msj (autom.)</th>
+        <th>Efectivos</th><th>Med. toque manual</th><th>Med. efectivo</th><th>≤15m</th><th>≤60m</th><th>Cita ≤48h</th><th>Citas</th><th>Show</th></tr>
+      ${rows || `<tr><td colspan="13" class="lft txt-nota">Sin datos.</td></tr>`}
     </table></div>`;
   };
   if(sinDatos){
@@ -4757,13 +4955,15 @@ function slaRender(){
   // --- Leads >7 días sin toque (la fuga silenciosa del funnel)
   const stale = leads.filter(l=>{
     if(l.sd) return false;                   // sin datos de conversación: no se puede afirmar nada
-    const last = l.lm || null;
+    const last = l.lmR || null;
     if(last) return (now-last) > SLA_STALE_MS;
     return (now-l.created) > SLA_STALE_MS;   // nunca tocado y ya viejo
-  }).sort((a,b)=>(a.lm||a.created)-(b.lm||b.created));
+  }).sort((a,b)=>(a.lmR||a.created)-(b.lmR||b.created));
   const staleRows = stale.slice(0,40).map(l=>{
-    const days = Math.floor((now-(l.lm||l.created))/86400e3);
-    return `<tr><td class="lft celda-fuerte">${escAttr(l.n)}</td><td class="lft">${escAttr(name(l.u))}</td><td class="lft">${escAttr(l.canal)}</td><td class="lft">${l.lm?"último mensaje":"nunca contactado"}</td><td style="color:var(--rojo);font-weight:700">${days} días</td></tr>`;
+    const days = Math.floor((now-(l.lmR||l.created))/86400e3);
+    const estado = !l.lmR ? (l.fo ? "solo automatizaciones" : "nunca contactado")
+                 : (l.li && l.li===l.lmR) ? "última respuesta del lead" : "último toque del asesor";
+    return `<tr><td class="lft celda-fuerte">${escAttr(l.n)}</td><td class="lft">${escAttr(name(l.u))}</td><td class="lft">${escAttr(l.canal)}</td><td class="lft">${estado}</td><td style="color:var(--rojo);font-weight:700">${days} días</td></tr>`;
   }).join("");
   html += `<div class="rep-section mb-sec"><h3>Más de 7 días sin toque · ${stale.length} lead${stale.length!==1?"s":""}</h3>
     <table class="rep"><thead><tr><th class="lft">Lead</th><th class="lft">Asesor</th><th class="lft">Canal</th><th class="lft">Estado</th><th class="lft">Sin toque</th></tr></thead>
@@ -4783,11 +4983,20 @@ function slaRender(){
     html += `<div class="lq-meth">ℹ En <b>${conHand}</b> de ${leads.length} leads el reloj no arranca en la fecha de alta del contacto sino en el <b>traspaso a ventas</b> (cuando entró al pipeline). Son leads que estuvieron un tiempo en marketing antes de asignarse: medirlos desde su alta los haría ver como respuestas de días o semanas.</div>`;
   }
   html += `<div class="lq-meth"><b>Definiciones</b> (Anexo 1) —
-    <b>1er toque / intento:</b> primer mensaje saliente (SMS/WhatsApp/email/llamada) registrado en el CRM ·
+    <b>1er toque manual:</b> primera acción del asesor en persona — su llamada, su WhatsApp,
+    su SMS o su email escrito a mano. <b>No cuenta ninguna automatización</b>: workflows,
+    campañas, envíos masivos ni nada que entre por API. Antes esta columna contaba cualquier
+    mensaje saliente y por eso marcaba 100% en todos los asesores — la automatización de
+    bienvenida le escribe a todos los leads, así que el número medía el workflow, no al equipo.
+    La columna gris <b>1er msj (autom.)</b> es ese número viejo, ahí para poder comparar ·
+    <b>Llamada conectada:</b> primera llamada del asesor con estatus <i>connected</i> o
+    <i>answered</i> — un intento que cayó a buzón es trabajo, pero no es un contacto ·
     <b>Contacto efectivo:</b> el lead respondió — hubo conversación, no solo un intento ·
     <b>SLA de primera respuesta:</b> del alta del lead hasta el <b>contacto efectivo</b>, que es la definición del Anexo 1;
     la mediana del intento se muestra aparte para separar rapidez de conectividad ·
-    <b>Sin toque:</b> más de 7 días sin ningún mensaje ·
+    <b>Sin toque:</b> más de 7 días sin un toque manual del asesor y sin respuesta del lead
+    (la secuencia automática no cuenta como toque: si contara, un lead abandonado con drip
+    activo nunca aparecería en esta lista) ·
     <b>Show rate:</b> citas con estatus showed ÷ (showed + no-show) ·
     <b>Oportunidades creadas:</b> registros del pipeline creados en el rango, por asesor asignado (no son OPPs: OPP = oportunidad real de cierre, de "Seguimiento de OPP" en adelante).</div>
     <div class="lq-meth"><b>SLAs contra los que se mide</b> —
@@ -5255,7 +5464,34 @@ function setMetaField(ch, fk, key, value){
 }
 
 const META_RESERVED = new Set(["__custom","__section_order","__section_labels","__field_sections","__custom_sections","__hidden_fields"]);
+
+// Metas globales guardadas en selvadentro:metas.__global. Se aplican sobre los defaults
+// del código, campo por campo: lo que no esté guardado conserva el default.
+function metaGlobalGuardada(){ return (META_OVERRIDES && META_OVERRIDES.__global) || {}; }
+function aplicarMetasGlobales(){
+  const g = metaGlobalGuardada();
+  CHANNEL_META = JSON.parse(JSON.stringify(CHANNEL_META_DEF));
+  CONV_T = { ...CONV_T_DEF };
+  Object.keys(CHANNEL_META).forEach(ch=>{
+    const w = g.won && g.won[ch], m = g.mix && g.mix[ch];
+    if(Number.isFinite(w)) CHANNEL_META[ch].won = w;
+    if(Number.isFinite(m)) CHANNEL_META[ch].mix = m;
+  });
+  Object.keys(CONV_T).forEach(k=>{ const v = g.conv && g.conv[k]; if(Number.isFinite(v)) CONV_T[k] = v; });
+}
+function guardarMetaGlobal(grupo, clave, valor){
+  META_OVERRIDES.__global = META_OVERRIDES.__global || {};
+  const G = META_OVERRIDES.__global;
+  G[grupo] = G[grupo] || {};
+  if(valor == null || valor === "" || !Number.isFinite(Number(valor))) delete G[grupo][clave];
+  else G[grupo][clave] = Number(valor);
+  if(!Object.keys(G[grupo]).length) delete G[grupo];
+  if(!Object.keys(G).length) delete META_OVERRIDES.__global;
+  aplicarMetasGlobales();
+}
+
 function applyMetas(){
+  aplicarMetasGlobales();
   for(const ch in META_OVERRIDES){
     const c=CHANNELS[ch]; if(!c) continue;
     // 0) Asignar __id canónico (estable, no cambia al renombrar)
@@ -5376,6 +5612,7 @@ function renderMetas(){
     };
     metasBuilt=true;
   }
+  renderMetasGlobales();
   if(!sel.value && !selM.value){ sel.value = Object.keys(CHANNELS)[0] || ""; }
   if(sel.value){
     metasShowFrame(false); renderMetasBody(sel.value);
@@ -5384,11 +5621,101 @@ function renderMetas(){
   else if(selM.value){ metasShowFrame(true, selM.value); }
   else ocultarSistema("metas-sistema");
 }
+/* --- Metas del negocio (globales) ------------------------------------------------------
+   Meta WON mensual y meta del mix de leads por canal, y las cuatro conversiones objetivo.
+   Estaban escritas en el código —CHANNEL_META y CONV_T— y salían en Dirección General,
+   Dirección Comercial y el reporte de cada canal sin que nadie pudiera tocarlas: cambiar
+   una meta era un cambio de código y un deploy. */
+function renderMetasGlobales(){
+  const host = document.getElementById("metas-global"); if(!host) return;
+  const g = metaGlobalGuardada();
+  const tocado = (grupo,clave)=> !!(g[grupo] && g[grupo][clave] != null);
+  const chs = Object.keys(CHANNEL_META_DEF).filter(k=>CHANNELS[k]);
+  const totWon = chs.reduce((a,k)=>a+(CHANNEL_META[k]?.won||0),0);
+  const totMix = chs.reduce((a,k)=>a+(CHANNEL_META[k]?.mix||0),0);
+  const mixMal = Math.abs(totMix-1) > 0.005;
+  const filaCh = (k)=>{
+    const m = CHANNEL_META[k] || {won:0,mix:0};
+    return `<tr data-mg-ch="${escAttr(k)}">
+      <td class="lft celda-fuerte">${escAttr(CHANNELS[k].name)}</td>
+      <td class="right"><input class="mg-won" type="number" step="0.5" min="0" value="${m.won}" aria-label="Meta WON mensual de ${escAttr(CHANNELS[k].name)}" style="width:88px;text-align:right">${tocado("won",k)?' <span class="lq-sub" title="Distinto del valor original del código">•</span>':""}</td>
+      <td class="right"><span class="meta-pct-wrap"><input class="mg-mix" type="number" step="0.5" min="0" max="100" value="${Math.round(m.mix*1000)/10}" aria-label="Meta del mix de leads de ${escAttr(CHANNELS[k].name)}" style="width:78px;text-align:right"><span>%</span></span>${tocado("mix",k)?' <span class="lq-sub">•</span>':""}</td>
+    </tr>`;
+  };
+  const filaConv = (k)=>`<tr data-mg-conv="${escAttr(k)}">
+    <td class="lft celda-fuerte">${escAttr(CONV_T_LBL[k]||k)}</td>
+    <td class="right"><span class="meta-pct-wrap"><input class="mg-conv" type="number" step="1" min="0" max="100" value="${Math.round(CONV_T[k]*1000)/10}" aria-label="Meta de conversión ${escAttr(CONV_T_LBL[k]||k)}" style="width:78px;text-align:right"><span>%</span></span>${tocado("conv",k)?' <span class="lq-sub">•</span>':""}</td>
+  </tr>`;
+  host.innerHTML = `<div class="rep-section mb-sec">
+    <h3>Metas del negocio</h3>
+    <p class="hint pegada">Estas son las metas que salen en Dirección General, Dirección Comercial y el reporte de cada canal. Se guardan en <code>selvadentro:metas</code> y aplican para todo el equipo. El punto • marca lo que ya se cambió respecto al valor original.</p>
+    <div class="crm-tables">
+      <div class="table-scroll" style="border:none;box-shadow:none"><table class="cons">
+        <tr><th class="lft">Canal</th><th>WON al mes</th><th>Mix de leads</th></tr>
+        ${chs.map(filaCh).join("")}
+        <tr class="total"><td class="lft">Total</td><td>${Math.round(totWon*10)/10}</td>
+          <td style="${mixMal?"color:var(--rojo);font-weight:700":""}">${Math.round(totMix*1000)/10}%</td></tr>
+      </table></div>
+      <div class="table-scroll" style="border:none;box-shadow:none"><table class="cons">
+        <tr><th class="lft">Conversión objetivo</th><th>Meta</th></tr>
+        ${Object.keys(CONV_T_DEF).map(filaConv).join("")}
+      </table></div>
+    </div>
+    ${mixMal?`<div class="lq-meth" style="border-color:var(--cobre)">⚠ El mix suma <b>${Math.round(totMix*1000)/10}%</b> y debería sumar 100%. Los porcentajes de cumplimiento del mix se calculan contra estas metas, así que mientras no sumen 100 el reporte reparte mal.</div>`:""}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px">
+      <button class="btn" id="mg-save" type="button">Guardar metas</button>
+      <button class="btn btn-ghost" id="mg-reset" type="button" title="Vuelve a los valores originales del código">Restaurar valores originales</button>
+      <span class="hint" id="mg-estado" style="margin:0"></span>
+    </div>
+  </div>`;
+
+  const estado = (txt, mal)=>{ const e=document.getElementById("mg-estado"); if(e){ e.textContent=txt; e.style.color = mal ? "var(--rojo)" : "var(--neutro)"; } };
+  document.getElementById("mg-save").onclick = async ()=>{
+    host.querySelectorAll("tr[data-mg-ch]").forEach(tr=>{
+      const ch = tr.dataset.mgCh;
+      const won = tr.querySelector(".mg-won").value;
+      const mix = tr.querySelector(".mg-mix").value;
+      guardarMetaGlobal("won", ch, won === "" ? null : Number(won));
+      guardarMetaGlobal("mix", ch, mix === "" ? null : Number(mix)/100);
+    });
+    host.querySelectorAll("tr[data-mg-conv]").forEach(tr=>{
+      const k = tr.dataset.mgConv, v = tr.querySelector(".mg-conv").value;
+      guardarMetaGlobal("conv", k, v === "" ? null : Number(v)/100);
+    });
+    try{
+      await saveMetas();
+      // Las metas salen en tres pantallas: hay que invalidar lo ya pintado.
+      resState.built=false; dcState.built=false;
+      estado("Guardado ✓");
+      toast("Metas guardadas ✓");
+      renderMetasGlobales();
+      if(NAV_GRUPO === "direccion") navIr("direccion", NAV_ULTIMA.direccion, false);
+    }catch(e){
+      // sSet lanza: un 403 aquí significa que la sesión no es de Dirección ni admin.
+      estado("No se pudo guardar: "+(e.message||e), true);
+      toast("No se pudo guardar las metas: "+(e.message||e));
+    }
+  };
+  document.getElementById("mg-reset").onclick = async ()=>{
+    if(!confirm("¿Volver a las metas originales? Se borran los valores que hayan capturado.")) return;
+    delete META_OVERRIDES.__global;
+    aplicarMetasGlobales();
+    try{
+      await saveMetas();
+      resState.built=false; dcState.built=false;
+      estado("Restaurado ✓"); toast("Metas restauradas ✓"); renderMetasGlobales();
+      if(NAV_GRUPO === "direccion") navIr("direccion", NAV_ULTIMA.direccion, false);
+    }catch(e){ estado("No se pudo guardar: "+(e.message||e), true); }
+  };
+}
+
 function metasShowFrame(show, modKey){
   const body = document.getElementById("metas-body");
   const hint = document.getElementById("metas-hint");
-  if(!show){ mktHostMostrar(false); body.style.display=""; hint.style.display=""; return; }
+  const glOn = document.getElementById("metas-global");
+  if(!show){ mktHostMostrar(false); body.style.display=""; hint.style.display=""; if(glOn) glOn.style.display=""; return; }
   body.style.display="none"; hint.style.display="none"; mktHostMostrar(true);
+  const gl = document.getElementById("metas-global"); if(gl) gl.style.display = "none";
   pintarSistema("metas-sistema", "Marketing", nombreModuloMkt(modKey), "se guarda en el almacenamiento de Marketing (mkt_*), aparte de las metas de Ventas");
   mktFrameUsar(w=>{ w.mktSetEmbedMode(true); w.mktSetActive(modKey); w.mktShowView('metas'); }, mktFrameFallo);
 }
@@ -5962,7 +6289,11 @@ function applyTabsVisibility(){
   // El sidebar tiene sus dos reglas propias; los grupos y sus sub-pestañas sacan las suyas
   // de NAV_GRUPOS, así que repintarlos ya aplica los permisos.
   const reglas = [
-    { tab:"metas",    visible: isAdmin() },
+    // Las metas del negocio las fija Dirección, pero el botón estaba condicionado a
+    // isAdmin(): Juan (Dirección Comercial) no veía la pantalla y por eso "no podía
+    // cambiar las metas". No era un permiso del backend —la clave selvadentro:metas
+    // nunca estuvo restringida— sino un botón escondido.
+    { tab:"metas",    visible: isAdmin() || navPermiso("direccion_general","direccion_comercial") },
     { tab:"asesores", visible: isAdmin() || CH !== "brokers" },
   ];
   let seFue = false;
@@ -6535,6 +6866,49 @@ function diagSeccionAtribucion(){
     </table></div>`;
 }
 
+/* --- Qué campañas están mal etiquetadas ----------------------------------------------
+   La sección de arriba dice CUÁNTOS leads traen atribución. Esta dice QUIÉN la rompe:
+   lee lo que cada anuncio manda de verdad (url_tags en Meta, sufijo de URL final y
+   plantilla de tracking en Google) y lo cruza contra los utm_campaign que llegan al CRM. */
+function diagSeccionUtm(){
+  const u = lqState.agg && lqState.agg.utm;
+  if(!u || !u.camps || !u.camps.length) return `<h3 class="diag-h">Etiquetado UTM por campaña</h3>
+    <p class="hint">Sincroniza Calidad de Leads para leer lo que manda cada anuncio. Requiere WINDSOR_API_KEY.</p>`;
+  const malas = u.camps.filter(c=>c.fallas.length);
+  const buenas = u.camps.length - malas.length;
+  let cab = malas.length
+    ? `<div class="lq-meth" style="border-color:var(--cobre)">◑ <b>${malas.length}</b> de ${u.camps.length} campañas con inversión tienen algo mal en el etiquetado${buenas?`; ${buenas} está${buenas>1?"n":""} bien`:""}.</div>`
+    : `<div class="lq-meth" style="border-color:var(--olivo)">✓ Las ${u.camps.length} campañas con inversión mandan los parámetros completos y consistentes.</div>`;
+  // Una campaña puede ser consistente consigo misma y aun así romper el reporte: si en una
+  // campaña utm_content trae el CONJUNTO y en otra trae el ANUNCIO, el mismo parámetro
+  // significa dos cosas distintas y el desglose por anuncio mezcla los dos niveles.
+  const porPlat = {};
+  u.camps.forEach(c=>{ (porPlat[c.plat] = porPlat[c.plat] || new Set()); (c.tCont||[]).forEach(t=>{ if(t!=="falta") porPlat[c.plat].add(t); }); });
+  const mezcla = Object.entries(porPlat).filter(([,set])=>set.size>1);
+  if(mezcla.length){
+    cab += mezcla.map(([plat,set])=>`<div class="lq-meth" style="border-color:var(--cobre)">◑ En <b>${escAttr(plat)}</b>, <code>utm_content</code> no significa lo mismo en todas las campañas: unas mandan ${escAttr([...set].join(" y otras "))}. El reporte cruza ese valor contra la estructura de la cuenta y acierta la mayoría de las veces, pero mientras el parámetro tenga dos significados el desglose "por anuncio" mezcla anuncios con conjuntos. Lo correcto es elegir uno para toda la cuenta.</div>`).join("");
+  }
+  const fila = (c)=>{
+    const ok = !c.fallas.length;
+    return `<tr>
+      <td class="lft celda-fuerte">${escAttr(c.camp||"(sin nombre)")}<div class="lq-sub">${escAttr(c.plat)}${c.cid?" · id "+escAttr(c.cid):""} · ${c.ads} anuncio${c.ads===1?"":"s"}</div></td>
+      <td>${c.inv?fmtMoney(c.inv):"—"}</td>
+      <td>${c.res||"—"}</td>
+      <td>${c.leads||"0"}</td>
+      <td class="lft">${escAttr((c.tCamp||[]).join(", ")||"—")}</td>
+      <td class="lft">${escAttr((c.tCont||[]).join(", ")||"—")}</td>
+      <td class="lft" style="${ok?"color:var(--verde-ok-tx)":""}">${ok?"✓ Bien etiquetada" : c.fallas.map(f=>`<div>⚠ ${escAttr(f)}</div>`).join("")}</td>
+    </tr>`;
+  };
+  return `<h3 class="diag-h">Etiquetado UTM por campaña</h3>
+    <p class="hint pegada">Leído de las plataformas, no capturado a mano: <b>url_tags</b> de cada anuncio en Meta y <b>sufijo de URL final</b> + <b>plantilla de tracking</b> en Google. "Leads CRM" son los contactos de GoHighLevel cuyo utm_campaign empata con esta campaña.</p>
+    ${cab}
+    <div class="table-scroll mb-sec"><table class="cons">
+      <tr><th class="lft">Campaña</th><th>Inversión</th><th>Result. plat.</th><th>Leads CRM</th><th class="lft">utm_campaign manda</th><th class="lft">utm_content manda</th><th class="lft">Qué hay que arreglar</th></tr>
+      ${u.camps.map(fila).join("")}
+    </table></div>`;
+}
+
 function diagSeccionCuentas(){
   const c = diagState.cuentas;
   if(!c) return "";
@@ -6784,14 +7158,14 @@ function renderDiag(){
   // primero no consulta nada y la segunda se alimenta de la sincronización de Calidad de
   // Leads, que es otra. Esconderlas detrás del botón las volvía invisibles.
   if(!diagState.pruebas){
-    host.innerHTML = diagSeccionGlosario() + diagSeccionCanales()
+    host.innerHTML = diagSeccionGlosario() + diagSeccionCanales() + diagSeccionUtm()
       + `<div class="empty-rep">Pulsa <b>Probar conexiones</b> para revisar los permisos del token y leer la configuración del CRM.</div>`;
     return;
   }
   host.innerHTML = diagSeccionGlosario() + diagSeccionCanales()
                  + diagSeccionPermisos() + diagSeccionMensajes() + diagSeccionCampos()
-                 + diagSeccionPipelines() + diagSeccionAtribucion() + diagSeccionCuentas()
-                 + diagSeccionHorario() + diagSeccionValores();
+                 + diagSeccionPipelines() + diagSeccionAtribucion() + diagSeccionUtm()
+                 + diagSeccionCuentas() + diagSeccionHorario() + diagSeccionValores();
 }
 
 /* --- Capturado a mano contra lo que el CRM sabe solo ----------------------------------
