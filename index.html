@@ -983,16 +983,18 @@ const BROKERS_SECTIONS = [
     {l:"Brokers activos comercialmente", target:0.25, num:"brokers_activos", den:"total_brokers"},
   ]},
   { title:"Pipeline e ingresos", fields:[
-    {k:"leads_registrados", l:"Leads registrados por brokers", meta:30},
-    {k:"zooms_clientes",    l:"Zooms con clientes", meta:8},
-    {k:"tours_clientes",    l:"Tours con clientes", meta:8},
-    {k:"opp_brokers",       l:"OPP por brokers", meta:13},
-    {k:"opp_zooms",         l:"OPP de zooms", meta:null},
-    {k:"opp_tours",         l:"OPP de tours", meta:null},
-    {k:"opp_14dias",        l:"OPP >14 días por brokers", meta:null},
-    {k:"apartados_brokers", l:"Apartados por brokers", meta:null},
-    {k:"won_brokers",       l:"WON por brokers", meta:4},
-    {k:"ingresos",          l:"Ingresos", meta:null, money:true},
+    {k:"leads_registrados",    l:"Leads registrados por brokers", meta:30},
+    {k:"leads_descalificados", l:"Leads descalificados", meta:null},
+    {k:"zooms_clientes",       l:"Zooms con clientes", meta:8},
+    {k:"tours_clientes",       l:"Tours con clientes", meta:8},
+    {k:"opp_brokers",          l:"OPP por brokers", meta:13},
+    {k:"opp_zooms",            l:"OPP de zooms", meta:null},
+    {k:"opp_tours",            l:"OPP de tours", meta:null},
+    {k:"opp_14dias",           l:"OPP >14 días por brokers", meta:null},
+    {k:"opp_activas",          l:"OPP activas", meta:null},
+    {k:"apartados_brokers",    l:"Apartados por brokers", meta:null},
+    {k:"won_brokers",          l:"WON por brokers", meta:4},
+    {k:"ingresos",             l:"Ingresos", meta:null, money:true},
   ], conv:[
     {l:"Presentaciones realizadas → OPP", target:0.15, num:"opp_brokers", den:"presentaciones_totales"},
     {l:"OPP → WON", target:0.30, num:"won_brokers", den:"opp_brokers"},
@@ -1054,8 +1056,9 @@ async function saveAdvisors(){ await sSet("selvadentro:asesores", ADVISOR_LIST);
 
 const PAID_SECTIONS = [
   { title:"Leads", fields:[
-    {k:"leads",          l:"Leads recibidos", meta:null},
-    {k:"leads_contacto", l:"Leads con contacto establecido", meta:null},
+    {k:"leads",                l:"Leads recibidos", meta:null},
+    {k:"leads_contacto",       l:"Leads con contacto establecido", meta:null},
+    {k:"leads_descalificados", l:"Leads descalificados", meta:null},
   ]},
   { title:"Calificación por temperatura", fields:[
     {k:"leads_frios",     l:"Leads fríos", meta:null},
@@ -1087,6 +1090,7 @@ const PAID_SECTIONS = [
     {k:"opp_tours",     l:"OPP de tours", meta:null},
     {k:"opp_next_step", l:"OPP con next step + fecha", meta:null},
     {k:"opp_14dias",    l:"OPP >14 días", meta:null},
+    {k:"opp_activas",   l:"OPP activas", meta:null},
   ], conv:[
     {l:"Zoom → OPP", target:0.15, num:"opp_zooms", den:"zooms_realizados"},
     {l:"Tour → OPP", target:0.20, num:"opp_tours", den:"tours_realizados"},
@@ -1137,8 +1141,9 @@ const REFERIDOS_SECTIONS = [
     {l:"Capacitación → Referidores inscritos", target:0.90, num:"referidores_inscritos", den:"capacitacion_completada"},
   ]},
   { title:"Leads", fields:[
-    {k:"leads",          l:"Leads por referidos", meta:null},
-    {k:"leads_contacto", l:"Leads con contacto", meta:null},
+    {k:"leads",                l:"Leads por referidos", meta:null},
+    {k:"leads_contacto",       l:"Leads con contacto", meta:null},
+    {k:"leads_descalificados", l:"Leads descalificados", meta:null},
   ]},
   { title:"Calificación por temperatura", fields:[
     {k:"leads_frios",     l:"Leads fríos", meta:null},
@@ -1160,6 +1165,7 @@ const REFERIDOS_SECTIONS = [
     {k:"opp_tours",     l:"OPP de tours", meta:null},
     {k:"opp_next_step", l:"OPP con next step + fecha", meta:null},
     {k:"opp_14dias",    l:"OPP >14 días", meta:null},
+    {k:"opp_activas",   l:"OPP activas", meta:null},
   ], conv:[
     {l:"Zooms → OPP", target:0.40, num:"opp_total", den:"zooms_realizados"},
   ]},
@@ -1172,8 +1178,9 @@ const REFERIDOS_SECTIONS = [
 
 const PD_LEADS_SECTIONS = [
   { title:"Leads", fields:[
-    {k:"leads",          l:"Leads", meta:null},
-    {k:"leads_contacto", l:"Leads contactados", meta:null},
+    {k:"leads",                l:"Leads", meta:null},
+    {k:"leads_contacto",       l:"Leads contactados", meta:null},
+    {k:"leads_descalificados", l:"Leads descalificados", meta:null},
   ]},
   { title:"Calificación por temperatura", fields:[
     {k:"leads_frios",     l:"Leads fríos", meta:null},
@@ -1197,6 +1204,7 @@ const PD_LEADS_SECTIONS = [
     {k:"opp_tours",     l:"OPP de tours", meta:null},
     {k:"opp_next_step", l:"OPP con next step + fecha", meta:null},
     {k:"opp_14dias",    l:"OPP >14 días", meta:null},
+    {k:"opp_activas",   l:"OPP activas", meta:null},
   ], conv:[
     {l:"Zooms → OPP", target:0.20, num:"opp_zooms", den:"zooms_realizados"},
     {l:"Tour → OPP", target:0.40, num:"opp_tours", den:"tours_realizados"},
@@ -1219,10 +1227,11 @@ const PD_LEADS_SEED = [
 
 const PD_BROKERS_SECTIONS = [
   { title:"Actividad con brokers", fields:[
-    {k:"eventos_asistidos", l:"Eventos asistidos", meta:null},
-    {k:"brokers_firmados",  l:"Brokers firmados", meta:null},
-    {k:"brokers_activos",   l:"Brokers activos", meta:null},
-    {k:"leads_brokers",     l:"Leads por brokers", meta:null},
+    {k:"eventos_asistidos",    l:"Eventos asistidos", meta:null},
+    {k:"brokers_firmados",     l:"Brokers firmados", meta:null},
+    {k:"brokers_activos",      l:"Brokers activos", meta:null},
+    {k:"leads_brokers",        l:"Leads por brokers", meta:null},
+    {k:"leads_descalificados", l:"Leads descalificados", meta:null},
   ]},
   { title:"Presentaciones", fields:[
     {k:"pres_broker_agendadas",  l:"Presentaciones con broker agendadas", meta:null},
@@ -1245,6 +1254,7 @@ const PD_BROKERS_SECTIONS = [
     {k:"opp_tours",     l:"OPP de tours", meta:null},
     {k:"opp_next_step", l:"OPP con next step + fecha", meta:null},
     {k:"opp_14dias",    l:"OPP >14 días", meta:null},
+    {k:"opp_activas",   l:"OPP activas", meta:null},
   ]},
   { title:"Cierre", fields:[
     {k:"apartados", l:"Apartados", meta:null},
@@ -1265,8 +1275,9 @@ const PD_BROKERS_SEED = [
 
 const SEMINARIOS_SECTIONS = [
   { title:"Leads", fields:[
-    {k:"leads",          l:"Leads", meta:null},
-    {k:"leads_contacto", l:"Leads con contacto", meta:null},
+    {k:"leads",                l:"Leads", meta:null},
+    {k:"leads_contacto",       l:"Leads con contacto", meta:null},
+    {k:"leads_descalificados", l:"Leads descalificados", meta:null},
   ]},
   { title:"Calificación por temperatura", fields:[
     {k:"leads_frios",     l:"Leads fríos", meta:null},
@@ -1302,6 +1313,7 @@ const SEMINARIOS_SECTIONS = [
     {k:"opp_externas",  l:"OPP externas", meta:null},
     {k:"opp_next_step", l:"OPP con next step + fecha", meta:null},
     {k:"opp_14dias",    l:"OPP >14 días", meta:null},
+    {k:"opp_activas",   l:"OPP activas", meta:null},
   ]},
   { title:"Cierre", fields:[
     {k:"apartados", l:"Apartados", meta:null},
@@ -1352,6 +1364,7 @@ const RP_VIP_SECTIONS = [
     {k:"embajadores_capacitados",  l:"Embajadores capacitados", meta:null},
     {k:"embajadores_activos",      l:"Embajadores activos (60 días)", meta:null},
     {k:"leads_embajadores",        l:"Leads por embajadores", meta:null},
+    {k:"leads_descalificados",     l:"Leads descalificados", meta:null},
   ]},
   { title:"Calificación por temperatura", fields:[
     {k:"leads_frios",     l:"Leads fríos", meta:null},
@@ -1370,6 +1383,7 @@ const RP_VIP_SECTIONS = [
     {k:"opp_tours",     l:"OPP de tours", meta:null},
     {k:"opp_next_step", l:"OPP con next step + fecha", meta:null},
     {k:"opp_14dias",    l:"OPP >14 días", meta:null},
+    {k:"opp_activas",   l:"OPP activas", meta:null},
   ]},
   { title:"Cierre", fields:[
     {k:"apartados", l:"Apartados", meta:null},
@@ -1400,6 +1414,22 @@ const CHANNELS = {
   pd_brokers:    { name:"Prospección directa brokers", sections:PD_BROKERS_SECTIONS, advisors:true, seed:PD_BROKERS_SEED },
   rp_vip:        { name:"RP VIP",                       sections:RP_VIP_SECTIONS, seed:RP_VIP_SEED },
 };
+
+/* El orden con el que están escritos los vectores `v` de cada semilla. NO se puede deducir
+   del formulario: seedRec los mapeaba por posición contra los campos vigentes, así que
+   insertar un campo a media lista corría cada valor uno y dejaba mal TODAS las semanas
+   sembradas de ese canal, sin nada que lo delatara. Aquí queda congelado el orden con el
+   que se escribieron. Un canal sin semillas no lleva entrada: el respaldo es el orden
+   vigente, que es justo contra el que se escribiría una semilla nueva. Si algún día se
+   reordenan los campos de un canal que YA tiene semillas, esta lista no se toca. */
+const SEED_ORDER = {
+  brokers: ["brokers_contactados","brokers_presentados","brokers_firmados","total_brokers","zooms_realizados","presentaciones_fisicas","recorridos","tours_grupales","presentaciones_totales","eventos_asistidos","eventos_realizados","publicaciones_grupos","brokers_grupos_mes_pasado","brokers_nuevos_grupos","total_brokers_grupo","brokers_interactuan","brokers_activos","brokers_3leads","reuniones_1a1","leads_registrados","zooms_clientes","tours_clientes","opp_brokers","opp_zooms","opp_tours","opp_14dias","apartados_brokers","won_brokers","ingresos"],
+  paid_organico: ["leads","leads_contacto","leads_frios","leads_templados","leads_calientes","web_registrados","web_confirmados","web_asistidos","seg_post_webinar","zooms_agendados","zooms_realizados","tours_agendados","tours_realizados","opp_total","opp_zooms","opp_tours","opp_next_step","opp_14dias","apartados","won","ingresos"],
+  pd_leads: ["leads","leads_contacto","leads_frios","leads_templados","leads_calientes","zooms_agendados","zooms_realizados","tours_agendados","tours_realizados","conversaciones_iniciadas","networking","publicaciones_marca","opp_total","opp_zooms","opp_tours","opp_next_step","opp_14dias","apartados","won","ingresos"],
+  pd_brokers: ["eventos_asistidos","brokers_firmados","brokers_activos","leads_brokers","pres_broker_agendadas","pres_broker_realizadas","pres_cliente_agendadas","pres_cliente_realizadas","zooms_agendados","zooms_realizados","tours_agendados","tours_realizados","opp_total","opp_zooms","opp_tours","opp_next_step","opp_14dias","apartados","won","ingresos"],
+  seminarios: ["leads","leads_contacto","leads_frios","leads_templados","leads_calientes","sem_registrados","sem_confirmados","sem_asistidos","seg_post_seminario","zooms_agendados","zooms_realizados","tours_agendados","tours_realizados","formularios_interes","uno_agendados","uno_realizados","uno_externos","opp_total","opp_zooms","opp_tours","opp_1a1","opp_externas","opp_next_step","opp_14dias","apartados","won","ingresos","ventas_30","ventas_60","ventas_90"],
+  rp_vip: ["prospectos_identificados","reuniones_realizadas","embajadores_incorporados","embajadores_capacitados","embajadores_activos","leads_embajadores","leads_frios","leads_templados","leads_calientes","zooms_agendados","zooms_realizados","tours_agendados","tours_realizados","opp_total","opp_zooms","opp_tours","opp_next_step","opp_14dias","apartados","won","ingresos"],
+};
 let CH = "brokers";
 const sections  = () => CHANNELS[CH].sections;
 const allFields = () => (sections()||[]).flatMap(s=>s.fields);
@@ -1424,7 +1454,9 @@ function handleAuthExpired(){
   if(AUTH_EXPIRED_HANDLED) return; AUTH_EXPIRED_HANDLED = true;
   // saveWeek le dice al usuario "lo capturado sigue en pantalla, si recargas se pierde" —
   // y esto recargaba. Ahora el borrador se guarda antes, y al volver a entrar se ofrece.
-  try{ if(typeof guardarBorrador==="function"){ ingSucio = true; guardarBorrador(); } }catch(e){}
+  // Solo si hay algo escrito: forzar ingSucio con el formulario vacío pisaba (clave única
+  // BORRADOR_KEY) un borrador real de otra sesión.
+  try{ if(typeof guardarBorrador==="function" && (ingSucio || ingTieneAlgo())){ ingSucio = true; guardarBorrador(); } }catch(e){}
   setAuthToken(null); writeSession(null); location.reload();
 }
 async function kvCall(body){
@@ -1515,7 +1547,9 @@ const STORED_KEYS = new Set();
 async function primeCache(){
   await Promise.all(Object.keys(CHANNELS).map(async chKey => {
     const p=chPrefix(chKey);
-    let rows=[]; try{ rows = await STORE.dump(p); }catch(e){ return; }
+    // Un dump fallido dejaba el canal mostrando SOLO la semilla sin ningún aviso:
+    // se marca la lectura como fallida para que salga la franja roja, igual que sGet.
+    let rows=[]; try{ rows = await STORE.dump(p); }catch(e){ LECTURA_FALLIDA = true; return; }
     for(const row of rows){ try{ RECCACHE[row.k]=JSON.parse(row.v); STORED_KEYS.add(row.k); }catch(e){} }
   }));
 }
@@ -1560,8 +1594,8 @@ function semanaISOTulum(iso){
 /* ===================== INGRESO FORM ===================== */
 function renderIngresoForm(){
   document.getElementById("ing-sections").innerHTML = sections().map(s=>`
-    <div class="section"><h3><span class="dot"></span>${s.title}</h3><div class="fields">
-      ${s.fields.map(f=>`<div class="frow"><label>${f.l}</label>
+    <div class="section"><h3><span class="dot"></span>${escAttr(s.title)}</h3><div class="fields">
+      ${s.fields.map(f=>`<div class="frow"><label>${escAttr(f.l)}</label>
         <input type="text" inputmode="decimal" id="in_${f.k}" placeholder="0" data-money="${f.money?1:0}"></div>`).join("")}
     </div></div>`).join("");
   document.querySelectorAll("#ing-sections input").forEach(el=>{
@@ -1572,7 +1606,10 @@ function renderIngresoForm(){
 function currentWeekId(){ const d=parseD(document.getElementById("ing-inicio").value); return d?isoWeekId(d):null; }
 // Ventana de edición para users no-admin: semana ISO de HOY + semana ISO anterior.
 function allowedEditWeeks(){
-  const now=new Date();
+  // Hora Tulum, no UTC: el domingo de 19:00 a 24:00 (hora local) UTC ya va en lunes,
+  // y con el reloj UTC la ventana editable saltaba a {semana próxima, actual} dejando
+  // fuera la semana anterior, que aquí todavía es válida.
+  const now=new Date(Date.now()-LQ_TZ_MS);
   const today=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()));
   const prev=new Date(today.getTime()-7*86400000);
   return new Set([isoWeekId(today), isoWeekId(prev)]);
@@ -1645,6 +1682,11 @@ function ingRevisarCoherencia(form){
   if(leads!=null && opp!=null && opp>leads){ problemas.push(`OPP (${opp}) es mayor que Leads (${leads})`); marca("opp","leads"); }
   if(opp!=null && won!=null && won>opp){     problemas.push(`WON (${won}) es mayor que OPP (${opp})`); marca("won","opp"); }
   if(ap!=null && won!=null && won>ap && ap>0){ problemas.push(`WON (${won}) es mayor que Apartados (${ap})`); marca("won","apartados"); }
+  // Descalificados no pasa por METRIC_MAP: la clave es la misma en los siete canales.
+  // OPP activas NO se compara contra nada: es un saldo vivo del pipeline, no un flujo de
+  // la semana, y legítimamente puede ser mayor que las OPP nuevas o que los leads.
+  const desc = Number(v.leads_descalificados||0);
+  if(leads!=null && desc>leads){ problemas.push(`Leads descalificados (${desc}) es mayor que Leads (${leads})`); campos.add("leads_descalificados"); marca("leads"); }
   Object.entries(v).forEach(([k,val])=>{ if(Number(val)<0){ problemas.push(`hay un valor negativo en "${etiquetaCampo(k)}"`); campos.add(k); } });
   return { mensaje: problemas.length ? "· " + problemas.join("\n· ") : "", campos:[...campos] };
 }
@@ -1677,7 +1719,10 @@ function ingVigilarCampo(el){
   } else if(!malo && prev) prev.remove();
 }
 async function ingSobrescribirOk(previo, dv, w){
-  const conDatos = Object.values((previo && previo.valores) || {}).some(v=>Number(v)!==0);
+  // Un registro cuyo único contenido son notas/aprendizajes/cambios también son datos:
+  // antes se reemplazaba sin confirmación por mirar solo los valores numéricos.
+  const conDatos = Object.values((previo && previo.valores) || {}).some(v=>Number(v)!==0)
+    || !!(previo && (previo.notas || previo.aprendizajes || previo.cambios));
   if(!conDatos) return true;
   const quien = dv.length ? " · " + dv.join(" · ") : "";
   return confirmar(`Ya hay datos guardados para ${w}${quien}. Si guardas ahora se reemplazan por lo que hay en pantalla.\n\n`
@@ -1745,9 +1790,12 @@ async function saveWeek(){
   if(revision.mensaje && !await confirmar(revision.mensaje, { titulo:"Revisa estos números", ok:"Guardar así" })) return;
   const previo = recGet(k);
   if(previo && !await ingSobrescribirOk(previo, dv, w)) return;
-  recSet(k, form);
   try{
     await sSet(k, form);
+    // El cache local se actualiza DESPUÉS del guardado exitoso: escribirlo antes dejaba
+    // valores no persistidos contando en Reporte/Dirección durante toda la sesión si el
+    // servidor fallaba.
+    recSet(k, form);
   }catch(e){
     // El toast decía "Guardado ✓" aunque el backend hubiera fallado. Ahora se dice.
     avisar("NO se guardó en el servidor.\n\n"+(e.message||e)+"\n\nLo capturado sigue en pantalla: revisa tu conexión y vuelve a pulsar Guardar. Si recargas la página ahora, se pierde.", { titulo:"No se guardó" });
@@ -1762,12 +1810,14 @@ function renderChips(){
   const keys=recList(recPrefix()); const cont=document.getElementById("chips");
   if(!keys.length){ cont.innerHTML='<span class="chip empty">Aún no hay registros guardados</span>'; return; }
   const items=keys.map(k=>{ const p=parseRecKey(k); return {k,w:p.w,dv:p.dimVals}; }).sort((a,b)=> a.w<b.w?-1:a.w>b.w?1:(a.dv.join()<b.dv.join()?-1:1));
-  cont.innerHTML=items.map(it=>`<span class="chip" data-k="${it.k}">${it.w}${it.dv.length?(" · "+it.dv.join(" · ")):""}</span>`).join("");
+  cont.innerHTML=items.map(it=>`<span class="chip" data-k="${escAttr(it.k)}">${escAttr(it.w)}${it.dv.length?(" · "+escAttr(it.dv.join(" · "))):""}</span>`).join("");
   cont.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{ const rec=recGet(c.dataset.k); if(rec){ fillForm(rec); toast("Registro cargado"); window.scrollTo({top:0,behavior:"smooth"}); } });
 }
 
 /* ===================== SEED ===================== */
-function seedRec(chKey,s){ const ch=CHANNELS[chKey]; const flds=ch.sections.flatMap(x=>x.fields); const valores={}; flds.forEach((f,i)=>valores[f.k]=s.v[i]); const dimVals=[]; if(ch.advisors) dimVals.push(s.asesor||""); if(ch.cities) dimVals.push(s.ciudad||""); return {semana:s.w,inicio:s.ini,fin:s.fin,dimVals,valores,notas:s.n||"",aprendizajes:s.a||"",cambios:s.c||""}; }
+function seedRec(chKey,s){ const ch=CHANNELS[chKey]; const orden=SEED_ORDER[chKey]||ch.sections.flatMap(x=>x.fields).map(f=>f.k);
+  if(s.v && s.v.length!==orden.length) console.warn(`Semilla de ${chKey}: ${s.v.length} valores para ${orden.length} campos — revisa SEED_ORDER.`);
+  const valores={}; orden.forEach((k,i)=>valores[k]=s.v[i]); const dimVals=[]; if(ch.advisors) dimVals.push(s.asesor||""); if(ch.cities) dimVals.push(s.ciudad||""); return {semana:s.w,inicio:s.ini,fin:s.fin,dimVals,valores,notas:s.n||"",aprendizajes:s.a||"",cambios:s.c||""}; }
 let SEEDMAP = {};
 function buildSeedMap(){
   const out={};
@@ -1795,6 +1845,11 @@ async function persistSeeds(){
 }
 
 /* ===================== REPORTE ===================== */
+// Prorrateo de meta mensual a periodo. Asumir 4 semanas infla la meta ~25% en rangos
+// largos (un mes son 4.348 semanas en promedio = 365.25/7/12). GLOBAL: la usan
+// generarReporte, renderResultados y renderDirCom — declararla dentro de una función
+// dejaba a las otras dos con un ReferenceError que rompía Dirección entera.
+const SEMANAS_MES = 4.348;
 function cartesian(arrs){ return arrs.reduce((acc,arr)=>acc.flatMap(a=>arr.map(x=>[...a,x])),[[]]); }
 async function generarReporte(){
   const out=document.getElementById("rep-output");
@@ -1806,32 +1861,42 @@ async function generarReporte(){
   const weekSet=weeksInRange(a,b); const nWeeks=weekSet.size; document.getElementById("rep-semanas").textContent=nWeeks;
 
   const dims=dimsOf();
-  const selected = dims.map((d,i)=>{ const v=document.getElementById("rep-dim-"+i).value; return v==="__todos"? d.values : [v]; });
-  const combos = dims.length? cartesian(selected) : [[]];
+  // "__todos" se resuelve contra las CLAVES GUARDADAS, no contra la lista vigente de
+  // valores de la dimensión: un asesor borrado o renombrado conserva sus registros en el
+  // kv, y armar los combos solo con los nombres actuales dejaba esas semanas fuera de la
+  // suma — mientras Dirección (que escanea claves) sí las contaba, así que dos pantallas
+  // daban totales distintos para el mismo rango.
+  const selDim = dims.map((d,i)=>document.getElementById("rep-dim-"+i).value);
   const flds=allFields(); const sum={}; flds.forEach(f=>sum[f.k]=0); const textos=[];
-  for(const w of [...weekSet].sort()){
-    for(const combo of combos){
-      const rec=recGet(recKey(w,combo));
-      if(rec){ if(rec.valores) flds.forEach(f=>sum[f.k]+=Number(rec.valores[f.k]||0)); if(rec.notas||rec.aprendizajes||rec.cambios) textos.push({semana:w,dims:combo.join(" · "),inicio:rec.inicio,fin:rec.fin,notas:rec.notas,aprendizajes:rec.aprendizajes,cambios:rec.cambios}); }
+  const recs=[];
+  if(dims.length){
+    for(const k of recList(recPrefix())){
+      const p=parseRecKey(k);
+      if(!weekSet.has(p.w)) continue;
+      if(!selDim.every((v,i)=>v==="__todos" || p.dimVals[i]===v)) continue;
+      const rec=recGet(k); if(rec) recs.push({w:p.w, combo:p.dimVals, rec});
     }
+  } else {
+    for(const w of weekSet){ const rec=recGet(recKey(w,[])); if(rec) recs.push({w, combo:[], rec}); }
+  }
+  recs.sort((a,b)=> a.w<b.w?-1:a.w>b.w?1:(a.combo.join()<b.combo.join()?-1:1));
+  for(const {w, combo, rec} of recs){
+    if(rec.valores) flds.forEach(f=>sum[f.k]+=Number(rec.valores[f.k]||0));
+    if(rec.notas||rec.aprendizajes||rec.cambios) textos.push({semana:w,dims:combo.join(" · "),inicio:rec.inicio,fin:rec.fin,notas:rec.notas,aprendizajes:rec.aprendizajes,cambios:rec.cambios});
   }
 
   const hasMetas=flds.some(f=>f.meta!=null);
-  // Prorrateo de meta mensual a periodo. Asumir 4 semanas infla la meta ~25% en rangos
-// largos (un mes son 4.345 semanas en promedio), lo que ponía el semáforo en rojo
-// antes de tiempo. SEMANAS_MES = 365.25/7/12.
-const SEMANAS_MES = 4.348;
-const metaPeriodo=meta=>meta==null?null:(meta/SEMANAS_MES*nWeeks);
+  const metaPeriodo=meta=>meta==null?null:(meta/SEMANAS_MES*nWeeks);
   const cumpCell=(val,meta)=>{ const mp=metaPeriodo(meta); if(mp==null) return '<td></td><td></td><td></td>'; if(mp===0) return `<td>${meta}</td><td>0</td><td><span class="cump no">Sin Datos</span></td>`; const pct=val/mp,cls=pct>=1?"ok":"no"; return `<td>${meta}</td><td>${(+mp.toFixed(2))}</td><td><span class="cump ${cls}">${fmtPct(pct)}</span></td>`; };
   const getv=spec=>Array.isArray(spec)?spec.reduce((acc,k)=>acc+(sum[k]||0),0):(sum[spec]||0);
   const convVal=c=>{ const den=getv(c.den),num=getv(c.num); if(!den) return `<span class="cump no">Sin Datos</span>`; const pct=num/den,cls=pct>=c.target?"ok":"no"; return `<span class="cump ${cls}">${fmtPct(pct)}</span>`; };
 
   const thMeta = hasMetas ? '<th>Meta mensual</th><th>Meta periodo</th><th>Cumplimiento</th>' : '';
   const sectionsHtml=sections().map(s=>`
-    <div class="rep-section"><h3>${s.title}</h3><div class="layout">
+    <div class="rep-section"><h3>${escAttr(s.title)}</h3><div class="layout">
       <div class="metrics"><table class="rep">
         <thead><tr><th class="lft">Métrica</th><th>Valor</th>${thMeta}</tr></thead>
-        <tbody>${s.fields.map(f=>`<tr><td class="lft">${f.l}</td><td class="val">${f.money?fmtMoney(sum[f.k]):sum[f.k]}</td>${hasMetas?cumpCell(sum[f.k],f.meta):''}</tr>`).join("")}</tbody>
+        <tbody>${s.fields.map(f=>`<tr><td class="lft">${escAttr(f.l)}</td><td class="val">${f.money?fmtMoney(sum[f.k]):sum[f.k]}</td>${hasMetas?cumpCell(sum[f.k],f.meta):''}</tr>`).join("")}</tbody>
       </table></div>
       ${s.conv?`<div class="conv">${s.conv.map(c=>`<div class="citem"><div class="clabel"><span>${c.l}</span><span class="ctarget">meta ${fmtPct(c.target)}</span></div><div class="cval">${convVal(c)}</div></div>`).join("")}</div>`:""}
     </div></div>`).join("");
@@ -1840,14 +1905,15 @@ const metaPeriodo=meta=>meta==null?null:(meta/SEMANAS_MES*nWeeks);
   const notasHtml = textos.length ? textos.map(t=>{
       const rango=(t.inicio&&t.fin)?` · ${dm(t.inicio)} → ${dm(t.fin)}`:"";
       const parts=[];
-      if(t.notas) parts.push(`<b>Notas:</b> ${t.notas}`);
-      if(t.aprendizajes) parts.push(`<b>Aprendizajes:</b> ${t.aprendizajes}`);
-      if(t.cambios) parts.push(`<b>Cambios:</b> ${t.cambios}`);
-      return `<div style="margin-bottom:15px"><div style="font-weight:600;color:var(--olivo);margin-bottom:3px">${t.semana}${t.dims?(" · "+t.dims):""}${rango}</div>${parts.join("<br>")}</div>`;
+      // Texto libre capturado por usuarios: SIEMPRE escapado antes de innerHTML.
+      if(t.notas) parts.push(`<b>Notas:</b> ${escAttr(t.notas)}`);
+      if(t.aprendizajes) parts.push(`<b>Aprendizajes:</b> ${escAttr(t.aprendizajes)}`);
+      if(t.cambios) parts.push(`<b>Cambios:</b> ${escAttr(t.cambios)}`);
+      return `<div style="margin-bottom:15px"><div style="font-weight:600;color:var(--olivo);margin-bottom:3px">${escAttr(t.semana)}${t.dims?(" · "+escAttr(t.dims)):""}${rango}</div>${parts.join("<br>")}</div>`;
     }).join("") : '<em>Sin notas, aprendizajes ni cambios registrados en el periodo.</em>';
 
-  const dimLine = dims.length ? " · " + dims.map((d,i)=>{ const v=document.getElementById("rep-dim-"+i).value; return v==="__todos"?("Todos: "+d.label.toLowerCase()):v; }).join(" · ") : "";
-  const respTxt = LAST_RESP[CH] ? ` · Responsable: ${LAST_RESP[CH]}` : "";
+  const dimLine = dims.length ? " · " + escAttr(dims.map((d,i)=>{ const v=document.getElementById("rep-dim-"+i).value; return v==="__todos"?("Todos: "+d.label.toLowerCase()):v; }).join(" · ")) : "";
+  const respTxt = LAST_RESP[CH] ? ` · Responsable: ${escAttr(LAST_RESP[CH])}` : "";
   out.innerHTML=`
     <div class="rep-head"><div class="ttl">Reporte · ${CHANNELS[CH].name}</div>
       <div class="meta-line">${fmtDate(a)} → ${fmtDate(b)} · ${nWeeks} semana(s)${dimLine}${respTxt}</div></div>
@@ -2538,6 +2604,7 @@ function bannerIncompleto(fallos, queRehacer){
 
 async function crmFn(body){
   const r = await fetch("/.netlify/functions/ghl-report", { method:"POST", headers:{"Content-Type":"application/json", "Authorization":"Bearer "+AUTH_TOKEN}, body:JSON.stringify(body) });
+  if(r.status===401){ handleAuthExpired(); throw new Error("sesión expirada"); }
   const d = await r.json().catch(()=>({}));
   if(!r.ok) throw new Error(d.error || ("HTTP "+r.status));
   return d;
@@ -2561,7 +2628,9 @@ function buildCrmAgg(boot, opps){
 function crmWeeks(){
   const set = new Set();
   (crmState.agg?.pipes||[]).forEach(p=>Object.keys(p.weekly).forEach(w=>set.add(w)));
-  set.add(isoWeekId(new Date()));
+  // Hora Tulum: con new Date() a secas, el domingo por la noche (UTC ya en lunes) se
+  // agregaba la semana que aún no empieza aquí y quedaba como default con puros ceros.
+  set.add(isoWeekId(new Date(Date.now()-LQ_TZ_MS)));
   return [...set].sort();
 }
 function crmPopulateWeeks(){
@@ -2623,7 +2692,7 @@ function crmRender(){
           <span>${(p.status.open||0).toLocaleString()} abiertas</span>
           ${cr?`<span>+${cr.toLocaleString()} nuevas en el rango</span>`:""}
           ${won?`<span>${won} WON cerrados en el rango</span>`:""}
-          ${p.status.won?`<span>${p.status.won} WON hist.</span>`:""}
+          ${p.status.won?`<span>${p.status.won} WON en la ventana</span>`:""}
         </span>
       </h3>
       <div class="crm-stages">${rows || '<div class="empty-rep" style="padding:18px">Sin oportunidades abiertas.</div>'}</div>
@@ -2631,13 +2700,18 @@ function crmRender(){
   }
 
   const kpi = (v,l)=>`<div class="crm-kpi"><div class="k-val">${v}</div><div class="k-lbl">${l}</div></div>`;
+  // La sincronización baja solo oportunidades CREADAS en las últimas CRM_SYNC_WEEKS
+  // semanas: las etiquetas lo dicen, porque "totales del CRM" y "abiertas hoy" sin esa
+  // acotación se leían como el CRM completo — y una venta cerrada hoy de una oportunidad
+  // más vieja que la ventana no aparece en los WON del rango.
   const kpis = `<div class="crm-kpis">
     ${kpi(crTot.toLocaleString(),"Oportunidades nuevas en el rango")}
     ${kpi(wonTot.toLocaleString(),"WON cerrados en el rango")}
     ${kpi(fmtMoney(wvTot),"Valor de los WON cerrados")}
-    ${kpi(openTot.toLocaleString(),"Oportunidades abiertas hoy")}
-    ${kpi(agg.total.toLocaleString(),"Oportunidades totales en el CRM")}
-  </div>`;
+    ${kpi(openTot.toLocaleString(),"Abiertas hoy (ventana 18 m)")}
+    ${kpi(agg.total.toLocaleString(),"Oportunidades en la ventana (18 m)")}
+  </div>
+  <p class="hint" style="margin-top:-4px">Ventana de sincronización: oportunidades <b>creadas</b> en las últimas ${CRM_SYNC_WEEKS} semanas (~18 meses). Una venta cerrada hoy de una oportunidad más vieja que la ventana no aparece en estos números.</p>`;
 
   const srcRows = Object.entries(srcTot).sort((a,b)=>b[1]-a[1]).slice(0,14)
     .map(([s,n])=>`<tr><td class="lft">${escAttr(CRM_SRC_LABELS[s]||s)}</td><td class="val">${n.toLocaleString()}</td></tr>`).join("");
@@ -2688,6 +2762,9 @@ async function crmSync(){
     if(crmState.agg){
       crmState.agg.fallos = ["la sincronización más reciente falló (" + (e.message||e) + ")"];
       crmRender();
+      // El aviso viaja DENTRO del agregado compartido (ese es su propósito declarado):
+      // sin persistirlo, quien cargara el cache después leía los datos viejos sin bandera.
+      sSet(CRM_AGG_KEY, crmState.agg).catch(()=>{});
     }
   }finally{
     crmState.syncing=false; restaurarBtn();
@@ -2746,11 +2823,12 @@ function lqWeekBounds(weekId){
   const m = weekId.match(/^(\d{4})-W(\d+)$/); if(!m) return null;
   const mon = dateOfIsoWeek(+m[1], +m[2]), sun = sundayOf(mon);
   const ymd = (d)=>`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}-${String(d.getUTCDate()).padStart(2,"0")}`;
-  return { startISO:`${ymd(mon)}T00:00:00${LQ_TZ}`, endISO:`${ymd(sun)}T23:59:59${LQ_TZ}`, startYMD:ymd(mon), endYMD:ymd(sun) };
+  return { startISO:`${ymd(mon)}T00:00:00${LQ_TZ}`, endISO:`${ymd(sun)}T23:59:59.999${LQ_TZ}`, startYMD:ymd(mon), endYMD:ymd(sun) };
 }
 
 async function lqFn(body){
   const r = await fetch("/.netlify/functions/lead-quality", { method:"POST", headers:{"Content-Type":"application/json", "Authorization":"Bearer "+AUTH_TOKEN}, body:JSON.stringify(body) });
+  if(r.status===401){ handleAuthExpired(); throw new Error("sesión expirada"); }
   const d = await r.json().catch(()=>({}));
   if(!r.ok) throw new Error(d.error ? d.error + (d.detail ? " — "+d.detail : "") : ("HTTP "+r.status));
   return d;
@@ -3345,14 +3423,16 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
       hs: !!(l.src || (l.attr && (l.attr.camp||l.attr.src))),   // fuente identificada
       o: op ? op.o : 0, pr: op ? op.pr : 0, w: op ? op.w : 0, wv: op ? op.v : 0,   // OPP (cotización) / registros de pipeline / WONs / valor
       ov: op ? op.ov : 0, ap: op ? op.ap : {tot:0,sh:0,ns:0},   // valor máximo de oportunidad y citas
-      tags:(l.tags||[]).join(", ").slice(0,140),
+      tags:(l.tags||[]).join(", "),
       pres: F.pres ? (l.cf[F.pres.id]||"") : "",
       hor:  F.hor  ? (l.cf[F.hor.id] ||"") : "",
       ch: cn.ch, chVia: cn.via,          // canal de negocio deducido del CRM (o null)
     };
   }).filter(l=>l.wk);
-  // Calificación automática por reglas (independiente del campo que llena el equipo)
-  leads.forEach(l=>{ const a = lqAutoQualify(l); l.alv = a.lv; l.awhy = a.why.join(" · ").slice(0,180); });
+  // Calificación automática por reglas (independiente del campo que llena el equipo).
+  // Los tags se truncan DESPUÉS de calificar: recortarlos antes podía comerse el tag de
+  // descalificación o de respuesta de un lead con muchos tags y cambiarle el nivel.
+  leads.forEach(l=>{ const a = lqAutoQualify(l); l.alv = a.lv; l.awhy = a.why.join(" · ").slice(0,180); l.tags = l.tags.slice(0,140); });
   return { ts:Date.now(), users:boot.users||{}, califField:F.calif, fuenteField:F.fuente, windsor:!!boot.windsor,
            oppStages: lqOppStageNames(boot.stages, lqOppThresholds(boot.stages)),
            stages: boot.stages||{},
@@ -3875,8 +3955,11 @@ function lqFamiliaData(agg, leads, rangoSet){
 }
 
 function lqComboSection(agg, leadsAll, rango, rangoSet){
-  const plat = lqState.plat || "all";
-  const leads = leadsAll.filter(l=>lqPlatMatch(l, plat));
+  // Sin filtro de plataforma: esta pestaña no muestra el toggle, y heredar el filtro de
+  // la pestaña Calidad filtraba los LEADS pero no la INVERSIÓN (lqFamiliaData suma todo
+  // agg.adw) — el CPL y el "costo por calificado" salían dividiendo dinero de Meta+Google
+  // entre leads de una sola plataforma, sin que nada en pantalla lo dijera.
+  const leads = leadsAll;
   const fams = lqFamiliaData(agg, leads, rangoSet);
   const keys = Object.keys(fams).sort((a,b)=>(fams[b].inv-fams[a].inv) || (fams[b].leads.length-fams[a].leads.length));
   const invT = keys.reduce((a,k)=>a+fams[k].inv,0);
@@ -4003,9 +4086,11 @@ function lqConclusionesSection(){
 const LQ_IA_KEY = "lq:ia:v1:";
 const LQ_IA_TTL = 12*3600e3;          // 12 h: el rango no cambia tanto como para pagar de nuevo
 
-// Devuelve el análisis guardado de este rango si sigue vigente
+// Devuelve el análisis guardado de este rango si sigue vigente. La clave incluye la
+// fuente de calificación (reglas vs campo del CRM): los números difieren entre las dos
+// y un análisis cacheado de una no sirve para la otra.
 async function lqIaCache(rango){
-  const etq = rango.length ? `${rango[0]} → ${rango[rango.length-1]}` : "—";
+  const etq = (rango.length ? `${rango[0]} → ${rango[rango.length-1]}` : "—") + ":" + (lqState.qual||"auto");
   try{
     const c = await sGet(LQ_IA_KEY + etq);
     if(c && c.ts && (Date.now()-c.ts) < LQ_IA_TTL) return c;
@@ -4021,9 +4106,11 @@ async function lqAnalizar(forzar){
       const cache = await lqIaCache(rango);
       if(cache){ lqState.ia = cache; lqRender(); return; }
     }
-    // El cruce vive en la pestaña Reporte Combinado; si aún no se ha visitado, se
-    // calcula aquí para no mandar un payload vacío al análisis.
-    if(!lqState._combo){
+    // El cruce se recalcula SIEMPRE con el rango y la fuente de calificación vigentes.
+    // Antes se reutilizaba lqState._combo si existía, y ese cache podía venir de un
+    // rango anterior: el análisis se etiquetaba con el rango nuevo pero analizaba los
+    // números del viejo, y así se guardaba en el kv compartido para todo el equipo.
+    {
       const agg = lqState.agg;
       const rangoSet = new Set(rango);
       const qual = lqState.qual || "auto";
@@ -4063,8 +4150,8 @@ async function lqAnalizar(forzar){
     const res = await lqFn2("/.netlify/functions/lq-analyze", payload);
     lqState.ia = { ...res, ts: Date.now(), rango: payload.rango };
     // Compartido en el kv: el análisis de un rango se paga UNA vez para todo el equipo,
-    // no una por usuario y por recarga.
-    sSet(LQ_IA_KEY + payload.rango, lqState.ia).catch(()=>{});
+    // no una por usuario y por recarga. Misma clave que lqIaCache (rango + fuente).
+    sSet(LQ_IA_KEY + payload.rango + ":" + (lqState.qual||"auto"), lqState.ia).catch(()=>{});
     lqRender();
   }catch(e){
     toast("No se pudo analizar: "+(e.message||e));
@@ -4073,6 +4160,7 @@ async function lqAnalizar(forzar){
 }
 async function lqFn2(url, body){
   const r = await fetch(url, { method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer "+AUTH_TOKEN}, body:JSON.stringify(body) });
+  if(r.status===401){ handleAuthExpired(); throw new Error("sesión expirada"); }
   const d = await r.json().catch(()=>({}));
   if(!r.ok) throw new Error(d.error ? d.error + (d.detail?" — "+d.detail:"") : ("HTTP "+r.status));
   return d;
@@ -4542,6 +4630,7 @@ const slaState = { built:false, agg:null, syncing:false, asesor:"" };   // aseso
 
 async function slaFn(body){
   const r = await fetch("/.netlify/functions/sla-report", { method:"POST", headers:{"Content-Type":"application/json", "Authorization":"Bearer "+AUTH_TOKEN}, body:JSON.stringify(body) });
+  if(r.status===401){ handleAuthExpired(); throw new Error("sesión expirada"); }
   const d = await r.json().catch(()=>({}));
   if(!r.ok) throw new Error(d.error ? d.error + (d.detail ? " — "+d.detail : "") : ("HTTP "+r.status));
   return d;
@@ -4679,14 +4768,19 @@ function slaScoreAsesor(arr){
   const vals = Object.values(sub).filter(v=>v!=null);
   const global = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
 
-  // Índice de calidad de lead recibida (0-100): pondera SQL Selvadentro 4, SQL 3, CQL 1
-  const q = { sqls:0, sql:0, cql:0, desc:0 };
+  // Índice de calidad de lead recibida (0-100): pondera SQL Selvadentro 4, SQL 3,
+  // MQL 2, CQL 1, Descalificado 0. Antes los MQL no entraban ni al numerador ni al
+  // denominador: un asesor con 40 MQL y 1 CQL sacaba su índice sobre 1 solo lead.
+  // Nuevo/Sin calificar siguen fuera: sin señal no se juzga la calidad.
+  const q = { sqls:0, sql:0, mql:0, cql:0, desc:0 };
   cd.forEach(l=>{ if(q[l.lv]!==undefined) q[l.lv]++; });
-  const qTot = q.sqls+q.sql+q.cql+q.desc;
-  const qIndex = qTot ? (4*q.sqls + 3*q.sql + 1*q.cql)/(4*qTot)*100 : null;
+  const qTot = q.sqls+q.sql+q.mql+q.cql+q.desc;
+  const qIndex = qTot ? (4*q.sqls + 3*q.sql + 2*q.mql + 1*q.cql)/(4*qTot)*100 : null;
 
+  // Tasa de oportunidades: opps creadas en el rango de los CONTACTOS de este asesor,
+  // entre todos sus leads del rango (mismo universo arriba y abajo).
   const opp = arr.reduce((a,l)=>a+(l.opp||0),0);
-  return { N, sub, global, pcts, q, qTot, qIndex, oppRate: pct(opp), opp,
+  return { N, sub, global, pcts, q, qTot, qIndex, oppRate: arr.length ? opp/arr.length*100 : 0, opp,
            small: N < SLA_MIN_N, bkDen, bk, desc, segMedido,
            citas: arr.filter(l=>!l.ad).reduce((a,l)=>a+l.ap.tot,0),
            showed: arr.filter(l=>!l.ad).reduce((a,l)=>a+l.ap.sh,0),
@@ -4791,7 +4885,7 @@ function slaAsesorSection(agg){
   html += `<div class="lq-meth"><b>Rúbrica</b> — cada sub-nota sale del % del criterio contra sus umbrales (≥ para 2 / 3 / 4 / 5):
     ${SLA_DIMS.map(d=>`<br><b>${escAttr(d.label)}:</b> ${d.thr.join(" · ")}%`).join("")}
     <br>Escala: 5 Excelente · 4 Bueno · 3 Adecuado · 2 Necesita mejorar · 1 Crítico. Muestra pequeña: menos de ${SLA_MIN_N} leads (se marca y sale del ranking de normalización).
-    <br><b>Índice de calidad</b> = (SQL Selvadentro×4 + SQL×3 + CQL×1) ÷ (4 × total), de la calificación que trae cada lead.
+    <br><b>Índice de calidad</b> = (SQL Selvadentro×4 + SQL×3 + MQL×2 + CQL×1) ÷ (4 × total calificado), de la calificación que trae cada lead; los leads sin calificar no entran.
     <br><b>Resultado ajustado</b> compara el percentil de la tasa de oportunidades del asesor contra el percentil de la calidad de lead que recibió, entre asesores comparables: separa el mérito del proceso de la suerte en la asignación.
     <br><b>Cierre de ciclo</b> se mide sobre los descalificados del asesor; si no tiene descalificados, sobre el total de sus leads.
     ${segOff?'<br>⚠ <b>Seguimiento a futuro</b> sale N/A: los campos "seguimiento semanal / mensual" no existen en GHL, así que no se puede medir y no baja la nota global.':''}
@@ -4833,7 +4927,7 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr)
     const slaEf = (sw.fi && sw.fi>=created) ? sw.fi-created : null;     // hasta la respuesta del lead
     const z48 = (sw.ap && sw.ap.f && sw.ap.f>=created) ? (sw.ap.f-created) <= 48*3600e3 : false;
     const canal = lqSourceCamp({tags:c.tags, src:c.src, attr:c.attr}).fuente;
-    return { n:c.n, wk, canal, u:c.u||"", created, alta,
+    return { id:c.id, n:c.n, wk, canal, u:c.u||"", created, alta,
              // hand = el reloj arrancó en el traspaso a ventas, no en el alta del contacto
              hand: (hand && hand > alta) ? hand : null,
              // fo = primer mensaje saliente de CUALQUIER origen, workflows incluidos. Se
@@ -4874,12 +4968,18 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr)
     if(ww && rangoSet.has(ww)){ b.won++; b.wv += (o.v||0); }
   }
   Object.keys(byRepOpp).forEach(u=>{ const b=byRepOpp[u]; if(!b.opp && !b.won) delete byRepOpp[u]; });
-  // OPP por asesor al nivel del lead, para la tasa de oportunidades de la rúbrica
-  leads.forEach(l=>{ const b=byRepOpp[l.u]; l.opp = 0; });
-  Object.entries(byRepOpp).forEach(([u,b])=>{
-    const mine = leads.filter(l=>l.u===u);
-    if(mine.length && b.opp) mine[0].opp = b.opp;    // se agrega por asesor, no por lead
-  });
+  // Tasa de oportunidades de la rúbrica: por CONTACTO, solo de los leads del rango.
+  // Antes se volcaba el total del asesor (incluidas opps de contactos de hace meses)
+  // en su primer lead y se dividía entre otro denominador: la tasa podía pasar de
+  // 100% y se inflaba para asesores con cartera vieja — y ese número alimenta los
+  // percentiles del "Resultado ajustado".
+  const byCt = {}; leads.forEach(l=>{ l.opp = 0; if(l.id) byCt[l.id] = l; });
+  for(const o of (oppsArr||[])){
+    if(!o.ct) continue;
+    const l = byCt[o.ct]; if(!l) continue;
+    const wc = lqWeekOf(o.c);
+    if(wc && rangoSet.has(wc)) l.opp++;
+  }
   // Horario REAL observado: se suman las horas de cada acción manual de los asesores.
   // Convierte "¿cuál es el horario laboral?" de una pregunta a una medición que el
   // equipo solo tiene que confirmar.
@@ -4920,8 +5020,11 @@ function slaRender(){
     ${kpi(und(15),"≤ 15 min (transferencia)")}
     ${kpi(und(60),"≤ 60 min (WhatsApp)")}
     ${kpi(fmtDur(slaMedian(slasAt)),"Mediana del 1er toque manual")}
-    ${(()=>{ const n=conDatos.filter(l=>l.z48).length, p=conDatos.length?Math.round(n/conDatos.length*100):0;
-      return `<div class="crm-kpi"><div class="k-val" style="color:${p>=40?'var(--verde-prof)':'var(--rojo)'}">${conDatos.length?p+"%":"—"}</div><div class="k-lbl">Cita en ≤48 h · meta 40%</div></div>`; })()}
+    ${(()=>{ // Solo leads cuyas CITAS sí se pudieron leer: un fallo del scope de citas
+      // metía ceros falsos al denominador y hundía la métrica contra la meta del 40%.
+      const base=conDatos.filter(l=>!l.ad);
+      const n=base.filter(l=>l.z48).length, p=base.length?Math.round(n/base.length*100):0;
+      return `<div class="crm-kpi"><div class="k-val" style="color:${p>=40?'var(--verde-prof)':'var(--rojo)'}">${base.length?p+"%":"—"}</div><div class="k-lbl">Cita en ≤48 h · meta 40%</div></div>`; })()}
     ${kpi((apSh+apNs)?pcti(apSh,apSh+apNs):"—","Show rate de citas")}
   </div>`;
 
@@ -4935,7 +5038,8 @@ function slaRender(){
       const sa = arr.map(l=>l.slaAt).filter(x=>x!=null);
       const u15 = ss.length ? Math.round(ss.filter(x=>x<=15*60000).length/ss.length*100)+"%" : "—";
       const u60 = ss.length ? Math.round(ss.filter(x=>x<=60*60000).length/ss.length*100)+"%" : "—";
-      const z = cd.length ? Math.round(cd.filter(l=>l.z48).length/cd.length*100) : null;
+      const zBase = cd.filter(l=>!l.ad);   // sin datos de citas ≠ "no agendó": fuera del %
+      const z = zBase.length ? Math.round(zBase.filter(l=>l.z48).length/zBase.length*100) : null;
       const sh = arr.reduce((a,l)=>a+l.ap.sh,0), ns = arr.reduce((a,l)=>a+l.ap.ns,0);
       return `<tr><td class="name">${escAttr(labelFn(k))}</td><td>${arr.length}${arr.length-cd.length?`<span style="color:var(--neutro);font-size:var(--fs-xs)"> (${arr.length-cd.length} s/d)</span>`:""}</td>
         <td class="pct">${pcti(cd.filter(l=>l.foM).length,cd.length)}</td>
@@ -5011,7 +5115,8 @@ function slaRender(){
     (la secuencia automática no cuenta como toque: si contara, un lead abandonado con drip
     activo nunca aparecería en esta lista) ·
     <b>Show rate:</b> citas con estatus showed ÷ (showed + no-show) ·
-    <b>Oportunidades creadas:</b> registros del pipeline creados en el rango, por asesor asignado (no son OPPs: OPP = oportunidad real de cierre, de "Seguimiento de OPP" en adelante).</div>
+    <b>Oportunidades creadas:</b> registros del pipeline creados en el rango, por asesor asignado (no son OPPs: OPP = oportunidad real de cierre, de "Seguimiento de OPP" en adelante) ·
+    <b>WONs:</b> ventas cuyo cierre cayó en el rango, aunque la oportunidad se haya creado antes (se buscan hasta ~18 meses atrás).</div>
     <div class="lq-meth"><b>SLAs contra los que se mide</b> —
     transferencia en caliente a un asesor <b>15 minutos</b> · handoff por WhatsApp <b>60 minutos</b> ·
     agendamiento <b>40% de los leads a una cita en 48 horas</b> (verde si se cumple, rojo si no) ·
@@ -5074,9 +5179,14 @@ async function slaSync(){
       lbl.textContent=`Analizando conversaciones y citas… ${done} de ${contactsArr.length}`;
     }
     bar.style.width="84%"; lbl.textContent="Trayendo oportunidades…";
+    // Los WON se cuentan por la semana del CIERRE, pero el filtro `since` era la fecha
+    // de CREACIÓN desde el inicio del rango: toda venta cerrada en el rango cuya
+    // oportunidad empezó antes (lo normal en ciclos de semanas o meses) desaparecía de
+    // "WONs por asesor". Se retrocede la ventana ~18 meses, igual que el CRM en vivo.
     const oppsArr=[]; let oc=null;
+    const desdeOpps = (Date.parse(b0.startISO)||Date.now()) - 78*7*86400e3;
     do{
-      const res = await slaFn({action:"opps", since: String(Date.parse(b0.startISO)||""), ...(oc||{})});
+      const res = await slaFn({action:"opps", since: String(desdeOpps), ...(oc||{})});
       oppsArr.push(...res.opps); oc = res.cursor;
     }while(oc);
     bar.style.width="94%"; lbl.textContent="Resolviendo asesores…";
@@ -5087,7 +5197,7 @@ async function slaSync(){
     bar.style.width="100%"; lbl.textContent="Procesando…";
     if(lotesFallidos){
       fallos.push(`las conversaciones y citas de ${leadsSinBarrer} lead${leadsSinBarrer!==1?"s":""} `
-        + `(${lotesFallidos} lote${lotesFallidos!==1?"s":""} falló${lotesFallidos!==1?"":""}) — `
+        + `(${lotesFallidos} lote${lotesFallidos!==1?"s fallaron":" falló"}) — `
         + `sus asesores salen con menos actividad de la real`);
     }
     slaState.agg = buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr);
@@ -5144,9 +5254,17 @@ function renderDirAnalitica(prefix, chsSel, weekSet, tabName){
     reintentar(()=>!!window.Chart, ()=>renderDirAnalitica(prefix,chsSel,weekSet,tabName),
       ()=>{ host.innerHTML = '<div class="anal-empty">No se pudo cargar la librería de gráficas. Revisa tu conexión y recarga la página.</div>'; });
     return; }
-  if(!weekSet || !weekSet.size || !chsSel.length){ host.innerHTML = ''; return; }
+  if(!weekSet || !weekSet.size || !chsSel.length){
+    host.innerHTML = '';
+    const nh = document.getElementById(`${prefix}-notes`); if(nh) nh.innerHTML = '';   // no dejar notas del render anterior
+    return;
+  }
   const state = ANAL_DIR[prefix];
   const { weeks, byMetric } = dirWeeklySeries(chsSel, weekSet);
+  // Las conclusiones IA cacheadas son del rango/canales con que se generaron: si el
+  // rango cambia, mostrarlas como si fueran del nuevo presenta análisis viejo como actual.
+  const rkAnal = weeks.join("|") + "§" + chsSel.join(",");
+  if(state._rk !== rkAnal){ state._rk = rkAnal; state.cache = {}; NOTES_CACHE[prefix] = {}; }
   if(!weeks.length){ host.innerHTML = ''; return; }
   const html = [`<h3 style="font-family:var(--serif);color:var(--verde-prof);font-size:var(--fs-xl);margin:24px 0 6px">Analítica del embudo</h3><p class="hint" style="margin-top:0">Serie semanal agregada de los canales seleccionados. Clic para expandir y pedir conclusión con IA.</p><div class="anal-grid">`];
   METRIC_KEYS.forEach((m, i) => {
@@ -5226,7 +5344,7 @@ function renderNotesSection(container, entradas, canalName, cacheKeyBucket, cach
     if(e.notas)        parts.push(`<div class="ane-line"><span class="ane-lbl">Notas:</span>${escAttr(e.notas)}</div>`);
     if(e.aprendizajes) parts.push(`<div class="ane-line"><span class="ane-lbl">Aprendizajes:</span>${escAttr(e.aprendizajes)}</div>`);
     if(e.cambios)      parts.push(`<div class="ane-line"><span class="ane-lbl">Cambios:</span>${escAttr(e.cambios)}</div>`);
-    return `<div class="anal-note-entry"><div class="ane-head">${head}</div>${parts.join("")}</div>`;
+    return `<div class="anal-note-entry"><div class="ane-head">${escAttr(head)}</div>${parts.join("")}</div>`;
   }).join("");
   container.innerHTML = `<div class="anal-notes-card">
     <h3>Notas cualitativas del periodo</h3>
@@ -5343,8 +5461,9 @@ function renderAnalitica(){
     return;
   }
   if(perBar) perBar.style.display = "";
-  // Poblar selectores si cambió el canal o si están vacíos
-  if(ANAL_STATE.chKey !== chKey || !selIni.options.length){
+  // Poblar selectores si cambió el canal, si están vacíos o si hay semanas nuevas
+  // (antes una semana guardada en la misma sesión no aparecía en el desplegable).
+  if(ANAL_STATE.chKey !== chKey || !selIni.options.length || selIni.options.length !== allWeeks.length){
     const opts = allWeeks.map(w => `<option value="${w}">${weekLabel(w)}</option>`).join("");
     selIni.innerHTML = opts; selFin.innerHTML = opts;
     ANAL_STATE.ini = allWeeks[allWeeks.length-1];
@@ -5371,9 +5490,9 @@ function renderAnalitica(){
     const canvasId = `anal-c-${chKey}-${f.k}`;
     const expanded = ANAL_STATE.expanded === f.k;
     const totalTxt = f.money ? fmtMoney(total) : total;
-    const conc = ANAL_STATE.cache[chKey+":"+f.k];
+    const conc = ANAL_STATE.cache[chKey+":"+f.k+":"+ANAL_STATE.ini+":"+ANAL_STATE.fin];   // la conclusión IA es del rango con que se generó
     return `<div class="anal-card${expanded?' expanded':''}" data-fk="${f.k}">
-      <div class="ac-title">${f.l}</div>
+      <div class="ac-title">${escAttr(f.l)}</div>
       <div class="ac-total">Total del rango: <b>${totalTxt}</b> · ${weeks.length} sem.</div>
       <canvas id="${canvasId}"></canvas>
       ${expanded ? `<div class="anal-actions"><button class="btn btn-olive" data-analyze="${f.k}">Analizar con IA</button>${f.meta!=null?`<span style="font-size:var(--fs-s);color:var(--neutro)">Meta mensual: <b>${f.meta}</b></span>`:''}</div>${conc?`<div class="anal-conc">${escAttr(conc)}</div>`:''}` : ''}
@@ -5411,7 +5530,7 @@ function renderAnalitica(){
         });
         const data = await resp.json();
         if(!resp.ok){ conc.classList.remove("loading"); conc.textContent = "Error: " + (data.error || resp.status); }
-        else { conc.classList.remove("loading"); conc.textContent = data.conclusion || "(sin conclusión)"; ANAL_STATE.cache[chKey+":"+fk] = data.conclusion; }
+        else { conc.classList.remove("loading"); conc.textContent = data.conclusion || "(sin conclusión)"; ANAL_STATE.cache[chKey+":"+fk+":"+ANAL_STATE.ini+":"+ANAL_STATE.fin] = data.conclusion; }
       } catch(err){ conc.classList.remove("loading"); conc.textContent = "Error de red: " + err.message; }
       finally { btn.disabled = false; }
     };
@@ -6197,9 +6316,9 @@ async function renderDBTable(ch){
   const c=CHANNELS[ch]; const dims=dimsList(ch); const flds=c.sections.flatMap(s=>s.fields);
   const recs=dbRecords(ch);
   const adm = isAdmin();
-  const head=`<tr><th class="lft">Semana</th>${dims.map(d=>`<th class="lft">${d.label}</th>`).join("")}${flds.map(f=>`<th>${f.l}</th>`).join("")}<th class="lft">Notas</th><th class="lft">Acciones</th></tr>`;
+  const head=`<tr><th class="lft">Semana</th>${dims.map(d=>`<th class="lft">${escAttr(d.label)}</th>`).join("")}${flds.map(f=>`<th>${escAttr(f.l)}</th>`).join("")}<th class="lft">Notas</th><th class="lft">Acciones</th></tr>`;
   const body=recs.map(({key,rec})=>{
-    const dimCells=dims.map((d,i)=>`<td class="lft">${(rec.dimVals&&rec.dimVals[i])||""}</td>`).join("");
+    const dimCells=dims.map((d,i)=>`<td class="lft">${escAttr((rec.dimVals&&rec.dimVals[i])||"")}</td>`).join("");
     const valCells=flds.map(f=>{ const v=rec.valores?rec.valores[f.k]:0; return `<td>${f.money?fmtMoney(v||0):(v??0)}</td>`; }).join("");
     const nota=(rec.notas||""); const safe=escAttr(nota);
     const inWindow = isWeekEditable(rec.semana||"");
@@ -6453,7 +6572,11 @@ async function init(){
       await loadAdvisors(); await loadMetas(); await loadLastResp();
       await primeCache(); await persistSeeds();
       resState.built=false; dcState.built=false; dbBuilt=false; metasBuilt=false;
-      await switchChannel(CH);
+      // Un usuario solo-Marketing no tiene ningún canal de ventas: CHANNELS queda vacío
+      // y CH apunta a "brokers" que ya no existe. switchChannel lanzaba, el catch marcaba
+      // LECTURA_FALLIDA y salía la franja roja de "no se pudieron cargar los datos" en
+      // cada carga, aunque todo hubiera cargado bien.
+      if(CHANNELS[CH]) await switchChannel(CH);
       refreshAdvisorDropdowns();
       // Con los datos guardados ya en caché, repintar lo que esté abierto.
       if(NAV_GRUPO === "direccion") navIr("direccion", NAV_ULTIMA.direccion, false);
@@ -7305,7 +7428,7 @@ function paintUsersTable(){
       : `<span style="color:var(--verde-ok-tx)" title="Ya definió su contraseña">Activo</span>`;
     return `
     <tr data-i="${i}">
-      <td>${u.email}</td>
+      <td>${escAttr(u.email)}</td>
       <td>
         <select class="usr-role">
           <option value="user" ${u.role==='user'?'selected':''}>user</option>

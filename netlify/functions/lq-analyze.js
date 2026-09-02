@@ -39,7 +39,8 @@ exports.handler = async (event) => {
   catch { return json(400, { error: "JSON inválido" }); }
 
   const T = d.totales || {};
-  const fam = (d.familias || []).map((f) =>
+  // Tope de tamaño: sin él, un body arbitrario infla el prompt (y la cuenta de la API).
+  const fam = (d.familias || []).slice(0, 40).map((f) =>
     `- ${f.nombre}: inversión ${money(f.inv)} · ${f.resultAds ?? "—"} resultados en plataforma · ${f.leads} leads en CRM · ` +
     `${f.calif} calificados (${pct(f.calif, f.leads)}) · CPL ${f.leads ? money(f.cpl) : "—"} · costo por calificado ${f.calif ? money(f.costoCalif) : "sin calificados"}` +
     (f.mezcla ? ` · mezcla: ${Object.entries(f.mezcla).filter(([, v]) => v).map(([k, v]) => `${v} ${k}`).join(", ") || "sin leads"}` : "")
