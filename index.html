@@ -3237,7 +3237,8 @@ function lqCoberturaAtrib(rawLeads, adIdx){
     const h = idx[lqNormCamp((l.attr&&l.attr.ad)||"")];
     return !!(h && (h.tipo==="grp" || h.grp));
   }).length;
-  return { pagados: pagados.length, total: rawLeads.length,
+  const deriv = pagados.filter(l=>l.attr && l.attr.cderiv).length;
+  return { pagados: pagados.length, total: rawLeads.length, deriv,
            camp: con("camp"), campPct: Math.round(con("camp")/d*100),
            ad:   con("ad"),   adPct:   Math.round(con("ad")/d*100),
            grp:  conGrp,      grpPct:  Math.round(conGrp/d*100) };
@@ -3284,6 +3285,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
   const A = lqDetectAtrib(boot.fields);
   const adw0 = lqBucketAds(adRows);
   const idIdx = lqIdIndex(adw0);
+  const adIdx0 = lqAdIndex({adw:adw0});
   // Nombres de conjunto / grupo de anuncios que existen de verdad en las cuentas.
   const grpSet = new Set(); adw0.forEach(a=>{ if(a.grp) grpSet.add(lqNormCamp(a.grp)); });
   // La atribución REAL de Selvadentro no viaja en attributionSource (13% de cobertura)
@@ -3313,6 +3315,17 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
     // (que en Google trae el id del grupo y ya quedó traducido arriba).
     const g = String(l.attr.grp||"").trim();
     if(g && !grpSet.has(lqNormCamp(g))){ l.attr.kw = g; l.attr.grp = ""; }
+    // Un lead SIN utm_campaign pero CON un anuncio o conjunto que existe en la cuenta sí
+    // se puede atribuir: la campaña se deduce de la estructura. Es exactamente el caso de
+    // los formularios instantáneos de Meta, que nunca pasan por una URL y por eso no
+    // llevan UTM, pero sí traen el id del conjunto en attributionSource — en el árbol se
+    // veían como un "conjunto" llamado 120248002284270275, colgado de la campaña pero
+    // separado del mismo conjunto por nombre, y sus leads caían en "(sin campaña
+    // atribuida)". Meta reportó 7 leads de formulario en agosto y el reporte emparejaba 1.
+    if(!l.attr.camp){
+      const h = adIdx0[lqNormCamp(l.attr.ad)] || adIdx0[lqNormCamp(l.attr.grp)] || null;
+      if(h && h.camp){ l.attr.camp = h.camp; l.attr.cderiv = true; }
+    }
   });
   const O = oppsByContact || {};
   const leads = rawLeads.map(l=>{
@@ -6860,7 +6873,7 @@ function diagSeccionAtribucion(){
     ${veredicto}
     <div class="table-scroll mb-sec"><table class="cons">
       <tr><th class="lft">Qué trae el lead</th><th>Cobertura</th><th>Leads</th><th class="lft">Para qué sirve</th></tr>
-      ${fila("Campaña (utm_campaign)", a.camp, a.campPct, "Sin esto no se sabe qué campaña generó el lead")}
+      ${fila("Campaña (utm_campaign)", a.camp, a.campPct, a.deriv ? `Incluye ${a.deriv} deducidos del anuncio o conjunto (formularios nativos: no pasan por una URL, así que no llevan UTM)` : "Sin esto no se sabe qué campaña generó el lead")}
       ${fila("Anuncio (utm_content)", a.ad, a.adPct, "Sin esto no hay desglose por anuncio")}
       ${fila("Conjunto (utm_term)", a.grp, a.grpPct, "GoHighLevel no expone conjunto: solo se resuelve cruzando el anuncio con Windsor")}
     </table></div>`;
