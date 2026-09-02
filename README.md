@@ -181,6 +181,16 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
   Sin eso las campañas de Google salían como números (familia "237") y sus columnas de
   leads y costo en guion. Por lo mismo `utm_term` de Google es la **palabra clave**, no
   el conjunto: solo se acepta como conjunto si empata con un grupo real de la cuenta.
+- **La plataforma sale de la cuenta, no de los tags**: si la campaña del lead existe en
+  una cuenta de anuncios, la fuente es esa cuenta. De ahí que los **registros a webinar
+  cuenten como Meta** (confirmado con el cliente el 2026-09-02): el formulario de registro
+  no manda UTM y el tag `webinar-registered` los mandaba a una campaña sintética
+  ("Registro a webinar · funnel MKT"), así que `INVESTORS_US/CA_WEBINAR_210726` gastaba
+  $4,681.85 con **cero** leads y sin costo por lead, mientras 17 leads colgaban de una
+  campaña que no existe en ninguna cuenta. Ahora se pegan a la campaña de webinar de la
+  cuenta **solo si hay una sola candidata con inversión**, marcados como deducidos —es una
+  inferencia por nombre, no atribución— y si no hay candidata clara se quedan en su propio
+  embudo en vez de inventarles plataforma. El tag sigue visible como nota del lead.
 - **Auditoría de etiquetado UTM** (`lqAuditUtm`, se ve en **Diagnóstico**): lee lo que
   manda cada anuncio —`url_tags` en Meta, sufijo de URL final y plantilla de tracking en
   Google— lo cruza contra los `utm_campaign` que llegan al CRM y dice qué campaña está
@@ -248,6 +258,10 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
   **60 min** (handoff por WhatsApp).
 - **Agendamiento**: % de leads con una cita dentro de **48 horas**, contra la meta
   del 40% (verde si se cumple, rojo si no).
+- **La nota del asesor se califica sobre acciones manuales** (confirmado con el cliente el
+  2026-09-02): la sub-nota de velocidad mide del alta del lead a su primer toque manual
+  (`foM`), en cualquier canal. La llamada conectada (`foC`) se reporta como columna, pero
+  no es la base de la calificación.
 - **Primer toque = acción MANUAL del asesor**, nunca la automatización. La columna
   contaba cualquier mensaje saliente y marcaba **100% en todos los asesores** — la
   secuencia de bienvenida le escribe a todos los leads, así que medía el workflow, no al

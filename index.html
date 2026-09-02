@@ -3055,7 +3055,18 @@ function lqSourceCamp(lead){
   const t = (lead.tags||[]).map(x=>String(x).toLowerCase());
   const blob = ((lead.src||"")+" "+(lead.attr?.src||"")+" "+(lead.attr?.med||"")).toLowerCase();
   const camp = String(lead.attr?.camp || "").trim();
-  const hint = lqTagHint(t);
+  let hint = lqTagHint(t);
+  // La plataforma deducida de la estructura de la cuenta manda sobre cualquier tag: si la
+  // campaña existe en esa cuenta de anuncios, la fuente es esa cuenta y no hay más que
+  // discutir. Es lo que hace que el registro a webinar cuente como Meta y que su campaña
+  // por fin tenga costo por lead.
+  const plat = String(lead.attr?.plat || "").trim();
+  if(plat === "Meta" || plat === "Google"){
+    if(t.includes("webinar-registered")) hint = "Registro a webinar" + (hint ? " · " + hint.replace(/^Señal por tags · /, "") : "");
+    return { fuente: plat, camp: camp || LQ_SIN_CAMP, hint };
+  }
+  // Sin campaña de la cuenta a la que pegarlo, el registro a webinar sigue siendo su
+  // propio embudo: es mejor eso que inventarle una plataforma.
   if(t.includes("webinar-registered")) return { fuente:"Webinar", camp: camp || "Registro a webinar · funnel MKT", hint };
   if(/google|adwords|gclid|ppc/.test(blob) || t.includes("google") || t.includes("accesibilidad"))
     return { fuente:"Google", camp: camp || LQ_SIN_CAMP, hint };
@@ -3366,6 +3377,18 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
   const adIdx0 = lqAdIndex({adw:adw0});
   // Nombres de conjunto / grupo de anuncios que existen de verdad en las cuentas.
   const grpSet = new Set(); adw0.forEach(a=>{ if(a.grp) grpSet.add(lqNormCamp(a.grp)); });
+  // Nombre de campaña → plataforma, tomado de las cuentas de anuncios. Si la campaña del
+  // lead existe en una cuenta, la plataforma no se adivina por tags: se sabe.
+  const campPlat = {};
+  adw0.forEach(a=>{ const k=lqNormCamp(a.camp); if(k && a.plat && !campPlat[k]) campPlat[k]=a.plat; });
+  // Campaña de webinar de la cuenta de anuncios: solo sirve si hay UNA candidata clara.
+  const campWebinar = (()=>{
+    const by = {};
+    adw0.forEach(a=>{ if(a.camp && /webinar/i.test(a.camp)){ const k=a.plat+"|"+a.camp;
+      by[k] = by[k] || { camp:a.camp, plat:a.plat, spend:0 }; by[k].spend += a.spend||0; } });
+    const cands = Object.values(by).filter(x=>x.spend>0);
+    return cands.length === 1 ? cands[0] : null;
+  })();
   // La atribución REAL de Selvadentro no viaja en attributionSource (13% de cobertura)
   // sino en campos personalizados: utm_campaign 38%, utm_content 38%, Campaign 43%,
   // Medium 56%, Session source 56%. Se completa lo que falta desde ahí.
@@ -3402,8 +3425,23 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
     // atribuida)". Meta reportó 7 leads de formulario en agosto y el reporte emparejaba 1.
     if(!l.attr.camp){
       const h = adIdx0[lqNormCamp(l.attr.ad)] || adIdx0[lqNormCamp(l.attr.grp)] || null;
-      if(h && h.camp){ l.attr.camp = h.camp; l.attr.cderiv = true; }
+      if(h && h.camp){ l.attr.camp = h.camp; l.attr.cderiv = true; if(h.plat) l.attr.plat = h.plat; }
     }
+    // REGISTROS A WEBINAR = META. El formulario de registro al webinar no manda UTM, y el
+    // tag webinar-registered mandaba a estos leads a una campaña sintética ("Registro a
+    // webinar · funnel MKT") con fuente "Webinar": la campaña de Meta que los trajo
+    // —INVESTORS_US/CA_WEBINAR_210726— gastó $4,681.85 en el rango y salía con CERO leads
+    // y sin costo por lead, mientras 17 leads colgaban de una campaña que no existe en
+    // ninguna cuenta. Confirmado con el cliente el 2026-09-02: cuentan como Meta. Se pegan
+    // a la campaña de webinar de la cuenta SOLO si hay una sola candidata, y se marcan como
+    // deducidos: es una inferencia por nombre, no atribución, y el reporte lo dice.
+    if(!l.attr.camp && (l.tags||[]).some(x=>/webinar/i.test(String(x))) && campWebinar){
+      l.attr.camp = campWebinar.camp; l.attr.cderiv = true; l.attr.plat = campWebinar.plat;
+    }
+    // Y si la campaña que YA traía el lead existe en una cuenta, de ahí sale la plataforma.
+    // Sin esto un registro a webinar con su utm_campaign de Meta seguía saliendo como
+    // fuente "Webinar", porque la plataforma solo se fijaba cuando había que deducirla.
+    if(!l.attr.plat && l.attr.camp) l.attr.plat = campPlat[lqNormCamp(l.attr.camp)] || "";
   });
   const O = oppsByContact || {};
   const leads = rawLeads.map(l=>{
