@@ -4398,7 +4398,7 @@ async function showLQ(){
 // citas y show rate, y OPPs/WONs por asesor. Con nombres, acumulable por semanas.
 const SLA_AGG_KEY = "sla:agg:v5";   // v5: spec v1.0 (roster, 5 min, tareas, telefonía)  // v4: reloj 24/7 y traspaso a ventas
 const SLA_STALE_MS = 7*86400e3; // "sin toque" = 7 días sin mensaje
-const slaState = { built:false, agg:null, syncing:false, asesor:"" };   // asesor:"" = todo el equipo
+const slaState = { built:false, agg:null, syncing:false, asesor:"", camp:"" };   // asesor/camp "" = sin filtro
 
 async function slaFn(body){
   const r = await fetch("/.netlify/functions/sla-report", { method:"POST", headers:{"Content-Type":"application/json", "Authorization":"Bearer "+AUTH_TOKEN}, body:JSON.stringify(body) });
@@ -4604,15 +4604,16 @@ function slaNormalizar(rows){
   return rows;
 }
 
-function slaAsesorSection(agg){
+function slaAsesorSection(agg, leadsIn){
   const name = (u)=> agg.users[u] || (u ? "(sin nombre)" : "(sin asesor)");
+  const universo = leadsIn || agg.leads;
   // Solo se califica a quien está en el roster de Asesores (spec A2). Antes el ranking
   // calificaba a cualquier dueño del CRM — "Selvadentro Tulum", "(sin asesor)", perfiles
   // que no venden — puro ruido, y los leads pagados estacionados con no-vendedores
   // desaparecían del problema en vez de señalarse.
   const rosterIds = slaRosterIds(agg.users);
   const groups = {}; const fuera = [];
-  agg.leads.forEach(l=>{ if(rosterIds.has(l.u)) (groups[l.u]=groups[l.u]||[]).push(l); else fuera.push(l); });
+  universo.forEach(l=>{ if(rosterIds.has(l.u)) (groups[l.u]=groups[l.u]||[]).push(l); else fuera.push(l); });
   // Un asesor del roster sin leads aparece en cero, no desaparece.
   rosterIds.forEach(u=>{ groups[u] = groups[u] || []; });
   let rows = Object.keys(groups).map(u=>({ u, a:groups[u], c:slaScoreAsesor(groups[u]) }));
@@ -4716,13 +4717,35 @@ function slaAsesorSection(agg){
   return html;
 }
 
-function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr){
+function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr, pipesArr){
   const rangoSet = new Set(rango);
   // Campos de GHL usados por la rúbrica, detectados por nombre
   const find = (re)=>{ const f=(fieldsArr||[]).find(x=>re.test(x.name||"")||re.test(x.key||"")); return f?{id:f.id,name:f.name}:null; };
   const F = { calif: find(/calificaci[oó]n.*lead|lead.*calificaci[oó]n/i) || find(/calificaci[oó]n/i),
               segSem: find(/seguimiento_semanal|seguimiento semanal/i),
-              segMes: find(/seguimiento_mensual|seguimiento mensual/i) };
+              segMes: find(/seguimiento_mensual|seguimiento mensual/i),
+              // Campaña de origen (spec D5): la atribución del contacto y, si viene
+              // vacía, los campos utm_campaign / Campaign del CRM.
+              camp: find(/^utm_campaign$/i) || find(/utm_campaign/i),
+              campAlt: find(/^campaign$/i) };
+  // Catálogo de pipelines/etapas, literal del CRM (spec B1/D1/E1)
+  const pipeName = {}, stageName = {}, stageOfPipe = {};
+  (pipesArr||[]).forEach(p=>{ pipeName[p.id]=p.name||""; (p.stages||[]).forEach(s=>{ stageName[s.id]=s.name||""; stageOfPipe[s.id]=p.name||""; }); });
+  // Pipeline/etapa actual por contacto: la oportunidad movida más recientemente,
+  // y el conjunto de pipelines donde el contacto tiene oportunidades (para el alcance).
+  const ctPipe = {};
+  for(const o of (oppsArr||[])){
+    if(!o.ct) continue;
+    const b = ctPipe[o.ct] = ctPipe[o.ct] || { pipes:new Set(), s:"", p:"", t:0 };
+    if(o.p && pipeName[o.p]) b.pipes.add(pipeName[o.p]);
+    const t = new Date(o.sc||o.c||0).getTime()||0;
+    if(o.s && t >= b.t){ b.t=t; b.s=stageName[o.s]||""; b.p=pipeName[o.p]||""; }
+  }
+  // Alcance por dueño, no por pipeline (spec D1) — con UNA exclusión: Brokers
+  // Expansión y activación recluta brokers, no vende a clientes. Un lead cuyas
+  // oportunidades viven SOLO ahí queda fuera del universo, y se declara cuántos.
+  const esExpansion = (ct)=>{ const b=ctPipe[ct]; return !!(b && b.pipes.size && [...b.pipes].every(n=>/expansi[oó]n\s*y\s*activaci[oó]n/i.test(n))); };
+  const exclExpansion = contactsArr.filter(c=>esExpansion(c.id)).length;
   // Traspaso de marketing a ventas: el cliente confirmó el 2026-08-26 que es cuando
   // el lead ENTRA AL PIPELINE, es decir cuando se le crea la oportunidad. Para un lead
   // frío que llegó hace meses y hoy se empuja a ventas, el reloj del asesor debe
@@ -4739,9 +4762,11 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr)
   // y cada porcentaje construido sobre ella. Se cuenta cuántos salieron y se declara.
   const esTest = (c)=> /(^|\b)(test|prueba|testing|propy\s*test)(\b|\d|$)/i.test(String(c.n||""));
   const testExcl = contactsArr.filter(esTest).length;
-  const leads = contactsArr.filter(c=>!esTest(c)).map(c=>{
+  const leads = contactsArr.filter(c=>!esTest(c) && !esExpansion(c.id)).map(c=>{
     const wk = lqWeekOf(c.c); if(!wk || !rangoSet.has(wk)) return null;
     const sw = sweepMap[c.id] || {sin:true};
+    const cf = (f)=> f && c.cf ? String(c.cf[f.id]||"").trim() : "";
+    const cp = ctPipe[c.id] || null;
     const alta = new Date(c.c).getTime();
     // Si el lead entró al pipeline DESPUÉS de darse de alta, ese es el momento en que
     // ventas se hizo cargo y desde ahí se le mide.
@@ -4753,7 +4778,10 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr)
     const slaEf = (sw.fi && sw.fi>=created) ? sw.fi-created : null;   // hasta la respuesta del lead
     // ("cita en ≤48h" retirada por la spec D3: la sustituyen tasa de agendamiento y días a la cita)
     const canal = lqSourceCamp({tags:c.tags, src:c.src, attr:c.attr}).fuente;
+    // Campaña de origen (spec D5) y pipeline/etapa actual (spec D1/E1)
+    const camp = String((c.attr && c.attr.camp) || cf(F.camp) || cf(F.campAlt) || "").trim();
     return { id:c.id, n:c.n, wk, canal, u:c.u||"", created, alta,
+             camp, pipe: cp ? cp.p : "", stage: cp ? cp.s : "",
              // hand = el reloj arrancó en el traspaso a ventas, no en el alta del contacto
              hand: (hand && hand > alta) ? hand : null,
              fo:sw.fo||null, fi:sw.fi||null, lm:sw.lm||null, slaAt, slaEf,
@@ -4781,9 +4809,12 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr)
     Object.entries(sw.cst||{}).forEach(([s,n])=>{ callSt[s]=(callSt[s]||0)+n; callTot+=n; });
     callDur += sw.cdur||0; call90 += sw.c90||0;
   });
-  // OPPs (cotizaciones) y WONs por asesor dentro del rango
+  // OPPs (cotizaciones) y WONs por asesor dentro del rango. Las oportunidades del
+  // pipeline de expansión de brokers quedan fuera, igual que sus leads (spec D1).
+  const esPipeExp = (p)=> /expansi[oó]n\s*y\s*activaci[oó]n/i.test(pipeName[p]||"");
   const byRepOpp = {};
   for(const o of (oppsArr||[])){
+    if(esPipeExp(o.p)) continue;
     const wc = lqWeekOf(o.c), ww = o.st==="won" ? lqWeekOf(o.stc) : null;
     const u = o.u || "";
     const b = byRepOpp[u] = byRepOpp[u] || {opp:0, won:0, wv:0};
@@ -4798,7 +4829,7 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr)
   // percentiles del "Resultado ajustado".
   const byCt = {}; leads.forEach(l=>{ l.opp = 0; if(l.id) byCt[l.id] = l; });
   for(const o of (oppsArr||[])){
-    if(!o.ct) continue;
+    if(!o.ct || esPipeExp(o.p)) continue;
     const l = byCt[o.ct]; if(!l) continue;
     const wc = lqWeekOf(o.c);
     if(wc && rangoSet.has(wc)) l.opp++;
@@ -4812,8 +4843,34 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr)
     (sw.dow||[]).forEach((n,i)=>{ dow[i]+=n||0; });
   });
   return { ts:Date.now(), rango, users:usersMap||{}, fields:F, leads, byRepOpp, hrs, dow,
-           testExcl, callSt, callDur, call90, callTot };
+           testExcl, callSt, callDur, call90, callTot,
+           exclExpansion, pipelines: pipesArr||[] };
 }
+
+// Las siete etapas EXCLUIDAS de la regla de >7 días sin toque (spec E1), literales
+// como las escribe el CRM — y de nada más: siguen contando en el universo, el embudo
+// y todos los demás indicadores. Zoom/Tour agendado SÍ se miden, pero desde la fecha
+// de la cita, no a los 7 días.
+const SLA_ETAPAS_EXCL = ["Sin Respuesta","WON","Largo plazo","Corretaje","Nurturing","Descalificado","Redes sociales"];
+const SLA_ETAPAS_CITA = ["Zoom agendado","Tour agendado"];
+
+// Anexo A de la spec: columna del manual + dwell máximo, para compararla en pantalla
+// contra el catálogo literal del CRM (spec B1) y, después, medir cada etapa contra su
+// propio dwell (E2, pendiente del timestamp de entrada a etapa).
+const SLA_MANUAL_ETAPAS = [
+  ["Nuevo lead (no contactado)","5 minutos"],["1er toque","24 horas"],["2ndo toque","24 horas"],
+  ["3er toque","48 horas"],["Ultimátum","48 horas"],["Break up","48 horas"],
+  ["Sin respuesta","10 días"],["Contacto establecido","48 h (máx. 1 semana)"],
+  ["Interés identificado","Máx. 1 semana"],["Zoom agendado","Hasta la cita"],
+  ["Zoom no show / re agendar","Máx. 1 semana"],["Zoom realizado","Máx. 1 semana"],
+  ["Tour agendado","Hasta la cita"],["Tour no show / re agendar","Máx. 1 semana"],
+  ["Tour realizado","Máx. 1 semana"],["Cotización enviada","Máx. 1 semana"],
+  ["Seguimiento de OPP","Máx. 3 meses"],["Carta Oferta","Máx. 1 semana"],
+  ["Apartado","Máx. 15 días"],["WON","Indefinido"],
+  ["Largo Plazo","Máx. 1 mes entre toques"],["Rescate","Máx. 12 días"],
+  ["Corretaje","Entrega en 48 h"],["Nurturing","Indefinido"],
+  ["Descalificado","Indefinido"],["Redes Sociales","Indefinido"],
+];
 
 // Roster de asesores (spec A2): solo se califica a quien está en la pantalla Asesores.
 // Se empata por nombre (sin acentos ni mayúsculas) contra los usuarios de GHL; todo
@@ -4831,7 +4888,10 @@ function slaRosterIds(users){
 function slaRender(){
   const agg = slaState.agg; if(!agg) return;
   document.getElementById("sla-last-sync").textContent = crmAgo(agg.ts);
-  const leads = agg.leads, now = Date.now();
+  // Filtro por campaña de origen (spec D5). "" = todas; "__sin" = sin campaña atribuida.
+  const fCamp = slaState.camp || "";
+  const leads = !fCamp ? agg.leads : agg.leads.filter(l=> fCamp==="__sin" ? !(l.camp||"").trim() : l.camp===fCamp);
+  const now = Date.now();
   const name = (u)=> agg.users[u] || (u ? "(sin nombre)" : "(sin asesor)");
   const pcti = (n,d)=> d ? Math.round(n/d*100)+"%" : "—";
 
@@ -4848,6 +4908,24 @@ function slaRender(){
   // El aviso de sincronización incompleta va ARRIBA de todo: si faltan conversaciones, la
   // nota de los asesores está subestimada y eso hay que verlo antes que los números.
   let html = bannerIncompleto(agg.fallos, "Generar reporte");
+  // Alcance en pantalla (spec D1): una regla, un universo, y las diferencias explicadas.
+  html += `<p class="hint" style="margin-top:0"><b>Alcance:</b> todo lead creado en las semanas del rango cuenta, esté en el pipeline que esté — el universo lo define el <b>dueño</b>, no el pipeline.
+    Excluidos: ${agg.exclExpansion||0} lead${(agg.exclExpansion||0)!==1?"s":""} de <b>Brokers Expansión y activación</b> (recluta brokers, no vende a clientes) y ${agg.testExcl||0} registro${(agg.testExcl||0)!==1?"s":""} de prueba.
+    La <b>N</b> del ranking cuenta solo leads con conversaciones legibles; la columna <b>Leads</b> los cuenta todos — la diferencia aparece como "s/d" en cada tabla.</p>`;
+  // Filtro por campaña de origen (spec D5)
+  {
+    const cuenta = {}; agg.leads.forEach(l=>{ const k=(l.camp||"").trim()||"__sin"; cuenta[k]=(cuenta[k]||0)+1; });
+    const camps = Object.keys(cuenta).filter(k=>k!=="__sin").sort();
+    html += `<div class="lq-toggle" style="margin:4px 0 10px">
+      <span class="lt-lbl">Campaña de origen</span>
+      <select id="sla-camp" class="lq-search" style="max-width:340px;cursor:pointer">
+        <option value="">Todas (${agg.leads.length})</option>
+        ${camps.map(c=>`<option value="${escAttr(c)}"${fCamp===c?" selected":""}>${escAttr(c)} (${cuenta[c]})</option>`).join("")}
+        ${cuenta.__sin?`<option value="__sin"${fCamp==="__sin"?" selected":""}>(sin campaña atribuida) (${cuenta.__sin})</option>`:""}
+      </select>
+      ${fCamp?`<span class="lq-sub">Filtrando: las tablas de leads respetan el filtro; OPPs/WONs por asesor y el horario observado no (van por oportunidad, no por lead).</span>`:""}
+    </div>`;
+  }
   // Cada KPI declara su evento de arranque y trae sus dos números (spec A1/A5/C3).
   const kpiND = (n,d,lbl,metaTxt,ok)=>`<div class="crm-kpi"><div class="k-val"${ok!=null?` style="color:${ok?'var(--verde-prof)':'var(--rojo)'}"`:""}>${d?Math.round(n/d*100)+"%":"—"}</div><div class="k-lbl">${lbl}${metaTxt?` · ${metaTxt}`:""}</div><div class="k-lbl" style="opacity:.7">${d?`${n} de ${d}`:""}</div></div>`;
   // 1er toque manual en ≤5 minutos (spec A5): la cifra existía en la ficha y nunca se
@@ -4923,7 +5001,7 @@ function slaRender(){
   if(sinCitas){
     html += `<div class="lq-meth">⚠ <b>${sinCitas}</b> de ${leads.length} leads quedaron <b>sin datos de citas</b> (mismo motivo) y están fuera del conteo de citas y del show rate. No se asume que no tuvieron cita.</div>`;
   }
-  html += slaAsesorSection(agg);
+  html += slaAsesorSection(agg, leads);
   // Tabla de SLA por asesor: mismo criterio del roster (spec A2) — todo dueño fuera
   // del roster de Asesores se agrega en una sola línea de volumen.
   {
@@ -4931,22 +5009,39 @@ function slaRender(){
     html += groupTbl("Asesor", l=>rosterIds.has(l.u)?l.u:SLA_FUERA, k=>k===SLA_FUERA?"Fuera del equipo de ventas":name(k));
   }
   html += groupTbl("Canal", l=>l.canal, k=>k);
+  // Desglose por pipeline (spec D1): un canal débil se ve, no se promedia hasta desaparecer
+  html += groupTbl("Pipeline", l=>l.pipe||"(sin oportunidad aún)", k=>k);
+  // Desglose por campaña de origen (spec D5): los sin atribuir son su propia línea
+  html += groupTbl("Campaña de origen", l=>(l.camp||"").trim()||"(sin campaña atribuida)", k=>k);
 
-  // --- Leads >7 días sin toque (la fuga silenciosa del funnel)
+  // --- Leads >7 días sin toque (la fuga silenciosa del funnel), spec E1:
+  // con la ETAPA como columna, las siete etapas excluidas por nombre literal del CRM,
+  // y Zoom/Tour agendado medidos desde la fecha de la cita, no a los 7 días.
   const stale = leads.filter(l=>{
     if(l.sd) return false;                   // sin datos de conversación: no se puede afirmar nada
+    if(SLA_ETAPAS_EXCL.includes(l.stage)) return false;   // las 7 etapas fuera de ESTA regla (y de nada más)
+    if(SLA_ETAPAS_CITA.includes(l.stage)){
+      // Vencido solo si la cita ya pasó y el lead sigue ahí (el manual pide salir de la
+      // etapa el día de la cita). Una cita agendada a dos semanas NO es alarma al día 8.
+      return !l.ad && !(l.ap && l.ap.fut > 0);
+    }
     const last = l.lm || null;
     if(last) return (now-last) > SLA_STALE_MS;
     return (now-l.created) > SLA_STALE_MS;   // nunca tocado y ya viejo
   }).sort((a,b)=>(a.lm||a.created)-(b.lm||b.created));
   const staleRows = stale.slice(0,40).map(l=>{
+    const cita = SLA_ETAPAS_CITA.includes(l.stage);
     const days = Math.floor((now-(l.lm||l.created))/86400e3);
-    return `<tr><td class="lft celda-fuerte">${escAttr(l.n)}</td><td class="lft">${escAttr(name(l.u))}</td><td class="lft">${escAttr(l.canal)}</td><td class="lft">${l.lm?"último mensaje":"nunca contactado"}</td><td style="color:var(--rojo);font-weight:700">${days} días</td></tr>`;
+    return `<tr><td class="lft celda-fuerte">${escAttr(l.n)}</td><td class="lft">${escAttr(name(l.u))}</td><td class="lft">${escAttr(l.canal)}</td>
+      <td class="lft">${escAttr(l.stage||"(sin etapa)")}</td>
+      <td class="lft">${cita?"la cita ya pasó y sigue en la etapa":(l.lm?"último mensaje":"nunca contactado")}</td>
+      <td style="color:var(--rojo);font-weight:700">${cita?"—":days+" días"}</td></tr>`;
   }).join("");
   html += `<div class="rep-section mb-sec"><h3>Más de 7 días sin toque · ${stale.length} lead${stale.length!==1?"s":""}</h3>
-    <table class="rep"><thead><tr><th class="lft">Lead</th><th class="lft">Asesor</th><th class="lft">Canal</th><th class="lft">Estado</th><th class="lft">Sin toque</th></tr></thead>
-    <tbody>${staleRows || `<tr><td colspan="5" class="lft txt-nota">Ninguno — todos los leads del rango tienen un toque en los últimos 7 días.</td></tr>`}</tbody></table>
-    ${stale.length>40?`<p class="hint">…y ${stale.length-40} más.</p>`:""}</div>`;
+    <table class="rep"><thead><tr><th class="lft">Lead</th><th class="lft">Asesor</th><th class="lft">Canal</th><th class="lft">Etapa (CRM)</th><th class="lft">Estado</th><th class="lft">Sin toque</th></tr></thead>
+    <tbody>${staleRows || `<tr><td colspan="6" class="lft txt-nota">Ninguno — todos los leads del rango tienen un toque en los últimos 7 días.</td></tr>`}</tbody></table>
+    ${stale.length>40?`<p class="hint">…y ${stale.length-40} más.</p>`:""}
+    <p class="hint">Etapas excluidas de esta regla (y solo de esta regla): ${SLA_ETAPAS_EXCL.join(" · ")}. Zoom agendado y Tour agendado sí se miden, desde la fecha de la cita. Un lead sin oportunidad aún no tiene etapa y se mide por los 7 días. (La medición por dwell propio de cada etapa —spec E2— espera el timestamp de entrada a etapa, spec B2-1.)</p></div>`;
 
   // --- OPPs y WONs por asesor (rango). Roster (spec A2): dueños fuera del roster se
   // agregan en una línea de volumen, no se listan como si fueran asesores.
@@ -4969,6 +5064,32 @@ function slaRender(){
   const conHand = leads.filter(l=>l.hand).length;
   if(conHand){
     html += `<div class="lq-meth">ℹ En <b>${conHand}</b> de ${leads.length} leads el reloj no arranca en la fecha de alta del contacto sino en el <b>traspaso a ventas</b> (cuando entró al pipeline). Son leads que estuvieron un tiempo en marketing antes de asignarse: medirlos desde su alta los haría ver como respuestas de días o semanas.</div>`;
+  }
+  // --- Manual vs CRM (spec B1): el catálogo de etapas del pipeline principal, lado a
+  // lado con el manual, con las cuatro etapas por verificar señaladas. Los filtros del
+  // reporte se codifican contra la columna del CRM, carácter por carácter.
+  if((agg.pipelines||[]).length){
+    const sv = agg.pipelines.find(p=>/seguimiento\s*de\s*ventas/i.test(p.name||""));
+    if(sv){
+      const crmNames = (sv.stages||[]).map(s=>s.name);
+      const compact = (s)=> slaNorm(s).replace(/[\s\/]+/g,"");
+      const filas = SLA_MANUAL_ETAPAS.map(([m,dw])=>{
+        const exacta = crmNames.find(n=>n===m);
+        const parecida = exacta || crmNames.find(n=>compact(n)===compact(m));
+        const estado = exacta ? `<span style="color:var(--verde-prof)">✓ idéntica</span>`
+          : parecida ? `<span style="color:var(--cobre)">≠ el CRM escribe "${escAttr(parecida)}"</span>`
+          : `<span style="color:var(--rojo);font-weight:700">✗ NO existe en el CRM — verificar (B1)</span>`;
+        return `<tr><td class="lft">${escAttr(m)}</td><td class="lft">${escAttr(parecida||"—")}</td><td class="lft">${escAttr(dw)}</td><td class="lft">${estado}</td></tr>`;
+      }).join("");
+      const sinManual = crmNames.filter(n=>!SLA_MANUAL_ETAPAS.some(([m])=>compact(m)===compact(n)));
+      html += `<div class="rep-section mb-sec"><h3>Etapas: manual vs CRM (spec B1 · Anexo A)</h3>
+        <div class="table-scroll"><table class="rep"><thead><tr><th class="lft">Manual</th><th class="lft">CRM (literal)</th><th class="lft">Dwell del manual</th><th class="lft">Estado</th></tr></thead>
+        <tbody>${filas}</tbody></table></div>
+        ${sinManual.length?`<p class="hint">Etapas en el CRM que el manual no documenta: ${sinManual.map(escAttr).join(" · ")}.</p>`:""}
+        <p class="hint">Los filtros del reporte usan la columna <b>CRM</b> tal cual. Donde dice "NO existe", la etapa hay que crearla en GoHighLevel o nombrar cuál juega su papel — decisión de Dirección, no del reporte. Sin "Cotización enviada" y "Apartado" no se pueden calcular OPP→Apartado ni Apartado→WON (spec D2).</p></div>`;
+    } else {
+      html += `<div class="lq-meth">⚠ No se encontró el pipeline <b>"Seguimiento de ventas"</b> en el catálogo del CRM para la comparación manual-vs-CRM (spec B1).</div>`;
+    }
   }
   // Bloque de Definiciones (spec F3): en las palabras de la sección 1 de la spec v1.0.
   // Regla: una métrica no sale a pantalla sin su definición aquí, y cuando una
@@ -5002,6 +5123,9 @@ function slaRender(){
     <b>60 segundos</b> del Ejecutivo de Primer Contacto, que aplica desde la calibración de septiembre.</div>`;
 
   document.getElementById("sla-content").innerHTML = html;
+  // Filtro de campaña (spec D5)
+  const selC = document.getElementById("sla-camp");
+  if(selC) selC.onchange = ()=>{ slaState.camp = selC.value; slaRender(); };
   // Selector de asesor: por el <select>, por el botón de limpiar, o clic en la fila
   const selA = document.getElementById("sla-asesor");
   if(selA) selA.onchange = ()=>{ slaState.asesor = selA.value; slaRender(); };
@@ -5068,15 +5192,16 @@ async function slaSync(){
     bar.style.width="94%"; lbl.textContent="Resolviendo asesores…";
     let usersMap={};
     let fieldsArr = [];
-    try{ const u = await slaFn({action:"users"}); usersMap = u.users || {}; fieldsArr = u.fields || []; }
-    catch(e){ fallos.push("los nombres de los asesores (aparecerán como identificadores)"); }
+    let pipesArr = [];
+    try{ const u = await slaFn({action:"users"}); usersMap = u.users || {}; fieldsArr = u.fields || []; pipesArr = u.pipelines || []; }
+    catch(e){ fallos.push("los nombres de los asesores y el catálogo de etapas"); }
     bar.style.width="100%"; lbl.textContent="Procesando…";
     if(lotesFallidos){
       fallos.push(`las conversaciones y citas de ${leadsSinBarrer} lead${leadsSinBarrer!==1?"s":""} `
         + `(${lotesFallidos} lote${lotesFallidos!==1?"s fallaron":" falló"}) — `
         + `sus asesores salen con menos actividad de la real`);
     }
-    slaState.agg = buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr);
+    slaState.agg = buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr, pipesArr);
     slaState.agg.fallos = fallos;
     sSet(SLA_AGG_KEY, slaState.agg).catch(e=>toast("Cache del reporte no guardado: "+(e.message||e)));
     slaPopulateWeeks(); slaRender();

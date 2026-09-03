@@ -268,9 +268,12 @@ async function sweep({ ids }) {
 }
 
 async function users() {
-  const [resp, fieldsResp] = await Promise.all([
+  const [resp, fieldsResp, pipesResp] = await Promise.all([
     ghl(`/users/?locationId=${LOCATION_ID}`).catch(() => null),
     ghl(`/locations/${LOCATION_ID}/customFields`).catch(() => null),
+    // Catálogo de pipelines y etapas, LITERAL como lo escribe el CRM (spec B1/D1/E1):
+    // contra esta columna se codifican los filtros de etapa, carácter por carácter.
+    ghl(`/opportunities/pipelines?locationId=${LOCATION_ID}`).catch(() => null),
   ]);
   const map = {};
   if (resp && Array.isArray(resp.users)) {
@@ -279,7 +282,12 @@ async function users() {
   const fields = ((fieldsResp && fieldsResp.customFields) || []).map((f) => ({
     id: f.id, name: f.name || f.fieldKey || "", key: f.fieldKey || "",
   }));
-  return { users: map, fields };
+  const pipelines = ((pipesResp && pipesResp.pipelines) || []).map((p) => ({
+    id: p.id, name: p.name || "",
+    stages: (p.stages || []).slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+      .map((s) => ({ id: s.id, name: s.name || "" })),
+  }));
+  return { users: map, fields, pipelines };
 }
 
 async function opps({ startAfter, startAfterId, since }) {
@@ -310,6 +318,9 @@ async function opps({ startAfter, startAfterId, since }) {
       c: o.createdAt || "",
       stc: o.lastStatusChangeAt || o.createdAt || "",
       v: Number(o.monetaryValue) || 0,
+      p: o.pipelineId || "",                                   // pipeline (alcance D1)
+      s: o.pipelineStageId || "",                              // etapa actual (E1)
+      sc: o.lastStageChangeAt || o.lastStatusChangeAt || o.updatedAt || o.createdAt || "",
     }));
     total = (data.meta && data.meta.total) || total;
     const meta = data.meta || {};
