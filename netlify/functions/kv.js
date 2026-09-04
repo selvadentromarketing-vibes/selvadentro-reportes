@@ -29,6 +29,12 @@ function canalesDeClave(k, op) {
   // usuario solo-ventas recibía 403 al cargarlo y la app levantaba la franja roja de
   // "no se pudieron leer los datos". Lectura libre; escribirlo sigue siendo de marketing.
   if (key === "mkt_logo" && op !== "set" && op !== "del") return null;
+  // Las metas del negocio las LEE toda la app —salen en Dirección, en Ventas y en cada
+  // reporte de canal— así que negar la lectura dejaría las pantallas sin metas. Pero
+  // cambiarlas es una decisión de Dirección, no de cualquiera con sesión.
+  if (key === "selvadentro:metas") {
+    return (op === "set" || op === "del") ? ["direccion_general", "direccion_comercial"] : null;
+  }
   // Registros de un canal de ventas: "<canal>:week:…" o "<canal>:rec:…"
   const m = key.match(/^([a-z_]+):(?:week|rec|metas|last_resp):/);
   if (m && CANALES_VENTAS.includes(m[1])) return [m[1], "direccion_general", "direccion_comercial"];

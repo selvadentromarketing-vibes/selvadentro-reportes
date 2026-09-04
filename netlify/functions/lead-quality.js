@@ -267,15 +267,25 @@ async function ads({ start, end }) {
   // También se pide url_tags: 9 de 11 anuncios escriben utm_content={{adset.name}}, así
   // que saber qué manda cada anuncio es lo que permite cruzar el lead con el anuncio.
   const [fb, gg] = await Promise.all([
-    windsorGet("facebook", `${range}&fields=date,campaign,adset_name,ad_id,ad_name,publisher_platform,effective_status,ad_preview_shareable_link,url_tags,spend,impressions,clicks,actions_lead`)
+    windsorGet("facebook", `${range}&fields=date,campaign,campaign_id,adset_name,adset_id,ad_id,ad_name,publisher_platform,effective_status,ad_preview_shareable_link,url_tags,spend,impressions,clicks,actions_lead`)
       // si el campo de leads no está disponible en la cuenta, degradar sin resultados
       .catch(() => windsorGet("facebook", `${range}&fields=date,campaign,adset_name,ad_id,ad_name,publisher_platform,effective_status,ad_preview_shareable_link,spend,impressions,clicks`).catch(() => [])),
-    windsorGet("google_ads", `${range}&fields=date,campaign,ad_group_name,ad_id,ad_name,ad_group_ad_status,ad_final_urls,spend,impressions,clicks,conversions`).catch(() => []),
+    // GOOGLE MANDA IDs, NO NOMBRES. El sufijo de URL final de la cuenta es
+    // `utm_campaign={campaignid}&utm_content={adgroupid}&utm_term={keyword}`, así que en
+    // GoHighLevel el lead de Google llega con utm_campaign=23715389989 y utm_content=
+    // 193313814165. Windsor sí devuelve el nombre legible, pero el reporte cruzaba nombre
+    // contra número: las campañas de Google salían como "23715389989" (familia "237") y sus
+    // filas de leads/costo en guion. ValueTrack no tiene un token de NOMBRE de campaña, así
+    // que no es algo que se pueda arreglar en Google: se piden los ids y el reporte traduce.
+    // Se piden también los sufijos y plantillas de tracking para auditar el etiquetado.
+    windsorGet("google_ads", `${range}&fields=date,campaign,campaign_id,ad_group_name,ad_group_id,ad_id,ad_name,ad_group_ad_status,ad_final_urls,ad_final_url_suffix,final_url_suffix,tracking_url_template,customer_final_url_suffix,customer_tracking_url_template,spend,impressions,clicks,conversions`)
+      .catch(() => windsorGet("google_ads", `${range}&fields=date,campaign,campaign_id,ad_group_name,ad_group_id,ad_id,ad_name,ad_group_ad_status,ad_final_urls,spend,impressions,clicks,conversions`).catch(() => [])),
   ]);
   // Filas por día × anuncio: el frontend las agrupa por semana/rango seleccionado
   const rows = [];
   fb.forEach((r) => rows.push({
     d: r.date || "", plat: "Meta", camp: r.campaign || "", grp: r.adset_name || "", id: String(r.ad_id || ""),
+    cid: String(r.campaign_id || ""), gid: String(r.adset_id || ""),
     name: r.ad_name || "", pp: r.publisher_platform || "", status: r.effective_status || "", link: r.ad_preview_shareable_link || "",
     // Qué manda el anuncio en utm_content: si es {{adset.name}}, el lead del CRM trae el
     // nombre del CONJUNTO y hay que cruzar por ahí, no por el nombre del anuncio.
@@ -293,7 +303,12 @@ async function ads({ start, end }) {
   };
   gg.forEach((r) => rows.push({
     d: r.date || "", plat: "Google", camp: r.campaign || "", grp: r.ad_group_name || "", id: String(r.ad_id || ""),
+    cid: String(r.campaign_id || ""), gid: String(r.ad_group_id || ""),
     name: r.ad_name || "", pp: "Google Ads", status: r.ad_group_ad_status || "", link: primeraUrl(r.ad_final_urls),
+    // Lo que Google ADJUNTA a la URL: primero lo del anuncio, luego lo de la campaña /
+    // grupo, luego lo de la cuenta. Es el equivalente de url_tags en Meta.
+    tags: String(r.ad_final_url_suffix || r.final_url_suffix || r.customer_final_url_suffix || "").trim(),
+    plantilla: String(r.ad_tracking_url_template || r.tracking_url_template || r.customer_tracking_url_template || "").trim(),
     spend: num(r.spend), impr: num(r.impressions), clicks: num(r.clicks), results: num(r.conversions),
   }));
   return { configured: true, ads: rows.filter((r) => r.spend || r.clicks || r.impr || r.results) };
