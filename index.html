@@ -2362,10 +2362,13 @@ const METRIC_MAP = {
    conversiones objetivo. Decían "editables" en el comentario desde el primer día, pero
    nunca tuvieron pantalla: eran constantes en el código y cambiarlas requería un deploy.
    Ahora son los valores POR DEFECTO y la pantalla de Metas los sobrescribe desde
-   selvadentro:metas.__global. Se conservan los defaults para poder restaurar. */
+   selvadentro:metas.__global. Se conservan los defaults para poder restaurar.
+   Meta mensual de WON = 4 TOTAL, fijada por Dirección General el 2026-08-24 (spec F1;
+   antes sumaba 9). Se reparte entre canales conservando el mix histórico. Si la pantalla
+   de Metas guardó valores viejos en el kv, hay que corregirlos AHÍ también. */
 const CHANNEL_META_DEF = {
-  brokers:{won:4,mix:0.45}, paid_organico:{won:2,mix:0.22}, seminarios:{won:1,mix:0.14},
-  referidos:{won:0.5,mix:0.05}, pd_leads:{won:0.5,mix:0.05}, pd_brokers:{won:0.5,mix:0.05}, rp_vip:{won:0.5,mix:0.04},
+  brokers:{won:1.8,mix:0.45}, paid_organico:{won:0.9,mix:0.22}, seminarios:{won:0.55,mix:0.14},
+  referidos:{won:0.2,mix:0.05}, pd_leads:{won:0.2,mix:0.05}, pd_brokers:{won:0.2,mix:0.05}, rp_vip:{won:0.15,mix:0.04},
 };
 const CONV_T_DEF = { zo:0.15, to:0.20, oa:0.30, aw:0.80 };
 const CONV_T_LBL = { zo:"Zooms → OPP", to:"Tours → OPP", oa:"OPP → Apartados", aw:"Apartados → WON reportado" };
@@ -4662,9 +4665,9 @@ async function showLQ(){
 // Reporte de disciplina comercial directo del CRM: SLA de primera respuesta por
 // asesor y canal, leads >7 días sin toque, trabajados vs contactados efectivos,
 // citas y show rate, y OPPs/WONs por asesor. Con nombres, acumulable por semanas.
-const SLA_AGG_KEY = "sla:agg:v5";   // v5: primer toque MANUAL y llamada conectada, no el mensaje automático   // v4: reloj 24/7 y arranque en el traspaso a ventas
+const SLA_AGG_KEY = "sla:agg:v6";   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
 const SLA_STALE_MS = 7*86400e3; // "sin toque" = 7 días sin mensaje
-const slaState = { built:false, agg:null, syncing:false, asesor:"" };   // asesor:"" = todo el equipo
+const slaState = { built:false, agg:null, syncing:false, asesor:"", camp:"" };   // asesor/camp "" = sin filtro
 
 async function slaFn(body){
   const r = await fetch("/.netlify/functions/sla-report", { method:"POST", headers:{"Content-Type":"application/json", "Authorization":"Bearer "+AUTH_TOKEN}, body:JSON.stringify(body) });
@@ -4756,11 +4759,17 @@ function slaBreakup(l){
    5 sub-notas independientes en escala 1-5, cada una con sus propios umbrales de %.
    La nota global es el promedio de las sub-notas DISPONIBLES y nunca se muestra sola.
    Una sub-nota sin dato queda N/A y no baja la global. */
+// Spec v1.0 (2026-09-02): Velocidad se mide en la ventana de 5 MINUTOS (A5) con
+// umbrales recalibrados — PROPUESTOS, pendientes de aprobación de Dirección General:
+// medida a 5 min la distribución actual del equipo es 22-45%, y conservar los umbrales
+// de la ventana vieja hundiría a todos por un cambio de regla, no de trabajo.
+// "Cumplimiento de tareas" sustituye a "Seguimiento a futuro" (C1), que era N/A
+// permanente porque sus campos no existen en GoHighLevel.
 const SLA_DIMS = [
-  { key:"vel",    label:"Velocidad de primer contacto", thr:[20,40,60,80] },
+  { key:"vel",    label:"Velocidad de primer contacto (≤5 min)", thr:[10,20,30,45], prop:true },
   { key:"cad",    label:"Cadencia / seguimiento (10 días)", thr:[20,40,60,80] },
   { key:"cierre", label:"Cierre de ciclo (break-up)", thr:[10,20,35,50] },
-  { key:"seg",    label:"Seguimiento a futuro", thr:[10,25,40,60] },
+  { key:"tareas", label:"Cumplimiento de tareas", thr:[50,70,85,95], prop:true },
   { key:"efec",   label:"Actividad efectiva", thr:[50,70,85,95] },
 ];
 const SLA_MIN_N = 10;                        // muestra pequeña: se marca y sale del ranking
@@ -4771,22 +4780,26 @@ function scoreOf(pct, thr){
   if(pct>=thr[1]) return 3; if(pct>=thr[0]) return 2; return 1;
 }
 
-// Calcula las 5 sub-notas, el índice de calidad y la tasa de oportunidades de un asesor
+// Calcula las 5 sub-notas, el índice de calidad y la tasa de oportunidades de un asesor.
+// Regla de la spec (A1): el numerador SIEMPRE es subconjunto del denominador, y cada
+// porcentaje viaja con sus dos números (cnt) para poder mostrarlos en pantalla.
 function slaScoreAsesor(arr){
   const cd = arr.filter(l=>!l.sd);          // sin datos de conversación = no se puede juzgar
   const N = cd.length;
   const pct = (x)=> N ? x/N*100 : 0;
-  // Velocidad: % dentro de la ventana de oro de 2 h (rangos 0-5, 5-30, 30-120)
-  const enVentana = cd.filter(l=>l.bucket!=="out").length;
+  // Velocidad (A5): % con primer toque manual en ≤5 MINUTOS (antes: ventana de 2 h)
+  const b5 = cd.filter(l=>l.bucket==="b5").length;
   // Cadencia: % con al menos 3 días distintos de contacto manual en los primeros 10 días
   const c3 = cd.filter(l=>(l.d10||0)>=3).length, c5 = cd.filter(l=>(l.d10||0)>=5).length;
-  // Cierre de ciclo: denominador = descalificados; si no hay, N (como el prototipo)
+  // Cierre de ciclo (A1): UNA población fija — los descalificados del asesor — y el
+  // numerador es subconjunto: descalificados QUE recibieron la escalera completa.
+  // Sin descalificados: N/A, nunca un denominador de reemplazo (el fallback al total
+  // de leads invertía el ranking: 700% y 143% puntuaban 5/5 y el 13% real puntuaba 2).
   const desc = cd.filter(l=>l.lv==="desc").length;
-  const bkDen = desc > 0 ? desc : N;
-  const bk = cd.filter(l=>l.breakup).length;
-  // Seguimiento a futuro: campos manuales de GHL (semanal mp / mensual lp)
-  const segMarcados = cd.filter(l=>l.segSem || l.segMes).length;
-  const segMedido = cd.some(l=>l.segSem!=null || l.segMes!=null);
+  const bk = cd.filter(l=>l.lv==="desc" && l.breakup).length;
+  // Cumplimiento de tareas (C1): tareas del CRM cerradas en o antes de su fecha.
+  let tkProg=0, tkFecha=0, tkVenc=0, tkLeidas=false;
+  cd.forEach(l=>{ if(l.terr || !l.tk) return; tkLeidas=true; tkProg+=l.tk.prog||0; tkFecha+=l.tk.enFecha||0; tkVenc+=l.tk.venc||0; });
   // Actividad efectiva: entregados + leídos ÷ enviados
   let env=0, ent=0;
   cd.forEach(l=>{ const d=l.deliv; if(!d) return;
@@ -4795,11 +4808,20 @@ function slaScoreAsesor(arr){
   const pctEfec = env > 0 ? ent/env*100 : null;
 
   const pcts = {
-    vel: pct(enVentana), cad: pct(c3), cierre: bkDen ? bk/bkDen*100 : 0,
-    seg: segMedido ? pct(segMarcados) : null, efec: pctEfec,
-    c5: pct(c5), d05: pct(cd.filter(l=>l.bucket==="b5").length),
+    vel: pct(b5), cad: pct(c3),
+    cierre: desc > 0 ? bk/desc*100 : null,
+    tareas: (tkLeidas && tkProg > 0) ? tkFecha/tkProg*100 : null,
+    efec: pctEfec,
+    c5: pct(c5), d05: pct(b5),
     d30: pct(cd.filter(l=>l.bucket==="b30").length), d120: pct(cd.filter(l=>l.bucket==="b120").length),
     dout: pct(cd.filter(l=>l.bucket==="out").length),
+  };
+  // Los dos números de cada porcentaje, para imprimirlos junto a él (spec A1)
+  const cnt = {
+    vel:[b5,N], cad:[c3,N],
+    cierre: desc>0 ? [bk,desc] : null,
+    tareas: (tkLeidas && tkProg>0) ? [tkFecha,tkProg] : null,
+    efec: env>0 ? [ent,env] : null,
   };
   const sub = {};
   SLA_DIMS.forEach(d=>{ sub[d.key] = scoreOf(pcts[d.key], d.thr); });
@@ -4815,11 +4837,21 @@ function slaScoreAsesor(arr){
   const qTot = q.sqls+q.sql+q.mql+q.cql+q.desc;
   const qIndex = qTot ? (4*q.sqls + 3*q.sql + 2*q.mql + 1*q.cql)/(4*qTot)*100 : null;
 
-  // Tasa de oportunidades: opps creadas en el rango de los CONTACTOS de este asesor,
-  // entre todos sus leads del rango (mismo universo arriba y abajo).
+  // Tasa de oportunidades: LEADS del rango con al menos una oportunidad creada, entre
+  // todos sus leads del rango — subconjunto real, nunca puede pasar de 100% (A1).
   const opp = arr.reduce((a,l)=>a+(l.opp||0),0);
-  return { N, sub, global, pcts, q, qTot, qIndex, oppRate: arr.length ? opp/arr.length*100 : 0, opp,
-           small: N < SLA_MIN_N, bkDen, bk, desc, segMedido,
+  const leadsConOpp = arr.filter(l=>(l.opp||0)>0).length;
+  // Índice de calidad en escala 1-5 (C2): mismo criterio publicado, solo re-escalado.
+  const q5 = qIndex==null ? null : 1 + 4*qIndex/100;
+  // Tasa de agendamiento y días a la cita (D3): sobre contactados efectivos con citas legibles
+  const agBase = cd.filter(l=>l.fi && !l.ad);
+  const agCon = agBase.filter(l=>l.ap && l.ap.tot>0).length;
+  const diasCita = slaMedian(agBase.filter(l=>l.ap && l.ap.f && l.ap.f>=l.fi).map(l=>(l.ap.f-l.fi)/86400e3));
+  return { N, sub, global, pcts, cnt, q, qTot, qIndex, q5,
+           oppRate: arr.length ? leadsConOpp/arr.length*100 : 0, opp, leadsConOpp, leadsTot: arr.length,
+           tk: { prog: tkProg, enFecha: tkFecha, venc: tkVenc, leidas: tkLeidas },
+           agend: { con: agCon, de: agBase.length, dias: diasCita },
+           small: N < SLA_MIN_N, bk, desc,
            citas: arr.filter(l=>!l.ad).reduce((a,l)=>a+l.ap.tot,0),
            showed: arr.filter(l=>!l.ad).reduce((a,l)=>a+l.ap.sh,0),
            sinCitas: arr.filter(l=>l.ad).length };
@@ -4841,13 +4873,24 @@ function slaNormalizar(rows){
   return rows;
 }
 
-function slaAsesorSection(agg){
+function slaAsesorSection(agg, leadsIn){
   const name = (u)=> agg.users[u] || (u ? "(sin nombre)" : "(sin asesor)");
-  const groups = {};
-  agg.leads.forEach(l=>{ (groups[l.u]=groups[l.u]||[]).push(l); });
+  const universo = leadsIn || agg.leads;
+  // Solo se califica a quien está en el roster de Asesores (spec A2). Antes el ranking
+  // calificaba a cualquier dueño del CRM — "Selvadentro Tulum", "(sin asesor)", perfiles
+  // que no venden — puro ruido, y los leads pagados estacionados con no-vendedores
+  // desaparecían del problema en vez de señalarse.
+  const rosterIds = slaRosterIds(agg.users);
+  const groups = {}; const fuera = [];
+  universo.forEach(l=>{ if(rosterIds.has(l.u)) (groups[l.u]=groups[l.u]||[]).push(l); else fuera.push(l); });
+  // Un asesor del roster sin leads aparece en cero, no desaparece.
+  rosterIds.forEach(u=>{ groups[u] = groups[u] || []; });
   let rows = Object.keys(groups).map(u=>({ u, a:groups[u], c:slaScoreAsesor(groups[u]) }));
   rows.sort((x,y)=>(y.c.global??-1)-(x.c.global??-1));
   slaNormalizar(rows);
+  // Si el roster no empató con ningún usuario de GHL (nombres distintos), avisar en vez
+  // de mostrar una tabla vacía sin explicación.
+  const rosterVacio = !rosterIds.size;
 
   const pill = (v)=> v==null ? `<span class="sla-pill na">N/A</span>` : `<span class="sla-pill s${v}">${v}</span>`;
   const adjTag = (r)=> r.c.small ? `<span class="tag-sm">muestra chica</span>`
@@ -4856,15 +4899,22 @@ function slaAsesorSection(agg){
     : r.adj==="mid" ? `<span class="tag-mid">En línea</span>` : `<span style="color:var(--neutro)">—</span>`;
 
   const tbody = rows.map(r=>{
-    const gl = r.c.global==null ? "—" : r.c.global.toFixed(1);
+    // Con menos de 10 leads NO se emite nota (regla de la spec): "sin muestra
+    // suficiente", nunca un 1.0 Crítico que persiga a alguien en una evaluación.
+    const gl = r.c.small ? `<span class="tag-sm">sin muestra suficiente</span>`
+      : r.c.global==null ? "—"
+      : `<b>${r.c.global.toFixed(1)}</b><div class="lq-sub">${SCORELAB[Math.round(r.c.global)]}</div>`;
     const sel = slaState.asesor===r.u;
     return `<tr class="sla-fila${sel?" sel":""}" data-sla-u="${escAttr(r.u)}" style="cursor:pointer${sel?";background:var(--crema-2)":""}"><td class="name">${escAttr(name(r.u))}${r.c.small?' <span class="tag-sm">N chica</span>':''}</td>
       <td>${r.c.N}</td>
-      ${SLA_DIMS.map(d=>`<td>${pill(r.c.sub[d.key])}</td>`).join("")}
-      <td><b>${gl}</b><div class="lq-sub">${r.c.global==null?"":SCORELAB[Math.round(r.c.global)]}</div></td>
-      <td>${r.c.qIndex==null?"—":Math.round(r.c.qIndex)}</td>
+      ${SLA_DIMS.map(d=>`<td>${r.c.small?'<span class="sla-pill na">—</span>':pill(r.c.sub[d.key])}</td>`).join("")}
+      <td>${gl}</td>
+      <td>${r.c.q5==null?"—":r.c.q5.toFixed(1)}</td>
       <td>${adjTag(r)}</td></tr>`;
-  }).join("");
+  }).join("")
+  // Todo dueño fuera del roster, en UNA línea: volumen a corregir, jamás calificado.
+  + (fuera.length ? `<tr style="background:var(--crema)"><td class="name">Fuera del equipo de ventas <span class="lq-sub">(${[...new Set(fuera.map(l=>name(l.u)))].slice(0,6).map(escAttr).join(", ")})</span></td>
+      <td><b>${fuera.length}</b></td><td colspan="${SLA_DIMS.length+3}" class="lft txt-nota">No se califica. Son leads asignados a alguien que no vende: volumen a corregir reasignándolos a un asesor del roster.</td></tr>` : "");
 
   // Selector de asesor: abre en todo el equipo (así se ve quién se está quedando
   // atrás) y al elegir a uno se despliega su ficha debajo de la tabla.
@@ -4883,7 +4933,7 @@ function slaAsesorSection(agg){
     <div class="table-scroll" style="margin-bottom:8px"><table class="cons">
       <tr><th class="lft">Asesor</th><th>N</th>
         ${SLA_DIMS.map(d=>`<th title="${escAttr(d.label)} · umbrales ${d.thr.join("/")}%">${escAttr(d.label.split(" ")[0])}</th>`).join("")}
-        <th>Nota global</th><th title="SQL Selvadentro×4 + SQL×3 + CQL×1 sobre el total">Índice calidad</th>
+        <th>Nota global</th><th title="Escala 1-5: 1 + 4×[(SQL Selvadentro×4 + SQL×3 + MQL×2 + CQL×1) ÷ (4 × total calificado)]. En blanco = sin leads calificados.">Índice calidad (1-5)</th>
         <th title="Percentil de su tasa de oportunidades vs. percentil de la calidad de lead que recibió">Resultado ajustado</th></tr>
       ${tbody || `<tr><td colspan="10" class="lft txt-nota">Sin leads en el rango.</td></tr>`}
     </table></div>`;
@@ -4896,10 +4946,11 @@ function slaAsesorSection(agg){
     const c=r.c;
     const col=(v)=> v==null?"#9aa39d":v===5?"var(--verde-prof)":v===4?"#5aa08f":v===3?"var(--cobre)":v===2?"#c9743a":"var(--rojo)";
     const bars = SLA_DIMS.map(d=>{
-      const v=c.sub[d.key], pc=c.pcts[d.key];
+      const v=c.sub[d.key], pc=c.pcts[d.key], nd=c.cnt ? c.cnt[d.key] : null;
+      // Cada porcentaje muestra los dos números de los que sale (spec A1)
       return `<div class="sla-bar"><span class="sb-lbl">${escAttr(d.label)}</span>
         <span class="sb-track"><i style="width:${v==null?0:v/5*100}%;background:${col(v)}"></i></span>
-        <span class="sb-val">${v==null?"N/A":v}${pc==null?"":` · ${Math.round(pc)}%`}</span></div>`;
+        <span class="sb-val">${v==null?"N/A":v}${pc==null?"":` · ${Math.round(pc)}%`}${nd?` <span style="color:var(--neutro)">(${nd[0]} de ${nd[1]})</span>`:""}</span></div>`;
     }).join("");
     const dist = [["d05","0-5 min","var(--verde-prof)"],["d30","5-30 min","#5aa08f"],["d120","30 m-2 h","var(--cobre)"],["dout","fuera / sin contacto","#ddd8cb"]];
     return `<div class="lq-card" style="margin-bottom:14px">
@@ -4908,7 +4959,7 @@ function slaAsesorSection(agg){
         ${c.small?'<span class="tag-sm">muestra pequeña — interpretar con cautela</span>':''}
         <span style="margin-left:auto;font-size:var(--fs-s);color:var(--neutro)">Nota global <b style="font-size:var(--fs-xl);color:var(--verde-prof)">${c.global==null?"—":c.global.toFixed(1)}</b>/5</span>
       </div>
-      <div class="lq-sub" style="margin-bottom:10px">N = ${c.N} leads · OPPs: ${c.opp} (${Math.round(c.oppRate)}%) · citas: ${c.showed}/${c.citas} asistidas · índice de calidad: ${c.qIndex==null?"—":Math.round(c.qIndex)+"/100"} · break up: ${c.bk} de ${c.bkDen} ${c.desc?"descalificados":"leads"}</div>
+      <div class="lq-sub" style="margin-bottom:10px">N = ${c.N} leads · oportunidades creadas: ${c.opp} · leads con oportunidad: ${c.leadsConOpp} de ${c.leadsTot} (${Math.round(c.oppRate)}%) · citas: ${c.showed}/${c.citas} asistidas · agendamiento: ${c.agend.de?`${c.agend.con} de ${c.agend.de} efectivos (${Math.round(c.agend.con/c.agend.de*100)}%)`:"—"} · índice de calidad: ${c.q5==null?"— (sin leads calificados en el CRM)":c.q5.toFixed(1)+"/5"} · break up: ${c.desc?`${c.bk} de ${c.desc} descalificados`:"N/A (sin descalificados)"} · tareas: ${c.tk.leidas?`${c.tk.prog} programadas · ${c.tk.enFecha} en fecha · ${c.tk.venc} vencidas abiertas`:"sin datos de tareas"}</div>
       ${bars}
       <div style="font-size:var(--fs-s);font-weight:600;color:var(--neutro);margin:12px 0 4px">Distribución de velocidad de primer contacto</div>
       <div class="lq-qbar">${dist.map(([k,,cl])=>`<span style="width:${c.pcts[k]}%;background:${cl}"></span>`).join("")}</div>
@@ -4916,29 +4967,54 @@ function slaAsesorSection(agg){
     </div>`;
   }).join("");
 
-  // Distinguir "no se puede medir" de "gap real": si NADIE tiene el campo lleno,
-  // el 1 de todos es una falta de captura, no de desempeño.
-  const segOff = rows.length && rows.every(r=>!r.c.segMedido);
-  const segVacio = rows.length && !segOff && rows.every(r=>!r.c.pcts.seg);
-  html += `<div class="lq-meth"><b>Rúbrica</b> — cada sub-nota sale del % del criterio contra sus umbrales (≥ para 2 / 3 / 4 / 5):
-    ${SLA_DIMS.map(d=>`<br><b>${escAttr(d.label)}:</b> ${d.thr.join(" · ")}%`).join("")}
-    <br>Escala: 5 Excelente · 4 Bueno · 3 Adecuado · 2 Necesita mejorar · 1 Crítico. Muestra pequeña: menos de ${SLA_MIN_N} leads (se marca y sale del ranking de normalización).
-    <br><b>Índice de calidad</b> = (SQL Selvadentro×4 + SQL×3 + MQL×2 + CQL×1) ÷ (4 × total calificado), de la calificación que trae cada lead; los leads sin calificar no entran.
-    <br><b>Resultado ajustado</b> compara el percentil de la tasa de oportunidades del asesor contra el percentil de la calidad de lead que recibió, entre asesores comparables: separa el mérito del proceso de la suerte en la asignación.
-    <br><b>Cierre de ciclo</b> se mide sobre los descalificados del asesor; si no tiene descalificados, sobre el total de sus leads.
-    ${segOff?'<br>⚠ <b>Seguimiento a futuro</b> sale N/A: los campos "seguimiento semanal / mensual" no existen en GHL, así que no se puede medir y no baja la nota global.':''}
-    ${segVacio?'<br>⚠ <b>Seguimiento a futuro</b> da 1 a todos porque los campos de GHL existen pero están vacíos (1 y 0 de ~2,198 contactos al 4 ago). Es una falta de <b>captura</b>, no de desempeño: al llenarse esos campos la sub-nota se corrige sola. Si prefieren que salga N/A mientras tanto, se cambia en una línea.':''}
-    <br><b>Pendiente:</b> el SLA de leads fríos de marketing debe arrancar en el traspaso a ventas (falta identificar ese evento en GHL) y la causa de descalificación necesita un campo nuevo para distinguir mala calidad de mala gestión.</div>`;
+  if(rosterVacio){
+    html += `<div class="lq-meth" style="border-color:var(--rojo)">⚠ <b>Ningún usuario de GoHighLevel empató con el roster de Asesores.</b>
+      El ranking se construye desde la pantalla <b>Asesores</b> (spec A2): revisa que los nombres ahí coincidan con los nombres de usuario del CRM.</div>`;
+  }
+  // Ventana y población de CADA sub-nota, junto a sus umbrales (spec C3): con esto un
+  // denominador de reemplazo o una ventana desfasada no pueden volver a esconderse.
+  html += `<div class="lq-meth"><b>Rúbrica</b> — cada sub-nota sale del % del criterio contra sus umbrales (≥ para 2 / 3 / 4 / 5). Ventana: el rango de semanas seleccionado. Población: los leads del asesor con datos de conversación legibles, salvo donde se indica.
+    <br><b>Velocidad de primer contacto:</b> ${SLA_DIMS[0].thr.join(" · ")}% — leads con 1er toque manual en ≤5 minutos, desde la entrada del lead (o su traspaso a ventas). <b>Umbrales propuestos, pendientes de aprobación de Dirección General</b>: la ventana cambió de 2 h a 5 min y conservar los umbrales viejos hundiría al equipo por un cambio de regla. Pendiente además el calendario de horario de atención para excluir a los leads fuera de horario (spec B2-3).
+    <br><b>Cadencia / seguimiento:</b> ${SLA_DIMS[1].thr.join(" · ")}% — leads con ≥3 días distintos de contacto manual en sus primeros 10 días.
+    <br><b>Cierre de ciclo:</b> ${SLA_DIMS[2].thr.join(" · ")}% — de los leads DESCALIFICADOS del asesor, cuántos recibieron la escalera completa antes de retirarse. Sin descalificados: N/A. Nunca un denominador de reemplazo.
+    <br><b>Cumplimiento de tareas:</b> ${SLA_DIMS[3].thr.join(" · ")}% — tareas del CRM cerradas en o antes de su fecha, sobre las programadas. Sustituye a "Seguimiento a futuro" (sus campos no existen en GHL). El % nunca se lee sin sus tres cifras: programadas, en fecha y vencidas abiertas — un % alto con pocas tareas premia programar menos. Umbrales propuestos.
+    <br><b>Actividad efectiva:</b> ${SLA_DIMS[4].thr.join(" · ")}% — mensajes entregados + leídos (y llamadas conectadas) ÷ enviados, de las acciones manuales del asesor.
+    <br>Escala: 5 Excelente · 4 Bueno · 3 Adecuado · 2 Necesita mejorar · 1 Crítico. Con menos de ${SLA_MIN_N} leads no se emite nota: "sin muestra suficiente".
+    <br><b>Índice de calidad (1-5)</b> = 1 + 4 × [(SQL Selvadentro×4 + SQL×3 + MQL×2 + CQL×1) ÷ (4 × total calificado)], de la calificación que trae cada lead; los leads sin calificar no entran. En blanco = el asesor no tiene leads calificados en el CRM.
+    <br><b>Resultado ajustado</b> compara el percentil de la tasa de oportunidades del asesor (leads con oportunidad ÷ sus leads) contra el percentil de la calidad de lead que recibió, entre asesores comparables: separa el mérito del proceso de la suerte en la asignación. En una evaluación, la conversación empieza aquí.
+    <br><b>Pendiente:</b> la causa de descalificación necesita el campo de motivo (spec B2-8) para distinguir mala calidad de mala gestión.</div>`;
   return html;
 }
 
-function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr){
+function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr, pipesArr){
   const rangoSet = new Set(rango);
   // Campos de GHL usados por la rúbrica, detectados por nombre
   const find = (re)=>{ const f=(fieldsArr||[]).find(x=>re.test(x.name||"")||re.test(x.key||"")); return f?{id:f.id,name:f.name}:null; };
   const F = { calif: find(/calificaci[oó]n.*lead|lead.*calificaci[oó]n/i) || find(/calificaci[oó]n/i),
               segSem: find(/seguimiento_semanal|seguimiento semanal/i),
-              segMes: find(/seguimiento_mensual|seguimiento mensual/i) };
+              segMes: find(/seguimiento_mensual|seguimiento mensual/i),
+              // Campaña de origen (spec D5): la atribución del contacto y, si viene
+              // vacía, los campos utm_campaign / Campaign del CRM.
+              camp: find(/^utm_campaign$/i) || find(/utm_campaign/i),
+              campAlt: find(/^campaign$/i) };
+  // Catálogo de pipelines/etapas, literal del CRM (spec B1/D1/E1)
+  const pipeName = {}, stageName = {}, stageOfPipe = {};
+  (pipesArr||[]).forEach(p=>{ pipeName[p.id]=p.name||""; (p.stages||[]).forEach(s=>{ stageName[s.id]=s.name||""; stageOfPipe[s.id]=p.name||""; }); });
+  // Pipeline/etapa actual por contacto: la oportunidad movida más recientemente,
+  // y el conjunto de pipelines donde el contacto tiene oportunidades (para el alcance).
+  const ctPipe = {};
+  for(const o of (oppsArr||[])){
+    if(!o.ct) continue;
+    const b = ctPipe[o.ct] = ctPipe[o.ct] || { pipes:new Set(), s:"", p:"", t:0 };
+    if(o.p && pipeName[o.p]) b.pipes.add(pipeName[o.p]);
+    const t = new Date(o.sc||o.c||0).getTime()||0;
+    if(o.s && t >= b.t){ b.t=t; b.s=stageName[o.s]||""; b.p=pipeName[o.p]||""; }
+  }
+  // Alcance por dueño, no por pipeline (spec D1) — con UNA exclusión: Brokers
+  // Expansión y activación recluta brokers, no vende a clientes. Un lead cuyas
+  // oportunidades viven SOLO ahí queda fuera del universo, y se declara cuántos.
+  const esExpansion = (ct)=>{ const b=ctPipe[ct]; return !!(b && b.pipes.size && [...b.pipes].every(n=>/expansi[oó]n\s*y\s*activaci[oó]n/i.test(n))); };
+  const exclExpansion = contactsArr.filter(c=>esExpansion(c.id)).length;
   // Traspaso de marketing a ventas: el cliente confirmó el 2026-08-26 que es cuando
   // el lead ENTRA AL PIPELINE, es decir cuando se le crea la oportunidad. Para un lead
   // frío que llegó hace meses y hoy se empuja a ventas, el reloj del asesor debe
@@ -4951,9 +5027,15 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr)
     if(!traspaso[o.ct] || t < traspaso[o.ct]) traspaso[o.ct] = t;   // la primera del contacto
   }
 
-  const leads = contactsArr.map(c=>{
+  // Registros de prueba fuera de TODO cálculo (spec A3): inflaban la lista de sin toque
+  // y cada porcentaje construido sobre ella. Se cuenta cuántos salieron y se declara.
+  const esTest = (c)=> /(^|\b)(test|prueba|testing|propy\s*test)(\b|\d|$)/i.test(String(c.n||""));
+  const testExcl = contactsArr.filter(esTest).length;
+  const leads = contactsArr.filter(c=>!esTest(c) && !esExpansion(c.id)).map(c=>{
     const wk = lqWeekOf(c.c); if(!wk || !rangoSet.has(wk)) return null;
     const sw = sweepMap[c.id] || {sin:true};
+    const cf = (f)=> f && c.cf ? String(c.cf[f.id]||"").trim() : "";
+    const cp = ctPipe[c.id] || null;
     const alta = new Date(c.c).getTime();
     // Si el lead entró al pipeline DESPUÉS de darse de alta, ese es el momento en que
     // ventas se hizo cargo y desde ahí se le mide.
@@ -4963,9 +5045,12 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr)
     // (el lead respondió), no contra el intento. Se miden los dos por separado.
     const slaAt = (sw.foM && sw.foM>=created) ? sw.foM-created : null;  // hasta el 1er intento MANUAL
     const slaEf = (sw.fi && sw.fi>=created) ? sw.fi-created : null;     // hasta la respuesta del lead
-    const z48 = (sw.ap && sw.ap.f && sw.ap.f>=created) ? (sw.ap.f-created) <= 48*3600e3 : false;
+    // ("cita en ≤48h" retirada por la spec D3: la sustituyen tasa de agendamiento y días a la cita)
     const canal = lqSourceCamp({tags:c.tags, src:c.src, attr:c.attr}).fuente;
+    // Campaña de origen (spec D5) y pipeline/etapa actual (spec D1/E1)
+    const camp = String((c.attr && c.attr.camp) || cf(F.camp) || cf(F.campAlt) || "").trim();
     return { id:c.id, n:c.n, wk, canal, u:c.u||"", created, alta,
+             camp, pipe: cp ? cp.p : "", stage: cp ? cp.s : "",
              // hand = el reloj arrancó en el traspaso a ventas, no en el alta del contacto
              hand: (hand && hand > alta) ? hand : null,
              // fo = primer mensaje saliente de CUALQUIER origen, workflows incluidos. Se
@@ -4973,7 +5058,7 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr)
              // porcentaje de desempeño se calcula con él: por eso el "1er toque" salía
              // 100% en todos los asesores —la automatización de bienvenida le escribe a
              // todos los leads— y el número no decía nada del asesor.
-             fo:sw.fo||null, fi:sw.fi||null, lm:sw.lm||null, li:sw.li||null, slaAt, slaEf, z48,
+             fo:sw.fo||null, fi:sw.fi||null, lm:sw.lm||null, li:sw.li||null, slaAt, slaEf,
              foC: sw.foC||null, callsOk: sw.callsOk||0,
              // lmR = último toque REAL: la última acción manual del asesor o la última
              // respuesta del lead. lm (cualquier mensaje) dejaba fuera de la lista de
@@ -4994,11 +5079,22 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr)
              segSem: F.segSem ? !!(c.cf && c.cf[F.segSem.id]) : null,
              segMes: F.segMes ? !!(c.cf && c.cf[F.segMes.id]) : null,
              opp: 0,
+             // Tareas del CRM (spec C1): programadas / en fecha / vencidas abiertas
+             tk: sw.tk || null, terr: !!(sw.sin || sw.tkerr),
              ap: sw.ap || {tot:0,sh:0,ns:0,fut:0} };
   }).filter(Boolean);
-  // OPPs (cotizaciones) y WONs por asesor dentro del rango
+  // Diagnóstico de telefonía (spec A4): valores reales del status de llamadas + duración
+  const callSt = {}; let callDur = 0, call90 = 0, callTot = 0;
+  Object.values(sweepMap||{}).forEach(sw=>{
+    Object.entries(sw.cst||{}).forEach(([s,n])=>{ callSt[s]=(callSt[s]||0)+n; callTot+=n; });
+    callDur += sw.cdur||0; call90 += sw.c90||0;
+  });
+  // OPPs (cotizaciones) y WONs por asesor dentro del rango. Las oportunidades del
+  // pipeline de expansión de brokers quedan fuera, igual que sus leads (spec D1).
+  const esPipeExp = (p)=> /expansi[oó]n\s*y\s*activaci[oó]n/i.test(pipeName[p]||"");
   const byRepOpp = {};
   for(const o of (oppsArr||[])){
+    if(esPipeExp(o.p)) continue;
     const wc = lqWeekOf(o.c), ww = o.st==="won" ? lqWeekOf(o.stc) : null;
     const u = o.u || "";
     const b = byRepOpp[u] = byRepOpp[u] || {opp:0, won:0, wv:0};
@@ -5013,7 +5109,7 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr)
   // percentiles del "Resultado ajustado".
   const byCt = {}; leads.forEach(l=>{ l.opp = 0; if(l.id) byCt[l.id] = l; });
   for(const o of (oppsArr||[])){
-    if(!o.ct) continue;
+    if(!o.ct || esPipeExp(o.p)) continue;
     const l = byCt[o.ct]; if(!l) continue;
     const wc = lqWeekOf(o.c);
     if(wc && rangoSet.has(wc)) l.opp++;
@@ -5026,13 +5122,56 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr)
     (sw.hrs||[]).forEach((n,i)=>{ hrs[i]+=n||0; });
     (sw.dow||[]).forEach((n,i)=>{ dow[i]+=n||0; });
   });
-  return { ts:Date.now(), rango, users:usersMap||{}, fields:F, leads, byRepOpp, hrs, dow };
+  return { ts:Date.now(), rango, users:usersMap||{}, fields:F, leads, byRepOpp, hrs, dow,
+           testExcl, callSt, callDur, call90, callTot,
+           exclExpansion, pipelines: pipesArr||[] };
+}
+
+// Las siete etapas EXCLUIDAS de la regla de >7 días sin toque (spec E1), literales
+// como las escribe el CRM — y de nada más: siguen contando en el universo, el embudo
+// y todos los demás indicadores. Zoom/Tour agendado SÍ se miden, pero desde la fecha
+// de la cita, no a los 7 días.
+const SLA_ETAPAS_EXCL = ["Sin Respuesta","WON","Largo plazo","Corretaje","Nurturing","Descalificado","Redes sociales"];
+const SLA_ETAPAS_CITA = ["Zoom agendado","Tour agendado"];
+
+// Anexo A de la spec: columna del manual + dwell máximo, para compararla en pantalla
+// contra el catálogo literal del CRM (spec B1) y, después, medir cada etapa contra su
+// propio dwell (E2, pendiente del timestamp de entrada a etapa).
+const SLA_MANUAL_ETAPAS = [
+  ["Nuevo lead (no contactado)","5 minutos"],["1er toque","24 horas"],["2ndo toque","24 horas"],
+  ["3er toque","48 horas"],["Ultimátum","48 horas"],["Break up","48 horas"],
+  ["Sin respuesta","10 días"],["Contacto establecido","48 h (máx. 1 semana)"],
+  ["Interés identificado","Máx. 1 semana"],["Zoom agendado","Hasta la cita"],
+  ["Zoom no show / re agendar","Máx. 1 semana"],["Zoom realizado","Máx. 1 semana"],
+  ["Tour agendado","Hasta la cita"],["Tour no show / re agendar","Máx. 1 semana"],
+  ["Tour realizado","Máx. 1 semana"],["Cotización enviada","Máx. 1 semana"],
+  ["Seguimiento de OPP","Máx. 3 meses"],["Carta Oferta","Máx. 1 semana"],
+  ["Apartado","Máx. 15 días"],["WON","Indefinido"],
+  ["Largo Plazo","Máx. 1 mes entre toques"],["Rescate","Máx. 12 días"],
+  ["Corretaje","Entrega en 48 h"],["Nurturing","Indefinido"],
+  ["Descalificado","Indefinido"],["Redes Sociales","Indefinido"],
+];
+
+// Roster de asesores (spec A2): solo se califica a quien está en la pantalla Asesores.
+// Se empata por nombre (sin acentos ni mayúsculas) contra los usuarios de GHL; todo
+// dueño fuera del roster se agrega en una sola línea "Fuera del equipo de ventas",
+// reportada como volumen a corregir y nunca calificada.
+const SLA_FUERA = "__fuera_del_equipo";
+function slaNorm(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim(); }
+function slaRosterIds(users){
+  const roster = new Set((typeof ADVISOR_LIST!=="undefined"?ADVISOR_LIST:[]).filter(a=>a.active!==false).map(a=>slaNorm(a.name)));
+  const ids = new Set();
+  for(const [id,name] of Object.entries(users||{})){ if(roster.has(slaNorm(name))) ids.add(id); }
+  return ids;
 }
 
 function slaRender(){
   const agg = slaState.agg; if(!agg) return;
   document.getElementById("sla-last-sync").textContent = crmAgo(agg.ts);
-  const leads = agg.leads, now = Date.now();
+  // Filtro por campaña de origen (spec D5). "" = todas; "__sin" = sin campaña atribuida.
+  const fCamp = slaState.camp || "";
+  const leads = !fCamp ? agg.leads : agg.leads.filter(l=> fCamp==="__sin" ? !(l.camp||"").trim() : l.camp===fCamp);
+  const now = Date.now();
   const name = (u)=> agg.users[u] || (u ? "(sin nombre)" : "(sin asesor)");
   const pcti = (n,d)=> d ? Math.round(n/d*100)+"%" : "—";
 
@@ -5049,22 +5188,65 @@ function slaRender(){
   // El aviso de sincronización incompleta va ARRIBA de todo: si faltan conversaciones, la
   // nota de los asesores está subestimada y eso hay que verlo antes que los números.
   let html = bannerIncompleto(agg.fallos, "Generar reporte");
+  // Alcance en pantalla (spec D1): una regla, un universo, y las diferencias explicadas.
+  html += `<p class="hint" style="margin-top:0"><b>Alcance:</b> todo lead creado en las semanas del rango cuenta, esté en el pipeline que esté — el universo lo define el <b>dueño</b>, no el pipeline.
+    Excluidos: ${agg.exclExpansion||0} lead${(agg.exclExpansion||0)!==1?"s":""} de <b>Brokers Expansión y activación</b> (recluta brokers, no vende a clientes) y ${agg.testExcl||0} registro${(agg.testExcl||0)!==1?"s":""} de prueba.
+    La <b>N</b> del ranking cuenta solo leads con conversaciones legibles; la columna <b>Leads</b> los cuenta todos — la diferencia aparece como "s/d" en cada tabla.</p>`;
+  // Filtro por campaña de origen (spec D5)
+  {
+    const cuenta = {}; agg.leads.forEach(l=>{ const k=(l.camp||"").trim()||"__sin"; cuenta[k]=(cuenta[k]||0)+1; });
+    const camps = Object.keys(cuenta).filter(k=>k!=="__sin").sort();
+    html += `<div class="lq-toggle" style="margin:4px 0 10px">
+      <span class="lt-lbl">Campaña de origen</span>
+      <select id="sla-camp" class="lq-search" style="max-width:340px;cursor:pointer">
+        <option value="">Todas (${agg.leads.length})</option>
+        ${camps.map(c=>`<option value="${escAttr(c)}"${fCamp===c?" selected":""}>${escAttr(c)} (${cuenta[c]})</option>`).join("")}
+        ${cuenta.__sin?`<option value="__sin"${fCamp==="__sin"?" selected":""}>(sin campaña atribuida) (${cuenta.__sin})</option>`:""}
+      </select>
+      ${fCamp?`<span class="lq-sub">Filtrando: las tablas de leads respetan el filtro; OPPs/WONs por asesor y el horario observado no (van por oportunidad, no por lead).</span>`:""}
+    </div>`;
+  }
+  // Cada KPI declara su evento de arranque y trae sus dos números (spec A1/A5/C3).
+  const kpiND = (n,d,lbl,metaTxt,ok)=>`<div class="crm-kpi"><div class="k-val"${ok!=null?` style="color:${ok?'var(--verde-prof)':'var(--rojo)'}"`:""}>${d?Math.round(n/d*100)+"%":"—"}</div><div class="k-lbl">${lbl}${metaTxt?` · ${metaTxt}`:""}</div><div class="k-lbl" style="opacity:.7">${d?`${n} de ${d}`:""}</div></div>`;
+  // 1er toque manual en ≤5 minutos (spec A5): la cifra existía en la ficha y nunca se
+  // había promovido a titular. Reloj: desde la entrada del lead (o su traspaso a ventas).
+  const v5n = conDatos.filter(l=>l.bucket==="b5").length;
+  // Tasa de agendamiento (spec D3): citas sobre CONTACTADOS EFECTIVOS — no sobre todos
+  // los leads, que era medir tasa de respuesta y castigar seis veces de más.
+  const agB = conDatos.filter(l=>l.fi && !l.ad);
+  const agN = agB.filter(l=>l.ap && l.ap.tot>0).length;
+  const diasCita = slaMedian(agB.filter(l=>l.ap && l.ap.f && l.ap.f>=l.fi).map(l=>(l.ap.f-l.fi)/86400e3));
   html += `<div class="crm-kpis">
     ${kpi(leads.length.toLocaleString(),"Leads en el rango")}
-    ${kpi(pcti(conDatos.filter(l=>l.foM).length,conDatos.length),"Con 1er toque manual del asesor")}
-    ${kpi(pcti(conDatos.filter(l=>l.foC).length,conDatos.length),"Con llamada que sí conectó")}
-    ${kpi(pcti(conDatos.filter(l=>l.fi).length,conDatos.length),"Contactados efectivos")}
-    ${kpi(fmtDur(slaMedian(slasEf)),"SLA mediana · contacto efectivo")}
-    ${kpi(und(15),"≤ 15 min (transferencia)")}
-    ${kpi(und(60),"≤ 60 min (WhatsApp)")}
-    ${kpi(fmtDur(slaMedian(slasAt)),"Mediana del 1er toque manual")}
-    ${(()=>{ // Solo leads cuyas CITAS sí se pudieron leer: un fallo del scope de citas
-      // metía ceros falsos al denominador y hundía la métrica contra la meta del 40%.
-      const base=conDatos.filter(l=>!l.ad);
-      const n=base.filter(l=>l.z48).length, p=base.length?Math.round(n/base.length*100):0;
-      return `<div class="crm-kpi"><div class="k-val" style="color:${p>=40?'var(--verde-prof)':'var(--rojo)'}">${base.length?p+"%":"—"}</div><div class="k-lbl">Cita en ≤48 h · meta 40%</div></div>`; })()}
-    ${kpi((apSh+apNs)?pcti(apSh,apSh+apNs):"—","Show rate de citas")}
+    ${kpiND(conDatos.filter(l=>l.foM).length,conDatos.length,"Con 1er toque manual del asesor")}
+    ${kpiND(conDatos.filter(l=>l.foC).length,conDatos.length,"Con llamada que sí conectó")}
+    ${kpiND(conDatos.filter(l=>l.fi).length,conDatos.length,"Contactados efectivos")}
+    ${kpiND(v5n,conDatos.length,"1er toque manual ≤5 min · desde la entrada del lead","meta 5 min")}
+    ${kpi(und(60),"Contacto efectivo ≤60 min (handoff WhatsApp) · desde la entrada")}
+    ${kpi(und(15),"Contacto efectivo ≤15 min (transferencia en caliente)")}
+    ${kpi(fmtDur(slaMedian(slasEf)),"Med. contacto efectivo · desde la entrada del lead")}
+    ${kpi(fmtDur(slaMedian(slasAt)),"Med. 1er toque manual · desde la entrada del lead")}
+    ${kpiND(agN,agB.length,"Tasa de agendamiento · citas ÷ contactados efectivos")}
+    ${kpi(diasCita==null?"—":(Math.round(diasCita*10)/10)+" d","Días a la cita (mediana, efectivo → fecha de cita) · estándar 1 semana")}
+    ${kpiND(apSh,apSh+apNs,"Show rate de citas","meta 75%",(apSh+apNs)?apSh/(apSh+apNs)>=0.75:null)}
   </div>`;
+  // Diagnóstico de datos (spec A3/A4/D4): registros de prueba excluidos, los valores
+  // REALES del status de llamadas, y si hay duración para medir "llamada efectiva ≥90 s".
+  {
+    const partes = [];
+    if(agg.testExcl) partes.push(`<b>${agg.testExcl}</b> registro${agg.testExcl!==1?"s":""} de prueba excluido${agg.testExcl!==1?"s":""} de todos los cálculos`);
+    if(agg.callTot != null){
+      const stStr = Object.entries(agg.callSt||{}).sort((a,b)=>b[1]-a[1]).map(([s,n])=>`${escAttr(s)} ${n}`).join(" · ");
+      const contestadas = (agg.callSt&&agg.callSt.completed)||0;
+      partes.push(agg.callTot
+        ? `<b>Telefonía</b>: ${agg.callTot} llamadas en el CRM · status vistos: ${stStr} · <b>llamada contestada</b> (completed): ${contestadas} — es diagnóstico de las líneas, no califica a nadie`
+        : `<b>Telefonía</b>: el CRM no registró ninguna llamada en el rango — si los asesores sí llaman, las llamadas corren por un canal que el CRM no registra (spec A4)`);
+      partes.push(agg.callDur
+        ? `<b>Llamada efectiva ≥90 s</b>: ${agg.call90} de ${agg.callDur} llamadas con duración legible`
+        : `El CRM no expone la <b>duración</b> de las llamadas: "llamada efectiva ≥90 s" (spec D4) no se puede medir todavía y la nota usa entregas/lecturas en su lugar`);
+    }
+    if(partes.length) html += `<div class="lq-meth">🔎 <b>Diagnóstico de datos</b> — ${partes.join(" · ")}.</div>`;
+  }
 
   // --- SLA por asesor y por canal
   const groupTbl = (title, keyFn, labelFn)=>{
@@ -5076,8 +5258,11 @@ function slaRender(){
       const sa = arr.map(l=>l.slaAt).filter(x=>x!=null);
       const u15 = ss.length ? Math.round(ss.filter(x=>x<=15*60000).length/ss.length*100)+"%" : "—";
       const u60 = ss.length ? Math.round(ss.filter(x=>x<=60*60000).length/ss.length*100)+"%" : "—";
-      const zBase = cd.filter(l=>!l.ad);   // sin datos de citas ≠ "no agendó": fuera del %
-      const z = zBase.length ? Math.round(zBase.filter(l=>l.z48).length/zBase.length*100) : null;
+      // Tasa de agendamiento (spec D3): citas ÷ contactados efectivos con citas legibles.
+      // Sustituye a "Cita ≤48h", que dividía entre TODOS los leads (medía tasa de
+      // respuesta) y arrancaba el reloj en la entrada del lead (doble conteo de velocidad).
+      const agB2 = cd.filter(l=>l.fi && !l.ad);
+      const agN2 = agB2.filter(l=>l.ap && l.ap.tot>0).length;
       const sh = arr.reduce((a,l)=>a+l.ap.sh,0), ns = arr.reduce((a,l)=>a+l.ap.ns,0);
       return `<tr><td class="name">${escAttr(labelFn(k))}</td><td>${arr.length}${arr.length-cd.length?`<span style="color:var(--neutro);font-size:var(--fs-xs)"> (${arr.length-cd.length} s/d)</span>`:""}</td>
         <td class="pct">${pcti(cd.filter(l=>l.foM).length,cd.length)}</td>
@@ -5085,15 +5270,15 @@ function slaRender(){
         <td class="pct" style="color:var(--neutro)">${pcti(cd.filter(l=>l.fo).length,cd.length)}</td>
         <td class="pct">${pcti(cd.filter(l=>l.fi).length,cd.length)}</td>
         <td>${fmtDur(slaMedian(sa))}</td><td>${fmtDur(slaMedian(ss))}</td><td class="pct">${u15}</td><td class="pct">${u60}</td>
-        <td class="pct" style="${z!=null?(z>=40?"color:var(--verde-prof);font-weight:600":"color:var(--rojo)"):""}">${z==null?"—":z+"%"}</td>
+        <td class="pct" title="${agN2} de ${agB2.length} contactados efectivos con cita">${agB2.length?Math.round(agN2/agB2.length*100)+"%":"—"}</td>
         <td>${arr.filter(l=>!l.ad).reduce((a,l)=>a+l.ap.tot,0)}</td><td class="pct">${(sh+ns)?pcti(sh,sh+ns):"—"}</td></tr>`;
     }).join("");
     return `<div class="table-scroll mb-sec"><table class="cons">
       <tr><th class="lft">${title}</th><th>Leads</th>
         <th title="Primera acción manual del asesor: su llamada, su WhatsApp, su SMS o su email escrito a mano">1er toque manual</th>
-        <th title="Primera llamada del asesor con estatus connected o answered">Llamada conectada</th>
+        <th title="Primera llamada del asesor que sí conectó (estatus completed)">Llamada conectada</th>
         <th title="Incluye la automatización de bienvenida: sale ~100% en todos y no mide al asesor" style="color:var(--neutro);font-weight:500">1er msj (autom.)</th>
-        <th>Efectivos</th><th>Med. toque manual</th><th>Med. efectivo</th><th>≤15m</th><th>≤60m</th><th>Cita ≤48h</th><th>Citas</th><th>Show</th></tr>
+        <th>Efectivos</th><th>Med. toque manual</th><th>Med. efectivo</th><th>≤15m</th><th>≤60m</th><th title="Citas ÷ contactados efectivos (spec D3)">Agend.</th><th>Citas</th><th>Show · 75%</th></tr>
       ${rows || `<tr><td colspan="13" class="lft txt-nota">Sin datos.</td></tr>`}
     </table></div>`;
   };
@@ -5103,67 +5288,140 @@ function slaRender(){
   if(sinCitas){
     html += `<div class="lq-meth">⚠ <b>${sinCitas}</b> de ${leads.length} leads quedaron <b>sin datos de citas</b> (mismo motivo) y están fuera del conteo de citas y del show rate. No se asume que no tuvieron cita.</div>`;
   }
-  html += slaAsesorSection(agg);
-  html += groupTbl("Asesor", l=>l.u, name);
+  html += slaAsesorSection(agg, leads);
+  // Tabla de SLA por asesor: mismo criterio del roster (spec A2) — todo dueño fuera
+  // del roster de Asesores se agrega en una sola línea de volumen.
+  {
+    const rosterIds = slaRosterIds(agg.users);
+    html += groupTbl("Asesor", l=>rosterIds.has(l.u)?l.u:SLA_FUERA, k=>k===SLA_FUERA?"Fuera del equipo de ventas":name(k));
+  }
   html += groupTbl("Canal", l=>l.canal, k=>k);
+  // Desglose por pipeline (spec D1): un canal débil se ve, no se promedia hasta desaparecer
+  html += groupTbl("Pipeline", l=>l.pipe||"(sin oportunidad aún)", k=>k);
+  // Desglose por campaña de origen (spec D5): los sin atribuir son su propia línea
+  html += groupTbl("Campaña de origen", l=>(l.camp||"").trim()||"(sin campaña atribuida)", k=>k);
 
-  // --- Leads >7 días sin toque (la fuga silenciosa del funnel)
+  // --- Leads >7 días sin toque (la fuga silenciosa del funnel), spec E1:
+  // con la ETAPA como columna, las siete etapas excluidas por nombre literal del CRM,
+  // y Zoom/Tour agendado medidos desde la fecha de la cita, no a los 7 días.
   const stale = leads.filter(l=>{
     if(l.sd) return false;                   // sin datos de conversación: no se puede afirmar nada
+    if(SLA_ETAPAS_EXCL.includes(l.stage)) return false;   // las 7 etapas fuera de ESTA regla (y de nada más)
+    if(SLA_ETAPAS_CITA.includes(l.stage)){
+      // Vencido solo si la cita ya pasó y el lead sigue ahí (el manual pide salir de la
+      // etapa el día de la cita). Una cita agendada a dos semanas NO es alarma al día 8.
+      return !l.ad && !(l.ap && l.ap.fut > 0);
+    }
+    // Último toque REAL (acción manual del asesor o respuesta del lead): la secuencia
+    // automática no cuenta como toque, o el drip mantendría "fresco" a un lead abandonado.
     const last = l.lmR || null;
     if(last) return (now-last) > SLA_STALE_MS;
     return (now-l.created) > SLA_STALE_MS;   // nunca tocado y ya viejo
   }).sort((a,b)=>(a.lmR||a.created)-(b.lmR||b.created));
   const staleRows = stale.slice(0,40).map(l=>{
+    const cita = SLA_ETAPAS_CITA.includes(l.stage);
     const days = Math.floor((now-(l.lmR||l.created))/86400e3);
-    const estado = !l.lmR ? (l.fo ? "solo automatizaciones" : "nunca contactado")
+    const estado = cita ? "la cita ya pasó y sigue en la etapa"
+                 : !l.lmR ? (l.fo ? "solo automatizaciones" : "nunca contactado")
                  : (l.li && l.li===l.lmR) ? "última respuesta del lead" : "último toque del asesor";
-    return `<tr><td class="lft celda-fuerte">${escAttr(l.n)}</td><td class="lft">${escAttr(name(l.u))}</td><td class="lft">${escAttr(l.canal)}</td><td class="lft">${estado}</td><td style="color:var(--rojo);font-weight:700">${days} días</td></tr>`;
+    return `<tr><td class="lft celda-fuerte">${escAttr(l.n)}</td><td class="lft">${escAttr(name(l.u))}</td><td class="lft">${escAttr(l.canal)}</td>
+      <td class="lft">${escAttr(l.stage||"(sin etapa)")}</td>
+      <td class="lft">${estado}</td>
+      <td style="color:var(--rojo);font-weight:700">${cita?"—":days+" días"}</td></tr>`;
   }).join("");
   html += `<div class="rep-section mb-sec"><h3>Más de 7 días sin toque · ${stale.length} lead${stale.length!==1?"s":""}</h3>
-    <table class="rep"><thead><tr><th class="lft">Lead</th><th class="lft">Asesor</th><th class="lft">Canal</th><th class="lft">Estado</th><th class="lft">Sin toque</th></tr></thead>
-    <tbody>${staleRows || `<tr><td colspan="5" class="lft txt-nota">Ninguno — todos los leads del rango tienen un toque en los últimos 7 días.</td></tr>`}</tbody></table>
-    ${stale.length>40?`<p class="hint">…y ${stale.length-40} más.</p>`:""}</div>`;
+    <table class="rep"><thead><tr><th class="lft">Lead</th><th class="lft">Asesor</th><th class="lft">Canal</th><th class="lft">Etapa (CRM)</th><th class="lft">Estado</th><th class="lft">Sin toque</th></tr></thead>
+    <tbody>${staleRows || `<tr><td colspan="6" class="lft txt-nota">Ninguno — todos los leads del rango tienen un toque en los últimos 7 días.</td></tr>`}</tbody></table>
+    ${stale.length>40?`<p class="hint">…y ${stale.length-40} más.</p>`:""}
+    <p class="hint">Etapas excluidas de esta regla (y solo de esta regla): ${SLA_ETAPAS_EXCL.join(" · ")}. Zoom agendado y Tour agendado sí se miden, desde la fecha de la cita. Un lead sin oportunidad aún no tiene etapa y se mide por los 7 días. (La medición por dwell propio de cada etapa —spec E2— espera el timestamp de entrada a etapa, spec B2-1.)</p></div>`;
 
-  // --- OPPs y WONs por asesor (rango)
-  const oppRows = Object.entries(agg.byRepOpp).sort((a,b)=>b[1].opp-a[1].opp).map(([u,b])=>
-    `<tr><td class="name">${escAttr(name(u))}</td><td>${b.opp}</td><td>${b.won}</td><td>${fmtMoney(b.wv)}</td></tr>`).join("");
-  html += `<div class="table-scroll mb-sec"><table class="cons">
-    <tr><th class="lft">Asesor</th><th>Oportunidades creadas</th><th>WONs</th><th>Valor WON</th></tr>
-    ${oppRows || `<tr><td colspan="4" class="lft txt-nota">Sin oportunidades en el rango.</td></tr>`}
-  </table></div>`;
+  // --- OPPs y WONs por asesor (rango). Roster (spec A2): dueños fuera del roster se
+  // agregan en una línea de volumen, no se listan como si fueran asesores.
+  {
+    const rosterIds = slaRosterIds(agg.users);
+    const dentro = [], fueraAgg = {opp:0, won:0, wv:0, quien:new Set()};
+    Object.entries(agg.byRepOpp).forEach(([u,b])=>{
+      if(rosterIds.has(u)) dentro.push([u,b]);
+      else { fueraAgg.opp+=b.opp; fueraAgg.won+=b.won; fueraAgg.wv+=b.wv; fueraAgg.quien.add(name(u)); }
+    });
+    const oppRows = dentro.sort((a,b)=>b[1].opp-a[1].opp).map(([u,b])=>
+      `<tr><td class="name">${escAttr(name(u))}</td><td>${b.opp}</td><td>${b.won}</td><td>${fmtMoney(b.wv)}</td></tr>`).join("")
+      + ((fueraAgg.opp||fueraAgg.won) ? `<tr style="background:var(--crema)"><td class="name">Fuera del equipo de ventas <span class="lq-sub">(${[...fueraAgg.quien].slice(0,6).map(escAttr).join(", ")})</span></td><td>${fueraAgg.opp}</td><td>${fueraAgg.won}</td><td>${fmtMoney(fueraAgg.wv)}</td></tr>` : "");
+    html += `<div class="table-scroll mb-sec"><table class="cons">
+      <tr><th class="lft">Asesor</th><th>Oportunidades creadas</th><th>WONs</th><th>Valor WON</th></tr>
+      ${oppRows || `<tr><td colspan="4" class="lft txt-nota">Sin oportunidades en el rango.</td></tr>`}
+    </table></div>`;
+  }
 
   const conHand = leads.filter(l=>l.hand).length;
   if(conHand){
     html += `<div class="lq-meth">ℹ En <b>${conHand}</b> de ${leads.length} leads el reloj no arranca en la fecha de alta del contacto sino en el <b>traspaso a ventas</b> (cuando entró al pipeline). Son leads que estuvieron un tiempo en marketing antes de asignarse: medirlos desde su alta los haría ver como respuestas de días o semanas.</div>`;
   }
-  html += `<div class="lq-meth"><b>Definiciones</b> (Anexo 1) —
-    <b>1er toque manual:</b> primera acción del asesor en persona — su llamada, su WhatsApp,
-    su SMS o su email escrito a mano. <b>No cuenta ninguna automatización</b>: workflows,
-    campañas, envíos masivos ni nada que entre por API. Antes esta columna contaba cualquier
-    mensaje saliente y por eso marcaba 100% en todos los asesores — la automatización de
-    bienvenida le escribe a todos los leads, así que el número medía el workflow, no al equipo.
+  // --- Manual vs CRM (spec B1): el catálogo de etapas del pipeline principal, lado a
+  // lado con el manual, con las cuatro etapas por verificar señaladas. Los filtros del
+  // reporte se codifican contra la columna del CRM, carácter por carácter.
+  if((agg.pipelines||[]).length){
+    const sv = agg.pipelines.find(p=>/seguimiento\s*de\s*ventas/i.test(p.name||""));
+    if(sv){
+      const crmNames = (sv.stages||[]).map(s=>s.name);
+      const compact = (s)=> slaNorm(s).replace(/[\s\/]+/g,"");
+      const filas = SLA_MANUAL_ETAPAS.map(([m,dw])=>{
+        const exacta = crmNames.find(n=>n===m);
+        const parecida = exacta || crmNames.find(n=>compact(n)===compact(m));
+        const estado = exacta ? `<span style="color:var(--verde-prof)">✓ idéntica</span>`
+          : parecida ? `<span style="color:var(--cobre)">≠ el CRM escribe "${escAttr(parecida)}"</span>`
+          : `<span style="color:var(--rojo);font-weight:700">✗ NO existe en el CRM — verificar (B1)</span>`;
+        return `<tr><td class="lft">${escAttr(m)}</td><td class="lft">${escAttr(parecida||"—")}</td><td class="lft">${escAttr(dw)}</td><td class="lft">${estado}</td></tr>`;
+      }).join("");
+      const sinManual = crmNames.filter(n=>!SLA_MANUAL_ETAPAS.some(([m])=>compact(m)===compact(n)));
+      html += `<div class="rep-section mb-sec"><h3>Etapas: manual vs CRM (spec B1 · Anexo A)</h3>
+        <div class="table-scroll"><table class="rep"><thead><tr><th class="lft">Manual</th><th class="lft">CRM (literal)</th><th class="lft">Dwell del manual</th><th class="lft">Estado</th></tr></thead>
+        <tbody>${filas}</tbody></table></div>
+        ${sinManual.length?`<p class="hint">Etapas en el CRM que el manual no documenta: ${sinManual.map(escAttr).join(" · ")}.</p>`:""}
+        <p class="hint">Los filtros del reporte usan la columna <b>CRM</b> tal cual. Donde dice "NO existe", la etapa hay que crearla en GoHighLevel o nombrar cuál juega su papel — decisión de Dirección, no del reporte. Sin "Cotización enviada" y "Apartado" no se pueden calcular OPP→Apartado ni Apartado→WON (spec D2).</p></div>`;
+    } else {
+      html += `<div class="lq-meth">⚠ No se encontró el pipeline <b>"Seguimiento de ventas"</b> en el catálogo del CRM para la comparación manual-vs-CRM (spec B1).</div>`;
+    }
+  }
+  // Bloque de Definiciones (spec F3): en las palabras de la sección 1 de la spec v1.0.
+  // Regla: una métrica no sale a pantalla sin su definición aquí, y cuando una
+  // definición cambia, cambia aquí el mismo día.
+  html += `<div class="lq-meth"><b>Definiciones</b> (spec v1.0, sección 1) —
+    <br><b>Universo y población</b> · <b>Universo de leads:</b> todo lead asignado a un asesor del roster, en cualquier pipeline de venta ·
+    <b>Fuera del equipo de ventas:</b> una sola línea que agrega los leads de quien no está en el roster de Asesores; volumen a corregir, nunca se califica ·
+    <b>Muestra insuficiente:</b> menos de 10 leads en el periodo — no se emite nota ·
+    <b>Registros de prueba:</b> excluidos de todo cálculo, con su conteo declarado ·
+    <b>Fuera de horario:</b> pendiente del calendario de horario de atención (spec B2-3).
+    <br><b>Contacto</b> · <b>1er toque manual:</b> primera acción del asesor en persona — su llamada, su WhatsApp, su SMS o su email escrito a mano.
+    <b>No cuenta ninguna automatización</b>: workflows, campañas, envíos masivos ni nada que entre por API. Antes esta columna contaba cualquier
+    mensaje saliente y marcaba 100% en todos — la automatización de bienvenida le escribe a todos los leads, así que medía el workflow, no al equipo.
     La columna gris <b>1er msj (autom.)</b> es ese número viejo, ahí para poder comparar ·
-    <b>Llamada conectada:</b> primera llamada del asesor con estatus <i>connected</i> o
-    <i>answered</i> — un intento que cayó a buzón es trabajo, pero no es un contacto ·
-    <b>Contacto efectivo:</b> el lead respondió — hubo conversación, no solo un intento ·
-    <b>SLA de primera respuesta:</b> del alta del lead hasta el <b>contacto efectivo</b>, que es la definición del Anexo 1;
-    la mediana del intento se muestra aparte para separar rapidez de conectividad ·
-    <b>Sin toque:</b> más de 7 días sin un toque manual del asesor y sin respuesta del lead
-    (la secuencia automática no cuenta como toque: si contara, un lead abandonado con drip
-    activo nunca aparecería en esta lista) ·
-    <b>Show rate:</b> citas con estatus showed ÷ (showed + no-show) ·
-    <b>Oportunidades creadas:</b> registros del pipeline creados en el rango, por asesor asignado (no son OPPs: OPP = oportunidad real de cierre, de "Seguimiento de OPP" en adelante) ·
-    <b>WONs:</b> ventas cuyo cierre cayó en el rango, aunque la oportunidad se haya creado antes (se buscan hasta ~18 meses atrás).</div>
-    <div class="lq-meth"><b>SLAs contra los que se mide</b> —
-    transferencia en caliente a un asesor <b>15 minutos</b> · handoff por WhatsApp <b>60 minutos</b> ·
-    agendamiento <b>40% de los leads a una cita en 48 horas</b> (verde si se cumple, rojo si no) ·
+    <b>Contacto efectivo:</b> el lead respondió — hubo conversación; un mensaje entregado no es contacto efectivo ·
+    <b>Llamada contestada / conectada:</b> llamada con estatus <i>completed</i> — un intento que cayó a buzón es trabajo, pero no es un contacto. Mide que las líneas funcionan; no califica a nadie ·
+    <b>Llamada efectiva:</b> llamada de ≥90 s; el único nivel de llamada que alimenta una nota (pendiente de que el CRM exponga duración) ·
+    <b>Med. 1er contacto / Med. efectivo:</b> medianas desde la entrada del lead (o su traspaso a ventas) al primer toque manual y al contacto efectivo.
+    <br><b>Riesgo</b> · <b>Lead sin toque:</b> lead activo con más de 7 días sin toque manual del asesor y sin respuesta del lead — la secuencia
+    automática no cuenta como toque (si contara, un lead abandonado con drip activo nunca aparecería en la lista) ·
+    <b>Tareas programadas · en fecha · vencidas:</b> tareas del CRM del asesor; cerradas en o antes de su fecha; abiertas ya pasada su fecha — el % nunca se lee sin el conteo.
+    <br><b>Embudo y resultado</b> · <b>Tasa de agendamiento:</b> citas agendadas ÷ contactados efectivos ·
+    <b>Días a la cita:</b> mediana de días del contacto efectivo a la cita (medida a la fecha de la cita; el CRM no expone la fecha de agendado) ·
+    <b>Show rate:</b> showed ÷ (showed + no-show) · meta <b>75%</b> ·
+    <b>Oportunidades creadas:</b> registros del pipeline creados en el rango, por asesor asignado (no son OPPs: OPP = oportunidad real de cierre, de "Seguimiento de OPP" en adelante; una cotización enviada NO es una oportunidad) ·
+    <b>WONs:</b> ventas cuyo cierre cayó en el rango, aunque la oportunidad se haya creado antes (se buscan hasta ~18 meses atrás) ·
+    <b>OPP→Apartado · 30%</b> y <b>Apartado→WON · 80%</b>: pendientes de que Apartado y Cotización enviada existan como etapas en el CRM (spec B1/D2).</div>
+    <div class="lq-meth"><b>SLAs contra los que se mide</b> (spec F1) —
+    primer contacto <b>≤5 minutos</b> · transferencia en caliente <b>15 minutos</b> · handoff por WhatsApp <b>60 minutos</b> ·
+    show rate <b>75%</b> · OPP→Apartado <b>30%</b> · Apartado→WON <b>80%</b> ·
     seguimiento: <b>ningún lead vivo más de 7 días</b> sin un toque registrado.
+    El SLA anterior de "40% a una cita en 48 h" queda retirado: lo sustituyen la tasa de agendamiento y los días a la cita (spec D3), con meta por fijarse del primer mes limpio.
     Acumulable dentro del mes seleccionando desde la primera semana.
-    <br><b>Pendiente:</b> confirmación de Zoom el mismo día, integridad de pipeline (OPPs sin next step con fecha) y el SLA de
+    <br><b>Pendiente:</b> confirmación de Zoom el mismo día, integridad de pipeline (OPPs sin next step con fecha — spec B2-2) y el SLA de
     <b>60 segundos</b> del Ejecutivo de Primer Contacto, que aplica desde la calibración de septiembre.</div>`;
 
   document.getElementById("sla-content").innerHTML = html;
+  // Filtro de campaña (spec D5)
+  const selC = document.getElementById("sla-camp");
+  if(selC) selC.onchange = ()=>{ slaState.camp = selC.value; slaRender(); };
   // Selector de asesor: por el <select>, por el botón de limpiar, o clic en la fila
   const selA = document.getElementById("sla-asesor");
   if(selA) selA.onchange = ()=>{ slaState.asesor = selA.value; slaRender(); };
@@ -5230,15 +5488,16 @@ async function slaSync(){
     bar.style.width="94%"; lbl.textContent="Resolviendo asesores…";
     let usersMap={};
     let fieldsArr = [];
-    try{ const u = await slaFn({action:"users"}); usersMap = u.users || {}; fieldsArr = u.fields || []; }
-    catch(e){ fallos.push("los nombres de los asesores (aparecerán como identificadores)"); }
+    let pipesArr = [];
+    try{ const u = await slaFn({action:"users"}); usersMap = u.users || {}; fieldsArr = u.fields || []; pipesArr = u.pipelines || []; }
+    catch(e){ fallos.push("los nombres de los asesores y el catálogo de etapas"); }
     bar.style.width="100%"; lbl.textContent="Procesando…";
     if(lotesFallidos){
       fallos.push(`las conversaciones y citas de ${leadsSinBarrer} lead${leadsSinBarrer!==1?"s":""} `
         + `(${lotesFallidos} lote${lotesFallidos!==1?"s fallaron":" falló"}) — `
         + `sus asesores salen con menos actividad de la real`);
     }
-    slaState.agg = buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr);
+    slaState.agg = buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr, pipesArr);
     slaState.agg.fallos = fallos;
     sSet(SLA_AGG_KEY, slaState.agg).catch(e=>toast("Cache del reporte no guardado: "+(e.message||e)));
     slaPopulateWeeks(); slaRender();

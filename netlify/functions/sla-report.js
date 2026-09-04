@@ -147,6 +147,12 @@ async function sweepOne(id) {
     calls: 0,                             // intentos de llamada manuales
     chans: [],                            // canales usados manualmente
     deliv: { sent: 0, delivered: 0, read: 0, failed: 0, sin: 0 },  // actividad efectiva vs realizada; sin = sin status legible
+    // Diagnóstico de telefonía (spec A4): qué valores trae DE VERDAD el campo status de
+    // las llamadas, con conteo, y cuántas llamadas traen duración legible. Con esto la
+    // pantalla puede responder "por qué las llamadas conectadas daban 0%" con datos.
+    cst: {},                              // { status: n } de TODOS los mensajes tipo CALL
+    cdur: 0,                              // llamadas con duración legible
+    c90: 0,                               // llamadas de ≥90 s (llamada efectiva, spec D4)
     // Histograma de la hora (Tulum) de cada acción manual del asesor: permite MEDIR el
     // horario real de trabajo en vez de asumirlo. hrs[0..23], dow[0..6] (0 = domingo).
     hrs: new Array(24).fill(0),
@@ -170,6 +176,13 @@ async function sweepOne(id) {
       const msgs = await allMessages(cv.id).catch(() => { convFallidas++; return []; });
       for (const m of msgs) {
         const t = ts(m.dateAdded); if (!t) continue;
+        // Toda llamada (manual o no) alimenta el diagnóstico de telefonía (A4/D4)
+        if (chanOf(m) === "call") {
+          const cs = String(m.status || "").toLowerCase() || "(sin status)";
+          out.cst[cs] = (out.cst[cs] || 0) + 1;
+          const dur = Number(m.callDuration ?? m.duration ?? (m.meta && m.meta.call && m.meta.call.duration));
+          if (isFinite(dur) && dur > 0) { out.cdur++; if (dur >= 90) out.c90++; }
+        }
         if (m.direction === "outbound" && (!out.fo || t < out.fo)) out.fo = t;
         if (m.direction === "inbound") {
           if (!out.fi || t < out.fi) out.fi = t;
@@ -188,7 +201,9 @@ async function sweepOne(id) {
           const st = String(m.status || "").toLowerCase();
           // Llamada que SÍ entró. Un intento que cayó a buzón es una acción del asesor
           // pero no es un contacto, y el reporte por asesor no distinguía las dos cosas.
-          if (ch === "call" && (st === "connected" || st === "answered")) {
+          // "completed" incluido: es el status que la telefonía de GHL escribe de verdad
+          // (spec A4) — filtrar solo connected/answered dejaba esta cifra en 0 para siempre.
+          if (ch === "call" && (st === "connected" || st === "answered" || st === "completed")) {
             out.callsOk++;
             if (!out.foC || t < out.foC) out.foC = t;
           }
@@ -199,10 +214,14 @@ async function sweepOne(id) {
           // "sent" NO es entregado: contarlo en el numerador inflaba la actividad
           // efectiva. Y un status desconocido (p.ej. opened/clicked de email) tampoco
           // debe caer al denominador sin ir al numerador: se trata como ilegible.
-          if (st === "read" || st === "connected" || st === "answered" || st === "opened" || st === "clicked") out.deliv.read++;
+          // "completed" es el status REAL de una llamada conectada en la telefonía de
+          // GoHighLevel: los valores "connected"/"answered" que se filtraban antes no
+          // existen en esa capa (queued, ringing, in-progress, completed, busy,
+          // no-answer, canceled, failed) — por eso "llamadas conectadas" daba 0% (A4).
+          if (st === "read" || st === "connected" || st === "answered" || st === "completed" || st === "opened" || st === "clicked") out.deliv.read++;
           else if (st === "delivered") out.deliv.delivered++;
-          else if (st === "failed" || st === "undelivered" || st === "no-answer" || st === "busy" || st === "voicemail") out.deliv.failed++;
-          else if (st === "sent" || st === "pending" || st === "scheduled" || st === "queued") out.deliv.sent++;
+          else if (st === "failed" || st === "undelivered" || st === "no-answer" || st === "busy" || st === "voicemail" || st === "canceled") out.deliv.failed++;
+          else if (st === "sent" || st === "pending" || st === "scheduled" || st === "queued" || st === "ringing" || st === "in-progress") out.deliv.sent++;
           else out.deliv.sin++;                   // sin status legible: fuera del %
           if (m.userId) uset.add(m.userId);
         }
@@ -212,6 +231,26 @@ async function sweepOne(id) {
     // (típicamente falta el scope de mensajes en el token), no ausencia de contacto.
     if (convs.length && convFallidas === convs.length) out.cerr = true;
   } catch (e) { out.cerr = true; /* conversaciones no disponibles: se marca, no se asume "sin contacto" */ }
+  // Tareas del contacto (spec C1): programadas, cerradas en fecha y vencidas abiertas.
+  // El manual gobierna cada cadencia con tareas, así que son evidencia que el asesor ya
+  // produce — no un campo nuevo que alguien tenga que acordarse de llenar.
+  out.tk = { prog: 0, enFecha: 0, venc: 0 };
+  out.tkerr = false;
+  try {
+    const tk = await ghl(`/contacts/${encodeURIComponent(id)}/tasks`);
+    const now = Date.now();
+    for (const t of (tk.tasks || [])) {
+      out.tk.prog++;
+      const due = ts(t.dueDate);
+      const done = t.completed === true || /^complet/i.test(String(t.status || ""));
+      // El API no siempre trae la fecha de cierre; se aproxima con la última
+      // actualización. Si ni eso hay, una tarea completada con fecha límite cuenta
+      // como en fecha (criterio a favor del asesor, declarado en pantalla).
+      const doneAt = ts(t.completedAt || t.dateUpdated || t.updatedAt);
+      if (done) { if (!due || !doneAt || doneAt <= due + 86400e3) out.tk.enFecha++; }
+      else if (due && due < now) out.tk.venc++;
+    }
+  } catch (e) { out.tkerr = true; /* tareas no disponibles: se marca, no se asume 0 */ }
   // Citas del contacto
   try {
     const ap = await ghl(`/contacts/${encodeURIComponent(id)}/appointments`);
@@ -245,9 +284,12 @@ async function sweep({ ids }) {
 }
 
 async function users() {
-  const [resp, fieldsResp] = await Promise.all([
+  const [resp, fieldsResp, pipesResp] = await Promise.all([
     ghl(`/users/?locationId=${LOCATION_ID}`).catch(() => null),
     ghl(`/locations/${LOCATION_ID}/customFields`).catch(() => null),
+    // Catálogo de pipelines y etapas, LITERAL como lo escribe el CRM (spec B1/D1/E1):
+    // contra esta columna se codifican los filtros de etapa, carácter por carácter.
+    ghl(`/opportunities/pipelines?locationId=${LOCATION_ID}`).catch(() => null),
   ]);
   const map = {};
   if (resp && Array.isArray(resp.users)) {
@@ -256,7 +298,12 @@ async function users() {
   const fields = ((fieldsResp && fieldsResp.customFields) || []).map((f) => ({
     id: f.id, name: f.name || f.fieldKey || "", key: f.fieldKey || "",
   }));
-  return { users: map, fields };
+  const pipelines = ((pipesResp && pipesResp.pipelines) || []).map((p) => ({
+    id: p.id, name: p.name || "",
+    stages: (p.stages || []).slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+      .map((s) => ({ id: s.id, name: s.name || "" })),
+  }));
+  return { users: map, fields, pipelines };
 }
 
 async function opps({ startAfter, startAfterId, since }) {
@@ -287,6 +334,9 @@ async function opps({ startAfter, startAfterId, since }) {
       c: o.createdAt || "",
       stc: o.lastStatusChangeAt || o.createdAt || "",
       v: Number(o.monetaryValue) || 0,
+      p: o.pipelineId || "",                                   // pipeline (alcance D1)
+      s: o.pipelineStageId || "",                              // etapa actual (E1)
+      sc: o.lastStageChangeAt || o.lastStatusChangeAt || o.updatedAt || o.createdAt || "",
     }));
     total = (data.meta && data.meta.total) || total;
     const meta = data.meta || {};
