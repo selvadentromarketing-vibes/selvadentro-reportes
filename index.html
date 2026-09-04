@@ -4019,14 +4019,30 @@ function lqComboSection(agg, leadsAll, rango, rangoSet){
     ${kpi(ccT!=null?fmtMoney(ccT):"—","Costo / calificado")}
   </div>`;
 
-  // Lectura automática (determinista, sin IA): lo que el dato dice por sí solo
-  const conCalif = keys.filter(k=>lqCalif(fams[k].leads)>0).sort((a,b)=>lqCalif(fams[b].leads)-lqCalif(fams[a].leads));
-  const quemado = keys.filter(k=>fams[k].inv>0 && lqCalif(fams[k].leads)===0).sort((a,b)=>fams[b].inv-fams[a].inv);
+  // Lectura automática (determinista, sin IA), escrita para leerse SIN glosario.
+  // Tres arreglos de comprensión que pidió el cliente el 2026-09-04:
+  // 1) El cubo "(Sin campaña / directo)" no compite como "mejor campaña": son leads sin
+  //    etiqueta, no una campaña — coronarlo confundía a todo el que leía el bloque.
+  // 2) Las ganadoras se muestran como "X calificados de Y leads (Z%)", no un conteo pelón
+  //    que siempre favorece a la campaña más grande.
+  // 3) "Inversión sin calificados" mezclaba dos realidades opuestas: gastó y sus leads NO
+  //    se pudieron cruzar por nombre (hueco de atribución, aún no se puede juzgar) vs.
+  //    gastó, SÍ tiene leads y ninguno califica (eso sí es un problema de calidad).
+  const SIN_FAM = "(Sin campaña / directo)";
+  const famCal = (k)=>lqCalif(fams[k].leads);
+  const mejores = keys.filter(k=>k!==SIN_FAM && fams[k].leads.length>0 && famCal(k)>0)
+    .sort((a,b)=>famCal(b)-famCal(a)).slice(0,3);
+  const sinEmpate = keys.filter(k=>k!==SIN_FAM && fams[k].inv>0 && fams[k].leads.length===0).sort((a,b)=>fams[b].inv-fams[a].inv);
+  const malaCal  = keys.filter(k=>k!==SIN_FAM && fams[k].inv>0 && fams[k].leads.length>0 && famCal(k)===0).sort((a,b)=>fams[b].inv-fams[a].inv);
+  const sinAttrN = fams[SIN_FAM] ? fams[SIN_FAM].leads.length : 0;
+  const sinAttrC = fams[SIN_FAM] ? famCal(SIN_FAM) : 0;
   html += `<div class="lq-lectura">
-    <h4>Lectura automática — cantidad vs. calidad</h4>
-    <p>Inversión <b>${fmtMoney(invT)}</b> · <b>${leads.length} leads</b> en CRM · <b>${califT} calificados</b> (${leads.length?Math.round(califT/leads.length*100):0}%)${ccT!=null?` · <b>${fmtMoney(ccT)}</b> por calificado`:""}.</p>
-    ${conCalif.length?`<p class="ok"><b>Mejor calidad:</b> ${conCalif.slice(0,3).map(k=>`${escAttr(k)} (${lqCalif(fams[k].leads)} calif.)`).join(" · ")}.</p>`:""}
-    ${quemado.length?`<p class="warn">⚠ <b>Inversión sin calificados:</b> ${quemado.slice(0,3).map(k=>`${escAttr(k)} (${fmtMoney(fams[k].inv)})`).join(" · ")}.</p>`:""}
+    <h4>Lectura automática — en corto</h4>
+    <p>Se invirtieron <b>${fmtMoney(invT)}</b> y llegaron <b>${leads.length} leads</b> al CRM. De ellos, <b>${califT} valen seguimiento</b> (calificados, ${leads.length?Math.round(califT/leads.length*100):0}%)${ccT!=null?`, es decir cada lead que vale la pena costó <b>${fmtMoney(ccT)}</b>`:""}.</p>
+    ${mejores.length?`<p class="ok"><b>Las campañas que más leads buenos trajeron:</b> ${mejores.map(k=>`${escAttr(k)} — ${famCal(k)} calificados de ${fams[k].leads.length} leads (${Math.round(famCal(k)/fams[k].leads.length*100)}%)`).join(" · ")}.</p>`:""}
+    ${sinAttrC?`<p>Además hay <b>${sinAttrC} leads calificados</b> (de ${sinAttrN}) que llegaron <b>sin etiqueta de campaña</b>: son buenos leads, pero no se puede saber qué campaña los trajo hasta que los anuncios pasen sus parámetros UTM.</p>`:""}
+    ${sinEmpate.length?`<p><b>Dinero que todavía no se puede juzgar:</b> ${sinEmpate.slice(0,3).map(k=>`${escAttr(k)} (${fmtMoney(fams[k].inv)})`).join(" · ")} gastaron, pero sus leads no se pudieron cruzar por nombre con el CRM. <b>No significa que no produjeron</b>: significa que falta la etiqueta para saberlo.</p>`:""}
+    ${malaCal.length?`<p class="warn">⚠ <b>Gastaron y sus leads no calificaron:</b> ${malaCal.slice(0,3).map(k=>`${escAttr(k)} — ${fmtMoney(fams[k].inv)}, ${fams[k].leads.length} lead${fams[k].leads.length!==1?"s":""}, 0 calificados`).join(" · ")}. Aquí sí hay que revisar el anuncio o la audiencia.</p>`:""}
     ${leads.length<20?`<p class="warn">⚠ Volumen bajo (${leads.length} leads): las proporciones de este periodo son indicativas, no concluyentes.</p>`:""}
   </div>`;
 
