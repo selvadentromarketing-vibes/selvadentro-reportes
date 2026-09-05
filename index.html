@@ -5540,6 +5540,17 @@ async function showSLA(){
   } else {
     slaRender();
   }
+  // El lunes sin botón (spec §4: "entregado cada lunes sin que nadie lo pida"): si el
+  // agregado compartido es de una semana ISO anterior —o no existe—, el reporte se
+  // regenera solo al abrir la pestaña. El primero que entre en la semana lo genera para
+  // todo el equipo (queda en el kv compartido); el resto lo lee al instante. El botón
+  // "Generar reporte" sigue ahí para refrescar a media semana.
+  const wkNow = isoWeekId(new Date(Date.now()-LQ_TZ_MS));
+  const wkAgg = slaState.agg && slaState.agg.ts ? isoWeekId(new Date(slaState.agg.ts-LQ_TZ_MS)) : null;
+  if(!slaState.syncing && wkAgg !== wkNow){
+    toast("Generando el reporte de la semana automáticamente…");
+    slaSync();
+  }
 }
 
 /* ===================== ANALÍTICA ===================== */
