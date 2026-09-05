@@ -1850,6 +1850,9 @@ async function persistSeeds(){
 // generarReporte, renderResultados y renderDirCom — declararla dentro de una función
 // dejaba a las otras dos con un ReferenceError que rompía Dirección entera.
 const SEMANAS_MES = 4.348;
+// Sumar metas con decimales (1.8 + 0.9 + …) acumula polvo de punto flotante y el total
+// salía "4.000000000000001" en pantalla. Toda meta que se imprime pasa por aquí.
+const rMeta = (v)=> +( (Number(v)||0).toFixed(2) );
 function cartesian(arrs){ return arrs.reduce((acc,arr)=>acc.flatMap(a=>arr.map(x=>[...a,x])),[[]]); }
 async function generarReporte(){
   const out=document.getElementById("rep-output");
@@ -1887,7 +1890,7 @@ async function generarReporte(){
 
   const hasMetas=flds.some(f=>f.meta!=null);
   const metaPeriodo=meta=>meta==null?null:(meta/SEMANAS_MES*nWeeks);
-  const cumpCell=(val,meta)=>{ const mp=metaPeriodo(meta); if(mp==null) return '<td></td><td></td><td></td>'; if(mp===0) return `<td>${meta}</td><td>0</td><td><span class="cump no">Sin Datos</span></td>`; const pct=val/mp,cls=pct>=1?"ok":"no"; return `<td>${meta}</td><td>${(+mp.toFixed(2))}</td><td><span class="cump ${cls}">${fmtPct(pct)}</span></td>`; };
+  const cumpCell=(val,meta)=>{ const mp=metaPeriodo(meta); if(mp==null) return '<td></td><td></td><td></td>'; if(mp===0) return `<td>${rMeta(meta)}</td><td>0</td><td><span class="cump no">Sin Datos</span></td>`; const pct=val/mp,cls=pct>=1?"ok":"no"; return `<td>${rMeta(meta)}</td><td>${(+mp.toFixed(2))}</td><td><span class="cump ${cls}">${fmtPct(pct)}</span></td>`; };
   const getv=spec=>Array.isArray(spec)?spec.reduce((acc,k)=>acc+(sum[k]||0),0):(sum[spec]||0);
   const convVal=c=>{ const den=getv(c.den),num=getv(c.num); if(!den) return `<span class="cump no">Sin Datos</span>`; const pct=num/den,cls=pct>=c.target?"ok":"no"; return `<span class="cump ${cls}">${fmtPct(pct)}</span>`; };
 
@@ -2456,7 +2459,7 @@ async function renderResultados(){
   for(const { ch, m } of perCh){
     const meta=CHANNEL_META[ch].won; totMeta+=meta;
     const metaPer=meta/SEMANAS_MES*nW;
-    rows+=`<tr><td class="name">${CHANNELS[ch].name}</td><td>${m.leads}</td><td>${m.zooms}</td><td>${m.tours}</td><td>${m.opp}</td><td>${m.opp_zooms}</td><td>${m.opp_tours}</td><td>${m.apartados}</td><td>${m.won}</td><td>${fmtMoney(m.ingresos)}</td><td>${pctTxt(m.won,m.opp)}</td><td>${meta}</td><td>${estadoDot(m.leads,m.won,metaPer)}</td></tr>`;
+    rows+=`<tr><td class="name">${CHANNELS[ch].name}</td><td>${m.leads}</td><td>${m.zooms}</td><td>${m.tours}</td><td>${m.opp}</td><td>${m.opp_zooms}</td><td>${m.opp_tours}</td><td>${m.apartados}</td><td>${m.won}</td><td>${fmtMoney(m.ingresos)}</td><td>${pctTxt(m.won,m.opp)}</td><td>${rMeta(meta)}</td><td>${estadoDot(m.leads,m.won,metaPer)}</td></tr>`;
   }
   cont.innerHTML=`
     <div class="rep-head"><div class="ttl">Dirección General</div>
@@ -2466,9 +2469,9 @@ async function renderResultados(){
       <div class="funnel-col">${convBlock(f)}</div>
     </div>
     <div class="table-scroll"><table class="cons">
-      <thead><tr><th class="lft">Canal</th><th>Leads</th><th>Zooms</th><th>Tours</th><th>OPP</th><th>OPP de zooms</th><th>OPP de tours</th><th>Apartado</th>${wonTh('reportado')}<th>Ingresos</th><th>Cierre %</th><th>Meta WON mensual</th><th>Estado</th></tr></thead>
+      <thead><tr><th class="lft">Canal</th><th>Leads</th><th>Zooms</th><th>Tours</th><th>OPP</th><th>OPP de zooms</th><th>OPP de tours</th><th>Apartado</th>${wonTh('reportado')}<th>Ingresos</th><th>Cierre %</th><th title="La meta total de 4 WON al mes (fijada por Dirección General el 24-ago) repartida entre canales según su mix objetivo de leads — por eso trae decimales">Meta WON mensual</th><th>Estado</th></tr></thead>
       <tbody>${rows}
-        <tr class="total"><td class="lft">Total</td><td>${tot.leads}</td><td>${tot.zooms}</td><td>${tot.tours}</td><td>${tot.opp}</td><td>${tot.opp_zooms}</td><td>${tot.opp_tours}</td><td>${tot.apartados}</td><td>${tot.won}</td><td>${fmtMoney(tot.ingresos)}</td><td>${pctTxt(tot.won,tot.opp)}</td><td>${totMeta}</td><td>${estadoDot(tot.leads,tot.won,totMeta/SEMANAS_MES*nW)}</td></tr>
+        <tr class="total"><td class="lft">Total</td><td>${tot.leads}</td><td>${tot.zooms}</td><td>${tot.tours}</td><td>${tot.opp}</td><td>${tot.opp_zooms}</td><td>${tot.opp_tours}</td><td>${tot.apartados}</td><td>${tot.won}</td><td>${fmtMoney(tot.ingresos)}</td><td>${pctTxt(tot.won,tot.opp)}</td><td>${rMeta(totMeta)}</td><td>${estadoDot(tot.leads,tot.won,totMeta/SEMANAS_MES*nW)}</td></tr>
       </tbody></table></div>`;
   ANAL_DIR.res.expanded=null;
   renderDirAnalitica("res", chsSel, weekSet, "Dirección General");
@@ -2497,7 +2500,7 @@ async function renderDirCom(){
       <td>${m.opp_14}</td>
       <td>${m.apartados}</td><td class="pct">${pctTxt(m.apartados,m.leads)}</td>
       <td>${m.won}</td><td>${fmtMoney(m.ingresos)}</td><td class="pct">${pctTxt(m.won,m.leads)}</td>
-      <td>${(meta.mix*100).toFixed(0)}%</td><td>${meta.won}</td><td class="pct">${pctTxt(m.won,meta.won/SEMANAS_MES*nW)}</td>
+      <td>${(meta.mix*100).toFixed(0)}%</td><td>${rMeta(meta.won)}</td><td class="pct">${pctTxt(m.won,meta.won/SEMANAS_MES*nW)}</td>
       <td>${estadoDot(m.leads,m.won,meta.won/SEMANAS_MES*nW)}</td></tr>`;
   }
   const totRow=`<tr class="total"><td class="lft">Total</td>
@@ -2510,13 +2513,13 @@ async function renderDirCom(){
     <td>${tot.opp_14}</td>
     <td>${tot.apartados}</td><td class="pct">${pctTxt(tot.apartados,tot.leads)}</td>
     <td>${tot.won}</td><td>${fmtMoney(tot.ingresos)}</td><td class="pct">${pctTxt(tot.won,tot.leads)}</td>
-    <td>${(totMix*100).toFixed(0)}%</td><td>${totMetaWon}</td><td class="pct">${pctTxt(tot.won,totMetaWon/SEMANAS_MES*nW)}</td>
+    <td>${(totMix*100).toFixed(0)}%</td><td>${rMeta(totMetaWon)}</td><td class="pct">${pctTxt(tot.won,totMetaWon/SEMANAS_MES*nW)}</td>
     <td>${estadoDot(tot.leads,tot.won,totMetaWon/SEMANAS_MES*nW)}</td></tr>`;
   cont.innerHTML=`
     <div class="rep-head"><div class="ttl">Reporte · Dirección Comercial</div>
       <div class="meta-line">Canales: ${chsSel.map(c=>CHANNELS[c].name).join(" | ")||"—"} · ${wk.length} semana(s) · ${fechas}</div></div>
     <div class="funnel-box">
-      <div class="funnel-col"><table class="fnl">${funnelRows(f, `Meta mensual ${metaWonSel} · Meta periodo ${metaWonPeriodo}`)}</table></div>
+      <div class="funnel-col"><table class="fnl">${funnelRows(f, `Meta mensual ${rMeta(metaWonSel)} · Meta periodo ${metaWonPeriodo}`)}</table></div>
       <div class="funnel-col">${convBlock(f)}</div>
     </div>
     <div class="table-scroll"><table class="cons">
@@ -5351,22 +5354,58 @@ function slaRender(){
     ${stale.length>40?`<p class="hint">…y ${stale.length-40} más.</p>`:""}
     <p class="hint">Etapas excluidas de esta regla (y solo de esta regla): ${SLA_ETAPAS_EXCL.join(" · ")}. Zoom agendado y Tour agendado sí se miden, desde la fecha de la cita. Un lead sin oportunidad aún no tiene etapa y se mide por los 7 días. (La medición por dwell propio de cada etapa —spec E2— espera el timestamp de entrada a etapa, spec B2-1.)</p></div>`;
 
-  // --- OPPs y WONs por asesor (rango). Roster (spec A2): dueños fuera del roster se
-  // agregan en una línea de volumen, no se listan como si fueran asesores.
+  // --- Embudo de resultado por asesor (spec D2): del registro del pipeline al cierre,
+  // con las dos conversiones que pide Dirección (OPP→Apartado ·30% y Apartado→WON ·80%)
+  // y sus conteos absolutos al lado. Posible desde que Cotización enviada, Apartado y
+  // WON existen como etapas (verificado en la tabla manual-vs-CRM de arriba).
+  // Roster (spec A2): dueños fuera del roster se agregan en una línea de volumen.
   {
     const rosterIds = slaRosterIds(agg.users);
-    const dentro = [], fueraAgg = {opp:0, won:0, wv:0, quien:new Set()};
-    Object.entries(agg.byRepOpp).forEach(([u,b])=>{
-      if(rosterIds.has(u)) dentro.push([u,b]);
-      else { fueraAgg.opp+=b.opp; fueraAgg.won+=b.won; fueraAgg.wv+=b.wv; fueraAgg.quien.add(name(u)); }
+    // Etapas LITERALES del CRM (Anexo A, columna CRM)
+    const ST_ACT = ["Seguimiento de OPP","Carta oferta","Apartado"];
+    const filas = {};
+    const F0 = ()=>({ creadas:0, wonC:0, wv:0, act:0, cot:0, apart:0, won:0 });
+    leads.forEach(l=>{
+      const u = rosterIds.has(l.u) ? l.u : SLA_FUERA;
+      const b = filas[u] = filas[u] || F0();
+      if(ST_ACT.includes(l.stage)) b.act++;
+      if(l.stage==="Cotización enviada") b.cot++;
+      if(l.stage==="Apartado") b.apart++;
+      if(l.stage==="WON") b.won++;
     });
-    const oppRows = dentro.sort((a,b)=>b[1].opp-a[1].opp).map(([u,b])=>
-      `<tr><td class="name">${escAttr(name(u))}</td><td>${b.opp}</td><td>${b.won}</td><td>${fmtMoney(b.wv)}</td></tr>`).join("")
-      + ((fueraAgg.opp||fueraAgg.won) ? `<tr style="background:var(--crema)"><td class="name">Fuera del equipo de ventas <span class="lq-sub">(${[...fueraAgg.quien].slice(0,6).map(escAttr).join(", ")})</span></td><td>${fueraAgg.opp}</td><td>${fueraAgg.won}</td><td>${fmtMoney(fueraAgg.wv)}</td></tr>` : "");
-    html += `<div class="table-scroll mb-sec"><table class="cons">
-      <tr><th class="lft">Asesor</th><th>Oportunidades creadas</th><th>WONs</th><th>Valor WON</th></tr>
-      ${oppRows || `<tr><td colspan="4" class="lft txt-nota">Sin oportunidades en el rango.</td></tr>`}
-    </table></div>`;
+    Object.entries(agg.byRepOpp).forEach(([u,b0])=>{
+      const u2 = rosterIds.has(u) ? u : SLA_FUERA;
+      const b = filas[u2] = filas[u2] || F0();
+      b.creadas += b0.opp; b.wonC += b0.won; b.wv += b0.wv;
+    });
+    // "Llegó a Apartado" ≈ está en Apartado o ya es WON (todo WON pasa por Apartado, el
+    // cierre comercial). Es aproximación hasta tener el historial de entrada a etapa
+    // (spec B2-1); ambas conversiones son subconjuntos reales y nunca pasan de 100% (A1).
+    const conv = (n,d,meta)=> d ? `<span style="${n/d>=meta?'color:var(--verde-prof);font-weight:600':'color:var(--rojo)'}">${Math.round(n/d*100)}%</span> <span class="lq-sub">(${n} de ${d})</span>` : "—";
+    const orden = Object.keys(filas).sort((a,b)=> (a===SLA_FUERA)-(b===SLA_FUERA) || (filas[b].creadas-filas[a].creadas));
+    const oppRows = orden.map(u=>{
+      const b = filas[u];
+      const llegoApart = b.apart + b.won;
+      const zonaOpp = b.act + b.won;               // en zona de OPP hoy, o ya cerrado
+      return `<tr${u===SLA_FUERA?' style="background:var(--crema)"':''}><td class="name">${u===SLA_FUERA?"Fuera del equipo de ventas":escAttr(name(u))}</td>
+        <td>${b.creadas||"·"}</td><td>${b.act||"·"}</td><td>${b.cot||"·"}</td><td>${b.apart||"·"}</td><td>${b.won||"·"}</td>
+        <td>${conv(llegoApart, zonaOpp, .30)}</td>
+        <td>${conv(b.won, llegoApart, .80)}</td>
+        <td>${b.wonC||"·"}</td><td>${b.wv?fmtMoney(b.wv):"—"}</td></tr>`;
+    }).join("");
+    html += `<h3 class="h-sec">Embudo de resultado (spec D2)</h3>
+    <div class="table-scroll mb-sec"><table class="cons">
+      <tr><th class="lft">Asesor</th>
+        <th title="Registros del pipeline creados en el rango, por asesor asignado. No son OPPs.">Opp. creadas</th>
+        <th title="Leads del rango hoy en Seguimiento de OPP, Carta oferta o Apartado">OPP activas</th>
+        <th title="Leads del rango hoy en Cotización enviada — cifra propia, nunca se cuenta como OPP">Cotiz.</th>
+        <th>Apartados</th><th>WON</th>
+        <th title="Llegaron a Apartado ÷ zona de OPP (activas + cerradas)">OPP→Apart. · 30%</th>
+        <th title="WON ÷ los que llegaron a Apartado">Apart.→WON · 80%</th>
+        <th title="Ventas cerradas en el rango por asesor asignado de la oportunidad (ventana 18 meses)">WONs cerrados</th><th>Valor WON</th></tr>
+      ${oppRows || `<tr><td colspan="10" class="lft txt-nota">Sin oportunidades en el rango.</td></tr>`}
+    </table></div>
+    <p class="hint" style="margin-top:-10px">Cohorte: los leads del rango, en su etapa de HOY. "Llegó a Apartado" se aproxima como "está en Apartado o ya es WON" hasta que el CRM exponga el historial de entrada a etapa (spec B2-1). Metas 30% y 80%: las oficiales del Diagnóstico, ahora por asesor.</p>`;
   }
 
   const conHand = leads.filter(l=>l.hand).length;
@@ -5380,21 +5419,29 @@ function slaRender(){
     const sv = agg.pipelines.find(p=>/seguimiento\s*de\s*ventas/i.test(p.name||""));
     if(sv){
       const crmNames = (sv.stages||[]).map(s=>s.name);
-      const compact = (s)=> slaNorm(s).replace(/[\s\/]+/g,"");
+      // "2ndo toque" (manual) vs "2do toque" (CRM): el ordinal difiere en letras, no
+      // solo en espacios/acentos, y el comparador lo marcaba como "NO existe" — un
+      // falso rojo que mandaba a verificar una etapa que sí está. Se normalizan
+      // también los ordinales antes de comparar.
+      const compact = (s)=> slaNorm(s).replace(/[\s\/]+/g,"").replace(/2ndo/g,"2do").replace(/1ero/g,"1er");
+      let nIg=0, nDif=0, nFalta=0;
       const filas = SLA_MANUAL_ETAPAS.map(([m,dw])=>{
         const exacta = crmNames.find(n=>n===m);
         const parecida = exacta || crmNames.find(n=>compact(n)===compact(m));
-        const estado = exacta ? `<span style="color:var(--verde-prof)">✓ idéntica</span>`
-          : parecida ? `<span style="color:var(--cobre)">≠ el CRM escribe "${escAttr(parecida)}"</span>`
+        if(exacta) nIg++; else if(parecida) nDif++; else nFalta++;
+        const estado = exacta ? `<span style="color:var(--neutro)">✓ idéntica</span>`
+          : parecida ? `<span style="color:var(--cobre);font-weight:600">≠ el CRM escribe "${escAttr(parecida)}"</span>`
           : `<span style="color:var(--rojo);font-weight:700">✗ NO existe en el CRM — verificar (B1)</span>`;
-        return `<tr><td class="lft">${escAttr(m)}</td><td class="lft">${escAttr(parecida||"—")}</td><td class="lft">${escAttr(dw)}</td><td class="lft">${estado}</td></tr>`;
+        // Las filas idénticas se atenúan: lo que hay que LEER son las diferencias.
+        return `<tr${exacta?' style="opacity:.62"':''}><td class="lft">${escAttr(m)}</td><td class="lft">${escAttr(parecida||"—")}</td><td class="lft">${escAttr(dw)}</td><td class="lft">${estado}</td></tr>`;
       }).join("");
       const sinManual = crmNames.filter(n=>!SLA_MANUAL_ETAPAS.some(([m])=>compact(m)===compact(n)));
       html += `<div class="rep-section mb-sec"><h3>Etapas: manual vs CRM (spec B1 · Anexo A)</h3>
+        <p class="hint" style="margin-top:0"><b>${nIg}</b> idénticas · <b>${nDif}</b> con grafía distinta (se codifica contra la del CRM) · <b style="${nFalta?'color:var(--rojo)':''}">${nFalta}</b> que no existen en el CRM.${nFalta===0?` <b style="color:var(--verde-prof)">Las cuatro etapas que la spec pedía verificar (Tour realizado, Cotización enviada, Apartado, WON) ya existen: el embudo de cierre (D2) quedó desbloqueado.</b>`:""}</p>
         <div class="table-scroll"><table class="rep"><thead><tr><th class="lft">Manual</th><th class="lft">CRM (literal)</th><th class="lft">Dwell del manual</th><th class="lft">Estado</th></tr></thead>
         <tbody>${filas}</tbody></table></div>
         ${sinManual.length?`<p class="hint">Etapas en el CRM que el manual no documenta: ${sinManual.map(escAttr).join(" · ")}.</p>`:""}
-        <p class="hint">Los filtros del reporte usan la columna <b>CRM</b> tal cual. Donde dice "NO existe", la etapa hay que crearla en GoHighLevel o nombrar cuál juega su papel — decisión de Dirección, no del reporte. Sin "Cotización enviada" y "Apartado" no se pueden calcular OPP→Apartado ni Apartado→WON (spec D2).</p></div>`;
+        <p class="hint">Los filtros del reporte usan la columna <b>CRM</b> tal cual. Donde diga "NO existe", la etapa hay que crearla en GoHighLevel o nombrar cuál juega su papel — decisión de Dirección, no del reporte.</p></div>`;
     } else {
       html += `<div class="lq-meth">⚠ No se encontró el pipeline <b>"Seguimiento de ventas"</b> en el catálogo del CRM para la comparación manual-vs-CRM (spec B1).</div>`;
     }
@@ -6466,9 +6513,12 @@ function renderMetasBody(ch){
 
   // --- Alternativa táctil: mover un KPI de sección con un desplegable ---
   (function(){
+    // El nombre de la sección vive en el VALUE del input del título, no en el texto del
+    // h3 — el h3 solo contiene el asa de arrastre ("⠿") y a veces "✕ Borrar sección",
+    // así que todas las opciones del desplegable salían idénticas e ilegibles.
     const secs = [...body.querySelectorAll('.meta-section[data-section-id]')]
       .map(sec => ({ id: sec.dataset.sectionId,
-                     nombre: ((sec.querySelector('h3')||{}).textContent || sec.dataset.sectionId).trim().slice(0,40) }));
+                     nombre: (((sec.querySelector('.section-title-input')||{}).value) || sec.dataset.sectionId).trim().slice(0,40) }));
     if(secs.length < 2) return;                       // con una sola sección no hay a dónde mover
     body.querySelectorAll('tr[data-k]').forEach(tr=>{
       const cont = tr.closest('.meta-section');
@@ -6477,7 +6527,9 @@ function renderMetasBody(ch){
       const sel = document.createElement('select');
       sel.className = 'kpi-sec';
       sel.title = 'Mover este KPI a otra sección';
-      sel.innerHTML = secs.map(x=>`<option value="${escAttr(x.id)}"${x.id===actual?' selected':''}>${escAttr(x.nombre)}</option>`).join('');
+      // Primera opción explica qué hace el control; las demás son las secciones destino.
+      sel.innerHTML = `<option value="" selected disabled>Mover a…</option>` +
+        secs.filter(x=>x.id!==actual).map(x=>`<option value="${escAttr(x.id)}">${escAttr(x.nombre)}</option>`).join('');
       sel.onchange = async ()=>{
         const destino = sel.value; if(!destino || destino===actual) return;
         const ch = tr.dataset.ch, fk = tr.dataset.k, isCustom = tr.dataset.custom === "1";
