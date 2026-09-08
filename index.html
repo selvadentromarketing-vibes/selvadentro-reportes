@@ -4806,8 +4806,14 @@ function slaScoreAsesor(arr){
   const cd = arr.filter(l=>!l.sd);          // sin datos de conversación = no se puede juzgar
   const N = cd.length;
   const pct = (x)=> N ? x/N*100 : 0;
-  // Velocidad (A5): % con primer toque manual en ≤5 MINUTOS (antes: ventana de 2 h)
-  const b5 = cd.filter(l=>l.bucket==="b5").length;
+  // Velocidad (A5): % con primer toque manual en ≤5 MINUTOS (antes: ventana de 2 h).
+  // Los "na" (conversación abierta antes de que arrancara el reloj) no son medibles:
+  // salen del numerador y del denominador en vez de contarse como un ≤5 min regalado.
+  const velBase = cd.filter(l=>l.bucket!=="na");
+  const nVel = velBase.length;
+  const velNA = cd.length - nVel;
+  const pctV = (x)=> nVel ? x/nVel*100 : null;
+  const b5 = velBase.filter(l=>l.bucket==="b5").length;
   // Cadencia: % con al menos 3 días distintos de contacto manual en los primeros 10 días
   const c3 = cd.filter(l=>(l.d10||0)>=3).length, c5 = cd.filter(l=>(l.d10||0)>=5).length;
   // Cierre de ciclo (A1): UNA población fija — los descalificados del asesor — y el
@@ -4827,17 +4833,17 @@ function slaScoreAsesor(arr){
   const pctEfec = env > 0 ? ent/env*100 : null;
 
   const pcts = {
-    vel: pct(b5), cad: pct(c3),
+    vel: pctV(b5), cad: pct(c3),
     cierre: desc > 0 ? bk/desc*100 : null,
     tareas: (tkLeidas && tkProg > 0) ? tkFecha/tkProg*100 : null,
     efec: pctEfec,
-    c5: pct(c5), d05: pct(b5),
-    d30: pct(cd.filter(l=>l.bucket==="b30").length), d120: pct(cd.filter(l=>l.bucket==="b120").length),
-    dout: pct(cd.filter(l=>l.bucket==="out").length),
+    c5: pct(c5), d05: pctV(b5),
+    d30: pctV(velBase.filter(l=>l.bucket==="b30").length), d120: pctV(velBase.filter(l=>l.bucket==="b120").length),
+    dout: pctV(velBase.filter(l=>l.bucket==="out").length),
   };
   // Los dos números de cada porcentaje, para imprimirlos junto a él (spec A1)
   const cnt = {
-    vel:[b5,N], cad:[c3,N],
+    vel: nVel ? [b5,nVel] : null, cad:[c3,N],
     cierre: desc>0 ? [bk,desc] : null,
     tareas: (tkLeidas && tkProg>0) ? [tkFecha,tkProg] : null,
     efec: env>0 ? [ent,env] : null,
@@ -4866,7 +4872,7 @@ function slaScoreAsesor(arr){
   const agBase = cd.filter(l=>l.fi && !l.ad);
   const agCon = agBase.filter(l=>l.ap && l.ap.tot>0).length;
   const diasCita = slaMedian(agBase.filter(l=>l.ap && l.ap.f && l.ap.f>=l.fi).map(l=>(l.ap.f-l.fi)/86400e3));
-  return { N, sub, global, pcts, cnt, q, qTot, qIndex, q5,
+  return { N, sub, global, pcts, cnt, q, qTot, qIndex, q5, velNA, nVel,
            oppRate: arr.length ? leadsConOpp/arr.length*100 : 0, opp, leadsConOpp, leadsTot: arr.length,
            tk: { prog: tkProg, enFecha: tkFecha, venc: tkVenc, leidas: tkLeidas },
            agend: { con: agCon, de: agBase.length, dias: diasCita },
@@ -4981,8 +4987,9 @@ function slaAsesorSection(agg, leadsIn){
       <div class="lq-sub" style="margin-bottom:10px">N = ${c.N} leads · oportunidades creadas: ${c.opp} · leads con oportunidad: ${c.leadsConOpp} de ${c.leadsTot} (${Math.round(c.oppRate)}%) · citas: ${c.showed}/${c.citas} asistidas · agendamiento: ${c.agend.de?`${c.agend.con} de ${c.agend.de} efectivos (${Math.round(c.agend.con/c.agend.de*100)}%)`:"—"} · índice de calidad: ${c.q5==null?"— (sin leads calificados en el CRM)":c.q5.toFixed(1)+"/5"} · break up: ${c.desc?`${c.bk} de ${c.desc} descalificados`:"N/A (sin descalificados)"} · tareas: ${c.tk.leidas?`${c.tk.prog} programadas · ${c.tk.enFecha} en fecha · ${c.tk.venc} vencidas abiertas`:"sin datos de tareas"}</div>
       ${bars}
       <div style="font-size:var(--fs-s);font-weight:600;color:var(--neutro);margin:12px 0 4px">Distribución de velocidad de primer contacto</div>
-      <div class="lq-qbar">${dist.map(([k,,cl])=>`<span style="width:${c.pcts[k]}%;background:${cl}"></span>`).join("")}</div>
-      <div class="lq-legend-dots">${dist.map(([k,lbl,cl])=>`<span><i style="background:${cl};display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px"></i>${lbl} ${Math.round(c.pcts[k])}%</span>`).join("")}</div>
+      <div class="lq-qbar">${dist.map(([k,,cl])=>`<span style="width:${c.pcts[k]||0}%;background:${cl}"></span>`).join("")}</div>
+      <div class="lq-legend-dots">${dist.map(([k,lbl,cl])=>`<span><i style="background:${cl};display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px"></i>${lbl} ${Math.round(c.pcts[k]||0)}%</span>`).join("")}</div>
+      ${c.velNA?`<div class="lq-sub" style="margin-top:4px">${c.velNA} lead${c.velNA!==1?"s":""} sin velocidad medible (la conversación ya estaba abierta cuando el lead pasó a ventas): fuera de este % y de la sub-nota, no contados como ≤5 min.</div>`:""}
     </div>`;
   }).join("");
 
@@ -5091,7 +5098,19 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
              ad: !!(sw.sin || sw.aerr),
              // Desempeño del asesor: contacto MANUAL, reloj con horario, seguimiento y break up
              foM: sw.foM||null, calls: sw.calls||0, chans: sw.chans||[], deliv: sw.deliv||null,
-             bucket: (()=>{ const r=slaReloj(created); return slaBucket(sw.foM && sw.foM>=r ? (sw.foM-r)/60000 : (sw.foM ? 0 : null)); })(),
+             // Velocidad (A5). Tres casos, y ninguno se inventa un número:
+             //  · 1er toque manual en o después del reloj → se mide de verdad.
+             //  · 1er toque manual ANTERIOR al reloj: la conversación venía de antes del
+             //    traspaso a ventas y el backend solo guarda el PRIMER toque de toda la
+             //    conversación, así que no hay forma de saber cuál fue el primero ya
+             //    dentro del proceso. Antes se puntuaba 0 minutos = el MEJOR bucket: un
+             //    lead con historial viejo salía "contactado en ≤5 min" sin que nadie lo
+             //    tocara tras el traspaso, e inflaba el titular de A5. Ahora es "na" y
+             //    sale del numerador Y del denominador, con su conteo declarado.
+             //  · sin ningún toque manual → sigue siendo el peor bucket (sin contacto).
+             bucket: (()=>{ const r=slaReloj(created);
+               if(!sw.foM) return slaBucket(null);
+               return sw.foM>=r ? slaBucket((sw.foM-r)/60000) : "na"; })(),
              d10: (sw.days||[]).filter(d=>{ const t=Date.parse(d+"T12:00:00Z"); return t>=created-86400e3 && t<=created+10*86400e3; }).length,
              breakup: slaBreakup({calls:sw.calls, chans:sw.chans, fi:sw.fi}),
              lv: F.calif ? lqClassify(c.cf && c.cf[F.calif.id]) : "nc",
@@ -5235,7 +5254,10 @@ function slaRender(){
   const kpiND = (n,d,lbl,metaTxt,ok)=>`<div class="crm-kpi"><div class="k-val"${ok!=null?` style="color:${ok?'var(--verde-prof)':'var(--rojo)'}"`:""}>${d?Math.round(n/d*100)+"%":"—"}</div><div class="k-lbl">${lbl}${metaTxt?` · ${metaTxt}`:""}</div><div class="k-lbl" style="opacity:.7">${d?`${n} de ${d}`:""}</div></div>`;
   // 1er toque manual en ≤5 minutos (spec A5): la cifra existía en la ficha y nunca se
   // había promovido a titular. Reloj: desde la entrada del lead (o su traspaso a ventas).
-  const v5n = conDatos.filter(l=>l.bucket==="b5").length;
+  // Mismo criterio que la rúbrica: los no medibles ("na") salen de los dos números.
+  const velBaseT = conDatos.filter(l=>l.bucket!=="na");
+  const v5n = velBaseT.filter(l=>l.bucket==="b5").length;
+  const velNAT = conDatos.length - velBaseT.length;
   // Tasa de agendamiento (spec D3): citas sobre CONTACTADOS EFECTIVOS — no sobre todos
   // los leads, que era medir tasa de respuesta y castigar seis veces de más.
   const agB = conDatos.filter(l=>l.fi && !l.ad);
@@ -5246,7 +5268,7 @@ function slaRender(){
     ${kpiND(conDatos.filter(l=>l.foM).length,conDatos.length,"Con 1er toque manual del asesor")}
     ${kpiND(conDatos.filter(l=>l.foC).length,conDatos.length,"Con llamada que sí conectó")}
     ${kpiND(conDatos.filter(l=>l.fi).length,conDatos.length,"Contactados efectivos")}
-    ${kpiND(v5n,conDatos.length,"1er toque manual ≤5 min · desde la entrada del lead","meta 5 min")}
+    ${kpiND(v5n,velBaseT.length,"1er toque manual ≤5 min · desde la entrada del lead","meta 5 min")}
     ${kpi(und(60),"Contacto efectivo ≤60 min (handoff WhatsApp) · desde la entrada")}
     ${kpi(und(15),"Contacto efectivo ≤15 min (transferencia en caliente)")}
     ${kpi(fmtDur(slaMedian(slasEf)),"Med. contacto efectivo · desde la entrada del lead")}
@@ -5255,6 +5277,8 @@ function slaRender(){
     ${kpi(diasCita==null?"—":(Math.round(diasCita*10)/10)+" d","Días a la cita (mediana, efectivo → fecha de cita) · estándar 1 semana")}
     ${kpiND(apSh,apSh+apNs,"Show rate de citas","meta 75%",(apSh+apNs)?apSh/(apSh+apNs)>=0.75:null)}
   </div>`;
+  // Lo excluido se declara (spec A1): el ≤5 min no puede callar a cuántos dejó fuera.
+  if(velNAT) html += `<p class="hint" style="margin-top:-6px"><b>${velNAT}</b> de ${conDatos.length} lead${velNAT!==1?"s":""} quedan fuera del <b>1er toque manual ≤5 min</b>: su conversación ya estaba abierta cuando el lead pasó a ventas, así que el CRM no permite ubicar cuál fue el primer toque <i>ya dentro</i> del proceso. No se cuentan como ≤5 min ni como incumplimiento — se declaran.</p>`;
   // Diagnóstico de datos (spec A3/A4/D4): registros de prueba excluidos, los valores
   // REALES del status de llamadas, y si hay duración para medir "llamada efectiva ≥90 s".
   {
