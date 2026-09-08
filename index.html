@@ -1051,7 +1051,11 @@ const ADVISORS_SEED = ["Mariano Molina","Alejandro López","Daniela Arana","Dian
 let ADVISOR_LIST = ADVISORS_SEED.map(n=>({name:n, active:true}));
 function advisorNames(){ return ADVISOR_LIST.map(a=>a.name); }            // todos (para reportes/histórico)
 function activeAdvisorNames(){ return ADVISOR_LIST.filter(a=>a.active).map(a=>a.name); } // solo activos (para captura)
-async function loadAdvisors(){ const saved=await sGet("selvadentro:asesores"); if(saved && Array.isArray(saved) && saved.length){ ADVISOR_LIST=saved.map(a=>({name:a.name, active:a.active!==false})); } else { await sSet("selvadentro:asesores", ADVISOR_LIST); } }
+async function loadAdvisors(){ const saved=await sGet("selvadentro:asesores"); if(saved && Array.isArray(saved) && saved.length){ ADVISOR_LIST=saved.map(a=>({name:a.name, active:a.active!==false})); }
+  // Sembrar el roster la primera vez es cortesía, no un requisito: ahora la clave está
+  // protegida contra escritura (solo Dirección) y un 403 aquí tumbaba la carga entera
+  // para cualquier usuario de ventas. Si no se puede sembrar, se sigue con el default.
+  else { try{ await sSet("selvadentro:asesores", ADVISOR_LIST); }catch(e){ console.warn("roster no sembrado:", e.message||e); } } }
 async function saveAdvisors(){ await sSet("selvadentro:asesores", ADVISOR_LIST); }
 
 const PAID_SECTIONS = [
@@ -5961,8 +5965,8 @@ function escAttr(s){ return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;
 function refreshAdvisorDropdowns(){
   const dims=dimsOf(); if(!dims||!dims.length) return;
   dims.forEach((d,i)=>{ if(d.id!=="asesor") return;
-    const ing=document.getElementById("ing-dim-"+i); if(ing){ const cur=ing.value; const act=activeAdvisorNames(); ing.innerHTML=act.map(v=>`<option>${v}</option>`).join(""); if(act.includes(cur)) ing.value=cur; }
-    const rep=document.getElementById("rep-dim-"+i); if(rep){ const cur=rep.value; rep.innerHTML=`<option value="__todos">Todos</option>`+advisorNames().map(v=>`<option value="${v}">${v}</option>`).join(""); rep.value=cur; }
+    const ing=document.getElementById("ing-dim-"+i); if(ing){ const cur=ing.value; const act=activeAdvisorNames(); ing.innerHTML=act.map(v=>`<option>${escAttr(v)}</option>`).join(""); if(act.includes(cur)) ing.value=cur; }
+    const rep=document.getElementById("rep-dim-"+i); if(rep){ const cur=rep.value; rep.innerHTML=`<option value="__todos">Todos</option>`+advisorNames().map(v=>`<option value="${escAttr(v)}">${escAttr(v)}</option>`).join(""); rep.value=cur; }
   });
 }
 let advDirty=false;
@@ -6903,8 +6907,8 @@ async function switchChannel(ch){
     return;
   }
   const dims=dimsOf();
-  document.getElementById("ing-dims").innerHTML = dims.map((d,i)=>{ const vals = d.id==="asesor" ? activeAdvisorNames() : d.values; return `<div class="grp"><label>${d.label}</label><select id="ing-dim-${i}">${vals.map(v=>`<option>${v}</option>`).join("")}</select></div>`; }).join("");
-  document.getElementById("rep-dims").innerHTML = dims.map((d,i)=>{ const vals = d.id==="ciudad" ? d.values.filter(v=>v!=="General") : d.values; return `<div class="grp"><label>${d.label}</label><select id="rep-dim-${i}"><option value="__todos">Todos</option>${vals.map(v=>`<option value="${v}">${v}</option>`).join("")}</select></div>`; }).join("");
+  document.getElementById("ing-dims").innerHTML = dims.map((d,i)=>{ const vals = d.id==="asesor" ? activeAdvisorNames() : d.values; return `<div class="grp"><label>${escAttr(d.label)}</label><select id="ing-dim-${i}">${vals.map(v=>`<option>${escAttr(v)}</option>`).join("")}</select></div>`; }).join("");
+  document.getElementById("rep-dims").innerHTML = dims.map((d,i)=>{ const vals = d.id==="ciudad" ? d.values.filter(v=>v!=="General") : d.values; return `<div class="grp"><label>${escAttr(d.label)}</label><select id="rep-dim-${i}"><option value="__todos">Todos</option>${vals.map(v=>`<option value="${escAttr(v)}">${escAttr(v)}</option>`).join("")}</select></div>`; }).join("");
   // Al cambiar de canal, soltar las gráficas del canal anterior: sus canvas ya no están
   // en el DOM y sus manejadores de resize seguían vivos en cada redimensionamiento.
   Object.values(ANAL_STATE.charts).forEach(c=>{ try{ c.destroy(); }catch(e){} });

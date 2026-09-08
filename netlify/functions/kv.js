@@ -35,6 +35,12 @@ function canalesDeClave(k, op) {
   if (key === "selvadentro:metas") {
     return (op === "set" || op === "del") ? ["direccion_general", "direccion_comercial"] : null;
   }
+  // El roster de Asesores decide A QUIÉN califica el reporte (spec A2) y sus nombres se
+  // pintan en los desplegables de Ingreso/Reporte. Lo LEE toda la app, así que negar la
+  // lectura dejaría las pantallas sin asesores; cambiarlo es decisión de Dirección.
+  if (key === "selvadentro:asesores") {
+    return (op === "set" || op === "del") ? ["direccion_general", "direccion_comercial"] : null;
+  }
   // Registros de un canal de ventas: "<canal>:week:…" o "<canal>:rec:…"
   const m = key.match(/^([a-z_]+):(?:week|rec|metas|last_resp):/);
   if (m && CANALES_VENTAS.includes(m[1])) return [m[1], "direccion_general", "direccion_comercial"];
