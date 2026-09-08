@@ -5177,6 +5177,12 @@ const SLA_MANUAL_ETAPAS = [
 // reportada como volumen a corregir y nunca calificada.
 const SLA_FUERA = "__fuera_del_equipo";
 function slaNorm(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim(); }
+// Las etapas se comparan SIEMPRE con esta forma normalizada. El CRM y el manual escriben
+// la MISMA etapa distinto —"Carta Oferta"/"Carta oferta", "Sin Respuesta"/"Sin respuesta",
+// "2ndo toque"/"2do toque"— y un === contra un literal fallaba en silencio: la etapa
+// quedaba fuera del cálculo sin avisar y el porcentaje salía mal, no vacío.
+const slaEtapa = (s)=> slaNorm(s).replace(/[\s\/]+/g,"").replace(/2ndo/g,"2do").replace(/1ero/g,"1er");
+const slaEsEtapa = (stage, lista)=>{ const k = slaEtapa(stage); return !!k && lista.some(x=>slaEtapa(x)===k); };
 function slaRosterIds(users){
   const roster = new Set((typeof ADVISOR_LIST!=="undefined"?ADVISOR_LIST:[]).filter(a=>a.active!==false).map(a=>slaNorm(a.name)));
   const ids = new Set();
@@ -5222,7 +5228,7 @@ function slaRender(){
         ${camps.map(c=>`<option value="${escAttr(c)}"${fCamp===c?" selected":""}>${escAttr(c)} (${cuenta[c]})</option>`).join("")}
         ${cuenta.__sin?`<option value="__sin"${fCamp==="__sin"?" selected":""}>(sin campaña atribuida) (${cuenta.__sin})</option>`:""}
       </select>
-      ${fCamp?`<span class="lq-sub">Filtrando: las tablas de leads respetan el filtro; OPPs/WONs por asesor y el horario observado no (van por oportunidad, no por lead).</span>`:""}
+      ${fCamp?`<span class="lq-sub">Filtrando: las tablas de leads respetan el filtro. Las columnas que van por oportunidad (Opp. creadas, WONs cerrados, Valor WON) y el horario observado no se pueden separar por campaña: salen como "—" mientras el filtro esté puesto.</span>`:""}
     </div>`;
   }
   // Cada KPI declara su evento de arranque y trae sus dos números (spec A1/A5/C3).
@@ -5325,8 +5331,8 @@ function slaRender(){
   // y Zoom/Tour agendado medidos desde la fecha de la cita, no a los 7 días.
   const stale = leads.filter(l=>{
     if(l.sd) return false;                   // sin datos de conversación: no se puede afirmar nada
-    if(SLA_ETAPAS_EXCL.includes(l.stage)) return false;   // las 7 etapas fuera de ESTA regla (y de nada más)
-    if(SLA_ETAPAS_CITA.includes(l.stage)){
+    if(slaEsEtapa(l.stage, SLA_ETAPAS_EXCL)) return false;   // las 7 etapas fuera de ESTA regla (y de nada más)
+    if(slaEsEtapa(l.stage, SLA_ETAPAS_CITA)){
       // Vencido solo si la cita ya pasó y el lead sigue ahí (el manual pide salir de la
       // etapa el día de la cita). Una cita agendada a dos semanas NO es alarma al día 8.
       return !l.ad && !(l.ap && l.ap.fut > 0);
@@ -5338,7 +5344,7 @@ function slaRender(){
     return (now-l.created) > SLA_STALE_MS;   // nunca tocado y ya viejo
   }).sort((a,b)=>(a.lmR||a.created)-(b.lmR||b.created));
   const staleRows = stale.slice(0,40).map(l=>{
-    const cita = SLA_ETAPAS_CITA.includes(l.stage);
+    const cita = slaEsEtapa(l.stage, SLA_ETAPAS_CITA);
     const days = Math.floor((now-(l.lmR||l.created))/86400e3);
     const estado = cita ? "la cita ya pasó y sigue en la etapa"
                  : !l.lmR ? (l.fo ? "solo automatizaciones" : "nunca contactado")
@@ -5354,58 +5360,73 @@ function slaRender(){
     ${stale.length>40?`<p class="hint">…y ${stale.length-40} más.</p>`:""}
     <p class="hint">Etapas excluidas de esta regla (y solo de esta regla): ${SLA_ETAPAS_EXCL.join(" · ")}. Zoom agendado y Tour agendado sí se miden, desde la fecha de la cita. Un lead sin oportunidad aún no tiene etapa y se mide por los 7 días. (La medición por dwell propio de cada etapa —spec E2— espera el timestamp de entrada a etapa, spec B2-1.)</p></div>`;
 
-  // --- Embudo de resultado por asesor (spec D2): del registro del pipeline al cierre,
-  // con las dos conversiones que pide Dirección (OPP→Apartado ·30% y Apartado→WON ·80%)
-  // y sus conteos absolutos al lado. Posible desde que Cotización enviada, Apartado y
-  // WON existen como etapas (verificado en la tabla manual-vs-CRM de arriba).
+  // --- Embudo de resultado por asesor (spec D2): del registro del pipeline al cierre.
+  // Regla dura de la spec A1: el numerador SIEMPRE es subconjunto del denominador, y el
+  // denominador incluye a los que se cayeron. La primera versión dividía entre "los que
+  // siguen vivos o ya ganaron", así que los leads que murieron (Descalificado, Sin
+  // respuesta, Nurturing…) desaparecían de ARRIBA y de ABAJO: un asesor con 20 OPPs, 15
+  // muertas, 3 en Apartado y 2 WON salía 100% en verde cuando su conversión real era 25%.
+  // Ahora el denominador es "entró al pipeline" (tiene etapa, la que sea), que sí retiene
+  // a los caídos y no se puede inflar por desgaste.
   // Roster (spec A2): dueños fuera del roster se agregan en una línea de volumen.
   {
     const rosterIds = slaRosterIds(agg.users);
-    // Etapas LITERALES del CRM (Anexo A, columna CRM)
-    const ST_ACT = ["Seguimiento de OPP","Carta oferta","Apartado"];
+    // Etapas del CRM comparadas con slaEsEtapa: el catálogo escribe "Carta Oferta" y el
+    // manual "Carta oferta"; con === se perdían esos leads y el % salía inflado.
+    const ST_ACT = ["Seguimiento de OPP","Carta Oferta","Apartado"];
     const filas = {};
-    const F0 = ()=>({ creadas:0, wonC:0, wv:0, act:0, cot:0, apart:0, won:0 });
+    const fueraQuien = new Set();
+    const F0 = ()=>({ creadas:0, wonC:0, wv:0, enPipe:0, act:0, cot:0, apart:0, won:0 });
     leads.forEach(l=>{
-      const u = rosterIds.has(l.u) ? l.u : SLA_FUERA;
+      const dentro = rosterIds.has(l.u);
+      const u = dentro ? l.u : SLA_FUERA;
+      if(!dentro && l.u) fueraQuien.add(name(l.u));
       const b = filas[u] = filas[u] || F0();
-      if(ST_ACT.includes(l.stage)) b.act++;
-      if(l.stage==="Cotización enviada") b.cot++;
-      if(l.stage==="Apartado") b.apart++;
-      if(l.stage==="WON") b.won++;
+      if(!String(l.stage||"").trim()) return;      // sin oportunidad: aún no entró al embudo
+      b.enPipe++;
+      if(slaEsEtapa(l.stage, ST_ACT)) b.act++;
+      if(slaEsEtapa(l.stage, ["Cotización enviada"])) b.cot++;
+      if(slaEsEtapa(l.stage, ["Apartado"])) b.apart++;
+      if(slaEsEtapa(l.stage, ["WON"])) b.won++;
     });
-    Object.entries(agg.byRepOpp).forEach(([u,b0])=>{
-      const u2 = rosterIds.has(u) ? u : SLA_FUERA;
-      const b = filas[u2] = filas[u2] || F0();
+    // byRepOpp va por OPORTUNIDAD y no conoce la campaña del lead: con el filtro D5 puesto
+    // mezclaría "50 creadas (todas las campañas)" con "3 activas (esta campaña)" en la
+    // misma fila. Cuando hay filtro, esas dos columnas se declaran no disponibles.
+    const oppFiltrable = !fCamp;
+    if(oppFiltrable) Object.entries(agg.byRepOpp).forEach(([u,b0])=>{
+      const dentro = rosterIds.has(u);
+      if(!dentro && u) fueraQuien.add(name(u));
+      const b = filas[dentro ? u : SLA_FUERA] = filas[dentro ? u : SLA_FUERA] || F0();
       b.creadas += b0.opp; b.wonC += b0.won; b.wv += b0.wv;
     });
-    // "Llegó a Apartado" ≈ está en Apartado o ya es WON (todo WON pasa por Apartado, el
-    // cierre comercial). Es aproximación hasta tener el historial de entrada a etapa
-    // (spec B2-1); ambas conversiones son subconjuntos reales y nunca pasan de 100% (A1).
     const conv = (n,d,meta)=> d ? `<span style="${n/d>=meta?'color:var(--verde-prof);font-weight:600':'color:var(--rojo)'}">${Math.round(n/d*100)}%</span> <span class="lq-sub">(${n} de ${d})</span>` : "—";
-    const orden = Object.keys(filas).sort((a,b)=> (a===SLA_FUERA)-(b===SLA_FUERA) || (filas[b].creadas-filas[a].creadas));
+    const orden = Object.keys(filas).sort((a,b)=> (a===SLA_FUERA)-(b===SLA_FUERA) || (filas[b].enPipe-filas[a].enPipe));
     const oppRows = orden.map(u=>{
       const b = filas[u];
-      const llegoApart = b.apart + b.won;
-      const zonaOpp = b.act + b.won;               // en zona de OPP hoy, o ya cerrado
-      return `<tr${u===SLA_FUERA?' style="background:var(--crema)"':''}><td class="name">${u===SLA_FUERA?"Fuera del equipo de ventas":escAttr(name(u))}</td>
-        <td>${b.creadas||"·"}</td><td>${b.act||"·"}</td><td>${b.cot||"·"}</td><td>${b.apart||"·"}</td><td>${b.won||"·"}</td>
-        <td>${conv(llegoApart, zonaOpp, .30)}</td>
+      const llegoApart = b.apart + b.won;          // ⊆ enPipe
+      const nom = u===SLA_FUERA
+        ? `Fuera del equipo de ventas${fueraQuien.size?` <span class="lq-sub">(${[...fueraQuien].slice(0,6).map(escAttr).join(", ")})</span>`:""}`
+        : escAttr(name(u));
+      return `<tr${u===SLA_FUERA?' style="background:var(--crema)"':''}><td class="name">${nom}</td>
+        <td>${oppFiltrable ? (b.creadas||"·") : "—"}</td><td>${b.enPipe||"·"}</td><td>${b.act||"·"}</td><td>${b.cot||"·"}</td><td>${b.apart||"·"}</td><td>${b.won||"·"}</td>
+        <td>${conv(llegoApart, b.enPipe, .30)}</td>
         <td>${conv(b.won, llegoApart, .80)}</td>
-        <td>${b.wonC||"·"}</td><td>${b.wv?fmtMoney(b.wv):"—"}</td></tr>`;
+        <td>${oppFiltrable ? (b.wonC||"·") : "—"}</td><td>${oppFiltrable ? (b.wv?fmtMoney(b.wv):"—") : "—"}</td></tr>`;
     }).join("");
     html += `<h3 class="h-sec">Embudo de resultado (spec D2)</h3>
     <div class="table-scroll mb-sec"><table class="cons">
       <tr><th class="lft">Asesor</th>
         <th title="Registros del pipeline creados en el rango, por asesor asignado. No son OPPs.">Opp. creadas</th>
-        <th title="Leads del rango hoy en Seguimiento de OPP, Carta oferta o Apartado">OPP activas</th>
+        <th title="Leads del rango que entraron al pipeline (tienen etapa, incluidas las etapas de caída). Es el denominador del embudo: los que se cayeron siguen contando.">Entraron al embudo</th>
+        <th title="Leads del rango hoy en Seguimiento de OPP, Carta Oferta o Apartado">OPP activas</th>
         <th title="Leads del rango hoy en Cotización enviada — cifra propia, nunca se cuenta como OPP">Cotiz.</th>
         <th>Apartados</th><th>WON</th>
-        <th title="Llegaron a Apartado ÷ zona de OPP (activas + cerradas)">OPP→Apart. · 30%</th>
+        <th title="Llegaron a Apartado (Apartado + WON) ÷ los que entraron al embudo. El denominador retiene a los caídos, así que este % no se infla por desgaste.">Entró→Apart. · 30%</th>
         <th title="WON ÷ los que llegaron a Apartado">Apart.→WON · 80%</th>
         <th title="Ventas cerradas en el rango por asesor asignado de la oportunidad (ventana 18 meses)">WONs cerrados</th><th>Valor WON</th></tr>
-      ${oppRows || `<tr><td colspan="10" class="lft txt-nota">Sin oportunidades en el rango.</td></tr>`}
+      ${oppRows || `<tr><td colspan="11" class="lft txt-nota">Sin oportunidades en el rango.</td></tr>`}
     </table></div>
-    <p class="hint" style="margin-top:-10px">Cohorte: los leads del rango, en su etapa de HOY. "Llegó a Apartado" se aproxima como "está en Apartado o ya es WON" hasta que el CRM exponga el historial de entrada a etapa (spec B2-1). Metas 30% y 80%: las oficiales del Diagnóstico, ahora por asesor.</p>`;
+    <p class="hint" style="margin-top:-10px">Cohorte: los leads del rango, en su etapa de HOY. El denominador del embudo es <b>entraron al pipeline</b> —tienen etapa, incluidas Descalificado, Sin respuesta y Nurturing— para que quien se cayó siga contando; la spec pide medir desde la etapa OPP, y eso exige el historial de entrada a etapa (spec B2-1), que el CRM todavía no expone. Mientras tanto este número es conservador, nunca inflado. <b>Apart.→WON</b> sí conserva el sesgo de supervivencia: un lead que llegó a Apartado y luego se descalificó hoy solo se ve en su etapa final. Metas 30% y 80%: las oficiales del Diagnóstico, ahora por asesor.${fCamp?` <b>Con el filtro de campaña puesto, "Opp. creadas", "WONs cerrados" y "Valor WON" salen como "—": van por oportunidad y el CRM no las liga a la campaña del lead.</b>`:""}</p>`;
   }
 
   const conHand = leads.filter(l=>l.hand).length;
@@ -5423,7 +5444,7 @@ function slaRender(){
       // solo en espacios/acentos, y el comparador lo marcaba como "NO existe" — un
       // falso rojo que mandaba a verificar una etapa que sí está. Se normalizan
       // también los ordinales antes de comparar.
-      const compact = (s)=> slaNorm(s).replace(/[\s\/]+/g,"").replace(/2ndo/g,"2do").replace(/1ero/g,"1er");
+      const compact = slaEtapa;   // el mismo comparador que usan los cálculos
       let nIg=0, nDif=0, nFalta=0;
       const filas = SLA_MANUAL_ETAPAS.map(([m,dw])=>{
         const exacta = crmNames.find(n=>n===m);
