@@ -4013,17 +4013,29 @@ function lqComboSection(agg, leadsAll, rango, rangoSet){
   const invT = keys.reduce((a,k)=>a+fams[k].inv,0);
   const resT = keys.reduce((a,k)=>a+fams[k].resultAds,0);
   const califT = lqCalif(leads);
-  const cplT = leads.length ? invT/leads.length : null;
-  const ccT = califT ? invT/califT : null;
+  // CPL y costo/calificado: invT es SOLO inversión de Meta+Google, así que el denominador
+  // tienen que ser los leads de las familias que efectivamente gastaron. Dividir entre
+  // TODO el CRM —orgánicos, seminarios, brokers, referidos, webinar— abarataba el CPL del
+  // titular, y cada fila de la tabla ya calculaba el suyo bien sobre sus propios leads:
+  // el Total contradecía a sus propias filas, y la fila "Total (leads de pago)" de la
+  // pestaña de plataformas daba un tercer número distinto para lo mismo.
+  // Se filtra por inversión y no por fuente a propósito: una familia con gasto real entra
+  // aunque su lead venga mal clasificado, y el hueco de atribución (gastó, 0 leads
+  // cruzados) sigue subiendo el CPL, que es justo lo que debe hacer.
+  const keysPagas = keys.filter(k=>fams[k].inv>0);
+  const leadsPagos = keysPagas.reduce((a,k)=>a.concat(fams[k].leads), []);
+  const califP = lqCalif(leadsPagos);
+  const cplT = leadsPagos.length ? invT/leadsPagos.length : null;
+  const ccT = califP ? invT/califP : null;
 
   const kpi=(v,l,accent)=>`<div class="crm-kpi"${accent?` style="border-color:${accent}"`:""}><div class="k-val">${v}</div><div class="k-lbl">${l}</div></div>`;
   let html = `<div class="crm-kpis">
     ${kpi(fmtMoney(invT),"Inversión total")}
     ${kpi(leads.length.toLocaleString(),"Leads CRM (GHL)")}
-    ${kpi(cplT!=null?fmtMoney(cplT):"—","CPL")}
-    ${kpi(califT.toLocaleString(),"Calificados")}
+    ${kpi(cplT!=null?fmtMoney(cplT):"—",`CPL · inversión ÷ ${leadsPagos.length} leads de campañas con inversión`)}
+    ${kpi(califT.toLocaleString(),"Calificados (todo el CRM)")}
     ${kpi(leads.length?Math.round(califT/leads.length*100)+"%":"—","% calificados")}
-    ${kpi(ccT!=null?fmtMoney(ccT):"—","Costo / calificado")}
+    ${kpi(ccT!=null?fmtMoney(ccT):"—",`Costo / calificado · ÷ ${califP} calificados de pago`)}
   </div>`;
 
   // Lectura automática (determinista, sin IA), escrita para leerse SIN glosario.
@@ -4045,7 +4057,7 @@ function lqComboSection(agg, leadsAll, rango, rangoSet){
   const sinAttrC = fams[SIN_FAM] ? famCal(SIN_FAM) : 0;
   html += `<div class="lq-lectura">
     <h4>Lectura automática — en corto</h4>
-    <p>Se invirtieron <b>${fmtMoney(invT)}</b> y llegaron <b>${leads.length} leads</b> al CRM. De ellos, <b>${califT} valen seguimiento</b> (calificados, ${leads.length?Math.round(califT/leads.length*100):0}%)${ccT!=null?`, es decir cada lead que vale la pena costó <b>${fmtMoney(ccT)}</b>`:""}.</p>
+    <p>Se invirtieron <b>${fmtMoney(invT)}</b> y llegaron <b>${leads.length} leads</b> al CRM. De ellos, <b>${califT} valen seguimiento</b> (calificados, ${leads.length?Math.round(califT/leads.length*100):0}%)${ccT!=null?`. Contando solo lo que vino de campañas con inversión, cada lead que vale la pena costó <b>${fmtMoney(ccT)}</b> (${fmtMoney(invT)} ÷ ${califP} calificados de pago)`:""}.</p>
     ${mejores.length?`<p class="ok"><b>Las campañas que más leads buenos trajeron:</b> ${mejores.map(k=>`${escAttr(k)} — ${famCal(k)} calificados de ${fams[k].leads.length} leads (${Math.round(famCal(k)/fams[k].leads.length*100)}%)`).join(" · ")}.</p>`:""}
     ${sinAttrC?`<p>Además hay <b>${sinAttrC} leads calificados</b> (de ${sinAttrN}) que llegaron <b>sin etiqueta de campaña</b>: son buenos leads, pero no se puede saber qué campaña los trajo hasta que los anuncios pasen sus parámetros UTM.</p>`:""}
     ${sinEmpate.length?`<p><b>Dinero que todavía no se puede juzgar:</b> ${sinEmpate.slice(0,3).map(k=>`${escAttr(k)} (${fmtMoney(fams[k].inv)})`).join(" · ")} gastaron, pero sus leads no se pudieron cruzar por nombre con el CRM. <b>No significa que no produjeron</b>: significa que falta la etiqueta para saberlo.</p>`:""}
@@ -4077,9 +4089,9 @@ function lqComboSection(agg, leadsAll, rango, rangoSet){
   html += `<div class="table-scroll" style="margin-bottom:8px"><table class="cons">
     <tr><th class="lft">Familia de campaña</th><th>Inversión</th><th>Result. ads</th><th>Leads CRM</th><th class="lft">Calidad</th><th>Calif.</th><th>CPL</th><th>Costo/calif.</th></tr>
     ${rows || `<tr><td colspan="8" class="lft txt-nota">Sin datos en el rango.</td></tr>`}
-    <tr class="total"><td class="lft">Total</td><td>${fmtMoney(invT)}</td><td>${resT||"—"}</td><td>${leads.length}</td><td>${barra(leads)}</td><td><b>${califT}</b></td><td>${cplT!=null?fmtMoney(cplT):"—"}</td><td>${ccT!=null?fmtMoney(ccT):"—"}</td></tr>
+    <tr class="total"><td class="lft">Total</td><td>${fmtMoney(invT)}</td><td>${resT||"—"}</td><td>${leads.length}</td><td>${barra(leads)}</td><td><b>${califT}</b></td><td>${cplT!=null?`${fmtMoney(cplT)} <span class="lq-sub">(÷${leadsPagos.length})</span>`:"—"}</td><td>${ccT!=null?`${fmtMoney(ccT)} <span class="lq-sub">(÷${califP})</span>`:"—"}</td></tr>
   </table></div>
-  <p class="hint">Result. ads = leads/conversiones que reporta la plataforma · Leads CRM = contactos en GoHighLevel · CPL = inversión ÷ leads CRM · Costo/calif. = inversión ÷ calificados. Las familias normalizan los nombres, que difieren entre plataforma y CRM.</p>`;
+  <p class="hint">Result. ads = leads/conversiones que reporta la plataforma · Leads CRM = contactos en GoHighLevel · CPL = inversión ÷ leads CRM <b>de esa familia</b>. En el Total, el CPL y el costo/calificado se dividen entre los leads de las familias <b>con inversión</b> (${leadsPagos.length} de ${leads.length}), no entre todo el CRM: la inversión es solo de Meta y Google, y mezclarla con los leads orgánicos, de seminarios, brokers y referidos hacía ver la publicidad más barata de lo que es. Las familias normalizan los nombres, que difieren entre plataforma y CRM.</p>`;
 
   lqState._combo = { keys, fams, invT, califT, cplT, ccT, leads };
   return html;
