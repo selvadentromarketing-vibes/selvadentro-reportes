@@ -5225,7 +5225,6 @@ function slaRender(){
 
   const slasEf = leads.map(l=>l.slaEf).filter(x=>x!=null);   // contacto efectivo (definición del Anexo 1)
   const slasAt = leads.map(l=>l.slaAt).filter(x=>x!=null);   // primer intento
-  const und = (mins)=> slasEf.length ? Math.round(slasEf.filter(x=>x<=mins*60000).length/slasEf.length*100)+"%" : "—";
   const conCitas = leads.filter(l=>!l.ad);        // solo los que sí se pudieron leer
   const apTot = conCitas.reduce((a,l)=>a+l.ap.tot,0), apSh = conCitas.reduce((a,l)=>a+l.ap.sh,0), apNs = conCitas.reduce((a,l)=>a+l.ap.ns,0);
   const sinCitas = leads.length - conCitas.length;
@@ -5273,8 +5272,8 @@ function slaRender(){
     ${kpiND(conDatos.filter(l=>l.foC).length,conDatos.length,"Con llamada que sí conectó")}
     ${kpiND(conDatos.filter(l=>l.fi).length,conDatos.length,"Contactados efectivos")}
     ${kpiND(v5n,velBaseT.length,"1er toque manual ≤5 min · desde la entrada del lead","meta 5 min")}
-    ${kpi(und(60),"Contacto efectivo ≤60 min (handoff WhatsApp) · desde la entrada")}
-    ${kpi(und(15),"Contacto efectivo ≤15 min (transferencia en caliente)")}
+    ${kpiND(slasEf.filter(x=>x<=60*60000).length,slasEf.length,"Contacto efectivo ≤60 min (handoff WhatsApp) · de los que respondieron")}
+    ${kpiND(slasEf.filter(x=>x<=15*60000).length,slasEf.length,"Contacto efectivo ≤15 min (transferencia en caliente) · de los que respondieron")}
     ${kpi(fmtDur(slaMedian(slasEf)),"Med. contacto efectivo · desde la entrada del lead")}
     ${kpi(fmtDur(slaMedian(slasAt)),"Med. 1er toque manual · desde la entrada del lead")}
     ${kpiND(agN,agB.length,"Tasa de agendamiento · citas ÷ contactados efectivos")}
@@ -5309,8 +5308,12 @@ function slaRender(){
       const cd = arr.filter(l=>!l.sd);
       const ss = arr.map(l=>l.slaEf).filter(x=>x!=null);
       const sa = arr.map(l=>l.slaAt).filter(x=>x!=null);
-      const u15 = ss.length ? Math.round(ss.filter(x=>x<=15*60000).length/ss.length*100)+"%" : "—";
-      const u60 = ss.length ? Math.round(ss.filter(x=>x<=60*60000).length/ss.length*100)+"%" : "—";
+      // Denominador = los que RESPONDIERON, no todos los leads. Se declara en el tooltip
+      // para que un 75% aquí no se lea como "75% de los leads" (spec A1).
+      const uND = (mins)=>{ if(!ss.length) return "—"; const n=ss.filter(x=>x<=mins*60000).length;
+        return `<span title="${n} de ${ss.length} que respondieron">${Math.round(n/ss.length*100)}% <span class="lq-sub">(${n}/${ss.length})</span></span>`; };
+      const u15 = uND(15);
+      const u60 = uND(60);
       // Tasa de agendamiento (spec D3): citas ÷ contactados efectivos con citas legibles.
       // Sustituye a "Cita ≤48h", que dividía entre TODOS los leads (medía tasa de
       // respuesta) y arrancaba el reloj en la entrada del lead (doble conteo de velocidad).
@@ -5644,7 +5647,18 @@ async function showSLA(){
   const wkNow = isoWeekId(new Date(Date.now()-LQ_TZ_MS));
   const wkAgg = slaState.agg && slaState.agg.ts ? isoWeekId(new Date(slaState.agg.ts-LQ_TZ_MS)) : null;
   if(!slaState.syncing && wkAgg !== wkNow){
-    toast("Generando el reporte de la semana automáticamente…");
+    // El automático SIEMPRE genera la última semana CERRADA, nunca la semana en curso.
+    // Los selectores arrancan vacíos en cada carga y slaPopulateWeeks los deja en
+    // weeks[last] = la semana en curso, así que el lunes a las 9:00 el primer usuario
+    // que abría la pestaña disparaba un barrido sobre las ~9 horas de leads que llevaba
+    // el lunes y ESE agregado se escribía en la clave compartida del kv, borrando el
+    // reporte terminado de la semana anterior — justo el que se entrega los lunes.
+    const wkCerrada = isoWeekId(new Date(Date.now()-LQ_TZ_MS-7*86400e3));
+    const si=document.getElementById("sla-sem-ini"), sf=document.getElementById("sla-sem-fin");
+    const hay = [...(si?.options||[])].some(o=>o.value===wkCerrada);
+    if(si && sf && hay){ si.value = wkCerrada; sf.value = wkCerrada; }
+    toast(hay ? `Generando el reporte de la semana cerrada (${weekLabel(wkCerrada)})…`
+              : "Generando el reporte de la semana automáticamente…");
     slaSync();
   }
 }
