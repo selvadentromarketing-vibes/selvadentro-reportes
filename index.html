@@ -5880,7 +5880,12 @@ async function showSLA(){
 }
 
 /* ===================== ANALÍTICA ===================== */
-const METRIC_LABELS = { leads:"Leads", zooms:"Zooms", tours:"Tours", opp:"OPP", opp_zooms:"OPP de zooms", opp_tours:"OPP de tours", opp_14:"OPP >14 días", apartados:"Apartados", won:"WON", ingresos:"Ingresos" };
+const METRIC_LABELS = { leads:"Leads", zooms:"Zooms realizados (tot.)", tours:"Tours realizados (tot.)", zooms_ag:"Zooms agendados", tours_ag:"Tours agendados",
+  zooms_seg:"Zooms realizados de seguimiento", tours_seg:"Tours realizados de seguimiento", zooms_ag_seg:"Zooms agendados de seguimiento", tours_ag_seg:"Tours agendados de seguimiento",
+  opp:"OPP", opp_zooms:"OPP de zooms", opp_tours:"OPP de tours", opp_14:"OPP >14 días", apartados:"Apartados", won:"WON", ingresos:"Ingresos" };
+// Las series de seguimiento son un insumo de la resta (nuevos = total − seguimiento), no
+// una tendencia que merezca tarjeta propia: la Analítica de Dirección grafica el resto.
+const ANAL_KEYS = METRIC_KEYS.filter(m=>!/_seg$/.test(m));
 const ANAL_DIR = { res:{expanded:null,charts:{},cache:{}}, dc:{expanded:null,charts:{},cache:{}} };
 function dirWeeklySeries(chsSel, weekSet){
   const wks = [...weekSet].sort();
@@ -5917,7 +5922,7 @@ function renderDirAnalitica(prefix, chsSel, weekSet, tabName){
   if(state._rk !== rkAnal){ state._rk = rkAnal; state.cache = {}; NOTES_CACHE[prefix] = {}; }
   if(!weeks.length){ host.innerHTML = ''; return; }
   const html = [`<h3 style="font-family:var(--serif);color:var(--verde-prof);font-size:var(--fs-xl);margin:24px 0 6px">Analítica del embudo</h3><p class="hint" style="margin-top:0">Serie semanal agregada de los canales seleccionados. Clic para expandir y pedir conclusión con IA.</p><div class="anal-grid">`];
-  METRIC_KEYS.forEach((m, i) => {
+  ANAL_KEYS.forEach((m, i) => {
     const values = byMetric[m];
     const total = values.reduce((a,b)=>a+b,0);
     const canvasId = `${prefix}-anc-${m}`;
@@ -5934,7 +5939,7 @@ function renderDirAnalitica(prefix, chsSel, weekSet, tabName){
   });
   html.push('</div>');
   host.innerHTML = html.join('');
-  METRIC_KEYS.forEach(m => {
+  ANAL_KEYS.forEach(m => {
     const el = document.getElementById(`${prefix}-anc-${m}`); if(!el) return;
     if(state.charts[m]) state.charts[m].destroy();
     state.charts[m] = new Chart(el.getContext("2d"), {
