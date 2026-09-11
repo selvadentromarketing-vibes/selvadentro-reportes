@@ -167,6 +167,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
      con un toast genérico y el campo culpable quedaba idéntico a los demás. */
   .frow input.campo-error, input.campo-error{ border-color:var(--rojo) !important; background:#F9E9E6; }
   .campo-aviso{ display:block; margin-top:4px; font-size:var(--fs-xs); color:var(--rojo); font-weight:600; }
+  .campo-ayuda{ display:block; margin-top:2px; font-size:var(--fs-xs); color:var(--neutro); font-weight:400; line-height:1.35; }
   .hint.pegada{ margin-top:-2px; }
   h3.h-sec{ font-family:var(--serif); color:var(--verde-prof); font-size:var(--fs-xl); margin:22px 0 6px; }
   .modal-texto{ width:100%; margin-top:14px; font-family:var(--mono); font-size:var(--fs-s);
@@ -1079,22 +1080,26 @@ const PAID_SECTIONS = [
     {k:"zooms_realizados", l:"Zooms realizados", meta:null},
     {k:"tours_agendados",  l:"Tours agendados", meta:null},
     {k:"tours_realizados", l:"Tours realizados", meta:null},
+    {k:"zooms_agendados_seg",  l:"Zooms agendados de seguimiento",  meta:null, h:"De los zooms agendados, cuántos fueron con un cliente que ya había tenido un zoom antes. Un lead cuenta como NUEVO una sola vez en toda su vida; cada zoom/tour posterior es seguimiento, sin importar el tiempo que pase ni qué asesor lo atienda. Nunca puede ser mayor que el total."},
+    {k:"zooms_realizados_seg", l:"Zooms realizados de seguimiento", meta:null, h:"De los zooms realizados, cuántos fueron repetidos. Un lead cuenta como NUEVO una sola vez en toda su vida; cada zoom/tour posterior es seguimiento, sin importar el tiempo que pase ni qué asesor lo atienda. Nunca puede ser mayor que el total."},
+    {k:"tours_agendados_seg",  l:"Tours agendados de seguimiento",  meta:null, h:"De los tours agendados, cuántos fueron con un cliente que ya había tenido un tour antes. Un lead cuenta como NUEVO una sola vez en toda su vida; cada zoom/tour posterior es seguimiento, sin importar el tiempo que pase ni qué asesor lo atienda. Nunca puede ser mayor que el total."},
+    {k:"tours_realizados_seg", l:"Tours realizados de seguimiento", meta:null, h:"De los tours realizados, cuántos fueron repetidos. Un lead cuenta como NUEVO una sola vez en toda su vida; cada zoom/tour posterior es seguimiento, sin importar el tiempo que pase ni qué asesor lo atienda. Nunca puede ser mayor que el total."},
   ], conv:[
-    {l:"Lead → Zoom/Tour agendado", target:0.10, num:["zooms_agendados","tours_agendados"], den:"leads"},
+    {l:"Lead → Zoom/Tour agendado (nuevos)", target:0.10, num:["zooms_agendados","tours_agendados","-zooms_agendados_seg","-tours_agendados_seg"], den:"leads"},
     {l:"Zooms agendados → realizados", target:0.75, num:"zooms_realizados", den:"zooms_agendados"},
     {l:"Tours agendados → realizados", target:0.75, num:"tours_realizados", den:"tours_agendados"},
   ]},
   { title:"Pipeline / OPP", fields:[
-    {k:"opp_total",     l:"OPP (total)", meta:null},
+    {k:"opp_total",     l:"OPP (total)", meta:null, h:"Oportunidades reales de cierre: de Seguimiento de OPP en adelante (Carta oferta, Apartado, WON). Una cotización enviada todavía NO es OPP."},
     {k:"opp_zooms",     l:"OPP de zooms", meta:null},
     {k:"opp_tours",     l:"OPP de tours", meta:null},
     {k:"opp_next_step", l:"OPP con next step + fecha", meta:null},
     {k:"opp_14dias",    l:"OPP >14 días", meta:null},
     {k:"opp_activas",   l:"OPP activas", meta:null},
   ], conv:[
-    {l:"Zoom → OPP", target:0.15, num:"opp_zooms", den:"zooms_realizados"},
-    {l:"Tour → OPP", target:0.20, num:"opp_tours", den:"tours_realizados"},
-    {l:"Zoom/Tour → OPP", target:0.40, num:"opp_total", den:["zooms_realizados","tours_realizados"]},
+    {l:"Zoom nuevo → OPP", target:0.15, num:"opp_zooms", den:["zooms_realizados","-zooms_realizados_seg"]},
+    {l:"Tour nuevo → OPP", target:0.20, num:"opp_tours", den:["tours_realizados","-tours_realizados_seg"]},
+    {l:"Zoom/Tour nuevo → OPP", target:0.40, num:"opp_total", den:["zooms_realizados","tours_realizados","-zooms_realizados_seg","-tours_realizados_seg"]},
   ]},
   { title:"Cierre", fields:[
     {k:"apartados", l:"Apartados", meta:null},
@@ -1155,19 +1160,23 @@ const REFERIDOS_SECTIONS = [
     {k:"zooms_realizados", l:"Zooms realizados", meta:null},
     {k:"tours_agendados",  l:"Tours agendados", meta:null},
     {k:"tours_realizados", l:"Tours realizados", meta:null},
+    {k:"zooms_agendados_seg",  l:"Zooms agendados de seguimiento",  meta:null, h:"De los zooms agendados, cuántos fueron con un cliente que ya había tenido un zoom antes. Un lead cuenta como NUEVO una sola vez en toda su vida; cada zoom/tour posterior es seguimiento, sin importar el tiempo que pase ni qué asesor lo atienda. Nunca puede ser mayor que el total."},
+    {k:"zooms_realizados_seg", l:"Zooms realizados de seguimiento", meta:null, h:"De los zooms realizados, cuántos fueron repetidos. Un lead cuenta como NUEVO una sola vez en toda su vida; cada zoom/tour posterior es seguimiento, sin importar el tiempo que pase ni qué asesor lo atienda. Nunca puede ser mayor que el total."},
+    {k:"tours_agendados_seg",  l:"Tours agendados de seguimiento",  meta:null, h:"De los tours agendados, cuántos fueron con un cliente que ya había tenido un tour antes. Un lead cuenta como NUEVO una sola vez en toda su vida; cada zoom/tour posterior es seguimiento, sin importar el tiempo que pase ni qué asesor lo atienda. Nunca puede ser mayor que el total."},
+    {k:"tours_realizados_seg", l:"Tours realizados de seguimiento", meta:null, h:"De los tours realizados, cuántos fueron repetidos. Un lead cuenta como NUEVO una sola vez en toda su vida; cada zoom/tour posterior es seguimiento, sin importar el tiempo que pase ni qué asesor lo atienda. Nunca puede ser mayor que el total."},
   ], conv:[
-    {l:"Lead → Zoom", target:0.70, num:"zooms_agendados", den:"leads"},
+    {l:"Lead → Zoom agendado (nuevos)", target:0.70, num:["zooms_agendados","-zooms_agendados_seg"], den:"leads"},
     {l:"Zooms agendados → realizados", target:0.75, num:"zooms_realizados", den:"zooms_agendados"},
   ]},
   { title:"Pipeline / OPP", fields:[
-    {k:"opp_total",     l:"OPP (total)", meta:null},
+    {k:"opp_total",     l:"OPP (total)", meta:null, h:"Oportunidades reales de cierre: de Seguimiento de OPP en adelante (Carta oferta, Apartado, WON). Una cotización enviada todavía NO es OPP."},
     {k:"opp_zooms",     l:"OPP de zooms", meta:null},
     {k:"opp_tours",     l:"OPP de tours", meta:null},
     {k:"opp_next_step", l:"OPP con next step + fecha", meta:null},
     {k:"opp_14dias",    l:"OPP >14 días", meta:null},
     {k:"opp_activas",   l:"OPP activas", meta:null},
   ], conv:[
-    {l:"Zooms → OPP", target:0.40, num:"opp_total", den:"zooms_realizados"},
+    {l:"Zoom nuevo → OPP", target:0.40, num:"opp_total", den:["zooms_realizados","-zooms_realizados_seg"]},
   ]},
   { title:"Cierre", fields:[
     {k:"apartados", l:"Apartados", meta:null},
@@ -1192,6 +1201,10 @@ const PD_LEADS_SECTIONS = [
     {k:"zooms_realizados", l:"Zooms realizados", meta:null},
     {k:"tours_agendados",  l:"Tours agendados", meta:null},
     {k:"tours_realizados", l:"Tours realizados", meta:null},
+    {k:"zooms_agendados_seg",  l:"Zooms agendados de seguimiento",  meta:null, h:"De los zooms agendados, cuántos fueron con un cliente que ya había tenido un zoom antes. Un lead cuenta como NUEVO una sola vez en toda su vida; cada zoom/tour posterior es seguimiento, sin importar el tiempo que pase ni qué asesor lo atienda. Nunca puede ser mayor que el total."},
+    {k:"zooms_realizados_seg", l:"Zooms realizados de seguimiento", meta:null, h:"De los zooms realizados, cuántos fueron repetidos. Un lead cuenta como NUEVO una sola vez en toda su vida; cada zoom/tour posterior es seguimiento, sin importar el tiempo que pase ni qué asesor lo atienda. Nunca puede ser mayor que el total."},
+    {k:"tours_agendados_seg",  l:"Tours agendados de seguimiento",  meta:null, h:"De los tours agendados, cuántos fueron con un cliente que ya había tenido un tour antes. Un lead cuenta como NUEVO una sola vez en toda su vida; cada zoom/tour posterior es seguimiento, sin importar el tiempo que pase ni qué asesor lo atienda. Nunca puede ser mayor que el total."},
+    {k:"tours_realizados_seg", l:"Tours realizados de seguimiento", meta:null, h:"De los tours realizados, cuántos fueron repetidos. Un lead cuenta como NUEVO una sola vez en toda su vida; cada zoom/tour posterior es seguimiento, sin importar el tiempo que pase ni qué asesor lo atienda. Nunca puede ser mayor que el total."},
   ]},
   { title:"Prospección en frío", fields:[
     {k:"conversaciones_iniciadas", l:"Contacto en frío", meta:null},
@@ -1199,15 +1212,15 @@ const PD_LEADS_SECTIONS = [
     {k:"publicaciones_marca",      l:"Publicaciones marca personal", meta:null},
   ]},
   { title:"Pipeline / OPP", fields:[
-    {k:"opp_total",     l:"OPP (total)", meta:null},
+    {k:"opp_total",     l:"OPP (total)", meta:null, h:"Oportunidades reales de cierre: de Seguimiento de OPP en adelante (Carta oferta, Apartado, WON). Una cotización enviada todavía NO es OPP."},
     {k:"opp_zooms",     l:"OPP de zooms", meta:null},
     {k:"opp_tours",     l:"OPP de tours", meta:null},
     {k:"opp_next_step", l:"OPP con next step + fecha", meta:null},
     {k:"opp_14dias",    l:"OPP >14 días", meta:null},
     {k:"opp_activas",   l:"OPP activas", meta:null},
   ], conv:[
-    {l:"Zooms → OPP", target:0.20, num:"opp_zooms", den:"zooms_realizados"},
-    {l:"Tour → OPP", target:0.40, num:"opp_tours", den:"tours_realizados"},
+    {l:"Zoom nuevo → OPP", target:0.20, num:"opp_zooms", den:["zooms_realizados","-zooms_realizados_seg"]},
+    {l:"Tour nuevo → OPP", target:0.40, num:"opp_tours", den:["tours_realizados","-tours_realizados_seg"]},
   ]},
   { title:"Cierre", fields:[
     {k:"apartados", l:"Apartados", meta:null},
@@ -1247,9 +1260,13 @@ const PD_BROKERS_SECTIONS = [
     {k:"zooms_realizados", l:"Zooms realizados", meta:null},
     {k:"tours_agendados",  l:"Tours agendados", meta:null},
     {k:"tours_realizados", l:"Tours realizados", meta:null},
+    {k:"zooms_agendados_seg",  l:"Zooms agendados de seguimiento",  meta:null, h:"De los zooms agendados, cuántos fueron con un cliente que ya había tenido un zoom antes. Un lead cuenta como NUEVO una sola vez en toda su vida; cada zoom/tour posterior es seguimiento, sin importar el tiempo que pase ni qué asesor lo atienda. Nunca puede ser mayor que el total."},
+    {k:"zooms_realizados_seg", l:"Zooms realizados de seguimiento", meta:null, h:"De los zooms realizados, cuántos fueron repetidos. Un lead cuenta como NUEVO una sola vez en toda su vida; cada zoom/tour posterior es seguimiento, sin importar el tiempo que pase ni qué asesor lo atienda. Nunca puede ser mayor que el total."},
+    {k:"tours_agendados_seg",  l:"Tours agendados de seguimiento",  meta:null, h:"De los tours agendados, cuántos fueron con un cliente que ya había tenido un tour antes. Un lead cuenta como NUEVO una sola vez en toda su vida; cada zoom/tour posterior es seguimiento, sin importar el tiempo que pase ni qué asesor lo atienda. Nunca puede ser mayor que el total."},
+    {k:"tours_realizados_seg", l:"Tours realizados de seguimiento", meta:null, h:"De los tours realizados, cuántos fueron repetidos. Un lead cuenta como NUEVO una sola vez en toda su vida; cada zoom/tour posterior es seguimiento, sin importar el tiempo que pase ni qué asesor lo atienda. Nunca puede ser mayor que el total."},
   ]},
   { title:"Pipeline / OPP", fields:[
-    {k:"opp_total",     l:"OPP (total)", meta:null},
+    {k:"opp_total",     l:"OPP (total)", meta:null, h:"Oportunidades reales de cierre: de Seguimiento de OPP en adelante (Carta oferta, Apartado, WON). Una cotización enviada todavía NO es OPP."},
     {k:"opp_zooms",     l:"OPP de zooms", meta:null},
     {k:"opp_tours",     l:"OPP de tours", meta:null},
     {k:"opp_next_step", l:"OPP con next step + fecha", meta:null},
@@ -1295,6 +1312,10 @@ const SEMINARIOS_SECTIONS = [
     {k:"zooms_realizados", l:"Zooms realizados (a distancia)", meta:null},
     {k:"tours_agendados",  l:"Tours agendados", meta:null},
     {k:"tours_realizados", l:"Tours realizados", meta:null},
+    {k:"zooms_agendados_seg",  l:"Zooms agendados de seguimiento",  meta:null, h:"De los zooms agendados, cuántos fueron con un cliente que ya había tenido un zoom antes. Un lead cuenta como NUEVO una sola vez en toda su vida; cada zoom/tour posterior es seguimiento, sin importar el tiempo que pase ni qué asesor lo atienda. Nunca puede ser mayor que el total."},
+    {k:"zooms_realizados_seg", l:"Zooms realizados de seguimiento", meta:null, h:"De los zooms realizados, cuántos fueron repetidos. Un lead cuenta como NUEVO una sola vez en toda su vida; cada zoom/tour posterior es seguimiento, sin importar el tiempo que pase ni qué asesor lo atienda. Nunca puede ser mayor que el total."},
+    {k:"tours_agendados_seg",  l:"Tours agendados de seguimiento",  meta:null, h:"De los tours agendados, cuántos fueron con un cliente que ya había tenido un tour antes. Un lead cuenta como NUEVO una sola vez en toda su vida; cada zoom/tour posterior es seguimiento, sin importar el tiempo que pase ni qué asesor lo atienda. Nunca puede ser mayor que el total."},
+    {k:"tours_realizados_seg", l:"Tours realizados de seguimiento", meta:null, h:"De los tours realizados, cuántos fueron repetidos. Un lead cuenta como NUEVO una sola vez en toda su vida; cada zoom/tour posterior es seguimiento, sin importar el tiempo que pase ni qué asesor lo atienda. Nunca puede ser mayor que el total."},
   ], conv:[
     {l:"Zooms agendados → realizados", target:0.75, num:"zooms_realizados", den:"zooms_agendados"},
     {l:"Tours agendados → realizados", target:0.75, num:"tours_realizados", den:"tours_agendados"},
@@ -1306,7 +1327,7 @@ const SEMINARIOS_SECTIONS = [
     {k:"uno_externos",        l:"1:1 externos", meta:null},
   ]},
   { title:"Pipeline / OPP", fields:[
-    {k:"opp_total",     l:"OPP (total)", meta:null},
+    {k:"opp_total",     l:"OPP (total)", meta:null, h:"Oportunidades reales de cierre: de Seguimiento de OPP en adelante (Carta oferta, Apartado, WON). Una cotización enviada todavía NO es OPP."},
     {k:"opp_zooms",     l:"OPP de zooms", meta:null},
     {k:"opp_tours",     l:"OPP de tours", meta:null},
     {k:"opp_1a1",       l:"OPP de 1:1", meta:null},
@@ -1376,9 +1397,13 @@ const RP_VIP_SECTIONS = [
     {k:"zooms_realizados", l:"Zooms realizados", meta:null},
     {k:"tours_agendados",  l:"Tours agendados", meta:null},
     {k:"tours_realizados", l:"Tours realizados", meta:null},
+    {k:"zooms_agendados_seg",  l:"Zooms agendados de seguimiento",  meta:null, h:"De los zooms agendados, cuántos fueron con un cliente que ya había tenido un zoom antes. Un lead cuenta como NUEVO una sola vez en toda su vida; cada zoom/tour posterior es seguimiento, sin importar el tiempo que pase ni qué asesor lo atienda. Nunca puede ser mayor que el total."},
+    {k:"zooms_realizados_seg", l:"Zooms realizados de seguimiento", meta:null, h:"De los zooms realizados, cuántos fueron repetidos. Un lead cuenta como NUEVO una sola vez en toda su vida; cada zoom/tour posterior es seguimiento, sin importar el tiempo que pase ni qué asesor lo atienda. Nunca puede ser mayor que el total."},
+    {k:"tours_agendados_seg",  l:"Tours agendados de seguimiento",  meta:null, h:"De los tours agendados, cuántos fueron con un cliente que ya había tenido un tour antes. Un lead cuenta como NUEVO una sola vez en toda su vida; cada zoom/tour posterior es seguimiento, sin importar el tiempo que pase ni qué asesor lo atienda. Nunca puede ser mayor que el total."},
+    {k:"tours_realizados_seg", l:"Tours realizados de seguimiento", meta:null, h:"De los tours realizados, cuántos fueron repetidos. Un lead cuenta como NUEVO una sola vez en toda su vida; cada zoom/tour posterior es seguimiento, sin importar el tiempo que pase ni qué asesor lo atienda. Nunca puede ser mayor que el total."},
   ]},
   { title:"Pipeline / OPP", fields:[
-    {k:"opp_total",     l:"OPP (total)", meta:null},
+    {k:"opp_total",     l:"OPP (total)", meta:null, h:"Oportunidades reales de cierre: de Seguimiento de OPP en adelante (Carta oferta, Apartado, WON). Una cotización enviada todavía NO es OPP."},
     {k:"opp_zooms",     l:"OPP de zooms", meta:null},
     {k:"opp_tours",     l:"OPP de tours", meta:null},
     {k:"opp_next_step", l:"OPP con next step + fecha", meta:null},
@@ -1550,7 +1575,7 @@ async function primeCache(){
     // Un dump fallido dejaba el canal mostrando SOLO la semilla sin ningún aviso:
     // se marca la lectura como fallida para que salga la franja roja, igual que sGet.
     let rows=[]; try{ rows = await STORE.dump(p); }catch(e){ LECTURA_FALLIDA = true; return; }
-    for(const row of rows){ try{ RECCACHE[row.k]=JSON.parse(row.v); STORED_KEYS.add(row.k); }catch(e){} }
+    for(const row of rows){ try{ RECCACHE[row.k]=normalizarAlias(chKey, JSON.parse(row.v)); STORED_KEYS.add(row.k); }catch(e){} }
   }));
 }
 
@@ -1595,11 +1620,11 @@ function semanaISOTulum(iso){
 function renderIngresoForm(){
   document.getElementById("ing-sections").innerHTML = sections().map(s=>`
     <div class="section"><h3><span class="dot"></span>${escAttr(s.title)}</h3><div class="fields">
-      ${s.fields.map(f=>`<div class="frow"><label>${escAttr(f.l)}</label>
+      ${s.fields.map(f=>`<div class="frow"><label for="in_${f.k}">${escAttr(f.l)}${f.h?`<span class="campo-ayuda">${escAttr(f.h)}</span>`:""}</label>
         <input type="text" inputmode="decimal" id="in_${f.k}" placeholder="0" data-money="${f.money?1:0}"></div>`).join("")}
     </div></div>`).join("");
   document.querySelectorAll("#ing-sections input").forEach(el=>{
-    el.addEventListener("blur", ()=>ingVigilarCampo(el));
+    el.addEventListener("blur", ()=>{ ingVigilarCampo(el); ingVigilarSeg(el); });
     el.addEventListener("input", ()=>{ if(el.classList.contains("campo-error")) ingVigilarCampo(el); });
   });
 }
@@ -1688,7 +1713,15 @@ function ingRevisarCoherencia(form){
   const desc = Number(v.leads_descalificados||0);
   if(leads!=null && desc>leads){ problemas.push(`Leads descalificados (${desc}) es mayor que Leads (${leads})`); campos.add("leads_descalificados"); marca("leads"); }
   Object.entries(v).forEach(([k,val])=>{ if(Number(val)<0){ problemas.push(`hay un valor negativo en "${etiquetaCampo(k)}"`); campos.add(k); } });
-  return { mensaje: problemas.length ? "· " + problemas.join("\n· ") : "", campos:[...campos] };
+  // Seguimiento > total es imposible por definición (los de seguimiento son PARTE del
+  // total). No es un aviso para "guardar así": bloquea el guardado.
+  const bloqueo = [];
+  allFields().filter(f=>/_seg$/.test(f.k)).forEach(f=>{
+    const base = f.k.replace(/_seg$/,""); if(!(base in v)) return;
+    const seg = Number(v[f.k]||0), tot = Number(v[base]||0);
+    if(seg > tot){ bloqueo.push(`"${etiquetaCampo(f.k)}" (${seg}) no puede ser mayor que "${etiquetaCampo(base)}" (${tot})`); campos.add(f.k); campos.add(base); }
+  });
+  return { mensaje: problemas.length ? "· " + problemas.join("\n· ") : "", campos:[...campos], bloqueo };
 }
 const etiquetaCampo = (k)=> (allFields().find(f=>f.k===k)||{}).l || k;
 // Marca en rojo los campos culpables en vez de dejar el aviso en un toast genérico.
@@ -1706,6 +1739,25 @@ function ingMarcarErrores(campos){
 }
 // Un texto que el parser no puede leer ("abc", "—") se guardaba como 0, indistinguible de
 // un 0 legítimo. Ahora el campo lo dice en el momento, no al guardar.
+// Seguimiento contra su total, en el momento: marca el campo de seguimiento en rojo con
+// el motivo, y lo limpia cuando cualquiera de los dos vuelve a ser coherente.
+function ingVigilarSeg(el){
+  const k = (el.id||"").replace(/^in_/,"");
+  const segK = /_seg$/.test(k) ? k : (allFields().some(f=>f.k===k+"_seg") ? k+"_seg" : null);
+  if(!segK) return;
+  const segEl = document.getElementById("in_"+segK), totEl = document.getElementById("in_"+segK.replace(/_seg$/,""));
+  if(!segEl || !totEl) return;
+  const seg = numCampo(segEl.value), tot = numCampo(totEl.value);
+  const excede = seg > tot;
+  const prev = segEl.parentElement.querySelector(".campo-aviso.seg");
+  if(excede){
+    segEl.classList.add("campo-error"); segEl.setAttribute("aria-invalid","true");
+    if(!prev){ const n=document.createElement("span"); n.className="campo-aviso seg"; n.textContent=`No puede ser mayor que el total (${tot}).`; segEl.parentElement.appendChild(n); }
+  } else if(prev){
+    prev.remove();
+    if(numCampoLegible(segEl.value) || !(segEl.value||"").trim()){ segEl.classList.remove("campo-error"); segEl.removeAttribute("aria-invalid"); }
+  }
+}
 function ingVigilarCampo(el){
   const t = (el.value||"").trim();
   const malo = t !== "" && !numCampoLegible(t);
@@ -1787,6 +1839,10 @@ async function saveWeek(){
   // Pisar un registro existente ya no es silencioso.
   const revision = ingRevisarCoherencia(form);
   ingMarcarErrores(revision.campos);
+  if(revision.bloqueo && revision.bloqueo.length){
+    await avisar("No se puede guardar:\n\n· "+revision.bloqueo.join("\n· ")+"\n\nLos de seguimiento son parte del total; corrige una de las dos cifras.", { titulo:"Seguimiento mayor que el total" });
+    return;
+  }
   if(revision.mensaje && !await confirmar(revision.mensaje, { titulo:"Revisa estos números", ok:"Guardar así" })) return;
   const previo = recGet(k);
   if(previo && !await ingSobrescribirOk(previo, dv, w)) return;
@@ -1891,15 +1947,25 @@ async function generarReporte(){
   const hasMetas=flds.some(f=>f.meta!=null);
   const metaPeriodo=meta=>meta==null?null:(meta/SEMANAS_MES*nWeeks);
   const cumpCell=(val,meta)=>{ const mp=metaPeriodo(meta); if(mp==null) return '<td></td><td></td><td></td>'; if(mp===0) return `<td>${rMeta(meta)}</td><td>0</td><td><span class="cump no">Sin Datos</span></td>`; const pct=val/mp,cls=pct>=1?"ok":"no"; return `<td>${rMeta(meta)}</td><td>${(+mp.toFixed(2))}</td><td><span class="cump ${cls}">${fmtPct(pct)}</span></td>`; };
-  const getv=spec=>Array.isArray(spec)?spec.reduce((acc,k)=>acc+(sum[k]||0),0):(sum[spec]||0);
+  // Una clave con "-" delante se RESTA: así una conversión puede usar "clientes nuevos"
+  // (total − seguimiento) como denominador sin capturar la cifra dos veces.
+  const getv=spec=>Array.isArray(spec)?spec.reduce((acc,k)=>String(k).startsWith("-")?acc-(sum[k.slice(1)]||0):acc+(sum[k]||0),0):(sum[spec]||0);
+  // Semanas capturadas antes de separar nuevo/seguimiento (2026-09): no traen los campos
+  // _seg, así que sus "nuevos" salen iguales al total. Se avisa; no se recaptura nada.
+  const tieneSeg = flds.some(f=>/_seg$/.test(f.k));
+  const semanasSinSeg = tieneSeg ? recs.filter(r=>r.rec.valores && !flds.some(f=>/_seg$/.test(f.k) && (f.k in r.rec.valores))).length : 0;
   const convVal=c=>{ const den=getv(c.den),num=getv(c.num); if(!den) return `<span class="cump no">Sin Datos</span>`; const pct=num/den,cls=pct>=c.target?"ok":"no"; return `<span class="cump ${cls}">${fmtPct(pct)}</span>`; };
 
   const thMeta = hasMetas ? '<th>Meta mensual</th><th>Meta periodo</th><th>Cumplimiento</th>' : '';
-  const sectionsHtml=sections().map(s=>`
+  const avisoSeg = semanasSinSeg ? `<div class="lq-meth" style="border-color:var(--cobre)">◑ <b>${semanasSinSeg}</b> de ${recs.length} registro${recs.length===1?"":"s"} del rango se capturaron <b>antes</b> de separar zooms/tours nuevos de los de seguimiento: en ellos el seguimiento vale 0 y los "nuevos" salen iguales al total. La tendencia contra esas semanas no es comparable.</div>` : "";
+  const sectionsHtml=avisoSeg+sections().map(s=>`
     <div class="rep-section"><h3>${escAttr(s.title)}</h3><div class="layout">
       <div class="metrics"><table class="rep">
         <thead><tr><th class="lft">Métrica</th><th>Valor</th>${thMeta}</tr></thead>
-        <tbody>${s.fields.map(f=>`<tr><td class="lft">${escAttr(f.l)}</td><td class="val">${f.money?fmtMoney(sum[f.k]):sum[f.k]}</td>${hasMetas?cumpCell(sum[f.k],f.meta):''}</tr>`).join("")}</tbody>
+        <tbody>${s.fields.map(f=>`<tr><td class="lft">${escAttr(f.l)}</td><td class="val">${f.money?fmtMoney(sum[f.k]):sum[f.k]}</td>${hasMetas?cumpCell(sum[f.k],f.meta):''}</tr>`).join("")}${
+          // Derivado, no capturado: nuevos = total − seguimiento, así las partes siempre suman el total
+          s.fields.filter(f=>/_seg$/.test(f.k) && s.fields.some(g=>g.k===f.k.replace(/_seg$/,""))).map(f=>{ const base=s.fields.find(g=>g.k===f.k.replace(/_seg$/,"")); const v=(sum[base.k]||0)-(sum[f.k]||0);
+            return `<tr class="fila-derivada"><td class="lft"><b>${escAttr(base.l)} nuevos</b> <span class="lq-sub">= total − seguimiento</span></td><td class="val"><b>${v}</b></td>${hasMetas?'<td></td><td></td><td></td>':''}</tr>`; }).join("")}</tbody>
       </table></div>
       ${s.conv?`<div class="conv">${s.conv.map(c=>`<div class="citem"><div class="clabel"><span>${c.l}</span><span class="ctarget">meta ${fmtPct(c.target)}</span></div><div class="cval">${convVal(c)}</div></div>`).join("")}</div>`:""}
     </div></div>`).join("");
@@ -2354,12 +2420,12 @@ const wonTh = (k, extra)=>`<th title="${escAttr(WON_DEFS[k].t)}">${WON_DEFS[k].n
 // Mapeo de cada métrica común al campo real de cada canal
 const METRIC_MAP = {
   brokers:       { leads:"leads_registrados", zooms:"zooms_clientes", tours:"tours_clientes", opp:"opp_brokers", opp_zooms:"opp_zooms", opp_tours:"opp_tours", opp_14:"opp_14dias", apartados:"apartados_brokers", won:"won_brokers", ingresos:"ingresos" },
-  paid_organico: { leads:"leads", zooms:"zooms_realizados", tours:"tours_realizados", opp:"opp_total", opp_zooms:"opp_zooms", opp_tours:"opp_tours", opp_14:"opp_14dias", apartados:"apartados", won:"won", ingresos:"ingresos" },
-  seminarios:    { leads:"leads", zooms:"zooms_realizados", tours:"tours_realizados", opp:"opp_total", opp_zooms:"opp_zooms", opp_tours:"opp_tours", opp_14:"opp_14dias", apartados:"apartados", won:"won", ingresos:"ingresos" },
-  referidos:     { leads:"leads", zooms:"zooms_realizados", tours:"tours_realizados", opp:"opp_total", opp_zooms:"opp_zooms", opp_tours:"opp_tours", opp_14:"opp_14dias", apartados:"apartados", won:"won", ingresos:"ingresos" },
-  pd_leads:      { leads:"leads", zooms:"zooms_realizados", tours:"tours_realizados", opp:"opp_total", opp_zooms:"opp_zooms", opp_tours:"opp_tours", opp_14:"opp_14dias", apartados:"apartados", won:"won", ingresos:"ingresos" },
-  pd_brokers:    { leads:"leads_brokers", zooms:"zooms_realizados", tours:"tours_realizados", opp:"opp_total", opp_zooms:"opp_zooms", opp_tours:"opp_tours", opp_14:"opp_14dias", apartados:"apartados", won:"won", ingresos:"ingresos" },
-  rp_vip:        { leads:"leads_embajadores", zooms:"zooms_realizados", tours:"tours_realizados", opp:"opp_total", opp_zooms:"opp_zooms", opp_tours:"opp_tours", opp_14:"opp_14dias", apartados:"apartados", won:"won", ingresos:"ingresos" },
+  paid_organico: { leads:"leads", zooms:"zooms_realizados", tours:"tours_realizados", zooms_ag:"zooms_agendados", tours_ag:"tours_agendados", zooms_seg:"zooms_realizados_seg", tours_seg:"tours_realizados_seg", zooms_ag_seg:"zooms_agendados_seg", tours_ag_seg:"tours_agendados_seg", opp:"opp_total", opp_zooms:"opp_zooms", opp_tours:"opp_tours", opp_14:"opp_14dias", apartados:"apartados", won:"won", ingresos:"ingresos" },
+  seminarios:    { leads:"leads", zooms:"zooms_realizados", tours:"tours_realizados", zooms_ag:"zooms_agendados", tours_ag:"tours_agendados", zooms_seg:"zooms_realizados_seg", tours_seg:"tours_realizados_seg", zooms_ag_seg:"zooms_agendados_seg", tours_ag_seg:"tours_agendados_seg", opp:"opp_total", opp_zooms:"opp_zooms", opp_tours:"opp_tours", opp_14:"opp_14dias", apartados:"apartados", won:"won", ingresos:"ingresos" },
+  referidos:     { leads:"leads", zooms:"zooms_realizados", tours:"tours_realizados", zooms_ag:"zooms_agendados", tours_ag:"tours_agendados", zooms_seg:"zooms_realizados_seg", tours_seg:"tours_realizados_seg", zooms_ag_seg:"zooms_agendados_seg", tours_ag_seg:"tours_agendados_seg", opp:"opp_total", opp_zooms:"opp_zooms", opp_tours:"opp_tours", opp_14:"opp_14dias", apartados:"apartados", won:"won", ingresos:"ingresos" },
+  pd_leads:      { leads:"leads", zooms:"zooms_realizados", tours:"tours_realizados", zooms_ag:"zooms_agendados", tours_ag:"tours_agendados", zooms_seg:"zooms_realizados_seg", tours_seg:"tours_realizados_seg", zooms_ag_seg:"zooms_agendados_seg", tours_ag_seg:"tours_agendados_seg", opp:"opp_total", opp_zooms:"opp_zooms", opp_tours:"opp_tours", opp_14:"opp_14dias", apartados:"apartados", won:"won", ingresos:"ingresos" },
+  pd_brokers:    { leads:"leads_brokers", zooms:"zooms_realizados", tours:"tours_realizados", zooms_ag:"zooms_agendados", tours_ag:"tours_agendados", zooms_seg:"zooms_realizados_seg", tours_seg:"tours_realizados_seg", zooms_ag_seg:"zooms_agendados_seg", tours_ag_seg:"tours_agendados_seg", opp:"opp_total", opp_zooms:"opp_zooms", opp_tours:"opp_tours", opp_14:"opp_14dias", apartados:"apartados", won:"won", ingresos:"ingresos" },
+  rp_vip:        { leads:"leads_embajadores", zooms:"zooms_realizados", tours:"tours_realizados", zooms_ag:"zooms_agendados", tours_ag:"tours_agendados", zooms_seg:"zooms_realizados_seg", tours_seg:"tours_realizados_seg", zooms_ag_seg:"zooms_agendados_seg", tours_ag_seg:"tours_agendados_seg", opp:"opp_total", opp_zooms:"opp_zooms", opp_tours:"opp_tours", opp_14:"opp_14dias", apartados:"apartados", won:"won", ingresos:"ingresos" },
 };
 /* Metas del negocio: meta WON mensual y meta del mix de leads por canal, más las cuatro
    conversiones objetivo. Decían "editables" en el comentario desde el primer día, pero
@@ -2373,19 +2439,32 @@ const CHANNEL_META_DEF = {
   brokers:{won:1.8,mix:0.45}, paid_organico:{won:0.9,mix:0.22}, seminarios:{won:0.55,mix:0.14},
   referidos:{won:0.2,mix:0.05}, pd_leads:{won:0.2,mix:0.05}, pd_brokers:{won:0.2,mix:0.05}, rp_vip:{won:0.15,mix:0.04},
 };
-const CONV_T_DEF = { zo:0.15, to:0.20, oa:0.30, aw:0.80 };
-const CONV_T_LBL = { zo:"Zooms → OPP", to:"Tours → OPP", oa:"OPP → Apartados", aw:"Apartados → WON reportado" };
+const CONV_T_DEF = { zo:0.15, to:0.20, oa:0.30, aw:0.80, zr:0.75, lz:0.10 };
+const CONV_T_LBL = { zo:"Zooms nuevos → OPP", to:"Tours nuevos → OPP", oa:"OPP → Apartados", aw:"Apartados → WON reportado", zr:"Zooms/Tours agendados → realizados (show rate)", lz:"Lead → Zoom/Tour agendado (nuevos)" };
 let CHANNEL_META = JSON.parse(JSON.stringify(CHANNEL_META_DEF));
 let CONV_T = { ...CONV_T_DEF };
-const METRIC_KEYS = ["leads","zooms","tours","opp","opp_zooms","opp_tours","opp_14","apartados","won","ingresos"];
+const METRIC_KEYS = ["leads","zooms","tours","zooms_ag","tours_ag","zooms_seg","tours_seg","zooms_ag_seg","tours_ag_seg","opp","opp_zooms","opp_tours","opp_14","apartados","won","ingresos"];
+// Nuevos = total − seguimiento, derivado en cada agregado (canal, selección, total). Las
+// conversiones del embudo dividen por clientes únicos; las de ejecución (show rate, carga
+// por asesor) por eventos totales. Solicitud de cambio del 2026-09-10, §05.
+function derivarNuevos(m){
+  m.zooms_nuevos    = Math.max(0, (m.zooms||0)    - (m.zooms_seg||0));
+  m.tours_nuevos    = Math.max(0, (m.tours||0)    - (m.tours_seg||0));
+  m.zooms_ag_nuevos = Math.max(0, (m.zooms_ag||0) - (m.zooms_ag_seg||0));
+  m.tours_ag_nuevos = Math.max(0, (m.tours_ag||0) - (m.tours_ag_seg||0));
+  return m;
+}
 
 function chPrefix(chKey){ const c=CHANNELS[chKey]; return (c.advisors||c.cities)?`${chKey}:rec:`:`${chKey}:week:`; }
 function allWeeksAll(){ const set=new Set(); for(const k of Object.keys(CHANNELS)){ const p=chPrefix(k); recList(p).forEach(x=>set.add(x.slice(p.length).split("__")[0])); } return [...set].filter(Boolean).sort(); }
 function channelMetrics(chKey, weekSet){
   const map=METRIC_MAP[chKey]; const out={}; METRIC_KEYS.forEach(m=>out[m]=0);
+  out.registros=0; out.sinSeg=0;   // sinSeg = capturados antes de separar nuevo/seguimiento
   const p=chPrefix(chKey); const keys=recList(p);
-  for(const k of keys){ const wk=k.slice(p.length).split("__")[0]; if(weekSet && !weekSet.has(wk)) continue; const rec=recGet(k); if(!rec||!rec.valores) continue; METRIC_KEYS.forEach(m=>{ const fk=map[m]; if(fk) out[m]+=Number(rec.valores[fk]||0); }); }
-  return out;
+  for(const k of keys){ const wk=k.slice(p.length).split("__")[0]; if(weekSet && !weekSet.has(wk)) continue; const rec=recGet(k); if(!rec||!rec.valores) continue;
+    out.registros++; if(map.zooms_seg && !(map.zooms_seg in rec.valores)) out.sinSeg++;
+    METRIC_KEYS.forEach(m=>{ const fk=map[m]; if(fk) out[m]+=Number(rec.valores[fk]||0); }); }
+  return derivarNuevos(out);
 }
 function pctTxt(num,den){ if(!den) return 'Sin Datos'; return (num/den*100).toFixed(2)+'%'; }
 function fechaIniW(w){ const m=w.match(/(\d{4})-W(\d+)/); return m?fmtDate(dateOfIsoWeek(+m[1],+m[2])):"—"; }
@@ -2393,14 +2472,24 @@ function fechaFinW(w){ const m=w.match(/(\d{4})-W(\d+)/); return m?fmtDate(sunda
 function estadoDot(leads,won,metaWon){ if(leads<=0&&won<=0) return '<span class="estado-dot n" title="Sin actividad"></span>'; if(metaWon>0 && won/metaWon>=1) return '<span class="estado-dot g" title="Meta cumplida"></span>'; if(won>0) return '<span class="estado-dot y" title="En proceso"></span>'; return '<span class="estado-dot r" title="Sin WON aún"></span>'; }
 function convBlock(f){
   const row=(l,num,den,t)=>{ const v=den?(num/den):null; const cls=v==null?'no':(v>=t?'ok':'no'); const txt=v==null?'Sin Datos':fmtPct(v); return `<div class="conv-row"><span>${l}</span><span class="ct">meta ${fmtPct(t)}</span><span class="cump ${cls}">${txt}</span></div>`; };
-  return row("Zooms → OPP", f.opp_zooms, f.zooms, CONV_T.zo)
-       + row("Tours → OPP", f.opp_tours, f.tours, CONV_T.to)
+  // Embudo por clientes únicos (nuevos); ejecución por eventos totales. Ver derivarNuevos.
+  return row("Lead → Zoom/Tour agendado (nuevos)", (f.zooms_ag_nuevos||0)+(f.tours_ag_nuevos||0), f.leads, CONV_T.lz ?? 0.10)
+       + row("Agendados → realizados (show rate)", (f.zooms||0)+(f.tours||0), (f.zooms_ag||0)+(f.tours_ag||0), CONV_T.zr ?? 0.75)
+       + row("Zooms nuevos → OPP", f.opp_zooms, f.zooms_nuevos ?? f.zooms, CONV_T.zo)
+       + row("Tours nuevos → OPP", f.opp_tours, f.tours_nuevos ?? f.tours, CONV_T.to)
        + row("OPP → Apartados", f.apartados, f.opp, CONV_T.oa)
        + row("Apartados → WON reportado", f.won, f.apartados, CONV_T.aw);
 }
+// Aviso de comparabilidad: registros capturados antes de separar nuevo/seguimiento.
+function avisoSinSeg(m){
+  if(!m || !m.sinSeg) return "";
+  return `<div class="lq-meth" style="border-color:var(--cobre);margin-top:10px">◑ <b>${m.sinSeg}</b> de ${m.registros} registro${m.registros===1?"":"s"} del rango se capturaron antes de separar zooms/tours nuevos de los de seguimiento (septiembre 2026): ahí "nuevos" = total y el show rate no cambia. Las conversiones por clientes únicos no son comparables contra esas semanas.</div>`;
+}
 function funnelRows(f, metas){
   const r=(l,v,m)=>`<tr><td class="lbl">${l}</td><td class="v">${v}</td>${m?('<td class="m">'+m+'</td>'):''}</tr>`;
-  return r("Leads",f.leads)+r("Zooms realizados",f.zooms)+r("Tours realizados",f.tours)
+  return r("Leads",f.leads)
+       +r("Zooms agendados",f.zooms_ag||0)+r("Zooms realizados (tot.)",f.zooms)+r("Zooms nuevos",f.zooms_nuevos ?? f.zooms)
+       +r("Tours agendados",f.tours_ag||0)+r("Tours realizados (tot.)",f.tours)+r("Tours nuevos",f.tours_nuevos ?? f.tours)
        +r("OPP",f.opp)+r("OPP de zooms",f.opp_zooms)+r("OPP de tours",f.opp_tours)
        +r("Apartados",f.apartados)+r(WON_DEFS.reportado.n,f.won, metas||"")+r("Ingresos",fmtMoney(f.ingresos));
 }
@@ -2439,12 +2528,14 @@ document.querySelectorAll(".dir-hint").forEach(el=>el.textContent = DIR_HINT);
 function metricsPorCanal(weekSet, chsSel){
   const sel = new Set(chsSel);
   const perCh = [], tot = {}, f = {};
-  METRIC_KEYS.forEach(k=>{ tot[k]=0; f[k]=0; });
+  METRIC_KEYS.forEach(k=>{ tot[k]=0; f[k]=0; }); tot.sinSeg=0; f.sinSeg=0; tot.registros=0; f.registros=0;
   for(const ch of Object.keys(CHANNELS)){
     const m = channelMetrics(ch, weekSet);
     perCh.push({ ch, m });
     METRIC_KEYS.forEach(k=>{ tot[k]+=m[k]; if(sel.has(ch)) f[k]+=m[k]; });
+    tot.sinSeg+=m.sinSeg; tot.registros+=m.registros; if(sel.has(ch)){ f.sinSeg+=m.sinSeg; f.registros+=m.registros; }
   }
+  derivarNuevos(tot); derivarNuevos(f);
   return { perCh, tot, f };
 }
 
@@ -2459,7 +2550,7 @@ async function renderResultados(){
   for(const { ch, m } of perCh){
     const meta=CHANNEL_META[ch].won; totMeta+=meta;
     const metaPer=meta/SEMANAS_MES*nW;
-    rows+=`<tr><td class="name">${CHANNELS[ch].name}</td><td>${m.leads}</td><td>${m.zooms}</td><td>${m.tours}</td><td>${m.opp}</td><td>${m.opp_zooms}</td><td>${m.opp_tours}</td><td>${m.apartados}</td><td>${m.won}</td><td>${fmtMoney(m.ingresos)}</td><td>${pctTxt(m.won,m.opp)}</td><td>${rMeta(meta)}</td><td>${estadoDot(m.leads,m.won,metaPer)}</td></tr>`;
+    rows+=`<tr><td class="name">${CHANNELS[ch].name}</td><td>${m.leads}</td><td>${m.zooms_ag}</td><td>${m.zooms}</td><td>${m.zooms_nuevos}</td><td class="pct">${pctTxt(m.zooms,m.zooms_ag)}</td><td>${m.tours_ag}</td><td>${m.tours}</td><td>${m.tours_nuevos}</td><td class="pct">${pctTxt(m.tours,m.tours_ag)}</td><td>${m.opp}</td><td>${m.opp_zooms}</td><td>${m.opp_tours}</td><td>${m.apartados}</td><td>${m.won}</td><td>${fmtMoney(m.ingresos)}</td><td>${pctTxt(m.won,m.opp)}</td><td>${rMeta(meta)}</td><td>${estadoDot(m.leads,m.won,metaPer)}</td></tr>`;
   }
   cont.innerHTML=`
     <div class="rep-head"><div class="ttl">Dirección General</div>
@@ -2469,10 +2560,11 @@ async function renderResultados(){
       <div class="funnel-col">${convBlock(f)}</div>
     </div>
     <div class="table-scroll"><table class="cons">
-      <thead><tr><th class="lft">Canal</th><th>Leads</th><th>Zooms</th><th>Tours</th><th>OPP</th><th>OPP de zooms</th><th>OPP de tours</th><th>Apartado</th>${wonTh('reportado')}<th>Ingresos</th><th>Cierre %</th><th title="La meta total de 4 WON al mes (fijada por Dirección General el 24-ago) repartida entre canales según su mix objetivo de leads — por eso trae decimales">Meta WON mensual</th><th>Estado</th></tr></thead>
+      <thead><tr><th class="lft">Canal</th><th>Leads</th><th>Zooms ag.</th><th title="Todos los zooms realizados, nuevos y de seguimiento">Zooms (tot.)</th><th title="Clientes que tuvieron su primer zoom: total − seguimiento">Zooms nuevos</th><th title="Zooms agendados → realizados · meta 75%">Show</th><th>Tours ag.</th><th title="Todos los tours realizados, nuevos y de seguimiento">Tours (tot.)</th><th title="Clientes que tuvieron su primer tour: total − seguimiento">Tours nuevos</th><th title="Tours agendados → realizados · meta 75%">Show</th><th>OPP</th><th>OPP de zooms</th><th>OPP de tours</th><th>Apartado</th>${wonTh('reportado')}<th>Ingresos</th><th>Cierre %</th><th title="La meta total de 4 WON al mes (fijada por Dirección General el 24-ago) repartida entre canales según su mix objetivo de leads — por eso trae decimales">Meta WON mensual</th><th>Estado</th></tr></thead>
       <tbody>${rows}
-        <tr class="total"><td class="lft">Total</td><td>${tot.leads}</td><td>${tot.zooms}</td><td>${tot.tours}</td><td>${tot.opp}</td><td>${tot.opp_zooms}</td><td>${tot.opp_tours}</td><td>${tot.apartados}</td><td>${tot.won}</td><td>${fmtMoney(tot.ingresos)}</td><td>${pctTxt(tot.won,tot.opp)}</td><td>${rMeta(totMeta)}</td><td>${estadoDot(tot.leads,tot.won,totMeta/SEMANAS_MES*nW)}</td></tr>
-      </tbody></table></div>`;
+        <tr class="total"><td class="lft">Total</td><td>${tot.leads}</td><td>${tot.zooms_ag}</td><td>${tot.zooms}</td><td>${tot.zooms_nuevos}</td><td class="pct">${pctTxt(tot.zooms,tot.zooms_ag)}</td><td>${tot.tours_ag}</td><td>${tot.tours}</td><td>${tot.tours_nuevos}</td><td class="pct">${pctTxt(tot.tours,tot.tours_ag)}</td><td>${tot.opp}</td><td>${tot.opp_zooms}</td><td>${tot.opp_tours}</td><td>${tot.apartados}</td><td>${tot.won}</td><td>${fmtMoney(tot.ingresos)}</td><td>${pctTxt(tot.won,tot.opp)}</td><td>${rMeta(totMeta)}</td><td>${estadoDot(tot.leads,tot.won,totMeta/SEMANAS_MES*nW)}</td></tr>
+      </tbody></table></div>
+    ${avisoSinSeg(tot)}`;
   ANAL_DIR.res.expanded=null;
   renderDirAnalitica("res", chsSel, weekSet, "Dirección General");
 }
@@ -2492,11 +2584,11 @@ async function renderDirCom(){
   for(const {ch,m} of perCh){ const meta=CHANNEL_META[ch];
     rows+=`<tr><td class="name">${CHANNELS[ch].name}</td>
       <td>${m.leads}</td><td class="pct">${pctTxt(m.leads,tot.leads)}</td>
-      <td>${m.zooms}</td><td class="pct">${pctTxt(m.zooms,m.leads)}</td>
-      <td>${m.tours}</td><td class="pct">${pctTxt(m.tours,m.leads)}</td>
+      <td>${m.zooms_ag}</td><td>${m.zooms}</td><td>${m.zooms_nuevos}</td><td class="pct">${pctTxt(m.zooms,m.zooms_ag)}</td>
+      <td>${m.tours_ag}</td><td>${m.tours}</td><td>${m.tours_nuevos}</td><td class="pct">${pctTxt(m.tours,m.tours_ag)}</td>
       <td>${m.opp}</td><td class="pct">${pctTxt(m.opp,m.leads)}</td>
-      <td>${m.opp_zooms}</td><td class="pct">${pctTxt(m.opp_zooms,m.zooms)}</td>
-      <td>${m.opp_tours}</td><td class="pct">${pctTxt(m.opp_tours,m.tours)}</td>
+      <td>${m.opp_zooms}</td><td class="pct">${pctTxt(m.opp_zooms,m.zooms_nuevos)}</td>
+      <td>${m.opp_tours}</td><td class="pct">${pctTxt(m.opp_tours,m.tours_nuevos)}</td>
       <td>${m.opp_14}</td>
       <td>${m.apartados}</td><td class="pct">${pctTxt(m.apartados,m.leads)}</td>
       <td>${m.won}</td><td>${fmtMoney(m.ingresos)}</td><td class="pct">${pctTxt(m.won,m.leads)}</td>
@@ -2505,11 +2597,11 @@ async function renderDirCom(){
   }
   const totRow=`<tr class="total"><td class="lft">Total</td>
     <td>${tot.leads}</td><td class="pct">${pctTxt(tot.leads,tot.leads)}</td>
-    <td>${tot.zooms}</td><td class="pct">${pctTxt(tot.zooms,tot.leads)}</td>
-    <td>${tot.tours}</td><td class="pct">${pctTxt(tot.tours,tot.leads)}</td>
+    <td>${tot.zooms_ag}</td><td>${tot.zooms}</td><td>${tot.zooms_nuevos}</td><td class="pct">${pctTxt(tot.zooms,tot.zooms_ag)}</td>
+    <td>${tot.tours_ag}</td><td>${tot.tours}</td><td>${tot.tours_nuevos}</td><td class="pct">${pctTxt(tot.tours,tot.tours_ag)}</td>
     <td>${tot.opp}</td><td class="pct">${pctTxt(tot.opp,tot.leads)}</td>
-    <td>${tot.opp_zooms}</td><td class="pct">${pctTxt(tot.opp_zooms,tot.zooms)}</td>
-    <td>${tot.opp_tours}</td><td class="pct">${pctTxt(tot.opp_tours,tot.tours)}</td>
+    <td>${tot.opp_zooms}</td><td class="pct">${pctTxt(tot.opp_zooms,tot.zooms_nuevos)}</td>
+    <td>${tot.opp_tours}</td><td class="pct">${pctTxt(tot.opp_tours,tot.tours_nuevos)}</td>
     <td>${tot.opp_14}</td>
     <td>${tot.apartados}</td><td class="pct">${pctTxt(tot.apartados,tot.leads)}</td>
     <td>${tot.won}</td><td>${fmtMoney(tot.ingresos)}</td><td class="pct">${pctTxt(tot.won,tot.leads)}</td>
@@ -2526,11 +2618,11 @@ async function renderDirCom(){
       <thead><tr>
         <th class="lft">Canal</th>
         <th>Leads</th><th>% mix</th>
-        <th>Zooms</th><th>Z/Leads</th>
-        <th>Tours</th><th>T/Leads</th>
+        <th>Zooms ag.</th><th title="Todos los zooms realizados, nuevos y de seguimiento">Zooms (tot.)</th><th title="Clientes con su primer zoom: total − seguimiento">Zooms nuevos</th><th title="Zooms agendados → realizados · meta 75%">Show</th>
+        <th>Tours ag.</th><th title="Todos los tours realizados">Tours (tot.)</th><th title="Clientes con su primer tour">Tours nuevos</th><th title="Tours agendados → realizados · meta 75%">Show</th>
         <th>OPP</th><th>OPP/Leads</th>
-        <th>OPP de zooms</th><th>/Zooms</th>
-        <th>OPP de tours</th><th>/Tours</th>
+        <th>OPP de zooms</th><th title="OPP de zooms ÷ zooms NUEVOS (clientes únicos)">/Zooms nuevos</th>
+        <th>OPP de tours</th><th title="OPP de tours ÷ tours NUEVOS (clientes únicos)">/Tours nuevos</th>
         <th>OPP &gt;14 días</th>
         <th>Apartado</th><th>Lead→APT</th>
         ${wonTh('reportado')}<th>Ingresos</th><th>Lead→WON</th>
@@ -2538,7 +2630,8 @@ async function renderDirCom(){
         <th>Estado</th>
       </tr></thead>
       <tbody>${rows}${totRow}</tbody>
-    </table></div>`;
+    </table></div>
+    ${avisoSinSeg(tot)}`;
   ANAL_DIR.dc.expanded=null;
   renderDirAnalitica("dc", chsSel, weekSet, "Dirección Comercial");
 }
@@ -2798,7 +2891,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v10";  // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
+const LQ_AGG_KEY = "lq:agg:v11";  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 // (LQ_TZ y LQ_TZ_MS ahora viven junto al resto de helpers de fecha, arriba)
@@ -2877,8 +2970,12 @@ function lqDetectFields(fields, llenos){
   return {
     calif: find(/calificaci[oó]n.*lead|lead.*calificaci[oó]n/i) || find(/calificaci[oó]n/i),
     fuente: find(/^fuente del lead$/i) || find(/fuente del lead/i),
-    pres:  find(/presupuesto|budget/i),
-    hor:   find(/horizonte|timeline|plazo/i),
+    // Los campos canónicos los nombra el propio framework del cliente ("Primera Conexión",
+    // 21-jul-2026, §6: Budget Range y Horizonte de inversión). Antes ganaba el más poblado
+    // de los tres campos de presupuesto y dos de horizonte que hay en el CRM, que es una
+    // apuesta; el nombre exacto va primero y lo más poblado queda como respaldo.
+    pres:  find(/^budget range$/i) || find(/presupuesto|budget/i),
+    hor:   find(/^horizonte de inversi[oó]n$/i) || find(/horizonte|timeline|plazo/i),
     desc:  find(/raz[oó]n de descarte|motivo.*descalific|descalificaci[oó]n/i),
     segSem: find(/semanas con seguimiento|seguimiento[_ ]semanal/i),
     segMes: find(/meses con seguimiento|seguimiento[_ ]mensual/i),
@@ -2907,7 +3004,15 @@ function lqParseMoney(s){
   if(u==="k"||u==="mil") n*=1000;
   else if(/^(millones?|mill|m|mdp)$/.test(u)) n*=1000000;
   // Rango tipo "100,000 - 200,000": toma el extremo bajo (criterio conservador)
-  if(/mxn|pesos|mdp/.test(t) && !/usd|dls|d[oó]lar/.test(t)) n = n/18;  // aprox MXN→USD
+  const dicePesos = /mxn|pesos|mdp/.test(t), diceDolares = /usd|dls|d[oó]lar/.test(t);
+  if(dicePesos && !diceDolares) return n/18;                 // aprox MXN→USD
+  // Budget Range mezcla rangos en MXN y USD sin decirlo: "$1M–$2M" (28 leads en julio de
+  // 2026, la opción más común) son pesos —el lote arranca en 1.4M MXN— y "$75K–$100K" son
+  // dólares. Sin esta regla, 1,000,000 se leía como un millón de dólares y casi todo el
+  // que contestó pasaba el umbral de $100K USD: SQL Selvadentro inflado. Nadie declara un
+  // presupuesto de USD 400K+ para un lote de USD 70–150K; a partir de ahí, sin moneda
+  // explícita, son pesos.
+  if(!diceDolares && n >= 400000) return n/18;
   return n;
 }
 // "0-3 meses", "inmediato", "6 meses", "1 año", "más de 12 meses" → meses (número)
@@ -3103,6 +3208,8 @@ const LQ_RX_MUERTA = new RegExp([
   "nurtur","largo plazo","long term","rescate","reactiva",
   // cubetas de enrutamiento, no etapas del embudo
   "corretaje","redes sociales","sin respuesta","reagendar",
+  // cubeta administrativa posterior a la venta; Dirección la excluyó por escrito el 2026-09-07
+  "registro de cliente",
 ].join("|"), "i");
 // Pipelines que NO son embudo de venta sino proceso posterior al cierre. En el
 // diagnóstico del 2026-08-26 el pipeline "Legal" contaba sus 8 etapas como OPP —
@@ -4684,7 +4791,7 @@ async function showLQ(){
 // Reporte de disciplina comercial directo del CRM: SLA de primera respuesta por
 // asesor y canal, leads >7 días sin toque, trabajados vs contactados efectivos,
 // citas y show rate, y OPPs/WONs por asesor. Con nombres, acumulable por semanas.
-const SLA_AGG_KEY = "sla:agg:v6";   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
+const SLA_AGG_KEY = "sla:agg:v7";   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
 const SLA_STALE_MS = 7*86400e3; // "sin toque" = 7 días sin mensaje
 const slaState = { built:false, agg:null, syncing:false, asesor:"", camp:"" };   // asesor/camp "" = sin filtro
 
@@ -5111,16 +5218,25 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
   // OPPs (cotizaciones) y WONs por asesor dentro del rango. Las oportunidades del
   // pipeline de expansión de brokers quedan fuera, igual que sus leads (spec D1).
   const esPipeExp = (p)=> /expansi[oó]n\s*y\s*activaci[oó]n/i.test(pipeName[p]||"");
+  // OPP = registro del pipeline creado en el rango cuya etapa ACTUAL es una de las cuatro
+  // que Dirección General fijó por escrito el 2026-09-07 (solicitud de cambio "OPP
+  // creadas"): Seguimiento de OPP, Carta oferta, Apartado o WON. Antes la columna contaba
+  // TODO registro creado en el rango —72 "oportunidades" contra 67 leads en W26–W37—, que
+  // es un sinónimo de "leads recibidos", no de avance comercial. Criterio de fecha: cohorte
+  // (opción a de la solicitud): creados en el rango, en su etapa de hoy; la entrada a
+  // etapa (opción b) espera el historial del CRM (spec B2-1). La lista es cerrada, así que
+  // "Registro de cliente" y las cubetas laterales quedan fuera sin regla aparte. Se
+  // conserva `reg` (todo registro creado) solo para mostrarlo como contexto.
   const byRepOpp = {};
   for(const o of (oppsArr||[])){
     if(esPipeExp(o.p)) continue;
     const wc = lqWeekOf(o.c), ww = o.st==="won" ? lqWeekOf(o.stc) : null;
     const u = o.u || "";
-    const b = byRepOpp[u] = byRepOpp[u] || {opp:0, won:0, wv:0};
-    if(wc && rangoSet.has(wc)) b.opp++;
+    const b = byRepOpp[u] = byRepOpp[u] || {opp:0, reg:0, won:0, wv:0};
+    if(wc && rangoSet.has(wc)){ b.reg++; if(SLA_ETAPAS_OPP.has(stageName[o.s]||"")) b.opp++; }
     if(ww && rangoSet.has(ww)){ b.won++; b.wv += (o.v||0); }
   }
-  Object.keys(byRepOpp).forEach(u=>{ const b=byRepOpp[u]; if(!b.opp && !b.won) delete byRepOpp[u]; });
+  Object.keys(byRepOpp).forEach(u=>{ const b=byRepOpp[u]; if(!b.opp && !b.reg && !b.won) delete byRepOpp[u]; });
   // Tasa de oportunidades de la rúbrica: por CONTACTO, solo de los leads del rango.
   // Antes se volcaba el total del asesor (incluidas opps de contactos de hace meses)
   // en su primer lead y se dividía entre otro denominador: la tasa podía pasar de
@@ -5151,6 +5267,9 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
 // y todos los demás indicadores. Zoom/Tour agendado SÍ se miden, pero desde la fecha
 // de la cita, no a los 7 días.
 const SLA_ETAPAS_EXCL = ["Sin Respuesta","WON","Largo plazo","Corretaje","Nurturing","Descalificado","Redes sociales"];
+// Las cuatro etapas que cuentan como OPP, con la grafía LITERAL del CRM ("Carta oferta"
+// lleva la o minúscula). Solicitud de cambio del 2026-09-07; una cotización enviada no es OPP.
+const SLA_ETAPAS_OPP = new Set(["Seguimiento de OPP","Carta oferta","Apartado","WON"]);
 const SLA_ETAPAS_CITA = ["Zoom agendado","Tour agendado"];
 
 // Anexo A de la spec: columna del manual + dwell máximo, para compararla en pantalla
@@ -5364,7 +5483,7 @@ function slaRender(){
     // Etapas LITERALES del CRM (Anexo A, columna CRM)
     const ST_ACT = ["Seguimiento de OPP","Carta oferta","Apartado"];
     const filas = {};
-    const F0 = ()=>({ creadas:0, wonC:0, wv:0, act:0, cot:0, apart:0, won:0 });
+    const F0 = ()=>({ creadas:0, reg:0, wonC:0, wv:0, act:0, cot:0, apart:0, won:0 });
     leads.forEach(l=>{
       const u = rosterIds.has(l.u) ? l.u : SLA_FUERA;
       const b = filas[u] = filas[u] || F0();
@@ -5376,19 +5495,19 @@ function slaRender(){
     Object.entries(agg.byRepOpp).forEach(([u,b0])=>{
       const u2 = rosterIds.has(u) ? u : SLA_FUERA;
       const b = filas[u2] = filas[u2] || F0();
-      b.creadas += b0.opp; b.wonC += b0.won; b.wv += b0.wv;
+      b.creadas += b0.opp; b.reg += (b0.reg||0); b.wonC += b0.won; b.wv += b0.wv;
     });
     // "Llegó a Apartado" ≈ está en Apartado o ya es WON (todo WON pasa por Apartado, el
     // cierre comercial). Es aproximación hasta tener el historial de entrada a etapa
     // (spec B2-1); ambas conversiones son subconjuntos reales y nunca pasan de 100% (A1).
     const conv = (n,d,meta)=> d ? `<span style="${n/d>=meta?'color:var(--verde-prof);font-weight:600':'color:var(--rojo)'}">${Math.round(n/d*100)}%</span> <span class="lq-sub">(${n} de ${d})</span>` : "—";
-    const orden = Object.keys(filas).sort((a,b)=> (a===SLA_FUERA)-(b===SLA_FUERA) || (filas[b].creadas-filas[a].creadas));
+    const orden = Object.keys(filas).sort((a,b)=> (a===SLA_FUERA)-(b===SLA_FUERA) || (filas[b].creadas-filas[a].creadas) || (filas[b].reg-filas[a].reg));
     const oppRows = orden.map(u=>{
       const b = filas[u];
       const llegoApart = b.apart + b.won;
       const zonaOpp = b.act + b.won;               // en zona de OPP hoy, o ya cerrado
       return `<tr${u===SLA_FUERA?' style="background:var(--crema)"':''}><td class="name">${u===SLA_FUERA?"Fuera del equipo de ventas":escAttr(name(u))}</td>
-        <td>${b.creadas||"·"}</td><td>${b.act||"·"}</td><td>${b.cot||"·"}</td><td>${b.apart||"·"}</td><td>${b.won||"·"}</td>
+        <td title="${b.reg} registro${b.reg===1?"":"s"} del pipeline creados en el rango; ${b.creadas} en etapa de OPP">${b.creadas||"·"}<span class="lq-sub"> / ${b.reg||0}</span></td><td>${b.act||"·"}</td><td>${b.cot||"·"}</td><td>${b.apart||"·"}</td><td>${b.won||"·"}</td>
         <td>${conv(llegoApart, zonaOpp, .30)}</td>
         <td>${conv(b.won, llegoApart, .80)}</td>
         <td>${b.wonC||"·"}</td><td>${b.wv?fmtMoney(b.wv):"—"}</td></tr>`;
@@ -5396,7 +5515,7 @@ function slaRender(){
     html += `<h3 class="h-sec">Embudo de resultado (spec D2)</h3>
     <div class="table-scroll mb-sec"><table class="cons">
       <tr><th class="lft">Asesor</th>
-        <th title="Registros del pipeline creados en el rango, por asesor asignado. No son OPPs.">Opp. creadas</th>
+        <th title="Registros del pipeline creados en el rango que HOY están en Seguimiento de OPP, Carta oferta, Apartado o WON, por asesor asignado. Una cotización enviada todavía no cuenta. El número chico es el total de registros creados, para contexto.">OPP</th>
         <th title="Leads del rango hoy en Seguimiento de OPP, Carta oferta o Apartado">OPP activas</th>
         <th title="Leads del rango hoy en Cotización enviada — cifra propia, nunca se cuenta como OPP">Cotiz.</th>
         <th>Apartados</th><th>WON</th>
@@ -5406,6 +5525,41 @@ function slaRender(){
       ${oppRows || `<tr><td colspan="10" class="lft txt-nota">Sin oportunidades en el rango.</td></tr>`}
     </table></div>
     <p class="hint" style="margin-top:-10px">Cohorte: los leads del rango, en su etapa de HOY. "Llegó a Apartado" se aproxima como "está en Apartado o ya es WON" hasta que el CRM exponga el historial de entrada a etapa (spec B2-1). Metas 30% y 80%: las oficiales del Diagnóstico, ahora por asesor.</p>`;
+
+    // Citas nuevas vs de seguimiento, derivadas del CRM (fase 3 de la solicitud del
+    // 2026-09-10, anticipada): la primera cita de cada contacto es nueva, las demás son
+    // seguimiento. No depende del criterio del asesor ni de la captura manual; sirve para
+    // comparar contra lo que el equipo escribe en Ingreso de datos y, cuando coincidan,
+    // retirar los cuatro campos del formulario. GoHighLevel no distingue Zoom de Tour en
+    // sus citas, así que aquí van juntas.
+    {
+      const conCitas = leads.filter(l=>!l.ad);
+      const rosterIds2 = slaRosterIds(agg.users);
+      const F1 = ()=>({ n:0, agT:0, agN:0, reT:0, reN:0 });
+      const porA = {};
+      conCitas.forEach(l=>{
+        const u = rosterIds2.has(l.u) ? l.u : SLA_FUERA;
+        const b = porA[u] = porA[u] || F1();
+        const tot = l.ap.tot||0, sh = l.ap.sh||0;
+        b.n++; b.agT += tot; if(tot>0) b.agN++; b.reT += sh; if(sh>0) b.reN++;
+      });
+      const T = F1(); Object.values(porA).forEach(b=>{ T.n+=b.n; T.agT+=b.agT; T.agN+=b.agN; T.reT+=b.reT; T.reN+=b.reN; });
+      const fila = (nom,b)=>`<tr><td class="name">${nom}</td><td>${b.n}</td>
+        <td>${b.agT||"·"}</td><td>${b.agN||"·"}</td><td>${(b.agT-b.agN)||"·"}</td>
+        <td>${b.reT||"·"}</td><td>${b.reN||"·"}</td><td>${(b.reT-b.reN)||"·"}</td>
+        <td class="pct">${b.agT?Math.round(b.reT/b.agT*100)+"%":"—"}</td></tr>`;
+      const ordenC = Object.keys(porA).sort((a,b)=>(a===SLA_FUERA)-(b===SLA_FUERA) || (porA[b].reT-porA[a].reT));
+      html += `<h3 class="h-sec">Citas nuevas vs de seguimiento · leídas del CRM</h3>
+      <div class="table-scroll mb-sec"><table class="cons">
+        <tr><th class="lft">Asesor</th><th>Leads</th>
+          <th title="Todas las citas agendadas de los leads del rango">Agendadas (tot.)</th><th title="Leads con al menos una cita: su primera cita">Nuevas</th><th title="Segunda cita en adelante del mismo lead">Seguim.</th>
+          <th title="Citas con estatus showed / completed">Realizadas (tot.)</th><th title="Leads con al menos una cita realizada">Nuevas</th><th title="Segunda cita realizada en adelante del mismo lead">Seguim.</th>
+          <th title="Realizadas ÷ agendadas · meta 75%">Show</th></tr>
+        ${ordenC.map(u=>fila(u===SLA_FUERA?"Fuera del equipo de ventas":escAttr(name(u)), porA[u])).join("") || `<tr><td colspan="9" class="lft txt-nota">Sin citas legibles en el rango.</td></tr>`}
+        ${ordenC.length>1?fila("<b>Total</b>", T).replace("<tr>",'<tr class="total">'):""}
+      </table></div>
+      <p class="hint" style="margin-top:-10px">Derivado del CRM, sin captura manual: la primera cita de cada lead es <b>nueva</b>, las siguientes son <b>seguimiento</b>. Es la misma separación que Ingreso de datos pide a mano desde septiembre de 2026; cuando las dos cifras coincidan por unas semanas, los cuatro campos del formulario se pueden retirar. GoHighLevel no distingue Zoom de Tour en las citas: aquí van juntas.${leads.length-conCitas.length?` <b>${leads.length-conCitas.length}</b> leads sin datos de citas quedan fuera.`:""}</p>`;
+    }
   }
 
   const conHand = leads.filter(l=>l.hand).length;
@@ -5469,7 +5623,7 @@ function slaRender(){
     <br><b>Embudo y resultado</b> · <b>Tasa de agendamiento:</b> citas agendadas ÷ contactados efectivos ·
     <b>Días a la cita:</b> mediana de días del contacto efectivo a la cita (medida a la fecha de la cita; el CRM no expone la fecha de agendado) ·
     <b>Show rate:</b> showed ÷ (showed + no-show) · meta <b>75%</b> ·
-    <b>Oportunidades creadas:</b> registros del pipeline creados en el rango, por asesor asignado (no son OPPs: OPP = oportunidad real de cierre, de "Seguimiento de OPP" en adelante; una cotización enviada NO es una oportunidad) ·
+    <b>OPP:</b> registros del pipeline que alcanzaron la etapa "Seguimiento de OPP" o posterior (Seguimiento de OPP, Carta oferta, Apartado, WON), por asesor asignado. Una cotización enviada todavía no cuenta como OPP. Cohorte: creados en el rango, en su etapa de hoy ·
     <b>WONs:</b> ventas cuyo cierre cayó en el rango, aunque la oportunidad se haya creado antes (se buscan hasta ~18 meses atrás) ·
     <b>OPP→Apartado · 30%</b> y <b>Apartado→WON · 80%</b>: pendientes de que Apartado y Cotización enviada existan como etapas en el CRM (spec B1/D2).</div>
     <div class="lq-meth"><b>SLAs contra los que se mide</b> (spec F1) —
@@ -5967,6 +6121,17 @@ function setMetaField(ch, fk, key, value){
 }
 
 const META_RESERVED = new Set(["__custom","__section_order","__section_labels","__field_sections","__custom_sections","__hidden_fields"]);
+// canal → { claveNativa: claveDelKpiPersonalizado } — ver applyMetas.
+const KPI_ALIAS = {};
+const normEtiqueta = (t)=> String(t||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g," ").trim();
+// Copia al campo nativo lo que se capturó bajo la clave personalizada, si el nativo viene vacío.
+function normalizarAlias(chKey, rec){
+  const al = KPI_ALIAS[chKey]; if(!al || !rec || !rec.valores) return rec;
+  for(const [nk, ck] of Object.entries(al)){
+    if((rec.valores[nk]==null || rec.valores[nk]==="") && rec.valores[ck]!=null) rec.valores[nk] = rec.valores[ck];
+  }
+  return rec;
+}
 
 // Metas globales guardadas en selvadentro:metas.__global. Se aplican sobre los defaults
 // del código, campo por campo: lo que no esté guardado conserva el default.
@@ -5995,6 +6160,7 @@ function guardarMetaGlobal(grupo, clave, valor){
 
 function applyMetas(){
   aplicarMetasGlobales();
+  Object.keys(KPI_ALIAS).forEach(k=>delete KPI_ALIAS[k]);
   for(const ch in META_OVERRIDES){
     const c=CHANNELS[ch]; if(!c) continue;
     // 0) Asignar __id canónico (estable, no cambia al renombrar)
@@ -6039,6 +6205,15 @@ function applyMetas(){
       c.sections.forEach(s => sectionByIdMap[s.__id] = s);
       const unassigned = [];
       for(const ck of custom){
+        // Un KPI personalizado con el mismo nombre que un campo nativo es el MISMO dato,
+        // capturado antes de que el campo existiera en el código. Caso real: Juan creó
+        // "Zooms/Tours agendados/realizados de seguimiento" en Paid Orgánico el 2026-09,
+        // dos días antes de que entraran como campos nativos. Duplicarlos en el formulario
+        // confundiría al equipo, y tirar lo que ya capturó perdería datos: se convierte en
+        // alias (los registros viejos se leen por la clave personalizada) y desaparece del
+        // formulario. Lo que ya se escribió con la clave nativa queda como está.
+        const nativo = c.sections.flatMap(sx=>sx.fields).find(f=>!f.__custom && normEtiqueta(f.l)===normEtiqueta(ck.l));
+        if(nativo){ (KPI_ALIAS[ch] = KPI_ALIAS[ch] || {})[nativo.k] = ck.k; continue; }
         const field = { k: ck.k, l: ck.l, meta: ck.meta_num ?? null, __custom: true };
         if(ck.section && sectionByIdMap[ck.section]){
           sectionByIdMap[ck.section].fields.push(field);

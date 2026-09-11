@@ -191,6 +191,15 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
   cuenta **solo si hay una sola candidata con inversión**, marcados como deducidos —es una
   inferencia por nombre, no atribución— y si no hay candidata clara se quedan en su propio
   embudo en vez de inventarles plataforma. El tag sigue visible como nota del lead.
+- **Campos canónicos de presupuesto y horizonte**: el framework del cliente (*Primera
+  Conexión*, 21-jul-2026, §6) los nombra: **Budget Range** y **Horizonte de inversión**.
+  `lqDetectFields` busca primero ese nombre exacto y solo de respaldo el campo más poblado
+  (el CRM tiene tres de presupuesto y dos de horizonte). Budget Range **mezcla MXN y USD
+  sin decirlo**: "$1M–$2M" (la opción más común, 28 leads en julio) son pesos y
+  "$75K–$100K" dólares. `lqParseMoney` trata como pesos cualquier cifra ≥ 400,000 sin
+  moneda explícita —nadie declara USD 400K+ para un lote de USD 70–150K— y la convierte a
+  USD (÷18) antes de compararla contra el umbral de $100K. Antes un millón de pesos pasaba
+  el umbral e inflaba SQL Selvadentro.
 - **Auditoría de etiquetado UTM** (`lqAuditUtm`, se ve en **Diagnóstico**): lee lo que
   manda cada anuncio —`url_tags` en Meta, sufijo de URL final y plantilla de tracking en
   Google— lo cruza contra los `utm_campaign` que llegan al CRM y dice qué campaña está
@@ -227,6 +236,66 @@ del kv y aplica para todo el equipo.
   regla del lado del servidor: la **lectura** de `selvadentro:metas` queda abierta
   (las metas salen en casi toda la app y negarla dejaría las pantallas en blanco), la
   **escritura** solo para esos tres.
+
+## Solicitudes de cambio de Dirección General (septiembre 2026)
+
+Dos solicitudes formales de Juan Cámara, ambas implementadas el 2026-09-11:
+
+**OPP por asesor (7-sep).** La columna "Opp. creadas" del embudo D2 contaba TODO registro
+del pipeline creado en el rango: 72 "oportunidades" contra 67 leads en W26–W37, un sinónimo
+de "leads recibidos". Ahora `OPP` = registros creados en el rango cuya etapa **actual** es
+una de cuatro, con la grafía literal del CRM (`SLA_ETAPAS_OPP`): *Seguimiento de OPP*,
+*Carta oferta*, *Apartado*, *WON*. Cohorte (opción a de la solicitud); la entrada a etapa
+(opción b) espera el historial del CRM (spec B2-1). El total de registros creados se
+conserva como número chico de contexto. *Registro de cliente* quedó fuera también en
+Calidad de Leads (`LQ_RX_MUERTA`). Verificación que pide la solicitud: el mismo rango
+22/06→13/09 debe bajar de 72 a 0 o 1.
+
+La definición oficial de OPP es esta. El Anexo 2 del documento de onboarding (ago 2026)
+todavía dice "OPP means quote sent": quedó **superado** por la decisión escrita de
+Dirección General del 26-ago y del 7-sep. El campo manual `opp_total` de los siete
+canales lleva ahora texto de ayuda con la misma definición para que las dos cifras
+(CRM y captura) midan lo mismo.
+
+**Zooms y tours: cliente nuevo vs seguimiento (10-sep).** El sistema contaba eventos, no
+personas: un cliente con tres zooms eran tres zooms, y Zooms→OPP dividía un numerador por
+cliente entre un denominador por evento. Fase 1, captura manual:
+
+- Cuatro campos nuevos en los seis canales con zooms/tours (Brokers queda para un ticket
+  aparte): `zooms_agendados_seg`, `zooms_realizados_seg`, `tours_agendados_seg`,
+  `tours_realizados_seg`. Los cuatro totales conservan su significado: **nada del
+  histórico se recaptura**. *Nuevos* se **deriva** (total − seguimiento) y nunca se
+  captura, así las partes siempre suman el total.
+- `seguimiento > total` **bloquea** el guardado (no es un aviso de "guardar así") y se
+  marca en rojo en el momento, al salir del campo. Los campos vacíos guardan 0.
+- Denominadores (§05 de la solicitud): las conversiones del **embudo** usan clientes
+  únicos —Zooms nuevos→OPP, Tours nuevos→OPP, Lead→agendado (nuevos)—; las de
+  **ejecución** usan eventos totales —show rate, carga por asesor. Las dos cifras se
+  muestran lado a lado, rotuladas `(tot.)` y `nuevos`. En las conversiones por canal una
+  clave con `-` delante se resta: `den:["zooms_realizados","-zooms_realizados_seg"]`.
+- Dirección General y Dirección Comercial muestran ahora *Zooms/Tours agendados*, *nuevos*
+  y el **show rate** (meta 75%), que antes no llegaban a Dirección. Show rate y
+  Lead→agendado son metas editables (`CONV_T.zr`, `CONV_T.lz`).
+- Registros capturados **antes** de la separación no traen las claves `_seg`: se cuentan
+  (`sinSeg`) y las tres vistas avisan que ahí *nuevos = total* y la tendencia no es
+  comparable. No se marcan uno a uno ni se editan.
+- **Alias de KPIs personalizados**: Juan había creado los cuatro campos como KPIs
+  personalizados en Paid Orgánico (`custom_*_de_seguimiento_*`) dos días antes de que
+  existieran en el código. Un KPI personalizado con el mismo nombre que un campo nativo se
+  convierte en alias (`KPI_ALIAS`, en `applyMetas`): desaparece del formulario y lo que se
+  capturó bajo su clave se lee en el campo nativo (`normalizarAlias`, al cargar el kv).
+  Nada se pierde y no hay campos duplicados.
+- **Fase 3 anticipada**: Desempeño de Ventas trae ya "Citas nuevas vs de seguimiento ·
+  leídas del CRM": la primera cita de cada contacto es nueva, las siguientes seguimiento,
+  sin criterio del asesor. GoHighLevel no distingue Zoom de Tour en las citas, así que van
+  juntas. Cuando esta cifra y la captura manual coincidan unas semanas, los cuatro campos
+  del formulario se pueden retirar.
+
+Metas: la solicitud cita 15%/20% para Zooms→OPP y Tours→OPP. Son las metas de la hoja
+*Reporte Detallado de Resultados* de marzo–agosto 2026 (el origen de los valores por
+defecto del código). En el kv hay 30%/35%, fijados desde la pantalla de Metas después del
+2-sep: **manda lo que está en la app**, y conviene revisarlo cuando el denominador cambie
+a clientes únicos, porque la solicitud misma advierte que Zooms→OPP va a subir.
 
 ## Las tres cifras de ventas cerradas
 
