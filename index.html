@@ -4791,7 +4791,7 @@ async function showLQ(){
 // Reporte de disciplina comercial directo del CRM: SLA de primera respuesta por
 // asesor y canal, leads >7 días sin toque, trabajados vs contactados efectivos,
 // citas y show rate, y OPPs/WONs por asesor. Con nombres, acumulable por semanas.
-const SLA_AGG_KEY = "sla:agg:v8";   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
+const SLA_AGG_KEY = "sla:agg:v9";   // v9: razón de descarte por lead   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
 const SLA_STALE_MS = 7*86400e3; // "sin toque" = 7 días sin mensaje
 const slaState = { built:false, agg:null, syncing:false, asesor:"", camp:"" };   // asesor/camp "" = sin filtro
 
@@ -5122,7 +5122,11 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
               // Campaña de origen (spec D5): la atribución del contacto y, si viene
               // vacía, los campos utm_campaign / Campaign del CRM.
               camp: find(/^utm_campaign$/i) || find(/utm_campaign/i),
-              campAlt: find(/^campaign$/i) };
+              campAlt: find(/^campaign$/i),
+              // "Razón de descarte" existe en el CRM desde antes de julio de 2026 y estaba
+              // vacío en el 100% de los descalificados (reporte Primera Conexión, 21-jul).
+              // Sin él, "cierre de ciclo" no distingue mala calidad de mala gestión.
+              razon: find(/raz[oó]n de descarte|motivo.*descalific|descarte/i) };
   // Catálogo de pipelines/etapas, literal del CRM (spec B1/D1/E1)
   const pipeName = {}, stageName = {}, stageOfPipe = {};
   (pipesArr||[]).forEach(p=>{ pipeName[p.id]=p.name||""; (p.stages||[]).forEach(s=>{ stageName[s.id]=s.name||""; stageOfPipe[s.id]=p.name||""; }); });
@@ -5202,6 +5206,7 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
              d10: (sw.days||[]).filter(d=>{ const t=Date.parse(d+"T12:00:00Z"); return t>=created-86400e3 && t<=created+10*86400e3; }).length,
              breakup: slaBreakup({calls:sw.calls, chans:sw.chans, fi:sw.fi}),
              lv: F.calif ? lqClassify(c.cf && c.cf[F.calif.id]) : "nc",
+             razon: F.razon ? String((c.cf && c.cf[F.razon.id]) || "").trim() : null,
              segSem: F.segSem ? !!(c.cf && c.cf[F.segSem.id]) : null,
              segMes: F.segMes ? !!(c.cf && c.cf[F.segMes.id]) : null,
              opp: 0,
@@ -5275,6 +5280,21 @@ const SLA_ETAPAS_OPP = new Set(["Seguimiento de OPP","Carta oferta","Apartado","
 // o una cita futura. Sin eso, el Anexo la declara incompleta. Solo se juzgan los leads
 // cuyas tareas Y citas se pudieron leer; los demás quedan fuera del denominador, no se
 // asume que no tienen paso.
+// Descalificados del rango y si traen razón de descarte. Un lead cuenta como descalificado
+// por su etapa ("Descalificado") o por la calificación del CRM; la razón es el campo
+// "Razón de descarte". razonMedible=false cuando el campo no existe en el CRM.
+function slaDescalificados(leads, rosterIds, razonMedible){
+  const desc = leads.filter(l=>l.lv==="desc" || l.stage==="Descalificado");
+  const porA = {}, razones = {};
+  desc.forEach(l=>{
+    const u = rosterIds.has(l.u) ? l.u : SLA_FUERA;
+    const b = porA[u] = porA[u] || { n:0, con:0 };
+    b.n++;
+    if(razonMedible && l.razon){ b.con++; razones[l.razon] = (razones[l.razon]||0) + 1; }
+  });
+  const con = desc.filter(l=>razonMedible && l.razon).length;
+  return { desc, con, sin: desc.length - con, porA, razones, razonMedible };
+}
 function conCitasTot(leads){
   let n=0, dia=0; leads.forEach(l=>{ if(l.ad || !l.ap) return; n += l.ap.conf||0; dia += l.ap.confDia||0; }); return { n, dia };
 }
@@ -5608,6 +5628,35 @@ function slaRender(){
         ${I.sinPaso.length>25?`<p class="hint">…y ${I.sinPaso.length-25} más.</p>`:""}</div>` : ""}
       <p class="hint" style="margin-top:-10px"><b>Next step con fecha</b> = una tarea abierta en el CRM con fecha límite hoy o después, o una cita futura. ${I.noMedibles?`<b>${I.noMedibles}</b> oportunidad${I.noMedibles===1?"":"es"} en zona de OPP quedan fuera porque sus tareas o citas no se pudieron leer.`:""}
       <b>Confirmación el mismo día</b>: GoHighLevel no guarda la hora en que se confirmó una cita; se aproxima con su última actualización y solo mientras la cita sigue en <i>confirmed</i> (una cita ya marcada showed/noshow pisó ese dato). ${conf.n?`Medibles: ${conf.n}.`:"No hay citas en <i>confirmed</i> en el rango, así que no se puede medir todavía."}</p>`;
+    }
+
+    // Descalificados y razón de descarte. La retro de Talía (3-jul-2026) y el reporte de
+    // Primera Conexión (21-jul) dicen lo mismo: sin la razón no se sabe si un lead se cayó
+    // por mala calidad (marketing) o por mala gestión (asesor), y el campo estaba vacío en
+    // el 100% de los casos. Aquí se ve, por asesor, cuántos descalificados traen razón.
+    {
+      const D = slaDescalificados(leads, slaRosterIds(agg.users), !!(agg.fields && agg.fields.razon));
+      const ordenD = Object.keys(D.porA).sort((a,b)=>(a===SLA_FUERA)-(b===SLA_FUERA) || (D.porA[b].n-D.porA[a].n));
+      const filasD = ordenD.map(u=>{ const b=D.porA[u]; const p=b.n?Math.round(b.con/b.n*100):null;
+        return `<tr><td class="name">${u===SLA_FUERA?"Fuera del equipo de ventas":escAttr(name(u))}</td><td>${b.n}</td><td>${b.con||"·"}</td><td style="${b.n-b.con?"color:var(--rojo);font-weight:700":""}">${(b.n-b.con)||"·"}</td><td class="pct" style="${p==null?"":p===100?"color:var(--verde-prof);font-weight:600":"color:var(--rojo)"}">${p==null?"—":p+"%"}</td></tr>`; }).join("");
+      const topR = Object.entries(D.razones).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([r,n])=>`<tr><td class="lft">${escAttr(r)}</td><td>${n}</td><td class="pct">${Math.round(n/D.con*100)}%</td></tr>`).join("");
+      html += `<h3 class="h-sec">Descalificados · razón de descarte</h3>
+      <div class="crm-kpis">
+        ${kpi(D.desc.length.toLocaleString(),"Leads descalificados en el rango (etapa o calificación del CRM)")}
+        ${D.razonMedible ? kpiND(D.con,D.desc.length,"Con razón de descarte capturada","meta 100%",D.desc.length?D.sin===0:null) : kpi("—","El campo \"Razón de descarte\" no existe en el CRM")}
+        ${kpi(`<span style="${D.sin?"color:var(--rojo)":""}">${D.sin}</span>`,"Sin razón: no se sabe si fue mala calidad o mala gestión")}
+      </div>
+      <div class="crm-tables mb-sec">
+        <div class="table-scroll" style="border:none;box-shadow:none"><table class="cons">
+          <tr><th class="lft">Asesor</th><th>Descalificados</th><th>Con razón</th><th>Sin razón</th><th>%</th></tr>
+          ${filasD || `<tr><td colspan="5" class="lft txt-nota">Sin descalificados en el rango.</td></tr>`}
+        </table></div>
+        <div class="table-scroll" style="border:none;box-shadow:none"><table class="cons">
+          <tr><th class="lft">Razón de descarte</th><th>Leads</th><th>%</th></tr>
+          ${topR || `<tr><td colspan="3" class="lft txt-nota">${D.razonMedible?"Ninguna razón capturada en el rango.":"Campo inexistente."}</td></tr>`}
+        </table></div>
+      </div>
+      <p class="hint" style="margin-top:-10px">La recomendación del reporte de Primera Conexión (21-jul-2026) sigue vigente: hacer <b>obligatoria</b> la razón de descarte en GoHighLevel al mover una oportunidad a "Descalificado". Mientras esté vacía, el "cierre de ciclo" de la rúbrica premia por igual a quien descarta bien y a quien abandona leads buenos.</p>`;
     }
   }
 

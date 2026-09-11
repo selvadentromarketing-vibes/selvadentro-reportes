@@ -351,6 +351,13 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
   se usa la última actualización y solo mientras la cita sigue en `confirmed` (una cita ya
   marcada showed/noshow pisó ese dato). El backend devuelve `tk.abiertasFut`, `ap.conf` y
   `ap.confDia` por contacto (`sla:agg:v8`).
+- **Descalificados · razón de descarte** (2026-09-11): por asesor, cuántos leads
+  descalificados del rango (por etapa "Descalificado" o por la calificación del CRM) traen
+  el campo *Razón de descarte* y la distribución de razones. La retro de Talía (3-jul) y
+  el reporte de Primera Conexión (21-jul) lo señalan igual: sin la razón, "cierre de ciclo"
+  no distingue mala calidad (marketing) de mala gestión (asesor), y el campo estaba vacío
+  en el 100% de los casos. La pantalla repite la recomendación: hacerlo obligatorio en GHL
+  al mover a "Descalificado". `sla:agg:v9`.
 - **Contactados efectivos** (el lead respondió) vs trabajados; **>7 días sin toque**
   con lista nominal — se mide contra el último toque **real** (acción manual del asesor o
   respuesta del lead), porque con el último mensaje de cualquier origen un lead abandonado
