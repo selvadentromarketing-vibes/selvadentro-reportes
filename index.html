@@ -2897,7 +2897,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v12";  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
+const LQ_AGG_KEY = "lq:agg:v13";  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 // (LQ_TZ y LQ_TZ_MS ahora viven junto al resto de helpers de fecha, arriba)
@@ -3027,11 +3027,17 @@ function lqParseMonths(s){
   if(!t) return null;
   // "Immediately" es una opción real del campo Investment Timeline (47% lleno)
   if(/inmediat|immediat|\bya\b|ahora|urgent|asap/.test(t)) return 0;
-  const yr = t.match(/(\d+)\s*(años?|year)/);
-  if(yr) return Number(yr[1])*12;
-  // "12+ meses": el "+" entre el número y la unidad rompía el match y devolvía null
+  // "o más", "or more", "más de", "more than", "+": el horizonte EXCEDE el número. La regla
+  // del CRM manager (Listas inteligentes, 29-jul-2026) es "6 meses o más = MQL", así que
+  // "6 meses o más" no puede leerse como 6 y colarse en el perfil de ≤6 meses: se devuelve
+  // el número más uno. Antes "12+ meses" se leía como 12 exactos.
+  const excede = /o m[aá]s|or more|m[aá]s de|more than|\+/.test(t) ? 1 : 0;
+  const yrR = t.match(/(\d+)\s*[-–a]\s*(\d+)\s*(años?|year)/);
+  if(yrR) return Number(yrR[2])*12 + excede;              // "1-2 años": extremo alto
+  const yr = t.match(/(\d+)\s*\+?\s*(años?|year)/);
+  if(yr) return Number(yr[1])*12 + excede;
   const mo = t.match(/(\d+)\s*\+?\s*(meses?|month)/);
-  if(mo) return Number(mo[1]);
+  if(mo) return Number(mo[1]) + excede;
   const rango = t.match(/(\d+)\s*[-–a]\s*(\d+)/);
   if(rango) return Number(rango[2]);          // extremo alto del rango
   const n = t.match(/^\s*(\d+)\s*$/);
@@ -3605,7 +3611,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
   // Los tags se truncan DESPUÉS de calificar: recortarlos antes podía comerse el tag de
   // descalificación o de respuesta de un lead con muchos tags y cambiarle el nivel.
   leads.forEach(l=>{ const a = lqAutoQualify(l); l.alv = a.lv; l.awhy = a.why.join(" · ").slice(0,180); l.tags = l.tags.slice(0,140); });
-  return { ts:Date.now(), users:boot.users||{}, califField:F.calif, fuenteField:F.fuente, windsor:!!boot.windsor, excl,
+  return { ts:Date.now(), users:boot.users||{}, califField:F.calif, fuenteField:F.fuente, presField:F.pres, horField:F.hor, windsor:!!boot.windsor, excl,
            oppStages: lqOppStageNames(boot.stages, lqOppThresholds(boot.stages)),
            stages: boot.stages||{},
            campos: lqCamposLlenos(boot, rawLeads),
@@ -7726,6 +7732,33 @@ function diagSeccionUtm(){
     </table></div>`;
 }
 
+/* --- Cómo lee la app cada opción de presupuesto y horizonte -------------------------
+   El perfil SQL Selvadentro (≥$100K USD, ≤6 meses) depende de dos campos de lista cuyas
+   opciones mezclan pesos y dólares sin decirlo. Esta tabla muestra cada opción REAL del
+   CRM y en qué la convierte el reporte, para que cualquiera pueda verificar la lectura
+   sin leer código: si una fila está mal, es una regla que hay que corregir, y se ve. */
+function diagSeccionLectura(){
+  const agg = lqState.agg;
+  if(!agg || !agg.campos) return "";
+  const campo = (F)=> F && (agg.campos||[]).find(c=>c.id===F.id);
+  const pres = campo(agg.presField), hor = campo(agg.horField);
+  if(!pres && !hor) return "";
+  const filaP = (o)=>{ const v=lqParseMoney(o); const ok = v!=null && v>=LQ_UMBRAL_USD;
+    return `<tr><td class="lft celda-fuerte">${escAttr(o)}</td><td>${v==null?"—":fmtMoney(Math.round(v))+" USD"}</td><td style="${v==null?"":ok?"color:var(--verde-prof);font-weight:600":"color:var(--neutro)"}">${v==null?"no se entiende":ok?"✓ alcanza el umbral":"debajo del umbral"}</td></tr>`; };
+  const filaH = (o)=>{ const v=lqParseMonths(o); const ok = v!=null && v<=LQ_HORIZONTE_M;
+    return `<tr><td class="lft celda-fuerte">${escAttr(o)}</td><td>${v==null?"—":v+" mes"+(v===1?"":"es")}</td><td style="${v==null?"":ok?"color:var(--verde-prof);font-weight:600":"color:var(--neutro)"}">${v==null?"no se entiende":ok?"✓ dentro del perfil":"fuera del perfil"}</td></tr>`; };
+  const tabla = (c, filas, cab)=> `<div class="table-scroll" style="border:none;box-shadow:none"><table class="cons">
+      <tr><th class="lft">${escAttr(c.nombre)} · opción del CRM</th><th>${cab}</th><th class="lft">Lectura</th></tr>
+      ${(c.opciones||[]).length ? (c.opciones||[]).map(filas).join("") : `<tr><td colspan="3" class="lft txt-nota">El campo no es de lista (texto libre): se interpreta valor por valor.</td></tr>`}
+    </table><p class="hint">Lleno en ${c.pct}% de los leads sincronizados.</p></div>`;
+  return `<h3 class="diag-h">Cómo se leen presupuesto y horizonte</h3>
+    <p class="hint pegada">Perfil SQL Selvadentro: presupuesto ≥ ${fmtMoney(LQ_UMBRAL_USD)} USD y horizonte ≤ ${LQ_HORIZONTE_M} meses. Las opciones sin moneda explícita de ${fmtMoney(400000)} en adelante se leen como <b>pesos</b> (÷18): el lote arranca en 1.4M MXN y nadie declara USD 400K+ para un lote de USD 70–150K. "6 meses o más" cuenta como <b>más</b> de 6.</p>
+    <div class="crm-tables mb-sec">
+      ${pres ? tabla(pres, filaP, "Se lee como") : `<div class="lq-meth">No se detectó un campo de presupuesto.</div>`}
+      ${hor ? tabla(hor, filaH, "Se lee como") : `<div class="lq-meth">No se detectó un campo de horizonte.</div>`}
+    </div>`;
+}
+
 function diagSeccionCuentas(){
   const c = diagState.cuentas;
   if(!c) return "";
@@ -7975,13 +8008,13 @@ function renderDiag(){
   // primero no consulta nada y la segunda se alimenta de la sincronización de Calidad de
   // Leads, que es otra. Esconderlas detrás del botón las volvía invisibles.
   if(!diagState.pruebas){
-    host.innerHTML = diagSeccionGlosario() + diagSeccionCanales() + diagSeccionUtm()
+    host.innerHTML = diagSeccionGlosario() + diagSeccionCanales() + diagSeccionUtm() + diagSeccionLectura()
       + `<div class="empty-rep">Pulsa <b>Probar conexiones</b> para revisar los permisos del token y leer la configuración del CRM.</div>`;
     return;
   }
   host.innerHTML = diagSeccionGlosario() + diagSeccionCanales()
                  + diagSeccionPermisos() + diagSeccionMensajes() + diagSeccionCampos()
-                 + diagSeccionPipelines() + diagSeccionAtribucion() + diagSeccionUtm()
+                 + diagSeccionPipelines() + diagSeccionAtribucion() + diagSeccionUtm() + diagSeccionLectura()
                  + diagSeccionCuentas() + diagSeccionHorario() + diagSeccionValores();
 }
 

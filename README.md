@@ -199,7 +199,11 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
   "$75K–$100K" dólares. `lqParseMoney` trata como pesos cualquier cifra ≥ 400,000 sin
   moneda explícita —nadie declara USD 400K+ para un lote de USD 70–150K— y la convierte a
   USD (÷18) antes de compararla contra el umbral de $100K. Antes un millón de pesos pasaba
-  el umbral e inflaba SQL Selvadentro.
+  el umbral e inflaba SQL Selvadentro. En el horizonte, "6 meses **o más**", "12+ meses" y
+  "más de N" **exceden** el número (n+1): la regla del CRM manager es "6 meses o más = MQL",
+  y antes "6 meses o más" se leía como 6 exactos y entraba al perfil de ≤6. **Diagnóstico →
+  "Cómo se leen presupuesto y horizonte"** muestra cada opción real de los dos campos y en
+  qué la convierte el reporte, para verificar la lectura sin leer código (`lq:agg:v13`).
 - **Auditoría de etiquetado UTM** (`lqAuditUtm`, se ve en **Diagnóstico**): lee lo que
   manda cada anuncio —`url_tags` en Meta, sufijo de URL final y plantilla de tracking en
   Google— lo cruza contra los `utm_campaign` que llegan al CRM y dice qué campaña está
