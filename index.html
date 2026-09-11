@@ -3489,14 +3489,17 @@ function lqCanalDeNegocio(lead, F){
 
 // Registros de prueba: TEST, Prueba, hoshitest@…, "Propy test". El manual de limpieza del
 // CRM (jul-2026) los excluye antes de calificar; el SLA ya lo hacía, Calidad de Leads no.
-const RX_REGISTRO_PRUEBA = /(^|\b)(test|prueba|testing|propy\s*test)(\b|\d|$)/i;
+// "hoshitest@…" no tiene frontera de palabra antes de "test": va como alternativa propia,
+// y "@" cuenta como cierre porque el nombre del lead cae al email cuando no hay nombre.
+const RX_REGISTRO_PRUEBA = /(^|\b)(test|prueba|testing|propy\s*test|hoshitest)(\b|\d|@|$)/i;
+const esRegistroPrueba = (l)=> RX_REGISTRO_PRUEBA.test(String(l.n||"")) || RX_REGISTRO_PRUEBA.test(String(l.em||""));
 function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
   // Paso 0 del manual de limpieza (jul-2026), aplicado ANTES de cualquier cálculo:
   // fuera los registros de prueba y los leads sin email NI teléfono (no hay a quién
   // contactar ni forma de detectar duplicados). Se cuentan y se muestran; no desaparecen.
   const excl = { prueba:0, sinContacto:0 };
   rawLeads = (rawLeads||[]).filter(l=>{
-    if(RX_REGISTRO_PRUEBA.test(String(l.n||""))){ excl.prueba++; return false; }
+    if(esRegistroPrueba(l)){ excl.prueba++; return false; }
     if(!l.em && !l.ph){ excl.sinContacto++; return false; }
     return true;
   });
