@@ -2480,6 +2480,12 @@ function convBlock(f){
        + row("OPP → Apartados", f.apartados, f.opp, CONV_T.oa)
        + row("Apartados → WON reportado", f.won, f.apartados, CONV_T.aw);
 }
+// Brokers no captura zooms/tours agendados ni de seguimiento (su homologación es el
+// ticket aparte de la solicitud del 10-sep, fase 2): en esas columnas va "—", no un 0
+// que se leería como "agendó cero".
+const tieneAgenda = (ch)=> !!(METRIC_MAP[ch] && METRIC_MAP[ch].zooms_ag);
+const agV = (ch, v)=> tieneAgenda(ch) ? v : "—";
+const agPct = (ch, n, d)=> tieneAgenda(ch) ? pctTxt(n, d) : "—";
 // Aviso de comparabilidad: registros capturados antes de separar nuevo/seguimiento.
 function avisoSinSeg(m){
   if(!m || !m.sinSeg) return "";
@@ -2550,7 +2556,7 @@ async function renderResultados(){
   for(const { ch, m } of perCh){
     const meta=CHANNEL_META[ch].won; totMeta+=meta;
     const metaPer=meta/SEMANAS_MES*nW;
-    rows+=`<tr><td class="name">${CHANNELS[ch].name}</td><td>${m.leads}</td><td>${m.zooms_ag}</td><td>${m.zooms}</td><td>${m.zooms_nuevos}</td><td class="pct">${pctTxt(m.zooms,m.zooms_ag)}</td><td>${m.tours_ag}</td><td>${m.tours}</td><td>${m.tours_nuevos}</td><td class="pct">${pctTxt(m.tours,m.tours_ag)}</td><td>${m.opp}</td><td>${m.opp_zooms}</td><td>${m.opp_tours}</td><td>${m.apartados}</td><td>${m.won}</td><td>${fmtMoney(m.ingresos)}</td><td>${pctTxt(m.won,m.opp)}</td><td>${rMeta(meta)}</td><td>${estadoDot(m.leads,m.won,metaPer)}</td></tr>`;
+    rows+=`<tr><td class="name">${CHANNELS[ch].name}</td><td>${m.leads}</td><td>${agV(ch,m.zooms_ag)}</td><td>${m.zooms}</td><td>${agV(ch,m.zooms_nuevos)}</td><td class="pct">${agPct(ch,m.zooms,m.zooms_ag)}</td><td>${agV(ch,m.tours_ag)}</td><td>${m.tours}</td><td>${agV(ch,m.tours_nuevos)}</td><td class="pct">${agPct(ch,m.tours,m.tours_ag)}</td><td>${m.opp}</td><td>${m.opp_zooms}</td><td>${m.opp_tours}</td><td>${m.apartados}</td><td>${m.won}</td><td>${fmtMoney(m.ingresos)}</td><td>${pctTxt(m.won,m.opp)}</td><td>${rMeta(meta)}</td><td>${estadoDot(m.leads,m.won,metaPer)}</td></tr>`;
   }
   cont.innerHTML=`
     <div class="rep-head"><div class="ttl">Dirección General</div>
@@ -2584,8 +2590,8 @@ async function renderDirCom(){
   for(const {ch,m} of perCh){ const meta=CHANNEL_META[ch];
     rows+=`<tr><td class="name">${CHANNELS[ch].name}</td>
       <td>${m.leads}</td><td class="pct">${pctTxt(m.leads,tot.leads)}</td>
-      <td>${m.zooms_ag}</td><td>${m.zooms}</td><td>${m.zooms_nuevos}</td><td class="pct">${pctTxt(m.zooms,m.zooms_ag)}</td>
-      <td>${m.tours_ag}</td><td>${m.tours}</td><td>${m.tours_nuevos}</td><td class="pct">${pctTxt(m.tours,m.tours_ag)}</td>
+      <td>${agV(ch,m.zooms_ag)}</td><td>${m.zooms}</td><td>${agV(ch,m.zooms_nuevos)}</td><td class="pct">${agPct(ch,m.zooms,m.zooms_ag)}</td>
+      <td>${agV(ch,m.tours_ag)}</td><td>${m.tours}</td><td>${agV(ch,m.tours_nuevos)}</td><td class="pct">${agPct(ch,m.tours,m.tours_ag)}</td>
       <td>${m.opp}</td><td class="pct">${pctTxt(m.opp,m.leads)}</td>
       <td>${m.opp_zooms}</td><td class="pct">${pctTxt(m.opp_zooms,m.zooms_nuevos)}</td>
       <td>${m.opp_tours}</td><td class="pct">${pctTxt(m.opp_tours,m.tours_nuevos)}</td>
