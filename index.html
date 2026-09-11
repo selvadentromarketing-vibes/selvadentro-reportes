@@ -2897,7 +2897,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v11";  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
+const LQ_AGG_KEY = "lq:agg:v12";  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 // (LQ_TZ y LQ_TZ_MS ahora viven junto al resto de helpers de fecha, arriba)
@@ -3487,7 +3487,19 @@ function lqCanalDeNegocio(lead, F){
   return { ch:null, via:v ? "campo sin canal" : "sin señal" };
 }
 
+// Registros de prueba: TEST, Prueba, hoshitest@…, "Propy test". El manual de limpieza del
+// CRM (jul-2026) los excluye antes de calificar; el SLA ya lo hacía, Calidad de Leads no.
+const RX_REGISTRO_PRUEBA = /(^|\b)(test|prueba|testing|propy\s*test)(\b|\d|$)/i;
 function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
+  // Paso 0 del manual de limpieza (jul-2026), aplicado ANTES de cualquier cálculo:
+  // fuera los registros de prueba y los leads sin email NI teléfono (no hay a quién
+  // contactar ni forma de detectar duplicados). Se cuentan y se muestran; no desaparecen.
+  const excl = { prueba:0, sinContacto:0 };
+  rawLeads = (rawLeads||[]).filter(l=>{
+    if(RX_REGISTRO_PRUEBA.test(String(l.n||""))){ excl.prueba++; return false; }
+    if(!l.em && !l.ph){ excl.sinContacto++; return false; }
+    return true;
+  });
   const llenos = lqCamposLlenos(boot, rawLeads);
   const F = lqDetectFields(boot.fields, llenos);
   const A = lqDetectAtrib(boot.fields);
@@ -3590,7 +3602,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
   // Los tags se truncan DESPUÉS de calificar: recortarlos antes podía comerse el tag de
   // descalificación o de respuesta de un lead con muchos tags y cambiarle el nivel.
   leads.forEach(l=>{ const a = lqAutoQualify(l); l.alv = a.lv; l.awhy = a.why.join(" · ").slice(0,180); l.tags = l.tags.slice(0,140); });
-  return { ts:Date.now(), users:boot.users||{}, califField:F.calif, fuenteField:F.fuente, windsor:!!boot.windsor,
+  return { ts:Date.now(), users:boot.users||{}, califField:F.calif, fuenteField:F.fuente, windsor:!!boot.windsor, excl,
            oppStages: lqOppStageNames(boot.stages, lqOppThresholds(boot.stages)),
            stages: boot.stages||{},
            campos: lqCamposLlenos(boot, rawLeads),
@@ -4368,6 +4380,12 @@ function lqRender(){
     ${kpi(oppTot.toLocaleString(),"OPPs · oportunidades reales de cierre")}
     ${kpi(wonTot.toLocaleString(),"WONs de estos leads")}
   </div>`;
+  if(agg.excl && (agg.excl.prueba || agg.excl.sinContacto)){
+    const e = agg.excl, partes = [];
+    if(e.prueba) partes.push(`<b>${e.prueba}</b> registro${e.prueba!==1?"s":""} de prueba`);
+    if(e.sinContacto) partes.push(`<b>${e.sinContacto}</b> sin email ni teléfono`);
+    html += `<p class="hint pegada">Excluidos de todos los cálculos (paso 0 del manual de limpieza del CRM): ${partes.join(" · ")}.</p>`;
+  }
   if(!agg.califField){
     html += `<div class="lq-meth">⚠ No se encontró el campo <b>"Calificación del lead"</b> en GoHighLevel; todos los leads aparecen como "Sin calificar". Verifica que el campo exista y que el token tenga el scope de campos personalizados.</div>`;
   }
@@ -5165,7 +5183,7 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
 
   // Registros de prueba fuera de TODO cálculo (spec A3): inflaban la lista de sin toque
   // y cada porcentaje construido sobre ella. Se cuenta cuántos salieron y se declara.
-  const esTest = (c)=> /(^|\b)(test|prueba|testing|propy\s*test)(\b|\d|$)/i.test(String(c.n||""));
+  const esTest = (c)=> RX_REGISTRO_PRUEBA.test(String(c.n||""));
   const testExcl = contactsArr.filter(esTest).length;
   const leads = contactsArr.filter(c=>!esTest(c) && !esExpansion(c.id)).map(c=>{
     const wk = lqWeekOf(c.c); if(!wk || !rangoSet.has(wk)) return null;
