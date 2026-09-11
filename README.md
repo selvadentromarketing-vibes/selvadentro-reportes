@@ -82,6 +82,25 @@ netlify dev --port 8888
 
 Sirve la app + functions en http://localhost:8888.
 
+### Prueba de humo de la interfaz (`scripts/smoke-ui.js`)
+
+La app no tiene build ni pruebas automáticas y todo lo que se rompía en pantalla lo veía
+primero el cliente (la última vez, seis tarjetas tituladas "undefined" en la Analítica de
+Dirección). `scripts/smoke-ui.js` arranca la app en Chromium sin cabeza con una sesión de
+admin simulada y los Netlify Functions sustituidos por stubs —kv vacío, sin CRM, sin
+Windsor: **no toca nada real**—, recorre las 14 vistas y falla si hay un error de
+JavaScript, si alguna vista imprime `undefined`, `NaN` o `[object Object]`, o si una tabla
+tiene distinto número de encabezados que de celdas. También ejerce en vivo la validación
+"seguimiento > total" del formulario de captura.
+
+```bash
+npm i -g playwright            # una vez (PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 si ya hay Chromium)
+node scripts/smoke-ui.js       # CHROME_PATH=… para usar otro binario · PORT=… para otro puerto
+```
+
+Sale con código 1 si encuentra algo. Los tres "502" en consola son los stubs del backend
+y son esperados. Correrla antes de cada `push` a `main`.
+
 ## CRM en vivo (GoHighLevel)
 
 Pestaña **CRM en vivo** en la barra principal:
