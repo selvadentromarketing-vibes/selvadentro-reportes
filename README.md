@@ -339,6 +339,18 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
   estatus `connected` o `answered` — un intento a buzón es trabajo, no contacto) y el
   número viejo en gris como referencia. La mediana del primer intento también pasó a
   medirse contra el toque manual.
+- **Los tres parámetros del Anexo 1 que faltaban** (2026-09-11), derivados de lo que el
+  barrido ya lee por contacto: **SLA de 60 segundos** del Ejecutivo de Primer Contacto
+  (contra el primer toque manual, con la referencia "cualquier salida, automatización
+  incluida" aparte y rotulada como referencia); **integridad del pipeline** (spec B2-2:
+  toda OPP abierta —Seguimiento de OPP, Carta oferta, Apartado— debe tener un *next step
+  con fecha* = tarea abierta con fecha límite hoy o después, o cita futura; se lista con
+  nombres, por asesor, y los leads cuyas tareas o citas no se pudieron leer salen del
+  denominador en vez de contarse como "sin paso"); y **confirmación de Zoom el mismo día**,
+  que es una **aproximación** declarada en pantalla: GHL no guarda la hora de confirmación,
+  se usa la última actualización y solo mientras la cita sigue en `confirmed` (una cita ya
+  marcada showed/noshow pisó ese dato). El backend devuelve `tk.abiertasFut`, `ap.conf` y
+  `ap.confDia` por contacto (`sla:agg:v8`).
 - **Contactados efectivos** (el lead respondió) vs trabajados; **>7 días sin toque**
   con lista nominal — se mide contra el último toque **real** (acción manual del asesor o
   respuesta del lead), porque con el último mensaje de cualquier origen un lead abandonado

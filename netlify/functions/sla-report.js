@@ -234,7 +234,9 @@ async function sweepOne(id) {
   // Tareas del contacto (spec C1): programadas, cerradas en fecha y vencidas abiertas.
   // El manual gobierna cada cadencia con tareas, así que son evidencia que el asesor ya
   // produce — no un campo nuevo que alguien tenga que acordarse de llenar.
-  out.tk = { prog: 0, enFecha: 0, venc: 0 };
+  // abiertasFut = tareas abiertas con fecha límite hoy o después: el "next step con fecha"
+  // que el Anexo 1 exige a toda oportunidad (integridad de pipeline, spec B2-2).
+  out.tk = { prog: 0, enFecha: 0, venc: 0, abiertasFut: 0 };
   out.tkerr = false;
   try {
     const tk = await ghl(`/contacts/${encodeURIComponent(id)}/tasks`);
@@ -249,6 +251,7 @@ async function sweepOne(id) {
       const doneAt = ts(t.completedAt || t.dateUpdated || t.updatedAt);
       if (done) { if (!due || !doneAt || doneAt <= due + 86400e3) out.tk.enFecha++; }
       else if (due && due < now) out.tk.venc++;
+      else if (due) out.tk.abiertasFut++;
     }
   } catch (e) { out.tkerr = true; /* tareas no disponibles: se marca, no se asume 0 */ }
   // Citas del contacto
@@ -262,6 +265,15 @@ async function sweepOne(id) {
       if (st === "showed" || st === "completed") out.ap.sh++;
       else if (st === "noshow") out.ap.ns++;
       else if (ts(ev.startTime) > now) out.ap.fut++;
+      // Confirmación el mismo día (Anexo 1). Solo es medible mientras la cita sigue en
+      // "confirmed": GHL no guarda la hora de confirmación, así que se aproxima con la
+      // última actualización, y una cita que ya se marcó showed/noshow pisó ese dato. Se
+      // cuenta cuántas se pudieron medir para que el % nunca se lea sin su base.
+      if (st === "confirmed") {
+        out.ap.conf = (out.ap.conf || 0) + 1;
+        const a = ts(ev.dateAdded), u = ts(ev.dateUpdated);
+        if (a && u && dayKey(a) === dayKey(u)) out.ap.confDia = (out.ap.confDia || 0) + 1;
+      }
       // Cita más temprana: base del SLA de agendamiento (40% a Zoom en 48 h)
       const stt = ts(ev.startTime);
       if (stt && (!out.ap.f || stt < out.ap.f)) out.ap.f = stt;

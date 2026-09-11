@@ -4791,7 +4791,7 @@ async function showLQ(){
 // Reporte de disciplina comercial directo del CRM: SLA de primera respuesta por
 // asesor y canal, leads >7 días sin toque, trabajados vs contactados efectivos,
 // citas y show rate, y OPPs/WONs por asesor. Con nombres, acumulable por semanas.
-const SLA_AGG_KEY = "sla:agg:v7";   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
+const SLA_AGG_KEY = "sla:agg:v8";   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
 const SLA_STALE_MS = 7*86400e3; // "sin toque" = 7 días sin mensaje
 const slaState = { built:false, agg:null, syncing:false, asesor:"", camp:"" };   // asesor/camp "" = sin filtro
 
@@ -5270,6 +5270,23 @@ const SLA_ETAPAS_EXCL = ["Sin Respuesta","WON","Largo plazo","Corretaje","Nurtur
 // Las cuatro etapas que cuentan como OPP, con la grafía LITERAL del CRM ("Carta oferta"
 // lleva la o minúscula). Solicitud de cambio del 2026-09-07; una cotización enviada no es OPP.
 const SLA_ETAPAS_OPP = new Set(["Seguimiento de OPP","Carta oferta","Apartado","WON"]);
+// Integridad del pipeline (Anexo 1 / spec B2-2): toda oportunidad ABIERTA en zona de OPP
+// debe tener un "next step con fecha" — una tarea abierta con fecha límite hoy o después,
+// o una cita futura. Sin eso, el Anexo la declara incompleta. Solo se juzgan los leads
+// cuyas tareas Y citas se pudieron leer; los demás quedan fuera del denominador, no se
+// asume que no tienen paso.
+function conCitasTot(leads){
+  let n=0, dia=0; leads.forEach(l=>{ if(l.ad || !l.ap) return; n += l.ap.conf||0; dia += l.ap.confDia||0; }); return { n, dia };
+}
+function slaIntegridad(leads, rosterIds){
+  const enZona = leads.filter(l=>SLA_ETAPAS_OPP.has(l.stage) && l.stage!=="WON");
+  const medibles = enZona.filter(l=>!l.terr && !l.ad);
+  const tienePaso = (l)=> !!((l.tk && l.tk.abiertasFut>0) || (l.ap && l.ap.fut>0));
+  const conPaso = medibles.filter(tienePaso), sinPaso = medibles.filter(l=>!tienePaso(l));
+  const porA = {};
+  medibles.forEach(l=>{ const u = rosterIds.has(l.u) ? l.u : SLA_FUERA; const b = porA[u] = porA[u] || {zona:0, con:0, sin:0}; b.zona++; if(tienePaso(l)) b.con++; else b.sin++; });
+  return { enZona, medibles, conPaso, sinPaso, porA, noMedibles: enZona.length - medibles.length };
+}
 const SLA_ETAPAS_CITA = ["Zoom agendado","Tour agendado"];
 
 // Anexo A de la spec: columna del manual + dwell máximo, para compararla en pantalla
@@ -5362,6 +5379,8 @@ function slaRender(){
     ${kpiND(v5n,conDatos.length,"1er toque manual ≤5 min · desde la entrada del lead","meta 5 min")}
     ${kpi(und(60),"Contacto efectivo ≤60 min (handoff WhatsApp) · desde la entrada")}
     ${kpi(und(15),"Contacto efectivo ≤15 min (transferencia en caliente)")}
+    ${kpiND(conDatos.filter(l=>l.slaAt!=null && l.slaAt<=60000).length,conDatos.length,"1er toque manual ≤60 s · SLA del Ejecutivo de Primer Contacto","meta 60 s")}
+    ${kpiND(conDatos.filter(l=>l.fo && l.fo>=l.created && (l.fo-l.created)<=60000).length,conDatos.length,"Cualquier salida ≤60 s, automatización incluida · referencia, no mide al equipo")}
     ${kpi(fmtDur(slaMedian(slasEf)),"Med. contacto efectivo · desde la entrada del lead")}
     ${kpi(fmtDur(slaMedian(slasAt)),"Med. 1er toque manual · desde la entrada del lead")}
     ${kpiND(agN,agB.length,"Tasa de agendamiento · citas ÷ contactados efectivos")}
@@ -5560,6 +5579,36 @@ function slaRender(){
       </table></div>
       <p class="hint" style="margin-top:-10px">Derivado del CRM, sin captura manual: la primera cita de cada lead es <b>nueva</b>, las siguientes son <b>seguimiento</b>. Es la misma separación que Ingreso de datos pide a mano desde septiembre de 2026; cuando las dos cifras coincidan por unas semanas, los cuatro campos del formulario se pueden retirar. GoHighLevel no distingue Zoom de Tour en las citas: aquí van juntas.${leads.length-conCitas.length?` <b>${leads.length-conCitas.length}</b> leads sin datos de citas quedan fuera.`:""}</p>`;
     }
+
+    // Integridad del pipeline y confirmación de citas (Anexo 1). Eran dos de los tres
+    // parámetros que el propio reporte listaba como "Pendiente": se miden desde las tareas
+    // y citas que el barrido ya lee por contacto.
+    {
+      const I = slaIntegridad(leads, slaRosterIds(agg.users));
+      const ordenI = Object.keys(I.porA).sort((a,b)=>(a===SLA_FUERA)-(b===SLA_FUERA) || (I.porA[b].sin-I.porA[a].sin));
+      const filasI = ordenI.map(u=>{ const b=I.porA[u]; const p=b.zona?Math.round(b.con/b.zona*100):null;
+        return `<tr><td class="name">${u===SLA_FUERA?"Fuera del equipo de ventas":escAttr(name(u))}</td><td>${b.zona}</td><td>${b.con||"·"}</td><td style="${b.sin?"color:var(--rojo);font-weight:700":""}">${b.sin||"·"}</td><td class="pct" style="${p==null?"":p===100?"color:var(--verde-prof);font-weight:600":"color:var(--rojo)"}">${p==null?"—":p+"%"}</td></tr>`; }).join("");
+      const sinRows = I.sinPaso.map(l=>({ l, dias: Math.floor((now-(l.lmR||l.created))/86400e3) })).sort((a,b)=>b.dias-a.dias).slice(0,25)
+        .map(({l,dias})=>`<tr><td class="lft celda-fuerte">${escAttr(l.n)}</td><td class="lft">${escAttr(name(l.u))}</td><td class="lft">${escAttr(l.stage||"")}</td><td style="color:var(--rojo);font-weight:700">${dias} d</td></tr>`).join("");
+      // Confirmación el mismo día: solo sobre citas que siguen en "confirmed" (ver sla-report)
+      const conf = conCitasTot(leads), pctConf = conf.n ? Math.round(conf.dia/conf.n*100) : null;
+      html += `<h3 class="h-sec">Integridad del pipeline · next step con fecha (Anexo 1)</h3>
+      <div class="crm-kpis">
+        ${kpi(I.enZona.length.toLocaleString(),"OPP abiertas en el rango (Seguimiento de OPP · Carta oferta · Apartado)")}
+        ${kpiND(I.conPaso.length,I.medibles.length,"Con next step y fecha (tarea abierta con fecha o cita futura)","meta 100%",I.medibles.length?I.sinPaso.length===0:null)}
+        ${kpi(`<span style="${I.sinPaso.length?"color:var(--rojo)":""}">${I.sinPaso.length}</span>`,"Sin next step con fecha · incompletas según el Anexo 1")}
+        ${kpiND(conf.dia,conf.n,"Zoom confirmado el mismo día que se agendó · aproximación","meta: mismo día",conf.n?pctConf===100:null)}
+      </div>
+      <div class="table-scroll mb-sec"><table class="cons">
+        <tr><th class="lft">Asesor</th><th>OPP abiertas</th><th>Con next step</th><th>Sin next step</th><th>%</th></tr>
+        ${filasI || `<tr><td colspan="5" class="lft txt-nota">Sin oportunidades abiertas en zona de OPP en el rango.</td></tr>`}
+      </table></div>
+      ${I.sinPaso.length ? `<div class="rep-section mb-sec"><h3>Oportunidades sin next step con fecha · ${I.sinPaso.length}</h3>
+        <table class="rep"><thead><tr><th class="lft">Lead</th><th class="lft">Asesor</th><th class="lft">Etapa</th><th class="lft">Sin toque</th></tr></thead><tbody>${sinRows}</tbody></table>
+        ${I.sinPaso.length>25?`<p class="hint">…y ${I.sinPaso.length-25} más.</p>`:""}</div>` : ""}
+      <p class="hint" style="margin-top:-10px"><b>Next step con fecha</b> = una tarea abierta en el CRM con fecha límite hoy o después, o una cita futura. ${I.noMedibles?`<b>${I.noMedibles}</b> oportunidad${I.noMedibles===1?"":"es"} en zona de OPP quedan fuera porque sus tareas o citas no se pudieron leer.`:""}
+      <b>Confirmación el mismo día</b>: GoHighLevel no guarda la hora en que se confirmó una cita; se aproxima con su última actualización y solo mientras la cita sigue en <i>confirmed</i> (una cita ya marcada showed/noshow pisó ese dato). ${conf.n?`Medibles: ${conf.n}.`:"No hay citas en <i>confirmed</i> en el rango, así que no se puede medir todavía."}</p>`;
+    }
   }
 
   const conHand = leads.filter(l=>l.hand).length;
@@ -5627,13 +5676,13 @@ function slaRender(){
     <b>WONs:</b> ventas cuyo cierre cayó en el rango, aunque la oportunidad se haya creado antes (se buscan hasta ~18 meses atrás) ·
     <b>OPP→Apartado · 30%</b> y <b>Apartado→WON · 80%</b>: pendientes de que Apartado y Cotización enviada existan como etapas en el CRM (spec B1/D2).</div>
     <div class="lq-meth"><b>SLAs contra los que se mide</b> (spec F1) —
-    primer contacto <b>≤5 minutos</b> · transferencia en caliente <b>15 minutos</b> · handoff por WhatsApp <b>60 minutos</b> ·
+    Ejecutivo de Primer Contacto <b>60 segundos</b> (se mide contra el primer toque manual; la referencia con automatización va aparte) · primer contacto <b>≤5 minutos</b> · transferencia en caliente <b>15 minutos</b> · handoff por WhatsApp <b>60 minutos</b> ·
     show rate <b>75%</b> · OPP→Apartado <b>30%</b> · Apartado→WON <b>80%</b> ·
     seguimiento: <b>ningún lead vivo más de 7 días</b> sin un toque registrado.
     El SLA anterior de "40% a una cita en 48 h" queda retirado: lo sustituyen la tasa de agendamiento y los días a la cita (spec D3), con meta por fijarse del primer mes limpio.
     Acumulable dentro del mes seleccionando desde la primera semana.
-    <br><b>Pendiente:</b> confirmación de Zoom el mismo día, integridad de pipeline (OPPs sin next step con fecha — spec B2-2) y el SLA de
-    <b>60 segundos</b> del Ejecutivo de Primer Contacto, que aplica desde la calibración de septiembre.</div>`;
+    <br><b>Ya se miden</b> (antes pendientes): integridad de pipeline —OPP abiertas sin next step con fecha, con nombres— y confirmación de Zoom el mismo día, ambas en su sección; el SLA de 60 segundos, arriba en los KPIs.
+    <b>Con reserva:</b> la confirmación el mismo día es una aproximación (GHL no guarda la hora de confirmación) y el SLA de 60 s se reporta sin saber si el puesto de Ejecutivo de Primer Contacto ya está activo.</div>`;
 
   document.getElementById("sla-content").innerHTML = html;
   // Filtro de campaña (spec D5)
