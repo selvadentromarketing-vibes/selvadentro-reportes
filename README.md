@@ -259,6 +259,23 @@ del kv y aplica para todo el equipo.
   regla del lado del servidor: la **lectura** de `selvadentro:metas` queda abierta
   (las metas salen en casi toda la app y negarla dejaría las pantallas en blanco), la
   **escritura** solo para esos tres.
+- **Una sola fuente para las conversiones objetivo** (reporte de bug de Dirección
+  General, 11-sep-2026). Ventas → Reporte de cada canal imprimía las metas escritas en el
+  código (Zooms→OPP 15%, Tours→OPP 20%, Zoom/Tour→OPP 40%…) mientras Dirección General y
+  Comercial leían las de Metas (30%/35%…): el mismo ratio salía verde en una pantalla y
+  rojo en otra. Ahora `metaConv()` resuelve la meta de cada conversión con esta
+  precedencia: **meta propia del canal** (nuevo bloque *Conversiones objetivo del canal*
+  en Metas, guardado en `__conv` del canal) → **meta global de Metas** (`CONV_T`, la
+  misma que Dirección) → valor del código, solo para conversiones sin equivalente global
+  (webinars, brokers, presentaciones). *Zoom/Tour → OPP* dejó de ser una constante: se
+  **deriva** como promedio de Zooms→OPP y Tours→OPP ponderado por la mezcla real de
+  zooms y tours del periodo, así siempre cae entre sus dos partes. Cada meta impresa lleva
+  una marca de origen (`·Metas`, `·canal`, `·derivada`, `·fija`) con tooltip.
+  Efecto colateral anunciado: las metas no guardan historial, por lo que un reporte de
+  semanas pasadas se colorea contra la meta **vigente hoy**, no contra la que regía
+  entonces (el reporte lo dice en una nota). La prueba de humo cubre el criterio de
+  aceptación (Paid Orgánico imprime `meta 30.00%`, nunca `15.00%`, y la combinada queda
+  entre 30 y 35).
 
 ## Solicitudes de cambio de Dirección General (septiembre 2026)
 

@@ -41,7 +41,11 @@ const PORT = process.env.PORT || 8765;
     let body = {}; try { body = JSON.parse(route.request().postData() || '{}'); } catch (e) {}
     const ok = (o) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(o) });
     if (fn === 'auth') return ok(body.action === 'status' ? { hasUsers: true } : { token: 'smoke-token', email: 'smoke@selvadentrotulum.com', role: 'admin', channels: ALL });
-    if (fn === 'kv') { const op = body.op; return ok(op === 'get' ? { v: null } : op === 'list' ? { keys: [] } : op === 'dump' ? { rows: [] } : { ok: true }); }
+    if (fn === 'kv') { const op = body.op;
+      // Metas guardadas como en producción el 2026-09-11 (reporte de bug de Dirección): las
+      // conversiones de Ventas → Reporte deben leer ESTAS, no los valores del código.
+      if (op === 'get' && body.k === 'selvadentro:metas') return ok({ v: JSON.stringify({ __global: { conv: { zo: 0.30, to: 0.35, oa: 0.33, aw: 0.80 } } }) });
+      return ok(op === 'get' ? { v: null } : op === 'list' ? { keys: [] } : op === 'dump' ? { rows: [] } : { ok: true }); }
     if (fn === 'sla-report' && body.action === 'users') return ok({ users: {}, fields: [], pipelines: [] });
     return route.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ error: 'stub: sin backend en la prueba' }) });
   });
@@ -88,6 +92,40 @@ const PORT = process.env.PORT || 8765;
     return { existe: true, rojo: seg.classList.contains('campo-error'), aviso: aviso ? aviso.textContent : null, bloqueo: rev.bloqueo, ayuda };
   });
   console.log('\n[ingreso:validación seg>total]', JSON.stringify(val));
+  // Criterio de aceptación del reporte de bug (2026-09-11): Ventas → Reporte de Paid Orgánico
+  // imprime la meta guardada en Metas (30%), no la del código (15%); la combinada se deriva.
+  VISTA = 'reporte:metas';
+  const metas = await page.evaluate(async () => {
+    navIr('ventas', 'reporte');
+    const s = document.getElementById('canal-select'); s.value = 'paid_organico'; s.dispatchEvent(new Event('change'));
+    await new Promise(r => setTimeout(r, 900));
+    // El reporte solo pinta sus secciones tras elegir rango y "Generar reporte" (como hace Juan).
+    const si = document.getElementById('rep-semana-ini'), sf = document.getElementById('rep-semana-fin');
+    if (!si.options.length) return { sinSemanas: true };
+    si.value = si.options[0].value; sf.value = sf.options[sf.options.length - 1].value;
+    await generarReporte();
+    const t = document.getElementById('view-reporte').innerText;
+    const comb = t.match(/Zoom\/Tour nuevo → OPP[\s\S]{0,40}meta (\d+\.\d+)%/);
+    const combV = comb ? Number(comb[1]) : null;
+    return { rango: si.value + '→' + sf.value, zoom30: /Zoom nuevo → OPP[\s\S]{0,40}meta 30\.00%/.test(t), zoom15: /meta 15\.00%/.test(t), tour35: /Tour nuevo → OPP[\s\S]{0,40}meta 35\.00%/.test(t),
+      comb40: /Zoom\/Tour nuevo → OPP[\s\S]{0,40}meta 40\.00%/.test(t), combEntre: combV != null && combV >= 30 && combV <= 35, combV, derivada: /·derivada/.test(t), metasSrc: /·Metas/.test(t), nota: /Metas de conversión/.test(t) };
+  });
+  console.log('\n[reporte:metas] Paid Orgánico', JSON.stringify(metas));
+  if (metas.sinSemanas || !metas.zoom30 || metas.zoom15 || !metas.tour35 || metas.comb40 || !metas.combEntre || !metas.derivada || !metas.metasSrc || !metas.nota) hallazgos.push({ vista: 'reporte:metas', metas });
+  // Precedencia de metaConv con el código real de la página: canal > Metas > derivada > fija.
+  VISTA = 'metaConv:unidad';
+  const mc = await page.evaluate(() => {
+    const getv = (ks) => { const v = { zooms_realizados: 10, zooms_realizados_seg: 2, tours_realizados: 2, tours_realizados_seg: 0 }; return ks.reduce((a, k) => a + (k[0] === '-' ? -(v[k.slice(1)] || 0) : (v[k] || 0)), 0); };
+    const zoom = { l: 'Zoom nuevo → OPP', target: 0.15, t: 'zo' }, mix = { l: 'Zoom/Tour nuevo → OPP', target: 0.40, t: 'mix_zt' }, libre = { l: 'Presentación → OPP', target: 0.25 };
+    const a = metaConv('paid_organico', zoom, getv), b = metaConv('seminarios', { ...zoom, target: 0.40 }, getv), c = metaConv('paid_organico', mix, getv), d = metaConv('brokers', libre, getv), e = metaConv('paid_organico', mix, null);
+    META_OVERRIDES.paid_organico = Object.assign({}, META_OVERRIDES.paid_organico, { __conv: { 'Zoom nuevo → OPP': 0.45 } });
+    const f = metaConv('paid_organico', zoom, getv); delete META_OVERRIDES.paid_organico.__conv;
+    const r = { a, b, c, d, e, f };
+    r.ok = a.v === 0.30 && a.src === 'metas' && b.v === 0.30 && Math.abs(c.v - (0.30 * 8 + 0.35 * 2) / 10) < 1e-9 && c.src === 'derivada' && c.v > 0.30 && c.v < 0.35 && d.v === 0.25 && d.src === 'fija' && Math.abs(e.v - 0.325) < 1e-9 && f.v === 0.45 && f.src === 'canal';
+    return r;
+  });
+  console.log('\n[metaConv] precedencia', JSON.stringify(mc));
+  if (!mc.ok) hallazgos.push({ vista: 'metaConv:unidad', mc });
   // Dirección General: encabezados nuevos y guiones de Brokers
   const dg = await page.evaluate(() => { navIr('direccion', 'general'); return new Promise(r => setTimeout(() => { const t = document.querySelector('#view-resultados table.cons'); const ths = [...t.querySelectorAll('thead th')].map(x => x.innerText.trim()); const filaB = [...t.querySelectorAll('tbody tr')].find(tr => /Brokers/.test(tr.innerText)); r({ ths, brokers: filaB ? [...filaB.querySelectorAll('td')].map(x => x.innerText.trim()).slice(0, 10) : null }); }, 500)); });
   console.log('\n[DG] encabezados:', dg.ths.join(' | ')); console.log('[DG] fila Brokers (10 primeras):', dg.brokers && dg.brokers.join(' | '));
