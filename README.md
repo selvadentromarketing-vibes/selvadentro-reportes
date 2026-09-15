@@ -157,8 +157,15 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
   con interruptor. Las reglas usan solo señales objetivas del CRM — etapa real del
   pipeline, estatus y valor de la oportunidad, citas asistidas/agendadas, campos de
   presupuesto y horizonte, tags — y se evalúan en orden: descalificado → SQL
-  Selvadentro (señal fuerte + perfil ≥$100K USD y ≤6 meses) → SQL (señal fuerte sin
-  perfil) → MQL (respondió / mostró interés) → CQL (capturado). Cada lead muestra en
+  Selvadentro (oportunidad real de cierre o WON en el pipeline, **o** cita asistida /
+  etapa avanzada + perfil ≥$100K USD y ≤6 meses) → SQL (señal fuerte sin perfil, o
+  perfil del formulario sin etapa que lo respalde) → MQL (respondió / mostró interés) →
+  CQL (capturado). **La etapa del pipeline manda sobre el formulario** (Dirección
+  General, 15-sep-2026): una OPP o una venta cerrada es el veredicto del asesor tras
+  hablar con el prospecto, mientras que presupuesto y horizonte son lo que el prospecto
+  tecleó antes de que nadie lo atendiera y la mitad los deja vacíos. Con la regla
+  anterior, 12 de los 26 SQL del reporte estaban en etapa de OPP —uno con venta
+  cerrada— y no subían a SQL Selvadentro solo por el formulario. Cada lead muestra en
   la columna **Por qué** la evidencia que disparó su regla, y una matriz compara
   reglas vs. captura del equipo para auditar discrepancias. **Solo lectura**: nunca
   escribe en GoHighLevel.

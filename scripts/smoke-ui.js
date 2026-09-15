@@ -126,6 +126,26 @@ const PORT = process.env.PORT || 8765;
   });
   console.log('\n[metaConv] precedencia', JSON.stringify(mc));
   if (!mc.ok) hallazgos.push({ vista: 'metaConv:unidad', mc });
+  // Calificación por reglas: la etapa del pipeline manda sobre el formulario (2026-09-15).
+  VISTA = 'lqAutoQualify:etapa';
+  const lq = await page.evaluate(() => {
+    const base = { tags: '', pstage: '', ost: '', ap: { tot: 0, sh: 0, ns: 0 }, pres: '', hor: '', o: 0, pr: 0, w: 0, wv: 0, ov: 0 };
+    const q = (o) => lqAutoQualify(Object.assign({}, base, o));
+    const r = {
+      oppSinForm: q({ o: 1, pstage: 'Seguimiento de OPP' }).lv,                       // sqls: la etapa manda
+      wonFormBajo: q({ o: 1, w: 1, pstage: 'WON', pres: '$50,000 USD', hor: '12 meses' }).lv, // sqls: la venta manda
+      oppPerdida: q({ o: 1, ost: 'lost', pstage: 'Seguimiento de OPP' }).lv,           // desc: perdida sigue mandando
+      fuerteSinForm: q({ pstage: 'Interés identificado' }).lv,                         // sql
+      fuerteConPerfil: q({ pstage: 'Tour realizado', pres: '$150,000 USD', hor: '3 meses' }).lv, // sqls
+      soloFormulario: q({ tags: 'replied', pres: '$150,000 USD', hor: '3 meses' }).lv, // sql (antes sqls)
+      soloRespondio: q({ tags: 'replied' }).lv,                                        // mql
+      why: q({ o: 1, pstage: 'Carta oferta', pres: '$50,000 USD' }).why.join(' · '),
+    };
+    r.ok = r.oppSinForm === 'sqls' && r.wonFormBajo === 'sqls' && r.oppPerdida === 'desc' && r.fuerteSinForm === 'sql' && r.fuerteConPerfil === 'sqls' && r.soloFormulario === 'sql' && r.soloRespondio === 'mql' && /etapa del pipeline manda/.test(r.why);
+    return r;
+  });
+  console.log('\n[lqAutoQualify] etapa > formulario', JSON.stringify(lq));
+  if (!lq.ok) hallazgos.push({ vista: 'lqAutoQualify:etapa', lq });
   // Dirección General: encabezados nuevos y guiones de Brokers
   const dg = await page.evaluate(() => { navIr('direccion', 'general'); return new Promise(r => setTimeout(() => { const t = document.querySelector('#view-resultados table.cons'); const ths = [...t.querySelectorAll('thead th')].map(x => x.innerText.trim()); const filaB = [...t.querySelectorAll('tbody tr')].find(tr => /Brokers/.test(tr.innerText)); r({ ths, brokers: filaB ? [...filaB.querySelectorAll('td')].map(x => x.innerText.trim()).slice(0, 10) : null }); }, 500)); });
   console.log('\n[DG] encabezados:', dg.ths.join(' | ')); console.log('[DG] fila Brokers (10 primeras):', dg.brokers && dg.brokers.join(' | '));

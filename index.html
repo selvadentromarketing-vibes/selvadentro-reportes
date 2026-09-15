@@ -2926,7 +2926,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v13";  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
+const LQ_AGG_KEY = "lq:agg:v14";  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 // (LQ_TZ y LQ_TZ_MS ahora viven junto al resto de helpers de fecha, arriba)
@@ -3121,18 +3121,33 @@ function lqAutoQualify(l){
   else if(stage && LQ_RX.fuerte.test(stage)) why.push(`etapa avanzada: "${stage}"`);
 
   const perfilOk = presupuesto!=null && presupuesto>=LQ_UMBRAL_USD && (hor==null || hor<=LQ_HORIZONTE_M);
+  const perfilBajo = (presupuesto!=null && presupuesto<LQ_UMBRAL_USD) || (hor!=null && hor>LQ_HORIZONTE_M);
   if(presupuesto!=null) why.push(`presupuesto ${fmtMoney(presupuesto)}${presupuesto>=LQ_UMBRAL_USD?" ≥ umbral":" < umbral de "+fmtMoney(LQ_UMBRAL_USD)}`);
   if(hor!=null) why.push(`horizonte ${hor} mes${hor===1?"":"es"}${hor<=LQ_HORIZONTE_M?" ≤ perfil":" > perfil"}`);
 
-  // 3) SQL Selvadentro — señal fuerte + perfil, o perfil completo con respuesta activa
+  // 3) SQL Selvadentro — la etapa del pipeline manda sobre el formulario (Dirección
+  // General, 2026-09-15). Una oportunidad real de cierre o una venta cerrada es el
+  // veredicto del asesor después de hablar con el prospecto; el presupuesto y el
+  // horizonte del formulario son lo que el prospecto declaró antes de que nadie lo
+  // atendiera (y la mitad los deja vacíos). Con la regla anterior una venta cerrada sin
+  // formulario, o con "$50K" tecleado el primer día, se quedaba en SQL debajo de un lead
+  // que solo contestó un mensaje pero llenó bien el formulario.
+  if(l.w>0 || enOpp){
+    if(presupuesto==null && hor==null) why.push("sin formulario: la etapa del pipeline manda");
+    else if(perfilBajo) why.push("formulario por debajo del perfil: la etapa del pipeline manda");
+    return {lv:"sqls", why};
+  }
+  // Señal fuerte sin OPP (cita asistida, etapa avanzada) + perfil confirmado
   if(senalFuerte && perfilOk) return {lv:"sqls", why};
-  if(perfilOk && respondio){ why.push("respuesta activa del lead"); return {lv:"sqls", why}; }
 
-  // 4) SQL — interés real y activo, pero sin perfil confirmado
+  // 4) SQL — interés real y activo, pero sin perfil confirmado; o perfil declarado en el
+  // formulario sin que ninguna etapa del pipeline lo respalde todavía (antes esto era SQL
+  // Selvadentro: el formulario solo no debe llegar al nivel más alto).
   if(senalFuerte){
     if(presupuesto==null && hor==null) why.push("sin presupuesto ni horizonte capturados: no alcanza perfil Selvadentro");
     return {lv:"sql", why};
   }
+  if(perfilOk && respondio){ why.push("perfil declarado en el formulario y respuesta activa, sin etapa del pipeline que lo confirme"); return {lv:"sql", why}; }
   if(ap.tot>0){ why.push("tiene cita agendada"); return {lv:"sql", why}; }
 
   // 5) MQL — respondió o mostró interés, aún sin calificar a fondo
@@ -3684,8 +3699,8 @@ function lqLeyenda(){
   return `<details class="lq-leyenda">
     <summary>Qué significa cada sigla</summary>
     <div class="lq-leyenda-cuerpo">
-      <span><b>SQL Selvadentro</b> señal fuerte de interés <i>y</i> perfil de ≥$100K USD con horizonte ≤6 meses</span>
-      <span><b>SQL</b> señal fuerte, sin ese perfil</span>
+      <span><b>SQL Selvadentro</b> oportunidad real de cierre o venta cerrada en el pipeline (manda sobre el formulario); o cita asistida/etapa avanzada <i>y</i> perfil de ≥$100K USD con horizonte ≤6 meses</span>
+      <span><b>SQL</b> señal fuerte sin ese perfil, o perfil del formulario sin etapa que lo respalde</span>
       <span><b>MQL</b> respondió o mostró interés</span>
       <span><b>CQL</b> capturado, sin respuesta aún</span>
       <span><b>OPP</b> oportunidad real de cierre: Seguimiento de OPP, Carta oferta, Apartado o posterior. Una cotización enviada todavía no cuenta</span>
@@ -4306,10 +4321,11 @@ function lqConclusionesSection(){
   return html;
 }
 
+// v3 (2026-09-15): OPP/WON es SQL Selvadentro aunque el formulario esté vacío o por debajo.
 // v2 (2026-09-11): la calificación cambió —OPP eleva a SQL, Budget Range en pesos, fuera
 // pruebas y sin contacto—, así que un análisis guardado con la v1 cita cifras que ya no
 // son las de la pantalla. Se paga una vez más por rango y se comparte otra vez.
-const LQ_IA_KEY = "lq:ia:v2:";
+const LQ_IA_KEY = "lq:ia:v3:";
 const LQ_IA_TTL = 12*3600e3;          // 12 h: el rango no cambia tanto como para pagar de nuevo
 
 // Devuelve el análisis guardado de este rango si sigue vigente. La clave incluye la
@@ -4666,9 +4682,11 @@ function lqRender(){
     <div class="lq-meth"><b>Reglas de calificación automática</b> — se evalúan en orden y la primera que se cumple manda. Umbral de producto
     <b>${fmtMoney(LQ_UMBRAL_USD)} USD</b>, horizonte del perfil <b>≤${LQ_HORIZONTE_M} meses</b>.
     <br>1 · <b>Descalificado</b>: oportunidad perdida en el CRM, etapa de descalificación, o tag de descalificación (número equivocado, spam, duplicado, sin interés).
-    <br>2 · <b>SQL Selvadentro</b>: señal fuerte (asistió a una cita, venta cerrada o etapa avanzada: interés identificado, cotización, negociación, apartado)
-    <b>y</b> perfil confirmado (presupuesto ≥ umbral y horizonte dentro del perfil) — o perfil confirmado con respuesta activa del lead.
-    <br>3 · <b>SQL</b>: interés real y activo (misma señal fuerte, o cita agendada) pero sin presupuesto/horizonte que confirmen el perfil.
+    <br>2 · <b>SQL Selvadentro</b>: oportunidad real de cierre (Seguimiento de OPP, Carta oferta, Apartado) o venta cerrada — <b>la etapa del pipeline manda</b>, aunque el
+    formulario esté vacío o por debajo del perfil, porque es el veredicto del asesor tras hablar con el prospecto. También: cita asistida o etapa avanzada
+    (interés identificado, cotización, tour/zoom realizado) <b>y</b> perfil confirmado (presupuesto ≥ umbral y horizonte dentro del perfil).
+    <br>3 · <b>SQL</b>: interés real y activo (cita asistida, etapa avanzada o cita agendada) sin presupuesto/horizonte que confirmen el perfil; o perfil declarado en el
+    formulario con respuesta activa pero sin ninguna etapa del pipeline que lo respalde todavía (el formulario solo no llega al nivel más alto).
     <br>4 · <b>MQL</b>: respondió o mostró interés (tag de respuesta, etapa de contacto establecido, u oportunidad ya movida del arranque), aún sin calificar a fondo.
     <br>5 · <b>CQL</b>: capturado; primer alcance enviado o intentos sin respuesta sustancial, sin nada de lo anterior.
     <br>El presupuesto sale del campo de presupuesto del contacto y, si está vacío, del valor de su oportunidad; los montos en pesos se
@@ -7951,8 +7969,8 @@ function diagSeccionGlosario(){
       ${fila("OPP", "Calidad de Leads y SLA",
              "Oportunidad real de cierre: <b>Seguimiento de OPP</b>, <b>Carta oferta</b>, <b>Apartado</b> o cualquier etapa posterior. Una cotización enviada todavía <b>no</b> cuenta (confirmado con el cliente el 2026-08-26).")}
       ${fila("SQL Selvadentro", "Calidad de Leads",
-             "Señal fuerte de interés <b>y</b> perfil de ≥$100K USD con horizonte ≤6 meses.")}
-      ${fila("SQL", "Calidad de Leads", "Señal fuerte de interés, sin el perfil de presupuesto y horizonte.")}
+             "Oportunidad real de cierre o venta cerrada en el pipeline (la etapa manda sobre el formulario); o cita asistida/etapa avanzada <b>y</b> perfil de ≥$100K USD con horizonte ≤6 meses.")}
+      ${fila("SQL", "Calidad de Leads", "Señal fuerte de interés sin el perfil de presupuesto y horizonte, o perfil del formulario sin etapa del pipeline que lo respalde.")}
       ${fila("MQL", "Calidad de Leads", "Respondió o mostró interés, sin señal fuerte todavía.")}
       ${fila("CQL", "Calidad de Leads", "Capturado: el lead entró y quedó registrado, sin respuesta aún.")}
     </tbody>
