@@ -430,9 +430,15 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
   - **Break-up** detectado del feed: ≥5 intentos de llamada + SMS/WhatsApp + email
     sin respuesta del lead. Denominador: descalificados del asesor, o el total si
     no tiene.
-  - **Índice de calidad** (SQLS×4 + SQL×3 + CQL×1) ÷ (4×total) y **resultado
+  - **Índice de calidad** (SQLS×4 + SQL×3 + MQL×2 + CQL×1) ÷ (4×total) y **resultado
     ajustado** por percentiles (tasa de OPPs vs. calidad recibida) para separar
     mérito del proceso de suerte en la asignación. Muestra pequeña: <10 leads.
+    Desde el 23-sep-2026 la calificación de cada lead sale de las **reglas de Calidad
+    de Leads** (`lqAutoQualify`, la etapa del pipeline manda), no del campo manual
+    "Calificación del lead": el equipo dejó de llenarlo en la semana 33 (0 de 51
+    leads del último rango lo traían) y el índice, y con él el cierre de ciclo y el
+    resultado ajustado, salían en blanco para todos los asesores. El campo manual se
+    conserva como `lvCrm` y el reporte declara cuántos leads lo traen.
   - **Actividad efectiva** del estado de entrega de cada mensaje (entregados +
     leídos ÷ enviados).
 - **Permisos**: canal `crm_live` o `direccion_comercial` (o admin) — mismo gate en

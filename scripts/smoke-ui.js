@@ -146,6 +146,23 @@ const PORT = process.env.PORT || 8765;
   });
   console.log('\n[lqAutoQualify] etapa > formulario', JSON.stringify(lq));
   if (!lq.ok) hallazgos.push({ vista: 'lqAutoQualify:etapa', lq });
+  // Desempeño: el Índice de calidad sale de las reglas, no del campo manual vacío (2026-09-23).
+  VISTA = 'sla:indiceCalidad';
+  const sla = await page.evaluate(() => {
+    const c = (id, n, u, cf) => ({ id, n, c: '2026-09-15T15:00:00.000Z', src: 'facebook', u, tags: ['replied'], attr: {}, cf: cf || {} });
+    const contactos = [c('c1', 'Ana Gómez', 'u1'), c('c2', 'Luis Pérez', 'u1'), c('c3', 'Marta Ruiz', 'u1', { fcal: 'MQL' })];
+    const sweeps = { c1: { fi: Date.parse('2026-09-15T16:00:00Z') }, c2: {}, c3: {} };
+    const opps = [{ ct: 'c1', u: 'u1', st: 'open', c: '2026-09-16T10:00:00.000Z', stc: '', v: 0, p: 'p1', s: 's2', sc: '2026-09-17T10:00:00.000Z' }];
+    const pipes = [{ id: 'p1', name: 'Pipeline de ventas', stages: [{ id: 's1', name: 'Contacto establecido' }, { id: 's2', name: 'Seguimiento de OPP' }] }];
+    const campos = [{ id: 'fcal', name: 'Calificación del lead' }];
+    const agg = buildSlaAgg([lqWeekOf('2026-09-15T15:00:00.000Z')], contactos, sweeps, opps, { u1: 'Asesor Uno' }, campos, pipes);
+    const by = {}; agg.leads.forEach(l => by[l.id] = { lv: l.lv, lvCrm: l.lvCrm, o: l.o });
+    const score = slaScoreAsesor(agg.leads);
+    return { by, califCrm: agg.califCrm, q5: score.q5, qTot: score.qTot };
+  });
+  console.log('\n[sla] índice de calidad por reglas', JSON.stringify(sla));
+  // c1: OPP real → sqls aunque el CRM no traiga calificación; c2: solo respondió → mql; c3: campo manual MQL, reglas mql.
+  if (!(sla.by.c1 && sla.by.c1.lv === 'sqls' && sla.by.c1.lvCrm === 'nc' && sla.by.c1.o === 1 && sla.by.c2.lv === 'mql' && sla.by.c3.lvCrm === 'mql' && sla.califCrm === 1 && sla.qTot === 3 && sla.q5 != null && sla.q5 > 1)) hallazgos.push({ vista: 'sla:indiceCalidad', sla });
   // Dirección General: encabezados nuevos y guiones de Brokers
   const dg = await page.evaluate(() => { navIr('direccion', 'general'); return new Promise(r => setTimeout(() => { const t = document.querySelector('#view-resultados table.cons'); const ths = [...t.querySelectorAll('thead th')].map(x => x.innerText.trim()); const filaB = [...t.querySelectorAll('tbody tr')].find(tr => /Brokers/.test(tr.innerText)); r({ ths, brokers: filaB ? [...filaB.querySelectorAll('td')].map(x => x.innerText.trim()).slice(0, 10) : null }); }, 500)); });
   console.log('\n[DG] encabezados:', dg.ths.join(' | ')); console.log('[DG] fila Brokers (10 primeras):', dg.brokers && dg.brokers.join(' | '));

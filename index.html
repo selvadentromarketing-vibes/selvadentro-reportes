@@ -4874,7 +4874,7 @@ async function showLQ(){
 // Reporte de disciplina comercial directo del CRM: SLA de primera respuesta por
 // asesor y canal, leads >7 días sin toque, trabajados vs contactados efectivos,
 // citas y show rate, y OPPs/WONs por asesor. Con nombres, acumulable por semanas.
-const SLA_AGG_KEY = "sla:agg:v9";   // v9: razón de descarte por lead   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
+const SLA_AGG_KEY = "sla:agg:v10";   // v10: calificación por reglas (la etapa manda), no el campo manual vacío   // v9: razón de descarte por lead   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
 const SLA_STALE_MS = 7*86400e3; // "sin toque" = 7 días sin mensaje
 const slaState = { built:false, agg:null, syncing:false, asesor:"", camp:"" };   // asesor/camp "" = sin filtro
 
@@ -5142,7 +5142,7 @@ function slaAsesorSection(agg, leadsIn){
     <div class="table-scroll" style="margin-bottom:8px"><table class="cons">
       <tr><th class="lft">Asesor</th><th>N</th>
         ${SLA_DIMS.map(d=>`<th title="${escAttr(d.label)} · umbrales ${d.thr.join("/")}%">${escAttr(d.label.split(" ")[0])}</th>`).join("")}
-        <th>Nota global</th><th title="Escala 1-5: 1 + 4×[(SQL Selvadentro×4 + SQL×3 + MQL×2 + CQL×1) ÷ (4 × total calificado)]. En blanco = sin leads calificados.">Índice calidad (1-5)</th>
+        <th>Nota global</th><th title="Escala 1-5: 1 + 4×[(SQL Selvadentro×4 + SQL×3 + MQL×2 + CQL×1) ÷ (4 × total calificado)], con la calificación por reglas de Calidad de Leads (la etapa del pipeline manda). En blanco = ningún lead con señal para calificar.">Índice calidad (1-5)</th>
         <th title="Percentil de su tasa de oportunidades vs. percentil de la calidad de lead que recibió">Resultado ajustado</th></tr>
       ${tbody || `<tr><td colspan="10" class="lft txt-nota">Sin leads en el rango.</td></tr>`}
     </table></div>`;
@@ -5189,7 +5189,7 @@ function slaAsesorSection(agg, leadsIn){
     <br><b>Cumplimiento de tareas:</b> ${SLA_DIMS[3].thr.join(" · ")}% — tareas del CRM cerradas en o antes de su fecha, sobre las programadas. Sustituye a "Seguimiento a futuro" (sus campos no existen en GHL). El % nunca se lee sin sus tres cifras: programadas, en fecha y vencidas abiertas — un % alto con pocas tareas premia programar menos. Umbrales propuestos.
     <br><b>Actividad efectiva:</b> ${SLA_DIMS[4].thr.join(" · ")}% — mensajes entregados + leídos (y llamadas conectadas) ÷ enviados, de las acciones manuales del asesor.
     <br>Escala: 5 Excelente · 4 Bueno · 3 Adecuado · 2 Necesita mejorar · 1 Crítico. Con menos de ${SLA_MIN_N} leads no se emite nota: "sin muestra suficiente".
-    <br><b>Índice de calidad (1-5)</b> = 1 + 4 × [(SQL Selvadentro×4 + SQL×3 + MQL×2 + CQL×1) ÷ (4 × total calificado)], de la calificación que trae cada lead; los leads sin calificar no entran. En blanco = el asesor no tiene leads calificados en el CRM.
+    <br><b>Índice de calidad (1-5)</b> = 1 + 4 × [(SQL Selvadentro×4 + SQL×3 + MQL×2 + CQL×1) ÷ (4 × total calificado)], con la <b>calificación por reglas</b> de Calidad de Leads (etapa del pipeline, oportunidades, citas, respuesta, formulario; la etapa manda). Antes se leía el campo manual "Calificación del lead" del CRM, que el equipo dejó de llenar desde la semana 33 de 2026 (hoy lo traen ${agg.califCrm||0} de ${(agg.leads||[]).length} leads del rango), y el índice salía en blanco para todos. Los leads nuevos sin ninguna señal no entran. En blanco = el asesor no tiene leads con señal.
     <br><b>Resultado ajustado</b> compara el percentil de la tasa de oportunidades del asesor (leads con oportunidad ÷ sus leads) contra el percentil de la calidad de lead que recibió, entre asesores comparables: separa el mérito del proceso de la suerte en la asignación. En una evaluación, la conversación empieza aquí.
     <br><b>Pendiente:</b> la causa de descalificación necesita el campo de motivo (spec B2-8) para distinguir mala calidad de mala gestión.</div>`;
   return html;
@@ -5209,7 +5209,11 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
               // "Razón de descarte" existe en el CRM desde antes de julio de 2026 y estaba
               // vacío en el 100% de los descalificados (reporte Primera Conexión, 21-jul).
               // Sin él, "cierre de ciclo" no distingue mala calidad de mala gestión.
-              razon: find(/raz[oó]n de descarte|motivo.*descalific|descarte/i) };
+              razon: find(/raz[oó]n de descarte|motivo.*descalific|descarte/i),
+              // Presupuesto y horizonte del formulario, los mismos campos canónicos que
+              // Calidad de Leads, para calificar por reglas (ver más abajo).
+              pres: find(/^budget range$/i) || find(/presupuesto|budget/i),
+              hor:  find(/^horizonte de inversi[oó]n$/i) || find(/horizonte|timeline|plazo/i) };
   // Catálogo de pipelines/etapas, literal del CRM (spec B1/D1/E1)
   const pipeName = {}, stageName = {}, stageOfPipe = {};
   (pipesArr||[]).forEach(p=>{ pipeName[p.id]=p.name||""; (p.stages||[]).forEach(s=>{ stageName[s.id]=s.name||""; stageOfPipe[s.id]=p.name||""; }); });
@@ -5288,7 +5292,14 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
              bucket: (()=>{ const r=slaReloj(created); return slaBucket(sw.foM && sw.foM>=r ? (sw.foM-r)/60000 : (sw.foM ? 0 : null)); })(),
              d10: (sw.days||[]).filter(d=>{ const t=Date.parse(d+"T12:00:00Z"); return t>=created-86400e3 && t<=created+10*86400e3; }).length,
              breakup: slaBreakup({calls:sw.calls, chans:sw.chans, fi:sw.fi}),
-             lv: F.calif ? lqClassify(c.cf && c.cf[F.calif.id]) : "nc",
+             // lvCrm = campo manual "Calificación del lead" tal cual. lv se fija más abajo
+             // con las reglas de Calidad de Leads, porque el campo manual quedó vacío en el
+             // 100% de los leads desde la semana 33 de 2026 y dejaba el Índice de calidad
+             // y el cierre de ciclo en blanco para todos los asesores.
+             lvCrm: F.calif ? lqClassify(c.cf && c.cf[F.calif.id]) : "nc", lv: "nc",
+             tags: (c.tags||[]).join(", "), pstage: cp ? cp.s : "",
+             pres: cf(F.pres), hor: cf(F.hor),
+             o: 0, pr: 0, w: 0, wv: 0, ov: 0, ost: "",
              razon: F.razon ? String((c.cf && c.cf[F.razon.id]) || "").trim() : null,
              segSem: F.segSem ? !!(c.cf && c.cf[F.segSem.id]) : null,
              segMes: F.segMes ? !!(c.cf && c.cf[F.segMes.id]) : null,
@@ -5336,7 +5347,19 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
     const l = byCt[o.ct]; if(!l) continue;
     const wc = lqWeekOf(o.c);
     if(wc && rangoSet.has(wc)) l.opp++;
+    // Evidencia del pipeline para calificar al lead, sin importar la semana de la
+    // oportunidad: registros (pr), OPP reales (o: las cuatro etapas), ventas (w) y valor.
+    l.pr++;
+    if(SLA_ETAPAS_OPP.has(stageName[o.s]||"")) l.o++;
+    if(o.st==="won"){ l.w++; l.wv += (o.v||0); }
+    l.ov = Math.max(l.ov, o.v||0);
+    l.ost = l.ost==="won" || o.st==="won" ? "won" : (o.st==="open" || l.ost==="open") ? "open" : (o.st||l.ost);
   }
+  // Calificación por reglas — la misma de Calidad de Leads, donde la etapa del pipeline
+  // manda sobre el formulario (Dirección General, 15-sep-2026). El campo manual del CRM se
+  // conserva en lvCrm y se cuenta cuántos lo traen, para declarar su cobertura.
+  leads.forEach(l=>{ l.lv = lqAutoQualify(l).lv; });
+  const califCrm = leads.filter(l=>l.lvCrm!=="nc").length;
   // Horario REAL observado: se suman las horas de cada acción manual de los asesores.
   // Convierte "¿cuál es el horario laboral?" de una pregunta a una medición que el
   // equipo solo tiene que confirmar.
@@ -5346,7 +5369,7 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
     (sw.dow||[]).forEach((n,i)=>{ dow[i]+=n||0; });
   });
   return { ts:Date.now(), rango, users:usersMap||{}, fields:F, leads, byRepOpp, hrs, dow,
-           testExcl, callSt, callDur, call90, callTot,
+           testExcl, callSt, callDur, call90, callTot, califCrm,
            exclExpansion, pipelines: pipesArr||[] };
 }
 
