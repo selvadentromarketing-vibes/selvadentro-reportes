@@ -2929,7 +2929,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v14";  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
+const LQ_AGG_KEY = "lq:agg:v15";  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 // (LQ_TZ y LQ_TZ_MS ahora viven junto al resto de helpers de fecha, arriba)
@@ -3546,6 +3546,14 @@ function lqCanalDeNegocio(lead, F){
 // y "@" cuenta como cierre porque el nombre del lead cae al email cuando no hay nombre.
 const RX_REGISTRO_PRUEBA = /(^|\b)(test|prueba|testing|propy\s*test|hoshitest)(\b|\d|@|$)/i;
 const esRegistroPrueba = (l)=> RX_REGISTRO_PRUEBA.test(String(l.n||"")) || RX_REGISTRO_PRUEBA.test(String(l.em||""));
+// Lead inválido según la spec v1.1 (R-01): la oportunidad está en Descalificado con una
+// causa del grupo inválido y su evidencia, y el CRM no la marcó como injustificada.
+function lqInvalido(op, tags){
+  if(!op || !op.dq || !op.dq.causa || !op.dq.evid || slaTagTiene(tags, SLA_V11_TAGS.inj)) return "";
+  const k = slaCompacto(op.dq.causa);
+  return SLA_CAUSAS_INVALIDO.find(c=>slaCompacto(c)===k) || "";
+}
+
 function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
   // Paso 0 del manual de limpieza (jul-2026), aplicado ANTES de cualquier cálculo:
   // fuera los registros de prueba y los leads sin email NI teléfono (no hay a quién
@@ -3652,6 +3660,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
       pres: F.pres ? (l.cf[F.pres.id]||"") : "",
       hor:  F.hor  ? (l.cf[F.hor.id] ||"") : "",
       ch: cn.ch, chVia: cn.via,          // canal de negocio deducido del CRM (o null)
+      inv: lqInvalido(op, l.tags),       // causa del grupo inválido (spec v1.1 R-01), o ""
     };
   }).filter(l=>l.wk);
   // Calificación automática por reglas (independiente del campo que llena el equipo).
@@ -4411,6 +4420,23 @@ async function lqFn2(url, body){
   return d;
 }
 
+// Leads inválidos (fuera de la nota) por fuente y campaña: la mitad de Marketing de la
+// spec v1.1 R-01. Ventas los saca de la nota del asesor; aquí se ve qué los produce.
+function lqBloqueInvalidos(leads){
+  const inv = leads.filter(l=>l.inv);
+  const porFC = {}, totFC = {};
+  leads.forEach(l=>{ const k = (l.fuente||"(sin fuente)")+"\u0001"+(l.camp||"(sin campaña atribuida)"); totFC[k] = (totFC[k]||0)+1; });
+  inv.forEach(l=>{ const k = (l.fuente||"(sin fuente)")+"\u0001"+(l.camp||"(sin campaña atribuida)"); const b = porFC[k] = porFC[k] || { n:0 }; b.n++; b[l.inv] = (b[l.inv]||0)+1; });
+  const filas = Object.keys(porFC).sort((a,b)=>porFC[b].n-porFC[a].n).map(k=>{ const [f,c] = k.split("\u0001"), b = porFC[k];
+    return `<tr><td class="lft">${escAttr(f)}</td><td class="lft">${escAttr(c)}</td>${SLA_CAUSAS_INVALIDO.map(x=>`<td>${b[x]||"·"}</td>`).join("")}<td><b>${b.n}</b></td><td class="pct">${(b.n*100/totFC[k]).toFixed(1)}% <span class="lq-sub">de ${totFC[k]}</span></td></tr>`; }).join("");
+  return `<h3 class="h-sec">Leads inválidos (fuera de la nota) · por fuente y campaña · ${inv.length}</h3>
+    <div class="table-scroll mb-sec"><table class="cons">
+      <tr><th class="lft">Fuente</th><th class="lft">Campaña</th>${SLA_CAUSAS_INVALIDO.map(c=>`<th>${escAttr(c)}</th>`).join("")}<th>Total</th><th>% de los leads de la campaña</th></tr>
+      ${filas || `<tr><td colspan="${SLA_CAUSAS_INVALIDO.length+4}" class="lft txt-nota">Ningún lead inválido en el rango (o el CRM todavía no trae "Causa de descalificación").</td></tr>`}
+    </table></div>
+    <p class="hint" style="margin-top:-10px">Oportunidades en Descalificado con una causa del grupo inválido y su evidencia (Change Spec v1.1, R-01): ${SLA_CAUSAS_INVALIDO.map(escAttr).join(" · ")}. En Ventas → Desempeño salen de la nota del asesor en los dos sentidos; aquí quedan como calidad de lead de cada fuente y campaña. Las que el CRM marcó <i>descalificacion injustificada</i> no cuentan como inválidas.</p>`;
+}
+
 function lqRender(){
   const agg = lqState.agg; if(!agg) return;
   document.getElementById("lq-last-sync").textContent = crmAgo(agg.ts);
@@ -4703,6 +4729,7 @@ function lqRender(){
     <b>CQL:</b> lead capturado; primer alcance enviado o intentos sin respuesta sustancial ·
     <b>Descalificado:</b> no pidió info, confundió el anuncio, número equivocado o sin fit.
     Umbral de producto: $100K USD. Semana ISO lun–dom en hora Tulum. Fuente: campo "${escAttr(agg.califField?.name||"Calificación del lead")}" de GoHighLevel; etapa derivada de tags.</div>`;
+    html += lqBloqueInvalidos(leads);
     return html;
   })();
   let out = subBar + lqLeyenda();
@@ -4810,6 +4837,9 @@ async function lqSync(){
     bar.style.width="82%"; lbl.textContent="Sincronizando oportunidades…";
     const oppsByContact = {};
     const oppTh = lqOppThresholds(boot.stages);
+    // Spec v1.1 R-01: causa y evidencia de la oportunidad en Descalificado, para mostrar a
+    // Marketing los leads inválidos por fuente y campaña.
+    const C11 = slaCamposV11([], boot.oppFields||[]);
     try{
       let oc=null, seen=0;
       do{
@@ -4825,6 +4855,10 @@ async function lqSync(){
           // Etapa real: la de la oportunidad movida más recientemente
           const t = new Date(o.sc||o.c||0).getTime()||0;
           if(o.s && t >= b.sc){ b.sc=t; b.s=o.s; b.st=o.st; }
+          const stN = (boot.stages||{})[o.s];
+          if(stN && /^descalificad/.test(slaNorm(stN.s)) && (!b.dq || t >= b.dq.t)){
+            b.dq = { t, causa: C11.causa && o.cf ? String(o.cf[C11.causa.id]||"").trim() : "", evid: C11.evid && o.cf ? String(o.cf[C11.evid.id]||"").trim() : "" };
+          }
         }
         seen += res.fetched; oc = res.cursor;
         lbl.textContent=`Sincronizando oportunidades… ${seen.toLocaleString()}`;
@@ -4877,7 +4911,7 @@ async function showLQ(){
 // Reporte de disciplina comercial directo del CRM: SLA de primera respuesta por
 // asesor y canal, leads >7 días sin toque, trabajados vs contactados efectivos,
 // citas y show rate, y OPPs/WONs por asesor. Con nombres, acumulable por semanas.
-const SLA_AGG_KEY = "sla:agg:v10";   // v10: calificación por reglas (la etapa manda), no el campo manual vacío   // v9: razón de descarte por lead   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
+const SLA_AGG_KEY = "sla:agg:v11";   // v11: spec v1.1 (filtros de medición: inválidos, brokers, revertidas, horario, sin llamada, contacto efectivo)   // v10: calificación por reglas (la etapa manda), no el campo manual vacío   // v9: razón de descarte por lead   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
 const SLA_STALE_MS = 7*86400e3; // "sin toque" = 7 días sin mensaje
 const slaState = { built:false, agg:null, syncing:false, asesor:"", camp:"" };   // asesor/camp "" = sin filtro
 
@@ -4962,9 +4996,161 @@ const slaBucket = (min)=> min==null ? "out" : (SLA_BUCKETS.find(b=>min<=b.max)||
 
 // Break up: se agotaron los 5 intentos de llamada + canal complementario + email
 // sin lograr contacto establecido (el lead nunca respondió).
-function slaBreakup(l){
+// sinLlamada (spec v1.1 R-05) = fecha de inicio de una excepción "sin llamada" válida: los
+// pasos de la escalera se completan con 1 mensaje + 1 email y no exigen llamadas, y "sin
+// respuesta" se cuenta desde esa fecha — "solo mensaje" exige justo una respuesta previa del
+// lead, así que con "nunca respondió" la escalera de esos leads no se podía completar nunca.
+function slaBreakup(l, sinLlamada){
   const ch = l.chans||[];
-  return (l.calls||0) >= 5 && (ch.includes("sms")||ch.includes("whatsapp")) && ch.includes("email") && !l.fi;
+  const sinResp = sinLlamada ? !(l.li && l.li > sinLlamada) : !l.fi;
+  return (sinLlamada || (l.calls||0) >= 5) && (ch.includes("sms")||ch.includes("whatsapp")) && ch.includes("email") && sinResp;
+}
+
+/* ===== Change Spec v1.1 · filtros de medición (Dirección General, efectivo 1-oct-2026) =====
+   Seis reglas que deciden qué leads cuentan en la nota del asesor y cómo. El principio:
+   una exclusión funciona en los dos sentidos. Un lead que no puede contar en contra del
+   asesor tampoco cuenta a favor: sale del numerador y del denominador de TODA métrica,
+   desde su alta — la misma causa raíz de los 700% y 112% de la v1.0.
+   Aplican a todo periodo que toque el 1-oct-2026 o después, con el mismo criterio que los
+   umbrales de la v1.2 (lo que rige el último día del periodo); los periodos que terminaron
+   antes no se recalculan. Los nombres de etiquetas y campos son los de la spec §2: las
+   etiquetas se comparan exactas; los nombres y valores de campos, sin mayúsculas, acentos
+   ni espacios alrededor. */
+const SLA_V11_DESDE = "2026-10-01";
+const SLA_V11_TAGS = { nci:"sin llamada - numero invalido", ncm:"sin llamada - solo mensaje", inj:"descalificacion injustificada", broker:"broker" };
+const SLA_V11_CAMPOS = { causa:"Causa de descalificación", evid:"Evidencia de descalificación", asesor:"Asesor que descalificó", fecha:"Fecha de entrada a Descalificado", ncDesde:"Sin llamada - fecha de inicio" };
+// R-01: dos grupos. Inválido = sale de todo; real descartado = se mide hasta su descalificación.
+const SLA_CAUSAS_INVALIDO = ["Dejó datos por error","Pruebas de marketing","Sin datos válidos","Número equivocado","Contacto inapropiado / broma"];
+const SLA_CAUSAS_REAL = ["No alineado","Ya no interesado","Malinterpretó la campaña"];
+// C-20 (telefonía): mientras las llamadas del CRM lean 0% conectadas y sin duración, la
+// evidencia de "sin llamada - numero invalido" (intentos que NO conectaron) no se puede
+// validar: se muestra "Pendiente de validación", la excepción se aplica provisionalmente y
+// la nota es solo diagnóstica (decisión del 2-sep). Poner en true al cerrar C-20.
+const SLA_C20_CERRADO = false;
+const SLA_NC_KEY = "sla:nocall:v1";          // primera vez que cada etiqueta "sin llamada" se vio retirada
+const SLA_V11_PENDIENTE_MS = 24*3600e3;      // Descalificado sin causa o evidencia: activo 24 h
+const slaV11 = (per)=> !!(per && per.fin && per.fin >= SLA_V11_DESDE);
+const slaCompacto = (s)=> slaNorm(s).replace(/[^a-z0-9]/g,"");
+const slaTagTiene = (tags, t)=> (Array.isArray(tags) ? tags : String(tags||"").split(",")).some(x=>String(x).trim()===t);
+// Campos de la spec §2 detectados por nombre (o por su fieldKey), sin mayúsculas, acentos
+// ni espacios. null = el campo no existe en el CRM y la pantalla lo dice.
+function slaCamposV11(fieldsArr, oppFieldsArr){
+  const find = (arr, nombre)=>{ const k = slaCompacto(nombre);
+    return (arr||[]).find(f=>slaCompacto(f.name)===k) || (arr||[]).find(f=>slaCompacto(String(f.key||"").split(".").pop())===k) || null; };
+  return { causa: find(oppFieldsArr, SLA_V11_CAMPOS.causa), evid: find(oppFieldsArr, SLA_V11_CAMPOS.evid),
+           asesor: find(oppFieldsArr, SLA_V11_CAMPOS.asesor), fecha: find(oppFieldsArr, SLA_V11_CAMPOS.fecha),
+           ncDesde: find(fieldsArr, SLA_V11_CAMPOS.ncDesde) };
+}
+// Timestamp de un campo de fecha: ISO, epoch (s o ms) o solo fecha. Una fecha sin hora se
+// toma al FINAL de ese día en hora Tulum, para no tirar la actividad de ese mismo día.
+function slaFechaCampo(v){
+  const s = String(v==null?"":v).trim(); if(!s) return null;
+  if(/^\d{10,13}$/.test(s)){ const n = Number(s); return s.length===10 ? n*1000 : n; }
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return Date.parse(s+"T23:59:59.999"+LQ_TZ);
+  const t = Date.parse(s); return isFinite(t) && t>0 ? t : null;
+}
+// "Asesor que descalificó" puede traer el id del usuario o su nombre.
+function slaUsuarioDe(v, usersMap){
+  const s = String(v||"").trim(); if(!s) return "";
+  if(usersMap && usersMap[s]) return s;
+  const k = slaNorm(s), hit = Object.entries(usersMap||{}).find(([,n])=>slaNorm(n)===k);
+  return hit ? hit[0] : "";
+}
+// Qué hace la spec v1.1 con cada contacto (id → disposición). tipo:
+//   broker    R-03 · etiqueta broker o una oportunidad en Brokers — Expansión y activación: fuera de todo
+//   invalido  R-01 · causa del grupo inválido, con evidencia: fuera de todo
+//   real      R-01 · lead real descartado: se mide hasta su entrada a Descalificado (cut)
+//   revertida R-02 · etiqueta descalificacion injustificada: lead real, cuenta para quien lo descalificó hasta esa fecha
+//   pendiente R-01 · en Descalificado hace <24 h sin causa o evidencia: se mide como activo
+//   ""        lead normal
+function slaDisposiciones(contactsArr, oppsArr, usersMap, pipesArr, C, now){
+  const pipeName = {}, stageName = {};
+  (pipesArr||[]).forEach(p=>{ pipeName[p.id]=p.name||""; (p.stages||[]).forEach(s=>{ stageName[s.id]=s.name||""; }); });
+  const esExp = (p)=> /expansi[oó]n\s*y\s*activaci[oó]n/i.test(pipeName[p]||"");
+  const porCt = {};
+  (oppsArr||[]).forEach(o=>{ if(o.ct) (porCt[o.ct]=porCt[o.ct]||[]).push(o); });
+  const val = (o,f)=> f && o.cf ? String(o.cf[f.id]||"").trim() : "";
+  const INV = new Map(SLA_CAUSAS_INVALIDO.map(c=>[slaCompacto(c),c])), REAL = new Map(SLA_CAUSAS_REAL.map(c=>[slaCompacto(c),c]));
+  const tagsDe = {}; (contactsArr||[]).forEach(c=>{ tagsDe[c.id] = c.tags||[]; });
+  const out = {};
+  const ids = new Set([...Object.keys(tagsDe), ...Object.keys(porCt)]);
+  ids.forEach(id=>{
+    const tags = tagsDe[id] || [], ops = porCt[id] || [];
+    const tagB = slaTagTiene(tags, SLA_V11_TAGS.broker), pipeB = ops.some(o=>esExp(o.p));
+    // Oportunidad de la descalificación: la más reciente con fecha, causa o en Descalificado.
+    let dq = null;
+    ops.forEach(o=>{
+      const enDesc = /^descalificad/.test(slaNorm(stageName[o.s]||""));
+      const fCampo = slaFechaCampo(val(o,C.fecha)), causa = val(o,C.causa);
+      if(!enDesc && !fCampo && !causa) return;
+      // Sin la fecha de la automatización: el cambio de etapa si sigue en Descalificado; si
+      // no, la última actividad del lead (= sin corte).
+      const fecha = fCampo || (enDesc ? (Date.parse(o.scE||"")||null) : null);
+      const c = { enDesc, causaTxt: causa, evid: val(o,C.evid), asesorTxt: val(o,C.asesor), fecha, fechaOrigen: fCampo ? "campo" : fecha ? "etapa" : "" };
+      if(!dq || (fecha||0) > (dq.fecha||0)) dq = c;
+    });
+    const d = { tipo:"", brokerPor: tagB&&pipeB ? "etiqueta broker y pipeline de Expansión" : tagB ? "etiqueta broker" : pipeB ? "pipeline Brokers — Expansión y activación" : "",
+      causa: dq ? (INV.get(slaCompacto(dq.causaTxt)) || REAL.get(slaCompacto(dq.causaTxt)) || dq.causaTxt) : "",
+      grupo: dq && dq.causaTxt ? (INV.has(slaCompacto(dq.causaTxt)) ? "invalido" : REAL.has(slaCompacto(dq.causaTxt)) ? "real" : "desconocida") : "",
+      evid: dq ? dq.evid : "", fecha: dq ? dq.fecha : null, fechaOrigen: dq ? dq.fechaOrigen : "",
+      asesorTxt: dq ? dq.asesorTxt : "", asesorU: dq ? slaUsuarioDe(dq.asesorTxt, usersMap) : "", cut: null, incompleto: false };
+    if(d.brokerPor) d.tipo = "broker";
+    else if(slaTagTiene(tags, SLA_V11_TAGS.inj)){ d.tipo = "revertida"; d.cut = d.fecha; }
+    else if(dq && dq.enDesc){
+      const completo = !!(dq.causaTxt && dq.evid);
+      if(!completo && d.fecha && now - d.fecha < SLA_V11_PENDIENTE_MS) d.tipo = "pendiente";
+      else if(completo && d.grupo==="invalido") d.tipo = "invalido";
+      else { d.tipo = "real"; d.cut = d.fecha; d.incompleto = !completo; }
+    }
+    if(d.tipo) out[id] = d;
+  });
+  return out;
+}
+// Horario de atención (R-04): 09:00:00 a 18:59:59 hora Tulum; los días son un parámetro
+// (Metas → Rúbrica de desempeño) que confirma Dirección Comercial contra el Manual de
+// etapas. Por defecto lunes a viernes, el mismo que el protocolo de ago 2026 dejó pendiente.
+const SLA_HORARIO_V11_DEF = { dias:[1,2,3,4,5], abre:9*3600, cierra:19*3600, limite:11*3600 };
+function slaHorarioV11(){
+  const g = SLA_RUBRICA_OVR && SLA_RUBRICA_OVR.horario;
+  const dias = g && Array.isArray(g.dias) ? [...new Set(g.dias.filter(x=>Number.isInteger(x) && x>=0 && x<=6))].sort() : [];
+  return { ...SLA_HORARIO_V11_DEF, dias: dias.length ? dias : SLA_HORARIO_V11_DEF.dias, guardado: !!dias.length, por: g && g.por || "", en: g && g.en || "" };
+}
+// ¿El lead entró en horario? Y su límite: 5 minutos en horario; fuera de horario, antes de
+// las 11:00 del siguiente día de servicio (el mismo día si entró antes de abrir).
+function slaVentanaV11(t, H){
+  const loc = new Date(t - LQ_TZ_MS), dow = loc.getUTCDay();
+  const seg = loc.getUTCHours()*3600 + loc.getUTCMinutes()*60 + loc.getUTCSeconds();
+  if(H.dias.includes(dow) && seg >= H.abre && seg < H.cierra) return { enHorario:true, limite: t + 5*60000 };
+  const d = new Date(Date.UTC(loc.getUTCFullYear(), loc.getUTCMonth(), loc.getUTCDate()));
+  if(!(H.dias.includes(dow) && seg < H.abre)){ do { d.setUTCDate(d.getUTCDate()+1); } while(!H.dias.includes(d.getUTCDay())); }
+  return { enHorario:false, limite: d.getTime() + H.limite*1000 + LQ_TZ_MS };
+}
+// Excepción "sin llamada" de un lead (R-05): válida, pendiente de validación (C-20) o sin
+// evidencia, con lo que falta. nc = evidencia del barrido, anterior a la fecha de inicio.
+function slaValidarSinLlamada(tagKey, nc){
+  const e = nc || { calls:0, dias:0, inb:false, c90:false };
+  if(tagKey === "ncm"){
+    return (e.inb || e.c90) ? { estado:"valida", falta:"" } : { estado:"sin", falta:"un mensaje entrante del lead (WhatsApp, SMS o email) o una llamada de ≥90 s antes de la etiqueta" };
+  }
+  const falta = [];
+  if((e.calls||0) < 2) falta.push(`${2-(e.calls||0)} intento${2-(e.calls||0)===1?"":"s"} de llamada fallido${2-(e.calls||0)===1?"":"s"} más`);
+  if((e.dias||0) < 2) falta.push("intentos en 2 días distintos");
+  if(falta.length) return { estado:"sin", falta: falta.join(" y ")+" antes de la etiqueta" };
+  return SLA_C20_CERRADO ? { estado:"valida", falta:"" } : { estado:"pendiente", falta:"la telefonía todavía no distingue llamadas conectadas (C-20)" };
+}
+// Primera vez que cada etiqueta "sin llamada" se vio retirada. El CRM no fecha el retiro de
+// una etiqueta, así que se guarda en el kv la primera sincronización donde ya no estaba.
+function slaActualizarSinLlamada(estado, contactsArr, now){
+  const st = estado && typeof estado==="object" ? estado : {};
+  (contactsArr||[]).forEach(c=>{
+    ["nci","ncm"].forEach(k=>{
+      const tiene = slaTagTiene(c.tags, SLA_V11_TAGS[k]);
+      const e = st[c.id] && st[c.id][k];
+      if(tiene && (!e || e.fuera)) (st[c.id] = st[c.id] || {})[k] = { visto: now, fuera: null };
+      else if(!tiene && e && !e.fuera) e.fuera = now;
+    });
+  });
+  return st;
 }
 
 /* ---- Rúbrica de desempeño (prototipo "Sistema de Calificación", ago 2026) ----
@@ -5054,6 +5240,8 @@ function slaPeriodoDe(rango){
 const SLA_MESES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
 const slaFechaCorta = (ymd)=>{ const m = String(ymd||"").match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? `${+m[3]}-${SLA_MESES[+m[2]-1]}-${m[1]}` : "—"; };
 const slaThrTxt = (thr)=> thr.join(" · ")+"%";
+const SLA_DIAS_CORTOS = ["dom","lun","mar","mié","jue","vie","sáb"];
+const slaDiasTxt = (dias)=> (dias||[]).map(d=>SLA_DIAS_CORTOS[d]).join(" · ");
 async function loadRubrica(){
   const saved = await sGet(SLA_RUBRICA_KEY);
   SLA_RUBRICA_OVR = (saved && typeof saved==="object" && !Array.isArray(saved)) ? saved : {};
@@ -5070,8 +5258,12 @@ function slaScoreAsesor(arr, rub){
   // x·100/N y no x/N·100: con la división al final, un % que cae justo en un umbral sale
   // exacto (57/100 → 57, no 56.999…) y el límite inferior inclusivo se respeta siempre.
   const pct = (x)=> N ? x*100/N : 0;
-  // Velocidad (A5): % con primer toque manual en ≤5 MINUTOS (antes: ventana de 2 h)
-  const b5 = cd.filter(l=>l.bucket==="b5").length;
+  // Velocidad: % de leads que cumplieron su SLA de 1er toque manual. Reglas v1.1 (R-04):
+  // 5 min en horario, antes de las 11:00 del siguiente día de servicio fuera de horario
+  // (velOk, fijado en buildSlaAgg). Reglas v1.0: ≤5 MINUTOS las 24 horas (A5).
+  const cumple = (l)=> l.velOk !== undefined ? !!l.velOk : l.bucket==="b5";
+  const b5 = cd.filter(cumple).length;
+  const fhDe = cd.filter(l=>l.fh).length, fhOk = cd.filter(l=>l.fh && cumple(l)).length;
   // Cadencia: % con al menos 3 días distintos de contacto manual en los primeros 10 días
   const c3 = cd.filter(l=>(l.d10||0)>=3).length, c5 = cd.filter(l=>(l.d10||0)>=5).length;
   // Cierre de ciclo (A1): UNA población fija — los descalificados del asesor — y el
@@ -5095,7 +5287,7 @@ function slaScoreAsesor(arr, rub){
     cierre: desc > 0 ? bk*100/desc : null,
     tareas: (tkLeidas && tkProg > 0) ? tkFecha*100/tkProg : null,
     efec: pctEfec,
-    c5: pct(c5), d05: pct(b5),
+    c5: pct(c5), d05: pct(cd.filter(l=>l.bucket==="b5").length),
     d30: pct(cd.filter(l=>l.bucket==="b30").length), d120: pct(cd.filter(l=>l.bucket==="b120").length),
     dout: pct(cd.filter(l=>l.bucket==="out").length),
   };
@@ -5137,6 +5329,7 @@ function slaScoreAsesor(arr, rub){
   return { N, sub, global, pcts, cnt, q, qTot, qIndex, q5,
            oppRate: arr.length ? leadsConOpp/arr.length*100 : 0, opp, leadsConOpp, leadsTot: arr.length,
            tk: { prog: tkProg, enFecha: tkFecha, venc: tkVenc, leidas: tkLeidas },
+           fh: { de: fhDe, ok: fhOk },               // fuera de horario atendidos antes de las 11:00 (R-04)
            agend: { con: agCon, de: agBase.length, dias: diasCita },
            small, bk, desc,
            citas: arr.filter(l=>!l.ad).reduce((a,l)=>a+l.ap.tot,0),
@@ -5175,6 +5368,111 @@ function slaHistorialTxt(key, rub){
   return partes.join(" ");
 }
 
+// Banner de la spec v1.1: qué reglas miden este periodo, qué salió de la nota y si el CRM
+// trae las entradas de la §2 (etiquetas y campos que configura Marketing).
+function slaBannerV11(agg){
+  const per = slaPeriodoDe(agg.rango), V = agg.v11;
+  if(!V) return per.fin && per.fin < SLA_V11_DESDE
+    ? `<div class="lq-meth">ℹ Este periodo terminó antes del <b>${escAttr(slaFechaCorta(SLA_V11_DESDE))}</b>: se mide con las reglas anteriores. Las <b>Reglas de medición vigentes desde el 1 de octubre de 2026</b> no se aplican hacia atrás.</div>` : "";
+  const n = (x,s,p)=> `<b>${x}</b> ${x===1?s:p}`;
+  const campo = (k, lbl)=> V.campos[k] ? `<span style="color:var(--verde-ok-tx)">✓ ${escAttr(lbl)}</span>` : `<span style="color:var(--rojo);font-weight:700">✗ ${escAttr(lbl)} — no existe en el CRM</span>`;
+  const tag = (k)=> `<span style="${V.tagsVistos[k]?"color:var(--verde-ok-tx)":"color:var(--neutro)"}">${V.tagsVistos[k]?"✓":"·"} ${escAttr(SLA_V11_TAGS[k])} (${V.tagsVistos[k]})</span>`;
+  return `<div class="lq-meth" style="border-color:var(--olivo)"><b style="font-size:var(--fs-md)">Reglas de medición vigentes desde el 1 de octubre de 2026</b>
+    <span class="lq-sub">· Change Spec v1.1${V.cruza?` · el rango incluye días anteriores al ${escAttr(slaFechaCorta(SLA_V11_DESDE))} y se mide completo con estas reglas`:""}</span>
+    <br>Fuera de la nota: ${n(V.invalidos.length,"lead inválido","leads inválidos")} y ${n(V.brokers.length,"error de asignación","errores de asignación")} — no cuentan ni a favor ni en contra.
+    Medidos hasta su descalificación: ${n(V.reales,"lead real descartado","leads reales descartados")}${V.cortados?` (${V.cortados} mensaje${V.cortados===1?"":"s"} posterior${V.cortados===1?"":"es"} fuera)`:""}.
+    ${V.pendientes?`En espera de causa o evidencia (menos de 24 h en Descalificado, medidos como activos): <b>${V.pendientes}</b>. `:""}
+    Descalificaciones revertidas en el periodo: <b>${V.revertidas.length}</b>.
+    <br>Horario de atención: <b>09:00–18:59</b>, ${escAttr(slaDiasTxt(V.horario.dias))}${V.horario.guardado?"":` <span style="color:var(--cobre);font-weight:600">(valor por defecto — confirmar los días con Dirección Comercial en Metas → Rúbrica de desempeño)</span>`}.
+    Contacto efectivo: respuesta del lead o llamada de ≥90 s.
+    <br><span class="lq-sub"><b>Entradas del CRM (§2):</b> ${campo("causa", SLA_V11_CAMPOS.causa)} · ${campo("evid", SLA_V11_CAMPOS.evid)} · ${campo("asesor", SLA_V11_CAMPOS.asesor)} · ${campo("fecha", SLA_V11_CAMPOS.fecha)} · ${campo("ncDesde", SLA_V11_CAMPOS.ncDesde)}
+      · etiquetas en leads del rango: ${["broker","inj","nci","ncm"].map(tag).join(" · ")}${V.oppFieldsOk?"":` · <b style="color:var(--rojo)">el CRM no devolvió el catálogo de campos de oportunidad</b>`}${V.taggedOk?"":` · <b style="color:var(--cobre)">no se pudieron buscar revertidas anteriores al rango</b>`}${V.taggedTruncado?" · búsqueda de revertidas truncada a 500":""}</span></div>`;
+}
+
+// Bloques de la spec v1.1 (§5): inválidos, errores de asignación, revertidas y excepciones
+// "sin llamada". Van debajo de la nota del asesor, con los rótulos literales de la spec.
+function slaSeccionesV11(agg, leads){
+  const V = agg.v11; if(!V) return "";
+  const name = (u)=> agg.users[u] || (u ? "(sin nombre)" : "(sin asesor)");
+  const rosterIds = slaRosterIds(agg.users);
+  const quien = (u)=> rosterIds.has(u) ? u : SLA_FUERA;
+  const nomQ = (u)=> u===SLA_FUERA ? "Fuera del equipo de ventas" : escAttr(name(u));
+  const orden = (m)=> Object.keys(m).sort((a,b)=>(a===SLA_FUERA)-(b===SLA_FUERA) || (m[b].n||0)-(m[a].n||0));
+  const fecha = (t)=> t ? fmtDate(new Date(t - LQ_TZ_MS)) : "—";
+  let html = "";
+
+  // R-01 · Leads inválidos (fuera de la nota): por asesor y por causa
+  {
+    const porA = {}; V.invalidos.forEach(l=>{ const u = quien(l.u); const b = porA[u] = porA[u] || { n:0 }; b.n++; b[l.causa] = (b[l.causa]||0)+1; });
+    const filas = orden(porA).map(u=>`<tr><td class="name">${nomQ(u)}</td>${SLA_CAUSAS_INVALIDO.map(c=>`<td>${porA[u][c]||"·"}</td>`).join("")}<td><b>${porA[u].n}</b></td></tr>`).join("");
+    const lista = V.invalidos.slice().sort((a,b)=>(b.fecha||0)-(a.fecha||0)).slice(0,30).map(l=>`<tr><td class="lft celda-fuerte">${escAttr(l.n)}</td><td class="lft">${escAttr(name(l.u))}</td><td class="lft">${escAttr(l.causa)}</td><td class="lft">${escAttr(l.evid)}</td><td class="lft">${escAttr(l.canal||"—")}</td><td class="lft">${escAttr(l.camp||"(sin campaña)")}</td><td class="lft">${fecha(l.fecha)}</td></tr>`).join("");
+    html += `<h3 class="h-sec">Leads inválidos (fuera de la nota) · ${V.invalidos.length}</h3>
+      <div class="table-scroll mb-sec"><table class="cons">
+        <tr><th class="lft">Asesor</th>${SLA_CAUSAS_INVALIDO.map(c=>`<th>${escAttr(c)}</th>`).join("")}<th>Total</th></tr>
+        ${filas || `<tr><td colspan="${SLA_CAUSAS_INVALIDO.length+2}" class="lft txt-nota">Ningún lead inválido en el rango.</td></tr>`}
+      </table></div>
+      ${lista ? `<div class="table-scroll mb-sec"><table class="rep"><thead><tr><th class="lft">Lead</th><th class="lft">Asesor</th><th class="lft">Causa</th><th class="lft">Evidencia</th><th class="lft">Fuente</th><th class="lft">Campaña</th><th class="lft">Descalificado</th></tr></thead><tbody>${lista}</tbody></table></div>${V.invalidos.length>30?`<p class="hint">…y ${V.invalidos.length-30} más.</p>`:""}` : ""}
+      <p class="hint" style="margin-top:-10px">Causa del grupo inválido con evidencia capturada (R-01): salen de TODAS las métricas del asesor desde el alta del lead — velocidad, cadencia, cierre de ciclo, tareas, actividad efectiva, contacto efectivo y todo conteo. Nunca suman ni restan. Marketing los ve por fuente y campaña en <b>Calidad de Leads</b>.</p>`;
+  }
+  // R-03 · Error de asignación
+  {
+    const porA = {}; V.brokers.forEach(l=>{ const u = quien(l.u); (porA[u] = porA[u] || { n:0 }).n++; });
+    const lista = V.brokers.slice(0,30).map(l=>`<tr><td class="lft celda-fuerte">${escAttr(l.n)}</td><td class="lft">${escAttr(name(l.u))}</td><td class="lft">${escAttr(l.por)}</td><td class="lft">${fecha(Date.parse(l.c))}</td></tr>`).join("");
+    html += `<h3 class="h-sec">Error de asignación · ${V.brokers.length}</h3>
+      ${V.brokers.length ? `<div class="crm-tables mb-sec">
+        <div class="table-scroll" style="border:none;box-shadow:none"><table class="cons"><tr><th class="lft">Asesor</th><th>Brokers asignados</th></tr>
+          ${orden(porA).map(u=>`<tr><td class="name">${nomQ(u)}</td><td><b>${porA[u].n}</b></td></tr>`).join("")}</table></div>
+        <div class="table-scroll" style="border:none;box-shadow:none"><table class="rep"><thead><tr><th class="lft">Lead</th><th class="lft">Asesor</th><th class="lft">Detectado por</th><th class="lft">Alta</th></tr></thead><tbody>${lista}</tbody></table></div>
+      </div>` : `<p class="hint">Ningún broker asignado a un asesor en el rango.</p>`}
+      <p class="hint" style="margin-top:-10px">Contactos con la etiqueta <b>broker</b> o con una oportunidad en <b>Brokers — Expansión y activación</b> (R-03): volumen a corregir en la entrada del CRM. Salen de la nota en los dos sentidos, igual que un lead inválido.</p>`;
+  }
+  // R-02 · Descalificaciones revertidas
+  {
+    const porA = {}; V.revertidas.forEach(x=>{ const u = x.asesorU ? quien(x.asesorU) : "__sin"; (porA[u] = porA[u] || { n:0 }).n++; });
+    const lista = V.revertidas.slice().sort((a,b)=>(b.fecha||0)-(a.fecha||0)).map(x=>`<tr><td class="lft celda-fuerte">${escAttr(x.n)}</td><td class="lft">${x.asesorU?escAttr(name(x.asesorU)):`<span class="txt-nota">${escAttr(x.asesorTxt||"(campo vacío)")}</span>`}</td><td class="lft">${escAttr(x.causa||"(sin causa)")}</td><td class="lft">${escAttr(x.evid||"(sin evidencia)")}</td><td class="lft">${fecha(x.fecha)}</td></tr>`).join("");
+    html += `<h3 class="h-sec">Descalificaciones revertidas · ${V.revertidas.length}</h3>
+      ${V.revertidas.length ? `<div class="crm-tables mb-sec">
+        <div class="table-scroll" style="border:none;box-shadow:none"><table class="cons"><tr><th class="lft">Asesor que descalificó</th><th>Revertidas</th></tr>
+          ${Object.keys(porA).sort((a,b)=>porA[b].n-porA[a].n).map(u=>`<tr><td class="name">${u==="__sin"?"(no se pudo leer el asesor)":nomQ(u)}</td><td><b>${porA[u].n}</b></td></tr>`).join("")}</table></div>
+        <div class="table-scroll" style="border:none;box-shadow:none"><table class="rep"><thead><tr><th class="lft">Lead</th><th class="lft">Asesor que descalificó</th><th class="lft">Causa</th><th class="lft">Evidencia</th><th class="lft">Fecha</th></tr></thead><tbody>${lista}</tbody></table></div>
+      </div>` : `<p class="hint">Ninguna descalificación revertida en el periodo.</p>`}
+      <p class="hint" style="margin-top:-10px">Etiqueta <b>descalificacion injustificada</b> (R-02): la oportunidad pasó 24 h en Descalificado sin causa o evidencia. Se cuenta para el <b>asesor que la descalificó</b>, en el periodo de su fecha de entrada a Descalificado. Es un lead real: lo que el asesor hizo antes sigue en su nota; ahora está en Rescate, fuera del equipo de ventas, y no se califica. No es una sexta sub-nota.</p>`;
+  }
+  // R-05 · Excepciones "sin llamada": tasa por asesor vs. equipo, sin evidencia y pendientes
+  {
+    const porA = {}, T = { n:0, nci:0, ncm:0 };
+    leads.forEach(l=>{
+      const u = l.uNota && rosterIds.has(l.uNota) ? l.uNota : l.u; if(!rosterIds.has(u)) return;
+      const b = porA[u] = porA[u] || { n:0, nci:0, ncm:0 }; b.n++; T.n++;
+      (l.nc||[]).forEach(x=>{ b[x.k]++; T[x.k]++; });
+    });
+    const pctT = { nci: T.n ? T.nci*100/T.n : 0, ncm: T.n ? T.ncm*100/T.n : 0 };
+    // Alerta roja: más del doble del promedio del equipo. Con muestra chica no hay alerta,
+    // igual que no hay nota (SLA_MIN_N).
+    const celda = (b,k)=>{ const p = b.n ? b[k]*100/b.n : 0, alerta = b.n >= SLA_MIN_N && b[k] > 0 && p > 2*pctT[k];
+      return `<td class="pct" style="${alerta?"color:var(--rojo);font-weight:700":""}"${alerta?` title="Más del doble del promedio del equipo (${pctT[k].toFixed(1)}%)"`:""}>${b[k]?`${p.toFixed(1)}% <span class="lq-sub">(${b[k]} de ${b.n})</span>`:"·"}${alerta?" ⚠":""}</td>`; };
+    const filas = Object.keys(porA).sort((a,b)=>porA[b].n-porA[a].n).map(u=>`<tr><td class="name">${escAttr(name(u))}</td><td>${porA[u].n}</td>${celda(porA[u],"nci")}${celda(porA[u],"ncm")}</tr>`).join("");
+    const conTag = leads.flatMap(l=>(l.nc||[]).map(x=>({ l, x })));
+    const fila = ({l,x})=>`<tr><td class="lft celda-fuerte">${escAttr(l.n)}</td><td class="lft">${escAttr(name(l.uNota||l.u))}</td><td class="lft">${escAttr(SLA_V11_TAGS[x.k])}</td><td class="lft">${fecha(x.desde)}${x.fuera?` <span class="lq-sub">· retirada ${fecha(x.fuera)}</span>`:""}</td><td class="lft">${escAttr(x.falta)}</td></tr>`;
+    const sinEv = conTag.filter(({x})=>x.estado==="sin"), pend = conTag.filter(({x})=>x.estado==="pendiente");
+    const tabla = (arr, col)=> `<div class="table-scroll mb-sec"><table class="rep"><thead><tr><th class="lft">Lead</th><th class="lft">Asesor</th><th class="lft">Etiqueta</th><th class="lft">Fecha de la etiqueta</th><th class="lft">${col}</th></tr></thead><tbody>${arr.slice(0,40).map(fila).join("")}</tbody></table></div>${arr.length>40?`<p class="hint">…y ${arr.length-40} más.</p>`:""}`;
+    html += `<h3 class="h-sec">Excepciones sin llamada</h3>
+      <div class="table-scroll mb-sec"><table class="cons">
+        <tr><th class="lft">Leads sin llamada — % del asesor vs. promedio del equipo</th><th>Leads</th><th>${escAttr(SLA_V11_TAGS.nci)}</th><th>${escAttr(SLA_V11_TAGS.ncm)}</th></tr>
+        ${filas || `<tr><td colspan="4" class="lft txt-nota">Sin leads de asesores del roster en el rango.</td></tr>`}
+        ${filas ? `<tr class="total"><td class="lft">Promedio del equipo</td><td>${T.n}</td><td class="pct">${pctT.nci.toFixed(1)}%</td><td class="pct">${pctT.ncm.toFixed(1)}%</td></tr>` : ""}
+      </table></div>
+      <p class="hint" style="margin-top:-10px">% de los leads del asesor en el periodo que traen cada etiqueta, sin inválidos ni errores de asignación en la base. En rojo ⚠: más del doble del promedio del equipo (sin alerta con menos de ${SLA_MIN_N} leads). Una etiqueta válida quita las llamadas de la escalera mientras está puesta; al retirarla, los pasos siguientes vuelven a pedirlas.</p>
+      <h3 class="h-sec">Etiquetas sin evidencia · ${sinEv.length}</h3>
+      ${sinEv.length ? tabla(sinEv, "Qué falta") : `<p class="hint">Ninguna: toda etiqueta "sin llamada" del rango trae su evidencia.</p>`}
+      <p class="hint" style="margin-top:-10px">La excepción no se aplica: la escalera sigue pidiendo llamadas. <b>${escAttr(SLA_V11_TAGS.nci)}</b> necesita ≥2 intentos de llamada del asesor que no conectaron, en ≥2 días distintos; <b>${escAttr(SLA_V11_TAGS.ncm)}</b>, un mensaje entrante del lead o una llamada de ≥90 s — siempre antes de la fecha de la etiqueta.</p>
+      <h3 class="h-sec">Pendiente de validación · ${pend.length}</h3>
+      ${pend.length ? tabla(pend, "Por qué") : `<p class="hint">Ninguna.</p>`}
+      <p class="hint" style="margin-top:-10px">${SLA_C20_CERRADO ? "C-20 cerrado: la telefonía ya distingue llamadas conectadas y estas etiquetas se validan completas." : `<b>${escAttr(SLA_V11_TAGS.nci)}</b> con los intentos y los días completos, pero la telefonía del CRM todavía lee 0% de llamadas conectadas (C-20): no se puede confirmar que los intentos no conectaron. La excepción se aplica provisionalmente y la lista queda para revisión de Dirección Comercial. Mientras C-20 siga abierto, una nota con esta entrada rota es diagnóstica y no se usa en una evaluación formal (decisión del 2-sep).`}</p>`;
+  }
+  return html;
+}
+
 function slaAsesorSection(agg, leadsIn){
   const name = (u)=> agg.users[u] || (u ? "(sin nombre)" : "(sin asesor)");
   const universo = leadsIn || agg.leads;
@@ -5184,7 +5482,16 @@ function slaAsesorSection(agg, leadsIn){
   // desaparecían del problema en vez de señalarse.
   const rosterIds = slaRosterIds(agg.users);
   const groups = {}; const fuera = [];
-  universo.forEach(l=>{ if(rosterIds.has(l.u)) (groups[l.u]=groups[l.u]||[]).push(l); else fuera.push(l); });
+  // R-02 (v1.1): una descalificación revertida se califica con quien la descalificó (uNota),
+  // medida hasta esa fecha; como volumen sigue con su dueño actual (Rescate), fuera del equipo.
+  universo.forEach(l=>{
+    const uN = l.uNota || l.u;
+    if(rosterIds.has(uN)) (groups[uN]=groups[uN]||[]).push(l);
+    if(!rosterIds.has(l.u)) fuera.push(l);
+  });
+  const v11 = agg.v11 || null;
+  const revDe = (u)=> v11 ? (v11.revertidas||[]).filter(x=>x.asesorU===u) : [];
+  const enRescate = fuera.filter(l=>l.uNota && rosterIds.has(l.uNota)).length;
   // Un asesor del roster sin leads aparece en cero, no desaparece.
   rosterIds.forEach(u=>{ groups[u] = groups[u] || []; });
   // Umbrales del periodo del reporte (spec v1.2): los del juego vigente en su último día.
@@ -5223,7 +5530,7 @@ function slaAsesorSection(agg, leadsIn){
   }).join("")
   // Todo dueño fuera del roster, en UNA línea: volumen a corregir, jamás calificado.
   + (fuera.length ? `<tr style="background:var(--crema)"><td class="name">Fuera del equipo de ventas <span class="lq-sub">(${[...new Set(fuera.map(l=>name(l.u)))].slice(0,6).map(escAttr).join(", ")})</span></td>
-      <td><b>${fuera.length}</b></td><td colspan="${SLA_DIMS.length+3}" class="lft txt-nota">No se califica. Son leads asignados a alguien que no vende: volumen a corregir reasignándolos a un asesor del roster.</td></tr>` : "");
+      <td><b>${fuera.length}</b></td><td colspan="${SLA_DIMS.length+3}" class="lft txt-nota">No se califica. Son leads asignados a alguien que no vende: volumen a corregir reasignándolos a un asesor del roster.${enRescate?` Incluye <b>${enRescate}</b> descalificación${enRescate===1?"":"es"} revertida${enRescate===1?"":"s"}, hoy en Rescate: lo que su asesor original hizo antes de descalificarla${enRescate===1?"":"s"} cuenta en su nota.`:""}</td></tr>` : "");
 
   // Selector de asesor: abre en todo el equipo (así se ve quién se está quedando
   // atrás) y al elegir a uno se despliega su ficha debajo de la tabla.
@@ -5252,7 +5559,7 @@ function slaAsesorSection(agg, leadsIn){
     html += `<p class="hint pegada">Elige un asesor arriba —o haz clic en su fila— para ver su ficha: sus tiempos, sus cinco sub-notas y de dónde sale cada una.</p>`;
   }
   html += fichas.map(r=>{
-    const c=r.c;
+    const c=r.c, rev = revDe(r.u);
     const col=(v)=> v==null?"#9aa39d":v===5?"var(--verde-prof)":v===4?"#5aa08f":v===3?"var(--cobre)":v===2?"#c9743a":"var(--rojo)";
     const bars = SLA_DIMS.map(d=>{
       const v=c.sub[d.key], pc=c.pcts[d.key], nd=c.cnt ? c.cnt[d.key] : null;
@@ -5268,10 +5575,14 @@ function slaAsesorSection(agg, leadsIn){
       <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px">
         <h4 style="margin:0">${escAttr(name(r.u))}</h4>
         ${c.small?'<span class="tag-sm">muestra pequeña — interpretar con cautela</span>':''}
-        <span style="margin-left:auto;font-size:var(--fs-s);color:var(--neutro)">Nota global ${c.small?`<span class="tag-sm">sin muestra suficiente</span>`:`<b style="font-size:var(--fs-xl);color:var(--verde-prof)">${c.global==null?"—":c.global.toFixed(1)}</b>/5`}</span>
+        <span style="margin-left:auto;font-size:var(--fs-s);color:var(--neutro)">${v11?`<span class="${rev.length?"tag-dn":"tag-sm"}" title="Leads que descalificó y que el CRM marcó como descalificacion injustificada (24 h en Descalificado sin causa o evidencia), por fecha de descalificación. No es una sexta sub-nota.">Descalificaciones revertidas: ${rev.length}</span> · `:""}Nota global ${c.small?`<span class="tag-sm">sin muestra suficiente</span>`:`<b style="font-size:var(--fs-xl);color:var(--verde-prof)">${c.global==null?"—":c.global.toFixed(1)}</b>/5`}</span>
       </div>
       <div class="lq-sub" style="margin-bottom:10px">N = ${c.N} leads · oportunidades creadas: ${c.opp} · leads con oportunidad: ${c.leadsConOpp} de ${c.leadsTot} (${Math.round(c.oppRate)}%) · citas: ${c.showed}/${c.citas} asistidas · agendamiento: ${c.agend.de?`${c.agend.con} de ${c.agend.de} efectivos (${Math.round(c.agend.con/c.agend.de*100)}%)`:"—"} · índice de calidad: ${c.q5==null?"— (sin leads calificados en el CRM)":c.q5.toFixed(1)+"/5"} · break up: ${c.desc?`${c.bk} de ${c.desc} descalificados`:"N/A (sin descalificados)"} · tareas: ${c.tk.leidas?`${c.tk.prog} programadas · ${c.tk.enFecha} en fecha · ${c.tk.venc} vencidas abiertas`:"sin datos de tareas"}</div>
+      ${v11 ? `<div class="lq-sub" style="margin:-4px 0 10px"><b>Fuera de horario atendidos antes de las 11:00:</b> ${c.fh.de ? `${c.fh.ok} de ${c.fh.de} (${(c.fh.ok*100/c.fh.de).toFixed(1)}%)` : "ninguno en el rango"}</div>` : ""}
       ${bars}
+      ${rev.length ? `<details style="margin:8px 0"><summary class="lq-sub" style="cursor:pointer;font-weight:700">Descalificaciones revertidas · ${rev.length}</summary>
+        <div class="table-scroll" style="margin-top:6px"><table class="cons"><tr><th class="lft">Lead</th><th class="lft">Causa</th><th class="lft">Evidencia</th><th class="lft">Fecha</th></tr>
+        ${rev.map(x=>`<tr><td class="lft celda-fuerte">${escAttr(x.n)}</td><td class="lft">${escAttr(x.causa||"(sin causa)")}</td><td class="lft">${escAttr(x.evid||"(sin evidencia)")}</td><td class="lft">${x.fecha?fmtDate(new Date(x.fecha-LQ_TZ_MS)):"—"}</td></tr>`).join("")}</table></div></details>` : ""}
       <div style="font-size:var(--fs-s);font-weight:600;color:var(--neutro);margin:12px 0 4px">Distribución de velocidad de primer contacto</div>
       <div class="lq-qbar">${dist.map(([k,,cl])=>`<span style="width:${c.pcts[k]}%;background:${cl}"></span>`).join("")}</div>
       <div class="lq-legend-dots">${dist.map(([k,lbl,cl])=>`<span><i style="background:${cl};display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px"></i>${lbl} ${pct1(c.pcts[k])}</span>`).join("")}</div>
@@ -5285,21 +5596,31 @@ function slaAsesorSection(agg, leadsIn){
   // Ventana y población de CADA sub-nota, junto a sus umbrales (spec C3): con esto un
   // denominador de reemplazo o una ventana desfasada no pueden volver a esconderse.
   html += `<div class="lq-meth"><b>Rúbrica</b> — cada sub-nota sale del % del criterio contra sus umbrales (≥ para 2 / 3 / 4 / 5; el límite inferior cuenta: exactamente 20.0% ya es un 2). Se califica sobre el % sin redondear y se muestra a un decimal. Ventana: el rango de semanas seleccionado${per.ini?` (${escAttr(slaFechaCorta(per.ini))} → ${escAttr(slaFechaCorta(per.fin))})`:""}. Población: los leads del asesor con datos de conversación legibles, salvo donde se indica.
-    <br><b>Velocidad de primer contacto:</b> ${slaThrTxt(rub.vel.thr)} — leads con 1er toque manual en ≤5 minutos, desde la entrada del lead (o su traspaso a ventas), sobre todos sus leads del periodo; ${rub.vel.thr[3]}% o más es un 5. ${slaHistorialTxt("vel", rub)} Pendiente el calendario de horario de atención para los leads fuera de horario (spec B2-3).
+    <br><b>Velocidad de primer contacto:</b> ${slaThrTxt(rub.vel.thr)} — ${v11
+      ? `leads que cumplieron su SLA de 1er toque manual, en cualquier canal, desde la entrada del lead (o su traspaso a ventas): <b>5 minutos</b> si entró en horario de atención (09:00–18:59, ${escAttr(slaDiasTxt(v11.horario.dias))}), <b>antes de las 11:00</b> del siguiente día de servicio si entró fuera de horario (R-04). Sin excepción si el asesor estaba en un Zoom o un tour: eso lo resuelve la rotación del CRM (R-07)`
+      : `leads con 1er toque manual en ≤5 minutos, desde la entrada del lead (o su traspaso a ventas), las 24 horas (reglas anteriores al ${escAttr(slaFechaCorta(SLA_V11_DESDE))})`}, sobre todos sus leads del periodo; ${rub.vel.thr[3]}% o más es un 5. ${slaHistorialTxt("vel", rub)}
     <br><b>Cadencia / seguimiento:</b> ${slaThrTxt(rub.cad.thr)} — leads con ≥3 días distintos de contacto manual en sus primeros 10 días. ${slaHistorialTxt("cad", rub)}
-    <br><b>Cierre de ciclo:</b> ${slaThrTxt(rub.cierre.thr)} — de los leads DESCALIFICADOS del asesor, cuántos recibieron la escalera completa antes de retirarse. Sin descalificados: N/A. Nunca un denominador de reemplazo. ${slaHistorialTxt("cierre", rub)}
+    <br><b>Cierre de ciclo:</b> ${slaThrTxt(rub.cierre.thr)} — de los leads DESCALIFICADOS del asesor, cuántos recibieron la escalera completa antes de retirarse. Sin descalificados: N/A. Nunca un denominador de reemplazo.${v11?` Con una excepción "sin llamada" válida o pendiente de validación, cada paso se completa con 1 mensaje + 1 email mientras la etiqueta está puesta, y "sin respuesta" se cuenta desde la fecha de la etiqueta (R-05).`:""} ${slaHistorialTxt("cierre", rub)}
     <br><b>Cumplimiento de tareas:</b> ${slaThrTxt(rub.tareas.thr)} — tareas del CRM cerradas en o antes de su fecha, sobre las programadas. Sustituye a "Seguimiento a futuro" (sus campos no existen en GHL). El % nunca se lee sin sus tres cifras: programadas, en fecha y vencidas abiertas — un % alto con pocas tareas premia programar menos. Umbrales propuestos. ${slaHistorialTxt("tareas", rub)}
     <br><b>Actividad efectiva:</b> ${slaThrTxt(rub.efec.thr)} — mensajes entregados + leídos (y llamadas conectadas) ÷ enviados, de las acciones manuales del asesor. ${slaHistorialTxt("efec", rub)}
+    ${v11?`<br><b>Qué leads cuentan (spec v1.1):</b> los <b>leads inválidos</b> y los <b>errores de asignación</b> (brokers) salen del numerador y del denominador de todas las sub-notas desde su alta: no cuentan ni a favor ni en contra (R-01, R-03). Un <b>lead real descartado</b> se mide hasta su entrada a Descalificado; nada posterior cuenta. Una <b>descalificación revertida</b> cuenta para quien la descalificó, hasta esa fecha (R-02). <b>Contacto efectivo</b> = respuesta del lead o llamada de ≥90 s; una acción manual sola nunca lo es (R-06).`:""}
     <br>Los umbrales tienen fecha de vigencia y se consultan en <b>Metas → Rúbrica de desempeño</b>: un periodo se califica con los vigentes en su último día, y el reporte nunca los cambia por su cuenta.
     <br>Escala: 5 Excelente · 4 Bueno · 3 Adecuado · 2 Necesita mejorar · 1 Crítico. La nota global es el promedio simple de las sub-notas, todas con el mismo peso. Con menos de ${SLA_MIN_N} leads no se emite nota: "sin muestra suficiente".
     <br><b>Índice de calidad (1-5)</b> = 1 + 4 × [(SQL Selvadentro×4 + SQL×3 + MQL×2 + CQL×1) ÷ (4 × total calificado)], con la <b>calificación por reglas</b> de Calidad de Leads (etapa del pipeline, oportunidades, citas, respuesta, formulario; la etapa manda). Antes se leía el campo manual "Calificación del lead" del CRM, que el equipo dejó de llenar desde la semana 33 de 2026 (hoy lo traen ${agg.califCrm||0} de ${(agg.leads||[]).length} leads del rango), y el índice salía en blanco para todos. Los leads nuevos sin ninguna señal no entran. En blanco = el asesor no tiene leads con señal.
     <br><b>Resultado ajustado</b> compara el percentil de la tasa de oportunidades del asesor (leads con oportunidad ÷ sus leads) contra el percentil de la calidad de lead que recibió, entre asesores comparables: separa el mérito del proceso de la suerte en la asignación. En una evaluación, la conversación empieza aquí.
-    <br><b>Pendiente:</b> la causa de descalificación necesita el campo de motivo (spec B2-8) para distinguir mala calidad de mala gestión.</div>`;
+    ${v11 ? `<br><b>Causa de descalificación</b> (spec v1.1): separa la mala calidad de lead (inválidos, fuera de la nota) de la mala gestión (lead real descartado o descalificación revertida).` : `<br><b>Pendiente:</b> la causa de descalificación necesita el campo de motivo (spec B2-8) para distinguir mala calidad de mala gestión.`}</div>`;
   return html;
 }
 
-function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr, pipesArr){
+// ext (spec v1.1, opcional): { oppFields, oppFieldsOk, ncState, tagged, taggedOk, now }
+function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr, pipesArr, ext){
   const rangoSet = new Set(rango);
+  // Reglas de medición del periodo: las de la spec v1.1 si el periodo toca el 1-oct-2026.
+  const per = slaPeriodoDe(rango), v11 = slaV11(per), X = ext || {}, now = X.now || Date.now();
+  const C11 = slaCamposV11(fieldsArr, X.oppFields);
+  const disp = v11 ? slaDisposiciones([...(contactsArr||[]), ...(X.tagged||[])], oppsArr, usersMap, pipesArr, C11, now) : {};
+  const H11 = slaHorarioV11();
+  const fueraDeTodo = (id)=> !!(disp[id] && (disp[id].tipo==="broker" || disp[id].tipo==="invalido"));
   // Campos de GHL usados por la rúbrica, detectados por nombre
   const find = (re)=>{ const f=(fieldsArr||[]).find(x=>re.test(x.name||"")||re.test(x.key||"")); return f?{id:f.id,name:f.name}:null; };
   const F = { calif: find(/calificaci[oó]n.*lead|lead.*calificaci[oó]n/i) || find(/calificaci[oó]n/i),
@@ -5351,9 +5672,15 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
   // y cada porcentaje construido sobre ella. Se cuenta cuántos salieron y se declara.
   const esTest = (c)=> RX_REGISTRO_PRUEBA.test(String(c.n||""));
   const testExcl = contactsArr.filter(esTest).length;
-  const leads = contactsArr.filter(c=>!esTest(c) && !esExpansion(c.id)).map(c=>{
+  // v1.1 (R-01/R-03): brokers e inválidos salen de TODO desde su alta, en los dos sentidos.
+  // Antes (reglas v1.0) solo salían los leads cuyas oportunidades vivían TODAS en Expansión.
+  const excluir = (c)=> v11 ? fueraDeTodo(c.id) : esExpansion(c.id);
+  const leads = contactsArr.filter(c=>!esTest(c) && !excluir(c)).map(c=>{
     const wk = lqWeekOf(c.c); if(!wk || !rangoSet.has(wk)) return null;
     const sw = sweepMap[c.id] || {sin:true};
+    const dp = disp[c.id] || null;
+    // Contacto efectivo (R-06): respuesta del lead o llamada ≥90 s; antes, solo la respuesta.
+    const fiEf = v11 && sw.fe !== undefined ? sw.fe : sw.fi;
     const cf = (f)=> f && c.cf ? String(c.cf[f.id]||"").trim() : "";
     const cp = ctPipe[c.id] || null;
     const alta = new Date(c.c).getTime();
@@ -5364,7 +5691,30 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
     // El Anexo 1 define el SLA de primera respuesta contra el CONTACTO EFECTIVO
     // (el lead respondió), no contra el intento. Se miden los dos por separado.
     const slaAt = (sw.foM && sw.foM>=created) ? sw.foM-created : null;  // hasta el 1er intento MANUAL
-    const slaEf = (sw.fi && sw.fi>=created) ? sw.fi-created : null;     // hasta la respuesta del lead
+    const slaEf = (fiEf && fiEf>=created) ? fiEf-created : null;        // hasta el contacto efectivo
+    // Velocidad (R-04): en horario, 1er toque manual en ≤5 min; fuera de horario, antes de
+    // las 11:00 del siguiente día de servicio. Con las reglas v1.0, ≤5 min las 24 horas.
+    const vt = v11 ? slaVentanaV11(created, H11) : null;
+    const velOk = !sw.foM ? false : sw.foM < created ? true
+      : vt ? (vt.enHorario ? sw.foM-created <= 5*60000 : sw.foM < vt.limite) : sw.foM-slaReloj(created) <= 5*60000;
+    // Excepciones "sin llamada" (R-05): etiqueta presente, o retirada desde la última vez que
+    // se vio, con su evidencia anterior a la fecha de inicio.
+    const nc = [];
+    if(v11) ["nci","ncm"].forEach(k=>{
+      const tiene = slaTagTiene(c.tags, SLA_V11_TAGS[k]);
+      const e = (X.ncState && X.ncState[c.id] && X.ncState[c.id][k]) || null;
+      if(!tiene && !(e && e.fuera)) return;
+      const desde = slaFechaCampo(C11.ncDesde && c.cf ? c.cf[C11.ncDesde.id] : "") || (e && e.visto) || null;
+      // Sin conversaciones legibles no hay forma de ver la evidencia: la excepción no se
+      // aplica, y la lista lo dice en vez de acusar a la etiqueta de no tener evidencia.
+      const v = (sw.sin || sw.cerr) ? { estado:"sin", falta:"no se pudieron leer sus conversaciones: vuelve a generar el reporte" } : slaValidarSinLlamada(k, sw.nc);
+      nc.push({ k, desde, fuera: tiene ? null : e.fuera, ...v });
+    });
+    // Con la excepción aplicada (válida o pendiente de validación) la escalera no exige
+    // llamadas mientras la etiqueta está puesta; si se retiró y la escalera siguió después,
+    // los pasos siguientes vuelven a pedir llamadas (2 intentos, un paso).
+    const excep = nc.find(x=> x.estado!=="sin" && (!x.fuera || !((sw.lmM||0) > x.fuera) || ((sw.nc && sw.nc.post)||0) >= 2));
+    const sinLlamada = excep ? (excep.desde || created) : 0;
     // ("cita en ≤48h" retirada por la spec D3: la sustituyen tasa de agendamiento y días a la cita)
     const canal = lqSourceCamp({tags:c.tags, src:c.src, attr:c.attr}).fuente;
     // Campaña de origen (spec D5) y pipeline/etapa actual (spec D1/E1)
@@ -5378,7 +5728,14 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
              // porcentaje de desempeño se calcula con él: por eso el "1er toque" salía
              // 100% en todos los asesores —la automatización de bienvenida le escribe a
              // todos los leads— y el número no decía nada del asesor.
-             fo:sw.fo||null, fi:sw.fi||null, lm:sw.lm||null, li:sw.li||null, slaAt, slaEf,
+             fo:sw.fo||null, fi:fiEf||null, lm:sw.lm||null, li:sw.li||null, slaAt, slaEf,
+             velOk, fh: vt ? !vt.enHorario : false,       // fh = entró fuera de horario (R-04)
+             nc: nc.length ? nc : null,
+             // Descalificación según la spec v1.1: tipo, causa, evidencia, fecha y quién.
+             dq: dp ? { tipo: dp.tipo, causa: dp.causa, evid: dp.evid, fecha: dp.fecha, asesorU: dp.asesorU, incompleto: dp.incompleto, fo: dp.fechaOrigen } : null,
+             // R-02: una descalificación revertida cuenta para quien la descalificó, hasta esa fecha
+             uNota: dp && dp.tipo==="revertida" && dp.asesorU ? dp.asesorU : "",
+             cortados: sw.cortados||0,
              foC: sw.foC||null, callsOk: sw.callsOk||0,
              // lmR = último toque REAL: la última acción manual del asesor o la última
              // respuesta del lead. lm (cualquier mensaje) dejaba fuera de la lista de
@@ -5394,7 +5751,7 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
              foM: sw.foM||null, calls: sw.calls||0, chans: sw.chans||[], deliv: sw.deliv||null,
              bucket: (()=>{ const r=slaReloj(created); return slaBucket(sw.foM && sw.foM>=r ? (sw.foM-r)/60000 : (sw.foM ? 0 : null)); })(),
              d10: (sw.days||[]).filter(d=>{ const t=Date.parse(d+"T12:00:00Z"); return t>=created-86400e3 && t<=created+10*86400e3; }).length,
-             breakup: slaBreakup({calls:sw.calls, chans:sw.chans, fi:sw.fi}),
+             breakup: slaBreakup({calls:sw.calls, chans:sw.chans, fi:fiEf, li:sw.li}, sinLlamada),
              // lvCrm = campo manual "Calificación del lead" tal cual. lv se fija más abajo
              // con las reglas de Calidad de Leads, porque el campo manual quedó vacío en el
              // 100% de los leads desde la semana 33 de 2026 y dejaba el Índice de calidad
@@ -5403,7 +5760,9 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
              tags: (c.tags||[]).join(", "), pstage: cp ? cp.s : "",
              pres: cf(F.pres), hor: cf(F.hor),
              o: 0, pr: 0, w: 0, wv: 0, ov: 0, ost: "",
-             razon: F.razon ? String((c.cf && c.cf[F.razon.id]) || "").trim() : null,
+             // v1.1: la razón es la "Causa de descalificación" de la oportunidad; antes, el
+             // campo de contacto "Razón de descarte", que llegaba vacío.
+             razon: v11 && C11.causa ? (dp && dp.causa ? dp.causa : "") : F.razon ? String((c.cf && c.cf[F.razon.id]) || "").trim() : null,
              segSem: F.segSem ? !!(c.cf && c.cf[F.segSem.id]) : null,
              segMes: F.segMes ? !!(c.cf && c.cf[F.segMes.id]) : null,
              opp: 0,
@@ -5431,7 +5790,7 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
   // conserva `reg` (todo registro creado) solo para mostrarlo como contexto.
   const byRepOpp = {};
   for(const o of (oppsArr||[])){
-    if(esPipeExp(o.p)) continue;
+    if(esPipeExp(o.p) || (v11 && fueraDeTodo(o.ct))) continue;
     const wc = lqWeekOf(o.c), ww = o.st==="won" ? lqWeekOf(o.stc) : null;
     const u = o.u || "";
     const b = byRepOpp[u] = byRepOpp[u] || {opp:0, reg:0, won:0, wv:0};
@@ -5446,7 +5805,7 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
   // percentiles del "Resultado ajustado".
   const byCt = {}; leads.forEach(l=>{ l.opp = 0; if(l.id) byCt[l.id] = l; });
   for(const o of (oppsArr||[])){
-    if(!o.ct || esPipeExp(o.p)) continue;
+    if(!o.ct || esPipeExp(o.p) || (v11 && fueraDeTodo(o.ct))) continue;
     const l = byCt[o.ct]; if(!l) continue;
     const wc = lqWeekOf(o.c);
     if(wc && rangoSet.has(wc)) l.opp++;
@@ -5473,7 +5832,44 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
   });
   return { ts:Date.now(), rango, users:usersMap||{}, fields:F, leads, byRepOpp, hrs, dow,
            testExcl, callSt, callDur, call90, callTot, califCrm,
-           exclExpansion, pipelines: pipesArr||[] };
+           exclExpansion: v11 ? 0 : exclExpansion, pipelines: pipesArr||[],
+           v11: v11 ? slaResumenV11({ contactsArr, tagged: X.tagged||[], disp, esTest, rangoSet, per, C11, H11, X, leads }) : null };
+}
+
+// Lo que la pantalla necesita de la spec v1.1, compacto (el agregado vive en el kv, ≤512 KB).
+function slaResumenV11({ contactsArr, tagged, disp, esTest, rangoSet, per, C11, H11, X, leads }){
+  const enRango = (contactsArr||[]).filter(c=>{ const wk = lqWeekOf(c.c); return wk && rangoSet.has(wk) && !esTest(c); });
+  const base = (c)=>({ id:c.id, n:c.n, u:c.u||"", c:c.c, canal: lqSourceCamp({tags:c.tags, src:c.src, attr:c.attr}).fuente, camp: String((c.attr && c.attr.camp) || "").trim() });
+  const invalidos = [], brokers = [];
+  enRango.forEach(c=>{
+    const d = disp[c.id]; if(!d) return;
+    if(d.tipo==="invalido") invalidos.push({ ...base(c), causa:d.causa, evid:d.evid, fecha:d.fecha, asesorU:d.asesorU });
+    else if(d.tipo==="broker") brokers.push({ ...base(c), por:d.brokerPor });
+  });
+  // R-02: el periodo lo fija la fecha de entrada a Descalificado, no el alta del lead, así
+  // que se cuentan también las revertidas de leads que entraron antes del rango.
+  const t0 = per.ini ? Date.parse(per.ini+"T00:00:00"+LQ_TZ) : -Infinity, t1 = per.fin ? Date.parse(per.fin+"T23:59:59.999"+LQ_TZ) : Infinity;
+  const vistos = new Set(), revertidas = [];
+  [...enRango, ...(tagged||[])].forEach(c=>{
+    if(vistos.has(c.id)) return; vistos.add(c.id);
+    const d = disp[c.id]; if(!d || d.tipo!=="revertida" || !slaTagTiene(c.tags, SLA_V11_TAGS.inj)) return;
+    const enUniverso = enRango.some(x=>x.id===c.id);
+    if(d.fecha ? (d.fecha < t0 || d.fecha > t1) : !enUniverso) return;
+    revertidas.push({ id:c.id, n:c.n, u:c.u||"", asesorU:d.asesorU, asesorTxt:d.asesorTxt, causa:d.causa, evid:d.evid, fecha:d.fecha, enUniverso });
+  });
+  const tagsVistos = {}; Object.entries(SLA_V11_TAGS).forEach(([k,t])=>{ tagsVistos[k] = enRango.filter(c=>slaTagTiene(c.tags, t)).length; });
+  return {
+    desde: SLA_V11_DESDE, cruza: !!(per.ini && per.ini < SLA_V11_DESDE),
+    campos: Object.fromEntries(Object.entries(C11).map(([k,f])=>[k, f ? f.name : null])),
+    oppFieldsOk: X.oppFieldsOk !== false, taggedOk: X.taggedOk !== false, taggedTruncado: !!X.taggedTruncado,
+    tagsVistos, invalidos, brokers, revertidas,
+    pendientes: leads.filter(l=>l.dq && l.dq.tipo==="pendiente").length,
+    reales: leads.filter(l=>l.dq && l.dq.tipo==="real").length,
+    incompletos: leads.filter(l=>l.dq && l.dq.tipo==="real" && l.dq.incompleto).length,
+    cortados: leads.reduce((a,l)=>a+(l.cortados||0),0),
+    horario: { dias: H11.dias, guardado: H11.guardado },
+    c20: SLA_C20_CERRADO,
+  };
 }
 
 // Las siete etapas EXCLUIDAS de la regla de >7 días sin toque (spec E1), literales
@@ -5560,7 +5956,8 @@ function slaRender(){
   const pcti = (n,d)=> d ? Math.round(n/d*100)+"%" : "—";
 
   const slasEf = leads.map(l=>l.slaEf).filter(x=>x!=null);   // contacto efectivo (definición del Anexo 1)
-  const slasAt = leads.map(l=>l.slaAt).filter(x=>x!=null);   // primer intento
+  // Mediana del 1er toque manual: con las reglas v1.1, solo leads que entraron en horario (R-04).
+  const slasAt = leads.filter(l=>!(agg.v11 && l.fh)).map(l=>l.slaAt).filter(x=>x!=null);   // primer intento
   const und = (mins)=> slasEf.length ? Math.round(slasEf.filter(x=>x<=mins*60000).length/slasEf.length*100)+"%" : "—";
   const conCitas = leads.filter(l=>!l.ad);        // solo los que sí se pudieron leer
   const apTot = conCitas.reduce((a,l)=>a+l.ap.tot,0), apSh = conCitas.reduce((a,l)=>a+l.ap.sh,0), apNs = conCitas.reduce((a,l)=>a+l.ap.ns,0);
@@ -5572,9 +5969,11 @@ function slaRender(){
   // El aviso de sincronización incompleta va ARRIBA de todo: si faltan conversaciones, la
   // nota de los asesores está subestimada y eso hay que verlo antes que los números.
   let html = bannerIncompleto(agg.fallos, "Generar reporte");
+  const V11 = agg.v11 || null;
+  html += slaBannerV11(agg);
   // Alcance en pantalla (spec D1): una regla, un universo, y las diferencias explicadas.
   html += `<p class="hint" style="margin-top:0"><b>Alcance:</b> todo lead creado en las semanas del rango cuenta, esté en el pipeline que esté — el universo lo define el <b>dueño</b>, no el pipeline.
-    Excluidos: ${agg.exclExpansion||0} lead${(agg.exclExpansion||0)!==1?"s":""} de <b>Brokers Expansión y activación</b> (recluta brokers, no vende a clientes) y ${agg.testExcl||0} registro${(agg.testExcl||0)!==1?"s":""} de prueba.
+    Excluidos: ${V11 ? `${V11.invalidos.length} lead${V11.invalidos.length!==1?"s":""} inválido${V11.invalidos.length!==1?"s":""}, ${V11.brokers.length} error${V11.brokers.length!==1?"es":""} de asignación (brokers)` : `${agg.exclExpansion||0} lead${(agg.exclExpansion||0)!==1?"s":""} de <b>Brokers Expansión y activación</b> (recluta brokers, no vende a clientes)`} y ${agg.testExcl||0} registro${(agg.testExcl||0)!==1?"s":""} de prueba.
     La <b>N</b> del ranking cuenta solo leads con conversaciones legibles; la columna <b>Leads</b> los cuenta todos — la diferencia aparece como "s/d" en cada tabla.</p>`;
   // Filtro por campaña de origen (spec D5)
   {
@@ -5594,7 +5993,8 @@ function slaRender(){
   const kpiND = (n,d,lbl,metaTxt,ok)=>`<div class="crm-kpi"><div class="k-val"${ok!=null?` style="color:${ok?'var(--verde-prof)':'var(--rojo)'}"`:""}>${d?Math.round(n/d*100)+"%":"—"}</div><div class="k-lbl">${lbl}${metaTxt?` · ${metaTxt}`:""}</div><div class="k-lbl" style="opacity:.7">${d?`${n} de ${d}`:""}</div></div>`;
   // 1er toque manual en ≤5 minutos (spec A5): la cifra existía en la ficha y nunca se
   // había promovido a titular. Reloj: desde la entrada del lead (o su traspaso a ventas).
-  const v5n = conDatos.filter(l=>l.bucket==="b5").length;
+  const v5n = conDatos.filter(l=> l.velOk !== undefined ? l.velOk : l.bucket==="b5").length;
+  const fhDe = conDatos.filter(l=>l.fh).length, fhOk = conDatos.filter(l=>l.fh && l.velOk).length;
   // Tasa de agendamiento (spec D3): citas sobre CONTACTADOS EFECTIVOS — no sobre todos
   // los leads, que era medir tasa de respuesta y castigar seis veces de más.
   const agB = conDatos.filter(l=>l.fi && !l.ad);
@@ -5604,14 +6004,16 @@ function slaRender(){
     ${kpi(leads.length.toLocaleString(),"Leads en el rango")}
     ${kpiND(conDatos.filter(l=>l.foM).length,conDatos.length,"Con 1er toque manual del asesor")}
     ${kpiND(conDatos.filter(l=>l.foC).length,conDatos.length,"Con llamada que sí conectó")}
-    ${kpiND(conDatos.filter(l=>l.fi).length,conDatos.length,"Contactados efectivos")}
-    ${kpiND(v5n,conDatos.length,"1er toque manual ≤5 min · desde la entrada del lead","meta 5 min")}
+    ${kpiND(conDatos.filter(l=>l.fi).length,conDatos.length,V11?"Contactados efectivos · respuesta del lead o llamada ≥90 s":"Contactados efectivos")}
+    ${V11 ? kpiND(v5n,conDatos.length,"Cumplieron su SLA de 1er toque manual · 5 min en horario, antes de las 11:00 fuera de horario")
+          : kpiND(v5n,conDatos.length,"1er toque manual ≤5 min · desde la entrada del lead","meta 5 min")}
+    ${V11 ? kpiND(fhOk,fhDe,"Fuera de horario atendidos antes de las 11:00") : ""}
     ${kpi(und(60),"Contacto efectivo ≤60 min (handoff WhatsApp) · desde la entrada")}
     ${kpi(und(15),"Contacto efectivo ≤15 min (transferencia en caliente)")}
     ${kpiND(conDatos.filter(l=>l.slaAt!=null && l.slaAt<=60000).length,conDatos.length,"1er toque manual ≤60 s · SLA del Ejecutivo de Primer Contacto","meta 60 s")}
     ${kpiND(conDatos.filter(l=>l.fo && l.fo>=l.created && (l.fo-l.created)<=60000).length,conDatos.length,"Cualquier salida ≤60 s, automatización incluida · referencia, no mide al equipo")}
     ${kpi(fmtDur(slaMedian(slasEf)),"Med. contacto efectivo · desde la entrada del lead")}
-    ${kpi(fmtDur(slaMedian(slasAt)),"Med. 1er toque manual · desde la entrada del lead")}
+    ${kpi(fmtDur(slaMedian(slasAt)),V11?"Med. 1er toque manual · solo leads que entraron en horario":"Med. 1er toque manual · desde la entrada del lead")}
     ${kpiND(agN,agB.length,"Tasa de agendamiento · citas ÷ contactados efectivos")}
     ${kpi(diasCita==null?"—":(Math.round(diasCita*10)/10)+" d","Días a la cita (mediana, efectivo → fecha de cita) · estándar 1 semana")}
     ${kpiND(apSh,apSh+apNs,"Show rate de citas","meta 75%",(apSh+apNs)?apSh/(apSh+apNs)>=0.75:null)}
@@ -5641,7 +6043,7 @@ function slaRender(){
     const rows = Object.entries(groups).sort((a,b)=>b[1].length-a[1].length).map(([k,arr])=>{
       const cd = arr.filter(l=>!l.sd);
       const ss = arr.map(l=>l.slaEf).filter(x=>x!=null);
-      const sa = arr.map(l=>l.slaAt).filter(x=>x!=null);
+      const sa = arr.filter(l=>!(V11 && l.fh)).map(l=>l.slaAt).filter(x=>x!=null);   // v1.1: solo en horario
       const u15 = ss.length ? Math.round(ss.filter(x=>x<=15*60000).length/ss.length*100)+"%" : "—";
       const u60 = ss.length ? Math.round(ss.filter(x=>x<=60*60000).length/ss.length*100)+"%" : "—";
       // Tasa de agendamiento (spec D3): citas ÷ contactados efectivos con citas legibles.
@@ -5664,7 +6066,7 @@ function slaRender(){
         <th title="Primera acción manual del asesor: su llamada, su WhatsApp, su SMS o su email escrito a mano">1er toque manual</th>
         <th title="Primera llamada del asesor que sí conectó (estatus completed)">Llamada conectada</th>
         <th title="Incluye la automatización de bienvenida: sale ~100% en todos y no mide al asesor" style="color:var(--neutro);font-weight:500">1er msj (autom.)</th>
-        <th>Efectivos</th><th>Med. toque manual</th><th>Med. efectivo</th><th>≤15m</th><th>≤60m</th><th title="Citas ÷ contactados efectivos (spec D3)">Agend.</th><th>Citas</th><th>Show · 75%</th></tr>
+        <th>Efectivos</th><th${V11?' title="Solo leads que entraron en horario de atención (spec v1.1 R-04)"':""}>Med. toque manual</th><th>Med. efectivo</th><th>≤15m</th><th>≤60m</th><th title="Citas ÷ contactados efectivos (spec D3)">Agend.</th><th>Citas</th><th>Show · 75%</th></tr>
       ${rows || `<tr><td colspan="13" class="lft txt-nota">Sin datos.</td></tr>`}
     </table></div>`;
   };
@@ -5675,6 +6077,7 @@ function slaRender(){
     html += `<div class="lq-meth">⚠ <b>${sinCitas}</b> de ${leads.length} leads quedaron <b>sin datos de citas</b> (mismo motivo) y están fuera del conteo de citas y del show rate. No se asume que no tuvieron cita.</div>`;
   }
   html += slaAsesorSection(agg, leads);
+  html += slaSeccionesV11(agg, leads);
   // Tabla de SLA por asesor: mismo criterio del roster (spec A2) — todo dueño fuera
   // del roster de Asesores se agrega en una sola línea de volumen.
   {
@@ -5844,7 +6247,9 @@ function slaRender(){
     // por mala calidad (marketing) o por mala gestión (asesor), y el campo estaba vacío en
     // el 100% de los casos. Aquí se ve, por asesor, cuántos descalificados traen razón.
     {
-      const D = slaDescalificados(leads, slaRosterIds(agg.users), !!(agg.fields && agg.fields.razon));
+      // v1.1: la razón es la "Causa de descalificación" de la oportunidad (R-01).
+      const D = slaDescalificados(leads, slaRosterIds(agg.users), V11 ? !!V11.campos.causa : !!(agg.fields && agg.fields.razon));
+      const campoRazon = V11 ? "Causa de descalificación" : "Razón de descarte";
       const ordenD = Object.keys(D.porA).sort((a,b)=>(a===SLA_FUERA)-(b===SLA_FUERA) || (D.porA[b].n-D.porA[a].n));
       const filasD = ordenD.map(u=>{ const b=D.porA[u]; const p=b.n?Math.round(b.con/b.n*100):null;
         return `<tr><td class="name">${u===SLA_FUERA?"Fuera del equipo de ventas":escAttr(name(u))}</td><td>${b.n}</td><td>${b.con||"·"}</td><td style="${b.n-b.con?"color:var(--rojo);font-weight:700":""}">${(b.n-b.con)||"·"}</td><td class="pct" style="${p==null?"":p===100?"color:var(--verde-prof);font-weight:600":"color:var(--rojo)"}">${p==null?"—":p+"%"}</td></tr>`; }).join("");
@@ -5852,7 +6257,7 @@ function slaRender(){
       html += `<h3 class="h-sec">Descalificados · razón de descarte</h3>
       <div class="crm-kpis">
         ${kpi(D.desc.length.toLocaleString(),"Leads descalificados en el rango (etapa o calificación del CRM)")}
-        ${D.razonMedible ? kpiND(D.con,D.desc.length,"Con razón de descarte capturada","meta 100%",D.desc.length?D.sin===0:null) : kpi("—","El campo \"Razón de descarte\" no existe en el CRM")}
+        ${D.razonMedible ? kpiND(D.con,D.desc.length,`Con ${campoRazon.toLowerCase()} capturada`,"meta 100%",D.desc.length?D.sin===0:null) : kpi("—",`El campo "${campoRazon}" no existe en el CRM`)}
         ${kpi(`<span style="${D.sin?"color:var(--rojo)":""}">${D.sin}</span>`,"Sin razón: no se sabe si fue mala calidad o mala gestión")}
       </div>
       <div class="crm-tables mb-sec">
@@ -5861,11 +6266,13 @@ function slaRender(){
           ${filasD || `<tr><td colspan="5" class="lft txt-nota">Sin descalificados en el rango.</td></tr>`}
         </table></div>
         <div class="table-scroll" style="border:none;box-shadow:none"><table class="cons">
-          <tr><th class="lft">Razón de descarte</th><th>Leads</th><th>%</th></tr>
+          <tr><th class="lft">${campoRazon}</th><th>Leads</th><th>%</th></tr>
           ${topR || `<tr><td colspan="3" class="lft txt-nota">${D.razonMedible?"Ninguna razón capturada en el rango.":"Campo inexistente."}</td></tr>`}
         </table></div>
       </div>
-      <p class="hint" style="margin-top:-10px">La recomendación del reporte de Primera Conexión (21-jul-2026) sigue vigente: hacer <b>obligatoria</b> la razón de descarte en GoHighLevel al mover una oportunidad a "Descalificado". Mientras esté vacía, el "cierre de ciclo" de la rúbrica premia por igual a quien descarta bien y a quien abandona leads buenos.</p>`;
+      <p class="hint" style="margin-top:-10px">${V11
+        ? `Con las reglas v1.1 la causa y la evidencia son obligatorias: una oportunidad que pasa 24 h en Descalificado sin ellas recibe <b>descalificacion injustificada</b> y cuenta como revertida (R-02). Los inválidos no aparecen aquí: salieron de la nota.${V11.incompletos?` <b>${V11.incompletos}</b> descalificado${V11.incompletos===1?"":"s"} sin causa o evidencia desde hace más de 24 h y todavía sin la etiqueta: se mide${V11.incompletos===1?"":"n"} como lead real hasta su descalificación — revisar la automatización del CRM.`:""}`
+        : `La recomendación del reporte de Primera Conexión (21-jul-2026) sigue vigente: hacer <b>obligatoria</b> la razón de descarte en GoHighLevel al mover una oportunidad a "Descalificado". Mientras esté vacía, el "cierre de ciclo" de la rúbrica premia por igual a quien descarta bien y a quien abandona leads buenos.`}</p>`;
     }
   }
 
@@ -5910,17 +6317,20 @@ function slaRender(){
   // Bloque de Definiciones (spec F3): en las palabras de la sección 1 de la spec v1.0.
   // Regla: una métrica no sale a pantalla sin su definición aquí, y cuando una
   // definición cambia, cambia aquí el mismo día.
-  html += `<div class="lq-meth"><b>Definiciones</b> (spec v1.0, sección 1) —
-    <br><b>Universo y población</b> · <b>Universo de leads:</b> todo lead asignado a un asesor del roster, en cualquier pipeline de venta ·
+  html += `<div class="lq-meth"><b>Definiciones</b> (spec v1.0, sección 1; spec v1.1 desde el ${escAttr(slaFechaCorta(SLA_V11_DESDE))}) —
+    <br><b>Universo y población</b> · <b>Universo de leads:</b> todo lead asignado a un asesor del roster, en cualquier pipeline de venta; desde el ${escAttr(slaFechaCorta(SLA_V11_DESDE))} sin <b>leads inválidos</b> (causa del grupo inválido con evidencia) ni <b>errores de asignación</b> (brokers), que salen de numerador y denominador en los dos sentidos ·
+    <b>Lead real descartado:</b> descalificado por No alineado, Ya no interesado o Malinterpretó la campaña; se mide hasta su entrada a Descalificado ·
+    <b>Descalificación revertida:</b> etiqueta descalificacion injustificada; cuenta para quien la descalificó ·
     <b>Fuera del equipo de ventas:</b> una sola línea que agrega los leads de quien no está en el roster de Asesores; volumen a corregir, nunca se califica ·
     <b>Muestra insuficiente:</b> menos de ${SLA_MIN_N} leads en el periodo — no se emite nota ·
     <b>Registros de prueba:</b> excluidos de todo cálculo, con su conteo declarado ·
-    <b>Fuera de horario:</b> pendiente del calendario de horario de atención (spec B2-3).
+    <b>Fuera de horario:</b> desde el ${escAttr(slaFechaCorta(SLA_V11_DESDE))}, lead que entra fuera de 09:00–18:59 hora Tulum o en un día que no es de servicio (${escAttr(slaDiasTxt(slaHorarioV11().dias))}); su SLA de 1er toque es antes de las 11:00 del siguiente día de servicio. Antes, el reloj corría 24/7.
     <br><b>Contacto</b> · <b>1er toque manual:</b> primera acción del asesor en persona — su llamada, su WhatsApp, su SMS o su email escrito a mano.
     <b>No cuenta ninguna automatización</b>: workflows, campañas, envíos masivos ni nada que entre por API. Antes esta columna contaba cualquier
     mensaje saliente y marcaba 100% en todos — la automatización de bienvenida le escribe a todos los leads, así que medía el workflow, no al equipo.
     La columna gris <b>1er msj (autom.)</b> es ese número viejo, ahí para poder comparar ·
-    <b>Contacto efectivo:</b> el lead respondió — hubo conversación; un mensaje entregado no es contacto efectivo ·
+    <b>Contacto efectivo:</b> el lead respondió — hubo conversación —, o desde el ${escAttr(slaFechaCorta(SLA_V11_DESDE))} una llamada de ≥90 s; un mensaje entregado o una acción manual sola no es contacto efectivo ·
+    <b>Excepción sin llamada:</b> etiqueta sin llamada - numero invalido o sin llamada - solo mensaje con su evidencia previa; la escalera pide 1 mensaje + 1 email por paso mientras está puesta ·
     <b>Llamada contestada / conectada:</b> llamada con estatus <i>completed</i> — un intento que cayó a buzón es trabajo, pero no es un contacto. Mide que las líneas funcionan; no califica a nadie ·
     <b>Llamada efectiva:</b> llamada de ≥90 s; el único nivel de llamada que alimenta una nota (pendiente de que el CRM exponga duración) ·
     <b>Med. 1er contacto / Med. efectivo:</b> medianas desde la entrada del lead (o su traspaso a ventas) al primer toque manual y al contacto efectivo.
@@ -5979,26 +6389,15 @@ async function slaSync(){
       contactsArr.push(...res.contacts); cursor = res.searchAfter;
       lbl.textContent=`Trayendo leads del rango… ${contactsArr.length}`;
     }while(cursor);
-    bar.style.width="10%";
-    // Barrido de conversaciones y citas, en lotes de 8
-    const sweepMap={};
-    for(let i=0;i<contactsArr.length;i+=8){
-      if(syncCancelado("sla")){ toast("Reporte cancelado"); return; }
-      const ids = contactsArr.slice(i,i+8).map(c=>c.id);
-      try{
-        const res = await slaFn({action:"sweep", ids});
-        (res.results||[]).forEach(r=>{ sweepMap[r.id]=r; });
-      }catch(e){
-        // Un lote fallido deja a esos leads sin conversaciones, y sin conversaciones se leen
-        // como "nunca los tocó": el asesor baja de nota por un error de red. Se cuenta y se
-        // reporta en el encabezado del reporte en vez de desaparecer.
-        lotesFallidos++; leadsSinBarrer += ids.length;
-      }
-      const done=Math.min(i+8,contactsArr.length);
-      bar.style.width=(10+Math.round(done/Math.max(1,contactsArr.length)*70))+"%";
-      lbl.textContent=`Analizando conversaciones y citas… ${done} de ${contactsArr.length}`;
-    }
-    bar.style.width="84%"; lbl.textContent="Trayendo oportunidades…";
+    bar.style.width="8%";
+    // Asesores, catálogos de campos y etapas, y oportunidades VAN ANTES del barrido: con las
+    // reglas v1.1 la fecha de descalificación de cada lead decide hasta dónde se leen sus
+    // conversaciones (nada posterior cuenta), y eso se le pasa al barrido.
+    lbl.textContent="Resolviendo asesores y campos…";
+    let usersMap={}, fieldsArr=[], pipesArr=[], oppFields=[], oppFieldsOk=true;
+    try{ const u = await slaFn({action:"users"}); usersMap = u.users || {}; fieldsArr = u.fields || []; pipesArr = u.pipelines || []; oppFields = u.oppFields || []; oppFieldsOk = u.oppFieldsOk !== false; }
+    catch(e){ fallos.push("los nombres de los asesores y el catálogo de etapas"); oppFieldsOk = false; }
+    lbl.textContent="Trayendo oportunidades…";
     // Los WON se cuentan por la semana del CIERRE, pero el filtro `since` era la fecha
     // de CREACIÓN desde el inicio del rango: toda venta cerrada en el rango cuya
     // oportunidad empezó antes (lo normal en ciclos de semanas o meses) desaparecía de
@@ -6009,19 +6408,63 @@ async function slaSync(){
       const res = await slaFn({action:"opps", since: String(desdeOpps), ...(oc||{})});
       oppsArr.push(...res.opps); oc = res.cursor;
     }while(oc);
-    bar.style.width="94%"; lbl.textContent="Resolviendo asesores…";
-    let usersMap={};
-    let fieldsArr = [];
-    let pipesArr = [];
-    try{ const u = await slaFn({action:"users"}); usersMap = u.users || {}; fieldsArr = u.fields || []; pipesArr = u.pipelines || []; }
-    catch(e){ fallos.push("los nombres de los asesores y el catálogo de etapas"); }
+    bar.style.width="14%";
+    // Spec v1.1: descalificaciones revertidas de cualquier fecha, etiquetas "sin llamada"
+    // retiradas desde la última sincronización y el corte de cada lead real descartado.
+    const v11 = slaV11(slaPeriodoDe(rango)), ahora = Date.now();
+    let tagged = [], taggedOk = true, taggedTruncado = false, ncState = {};
+    const sweepOpts = {};
+    if(v11){
+      lbl.textContent="Revisando descalificaciones y excepciones…";
+      try{ const t = await slaFn({action:"tagged", tag: SLA_V11_TAGS.inj}); tagged = (t.contacts||[]).filter(c=>slaTagTiene(c.tags, SLA_V11_TAGS.inj)); taggedTruncado = !!t.truncado; }
+      catch(e){ taggedOk = false; fallos.push("las descalificaciones revertidas de leads anteriores al rango (solo se cuentan las del rango)"); }
+      try{ ncState = slaActualizarSinLlamada(await sGet(SLA_NC_KEY), contactsArr, ahora); await sSet(SLA_NC_KEY, ncState); }
+      catch(e){ fallos.push("el registro de etiquetas \"sin llamada\" retiradas"); }
+      const C11 = slaCamposV11(fieldsArr, oppFields);
+      const disp = slaDisposiciones([...contactsArr, ...tagged], oppsArr, usersMap, pipesArr, C11, ahora);
+      contactsArr.forEach(c=>{
+        const d = disp[c.id], o = {};
+        if(d && d.cut && (d.tipo==="real" || d.tipo==="revertida")) o.cut = d.cut;
+        // Evidencia de la excepción: todo lo anterior a su fecha de inicio (la más temprana).
+        const desde = [], fuera = [];
+        ["nci","ncm"].forEach(k=>{
+          const e = ncState[c.id] && ncState[c.id][k];
+          if(!slaTagTiene(c.tags, SLA_V11_TAGS[k]) && !(e && e.fuera)) return;
+          const f = slaFechaCampo(C11.ncDesde && c.cf ? c.cf[C11.ncDesde.id] : "") || (e && e.visto);
+          if(f) desde.push(f); if(e && e.fuera && !slaTagTiene(c.tags, SLA_V11_TAGS[k])) fuera.push(e.fuera);
+        });
+        if(desde.length) o.ncD = Math.min(...desde);
+        if(fuera.length) o.ncR = Math.min(...fuera);
+        if(Object.keys(o).length) sweepOpts[c.id] = o;
+      });
+    }
+    // Barrido de conversaciones y citas, en lotes de 8
+    const sweepMap={};
+    for(let i=0;i<contactsArr.length;i+=8){
+      if(syncCancelado("sla")){ toast("Reporte cancelado"); return; }
+      const ids = contactsArr.slice(i,i+8).map(c=>c.id);
+      const opts = {}; ids.forEach(id=>{ if(sweepOpts[id]) opts[id] = sweepOpts[id]; });
+      try{
+        const res = await slaFn({action:"sweep", ids, ...(Object.keys(opts).length ? { opts } : {})});
+        (res.results||[]).forEach(r=>{ sweepMap[r.id]=r; });
+      }catch(e){
+        // Un lote fallido deja a esos leads sin conversaciones, y sin conversaciones se leen
+        // como "nunca los tocó": el asesor baja de nota por un error de red. Se cuenta y se
+        // reporta en el encabezado del reporte en vez de desaparecer.
+        lotesFallidos++; leadsSinBarrer += ids.length;
+      }
+      const done=Math.min(i+8,contactsArr.length);
+      bar.style.width=(14+Math.round(done/Math.max(1,contactsArr.length)*80))+"%";
+      lbl.textContent=`Analizando conversaciones y citas… ${done} de ${contactsArr.length}`;
+    }
     bar.style.width="100%"; lbl.textContent="Procesando…";
     if(lotesFallidos){
       fallos.push(`las conversaciones y citas de ${leadsSinBarrer} lead${leadsSinBarrer!==1?"s":""} `
         + `(${lotesFallidos} lote${lotesFallidos!==1?"s fallaron":" falló"}) — `
         + `sus asesores salen con menos actividad de la real`);
     }
-    slaState.agg = buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr, pipesArr);
+    slaState.agg = buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr, pipesArr,
+      { oppFields, oppFieldsOk, ncState, tagged, taggedOk, taggedTruncado, now: ahora });
     slaState.agg.fallos = fallos;
     sSet(SLA_AGG_KEY, slaState.agg).catch(e=>toast("Cache del reporte no guardado: "+(e.message||e)));
     slaPopulateWeeks(); slaRender();
@@ -6709,7 +7152,7 @@ const puedeRubrica = ()=> navPermiso("direccion_general");
 const slaDiaAntes = (ymd)=>{ const d = new Date(ymd+"T12:00:00Z"); d.setUTCDate(d.getUTCDate()-1); return d.toISOString().slice(0,10); };
 function renderRubricaMetas(){
   const host = document.getElementById("metas-rubrica"); if(!host) return;
-  const hoy = slaHoyYMD(), puede = puedeRubrica();
+  const hoy = slaHoyYMD(), puede = puedeRubrica(), H = slaHorarioV11();
   const fila = (d)=>{
     const js = slaJuegos(d.key), vig = slaUmbrales(d.key, hoy, hoy);
     const items = js.map((j,i)=>{
@@ -6732,6 +7175,14 @@ function renderRubricaMetas(){
       <tr><th class="lft">Sub-nota</th><th class="lft">Umbrales y vigencia</th></tr>
       ${SLA_DIMS.map(fila).join("")}
     </table></div>
+    <div style="margin:12px 0 4px">
+      <div class="lq-sub" style="font-weight:700;margin-bottom:4px">Horario de atención · Velocidad de primer contacto (spec v1.1, R-04, desde el ${escAttr(slaFechaCorta(SLA_V11_DESDE))})</div>
+      <p class="hint pegada" style="margin:0 0 6px">09:00:00 a 18:59:59, hora Tulum. Un lead que entra en horario tiene <b>5 minutos</b>; uno que entra fuera de horario, hasta <b>antes de las 11:00</b> del siguiente día de servicio. Los días siguen el Manual de etapas y los confirma Dirección Comercial.${H.guardado?"":` <b style="color:var(--cobre)">Hoy rige el valor por defecto (lunes a viernes), sin confirmar.</b>`}${H.por?` <span class="lq-sub">Guardado por ${escAttr(H.por)}${Date.parse(H.en)?` el ${escAttr(slaFechaCorta(new Date(Date.parse(H.en)-LQ_TZ_MS).toISOString().slice(0,10)))}`:""}.</span>`:""}</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        ${[1,2,3,4,5,6,0].map(d=>`<label class="lq-sub" style="display:inline-flex;gap:4px;align-items:center"><input type="checkbox" class="rb-dia" value="${d}"${H.dias.includes(d)?" checked":""}${puede?"":" disabled"}> ${SLA_DIAS_CORTOS[d]}</label>`).join("")}
+        ${puede?`<button class="btn btn-ghost" id="rb-dias-save" type="button" style="padding:4px 12px">Guardar días de servicio</button>`:""}
+      </div>
+    </div>
     ${puede ? `<div style="margin-top:10px">
       <div class="lq-sub" style="font-weight:700;margin-bottom:6px">Programar un cambio de umbrales</div>
       <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px">
@@ -6780,6 +7231,12 @@ function renderRubricaMetas(){
     if(mismo && mismo.desde <= hoy) return estado(`Ya hay un juego que rige desde el ${slaFechaCorta(desde)}; programa el cambio para otra fecha.`, true);
     if(!confirm(`${dim.label}: ${slaThrTxt(thr)} a partir del ${slaFechaCorta(desde)}.\n\nLos periodos que terminen antes de esa fecha conservan su nota.${mismo?`\nReemplaza al cambio ya programado para ese día (${slaThrTxt(mismo.thr)}).`:""}`)) return;
     await guardar(key, js.filter(x=>x.desde!==desde).concat([j]), "Cambio de rúbrica programado ✓");
+  };
+  document.getElementById("rb-dias-save").onclick = async ()=>{
+    const dias = [...host.querySelectorAll(".rb-dia:checked")].map(x=>Number(x.value)).sort();
+    if(!dias.length) return estado("Marca al menos un día de servicio.", true);
+    if(!confirm(`Días de servicio: ${slaDiasTxt(dias)}.\n\nCambia qué leads cuentan como "fuera de horario" en todo periodo desde el ${slaFechaCorta(SLA_V11_DESDE)}.`)) return;
+    await guardar("horario", { dias, por: (SESSION && SESSION.email) || "", en: new Date().toISOString() }, "Días de servicio guardados ✓ — se aplican al volver a generar el reporte de Desempeño");
   };
   host.querySelectorAll(".rb-quitar").forEach(b=>b.onclick = async ()=>{
     const key = b.dataset.rbK, desde = b.dataset.rbDesde, js = slaJuegos(key);
@@ -8123,9 +8580,10 @@ function diagSeccionHorario(){
     : "24/7 — sin ventana laboral";
   const fuera = tot ? Math.round(hrs.reduce((a,n,h)=>a+((h<8||h>20)?n:0),0)/tot*100) : 0;
   return `<h3 class="diag-h">Horario real de trabajo</h3>
-    <p class="hint pegada">Medido de ${tot.toLocaleString()} acciones manuales de los asesores en el rango del último reporte. El reloj del SLA ya no depende de esto: se decidió medir 24/7. Sirve para entender cómo trabaja el equipo.</p>
+    <p class="hint pegada">Medido de ${tot.toLocaleString()} acciones manuales de los asesores en el rango del último reporte. Desde el ${escAttr(slaFechaCorta(SLA_V11_DESDE))} el SLA de primer toque distingue horario de atención (spec v1.1 R-04: 09:00–18:59, ${escAttr(slaDiasTxt(slaHorarioV11().dias))}); esta medición sirve para confirmar los días de servicio con Dirección Comercial.</p>
     <div class="lq-meth">
-      <b>Configurado hoy:</b> ${escAttr(cfg)} — el reloj corre desde que entra el lead, sin perdonar noches ni fines de semana.
+      <b>Reglas anteriores al ${escAttr(slaFechaCorta(SLA_V11_DESDE))}:</b> ${escAttr(cfg)} — el reloj corre desde que entra el lead, sin perdonar noches ni fines de semana.
+      <br><b>Desde el ${escAttr(slaFechaCorta(SLA_V11_DESDE))}:</b> 09:00–18:59, ${escAttr(slaDiasTxt(slaHorarioV11().dias))}${slaHorarioV11().guardado?"":" (valor por defecto, sin confirmar)"} — fuera de horario, antes de las 11:00 del siguiente día de servicio.
       <br><b>Observado:</b> el 90% de la actividad ocurre entre las <b>${ini}:00</b> y las <b>${fin}:59</b>, hora de Tulum.
       <br><b>Fuera de 8:00–20:00:</b> ${fuera}% de las acciones.
       ${fuera >= 15 ? `<br><span style="color:var(--verde-ok-tx)">Con esa actividad nocturna, medir 24/7 es coherente: el equipo sí responde fuera de oficina.</span>`

@@ -61,6 +61,20 @@ function attrOf(c) {
   };
 }
 
+// Valor de un campo personalizado de oportunidad, tolerante a las formas del API de GHL
+// (`fieldValue` o `fieldValueString/Number/Date/Array`).
+function cfMap(list) {
+  const m = {};
+  (Array.isArray(list) ? list : []).forEach((f) => {
+    if (!f || f.id == null) return;
+    let v = f.fieldValue ?? f.fieldValueString ?? f.fieldValueNumber ?? f.fieldValueDate ?? f.fieldValueArray ?? f.value ?? "";
+    if (Array.isArray(v)) v = v.join(", ");
+    else if (v && typeof v === "object") v = JSON.stringify(v);
+    m[f.id] = String(v ?? "");
+  });
+  return m;
+}
+
 const slim = (c) => ({
   id: c.id,
   n: c.contactName || [c.firstName, c.lastName].filter(Boolean).join(" ") || c.email || c.phone || "(sin nombre)",
@@ -78,10 +92,14 @@ const slim = (c) => ({
 });
 
 async function bootstrap() {
-  const [fieldsResp, usersResp, pipesResp] = await Promise.all([
+  const [fieldsResp, usersResp, pipesResp, oppFieldsResp] = await Promise.all([
     ghl(`/locations/${LOCATION_ID}/customFields`).catch(() => null), // scope opcional: degradar sin romper
     ghl(`/users/?locationId=${LOCATION_ID}`).catch(() => null),
     ghl(`/opportunities/pipelines?locationId=${LOCATION_ID}`).catch(() => null),
+    // Campos de OPORTUNIDAD: "Causa de descalificación" y "Evidencia de descalificación"
+    // (Change Spec v1.1 R-01), para ver los leads inválidos por fuente y campaña.
+    ghl(`/locations/${LOCATION_ID}/customFields?model=opportunity`)
+      .catch(() => ghl(`/locations/${LOCATION_ID}/customFields?model=all`).catch(() => null)),
   ]);
   // Mapa etapa → { pipeline, etapa } para mostrar la etapa REAL del CRM en cada lead
   const stages = {};
@@ -97,7 +115,10 @@ async function bootstrap() {
     name: f.name || f.fieldKey || "",
     options: (f.picklistOptions || f.options || []).map((o) => (typeof o === "string" ? o : o?.name || o?.value || "")).filter(Boolean),
   }));
-  return { users, fields, stages, windsor: !!WINDSOR_KEY };
+  const oppFields = ((oppFieldsResp && oppFieldsResp.customFields) || [])
+    .filter((f) => !f.model || f.model === "opportunity")
+    .map((f) => ({ id: f.id, name: f.name || f.fieldKey || "", key: f.fieldKey || "" }));
+  return { users, fields, oppFields, stages, windsor: !!WINDSOR_KEY };
 }
 
 async function leads({ start, end, searchAfter }) {
@@ -169,6 +190,7 @@ async function opps({ startAfter, startAfterId, since }) {
         s: o.pipelineStageId || "",                                        // etapa real del pipeline
         sc: o.lastStageChangeAt || o.lastStatusChangeAt || o.updatedAt || o.createdAt || "",
         ap,
+        cf: cfMap(o.customFields),
       });
     });
     total = (data.meta && data.meta.total) || total;

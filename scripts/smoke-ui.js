@@ -217,6 +217,109 @@ const PORT = process.env.PORT || 8765;
   console.log('[rubrica v1.2] periodos', JSON.stringify(rb.periodos), '· W39 8/20 →', rb.w39_8de20, '· W41 8/20 →', rb.w41_8de20);
   console.log('[rubrica v1.2] pantalla', JSON.stringify(rb.ui), '· guardado', rb.guardado, '· inválido →', rb.invalido);
   if (!rb.ok) hallazgos.push({ vista: 'rubrica:v1.2', rb });
+  // Change Spec v1.1 (Lead Filters, 1-oct-2026): los diez casos de aceptación de la
+  // sección 6, con el código real de la página y datos sintéticos de la semana 5–11 oct.
+  // El corte de actividad posterior a la descalificación (caso 2) vive en el backend y lo
+  // prueba scripts/test-sla-report.js; aquí se comprueba que el corte se le pide.
+  VISTA = 'reglas:v1.1';
+  const v11 = await page.evaluate(() => {
+    const Z = (local) => Date.parse(local + '-05:00');                   // hora Tulum → ms
+    const iso = (t) => new Date(t).toISOString();
+    const users = { u1: 'Daniela Arana', u2: 'Mariano Molina', u3: 'Diana Jiménez', ces: 'César Rescate' };
+    const pipes = [{ id: 'p1', name: 'Seguimiento de ventas', stages: [{ id: 's1', name: 'Contacto establecido' }, { id: 'sD', name: 'Descalificado' }, { id: 'sR', name: 'Rescate' }] },
+                   { id: 'p2', name: 'Brokers — Expansión y activación', stages: [{ id: 'sE', name: 'Nuevo' }] }];
+    const oppFields = [{ id: 'fC', name: 'Causa de descalificación' }, { id: 'fE', name: 'Evidencia de descalificación' }, { id: 'fA', name: 'Asesor que descalificó' }, { id: 'fF', name: 'Fecha de entrada a Descalificado' }];
+    const campos = [{ id: 'fNc', name: 'Sin llamada - fecha de inicio' }];
+    const contactos = [], sweeps = {}, opps = [];
+    const lead = (id, u, local, extra, sw) => {
+      contactos.push(Object.assign({ id, n: 'Lead ' + id, c: iso(Z(local)), src: 'facebook', u, tags: [], attr: {}, cf: {} }, extra || {}));
+      sweeps[id] = Object.assign({ foM: Z(local) + 2 * 60e3, fi: null, fe: null, days: [], calls: 0, chans: ['whatsapp'], deliv: { sent: 1, delivered: 1, read: 0, failed: 0 }, ap: { tot: 0, sh: 0, ns: 0, fut: 0 }, tk: { prog: 0, enFecha: 0, venc: 0 } }, sw || {});
+    };
+    const opp = (ct, u, s, cf, p) => opps.push({ id: 'o-' + ct, ct, u, st: 'open', c: contactos.find(c => c.id === ct).c, p: p || 'p1', s, sc: '', scE: cf && cf.fF || '', cf: cf || {} });
+    // 1 · respuesta ofensiva, descalificado como "Contacto inapropiado / broma" con evidencia
+    lead('inv', 'u1', '2026-10-05T10:00:00', {}, { fi: Z('2026-10-05T11:00:00'), fe: Z('2026-10-05T11:00:00') });
+    opp('inv', 'u1', 'sD', { fC: 'contacto inapropiado/broma ', fE: 'Respondió con insultos', fF: iso(Z('2026-10-05T13:00:00')) });
+    // 2 · lead real "No alineado": se mide hasta su entrada a Descalificado
+    lead('real', 'u1', '2026-10-05T11:00:00', {}, { days: ['2026-10-05', '2026-10-06'] });
+    opp('real', 'u1', 'sD', { fC: 'No alineado', fE: 'Busca renta vacacional', fF: iso(Z('2026-10-06T16:00:00')) });
+    // 3 · 24 h en Descalificado sin causa: el CRM puso la etiqueta y lo pasó a Rescate (César)
+    lead('rev', 'ces', '2026-10-05T12:00:00', { tags: ['descalificacion injustificada'] });
+    opp('rev', 'ces', 'sR', { fA: 'Daniela Arana', fF: iso(Z('2026-10-06T09:00:00')) });
+    // 3b · en Descalificado hace menos de 24 h sin causa: se mide como activo
+    lead('pend', 'u2', '2026-10-11T15:00:00');
+    opp('pend', 'u2', 'sD', { fF: iso(Z('2026-10-12T05:00:00')) });
+    // 4 · etiqueta broker asignada a Daniela; 4b · broker por el pipeline de Expansión
+    lead('brk', 'u1', '2026-10-05T13:00:00', { tags: ['broker'] });
+    lead('brk2', 'u2', '2026-10-05T13:30:00');
+    opp('brk2', 'u2', 'sE', {}, 'p2');
+    // 5 · entra 22:10, primer WhatsApp manual 10:40 del día siguiente
+    lead('noche', 'u2', '2026-10-05T22:10:00', {}, { foM: Z('2026-10-06T10:40:00') });
+    // 6 · entra 18:59, primer toque 19:07
+    lead('tarde', 'u2', '2026-10-05T18:59:00', {}, { foM: Z('2026-10-05T19:07:00') });
+    // 7 · solo mensaje con un WhatsApp previo del lead: pasos con 1 mensaje + 1 email
+    lead('ncm', 'u3', '2026-10-05T10:00:00', { tags: ['sin llamada - solo mensaje'], cf: { fNc: iso(Z('2026-10-06T10:00:00')) } },
+      { fi: Z('2026-10-05T12:00:00'), fe: Z('2026-10-05T12:00:00'), li: Z('2026-10-05T12:00:00'), chans: ['whatsapp', 'email'], nc: { calls: 0, dias: 0, inb: true, c90: false, post: 0 } });
+    // 8 · número inválido con un solo intento fallido
+    lead('nci', 'u3', '2026-10-05T10:30:00', { tags: ['sin llamada - numero invalido'], cf: { fNc: iso(Z('2026-10-06T10:00:00')) } },
+      { calls: 1, chans: ['whatsapp', 'email', 'call'], nc: { calls: 1, dias: 1, inb: false, c90: false, post: 0 } });
+    // (pendiente de validación: número inválido con 2 intentos en 2 días, C-20 abierto)
+    lead('nciP', 'u3', '2026-10-05T11:30:00', { tags: ['sin llamada - numero invalido'], cf: { fNc: iso(Z('2026-10-07T10:00:00')) } },
+      { calls: 2, chans: ['whatsapp', 'email', 'call'], nc: { calls: 2, dias: 2, inb: false, c90: false, post: 0 } });
+    // 9 · Mariano con 3 de 10 leads "solo mensaje" (30%) contra 4 de 30 del equipo (13.3%)
+    for (let i = 0; i < 8; i++) lead('f1' + i, 'u1', `2026-10-0${6 + (i % 3)}T10:${10 + i}:00`);
+    for (let i = 0; i < 7; i++) lead('f2' + i, 'u2', `2026-10-0${6 + (i % 3)}T11:${10 + i}:00`, i < 3 ? { tags: ['sin llamada - solo mensaje'] } : {}, i < 3 ? { nc: { calls: 0, dias: 0, inb: true, c90: false, post: 0 } } : {});
+    for (let i = 0; i < 7; i++) lead('f3' + i, 'u3', `2026-10-0${6 + (i % 3)}T12:${10 + i}:00`);
+    const now = Z('2026-10-12T12:00:00');
+    const ncState = slaActualizarSinLlamada({}, contactos, now);
+    const agg = buildSlaAgg(['2026-W41'], contactos, sweeps, opps, users, campos, pipes, { oppFields, oppFieldsOk: true, ncState, tagged: [], taggedOk: true, now });
+    const C11 = slaCamposV11(campos, oppFields), disp = slaDisposiciones(contactos, opps, users, pipes, C11, now);
+    const L = {}; agg.leads.forEach(l => { L[l.id] = l; });
+    const V = agg.v11, r = {};
+    const advPrev = ADVISOR_LIST, selPrev = slaState.asesor, aggPrev = slaState.agg;
+    ADVISOR_LIST = [{ name: 'Daniela Arana', active: true }, { name: 'Mariano Molina', active: true }, { name: 'Diana Jiménez', active: true }];
+    slaState.asesor = 'u1'; slaState.agg = agg; agg.ts = now;
+    navIr('ventas', 'desempeno'); slaRender();
+    const vista = document.getElementById('view-sla'), txt = vista.innerText, html = vista.innerHTML;
+    r.c1 = !L.inv && V.invalidos.some(x => x.id === 'inv' && x.causa === 'Contacto inapropiado / broma') && agg.leads.filter(l => l.u === 'u1' && l.fi).length === 0;
+    r.c2 = !!(L.real && L.real.dq && L.real.dq.tipo === 'real' && disp.real.cut === Z('2026-10-06T16:00:00'));
+    r.c3 = !!(L.rev && L.rev.uNota === 'u1' && L.rev.u === 'ces' && V.revertidas.some(x => x.id === 'rev' && x.asesorU === 'u1')) && /Descalificaciones revertidas: 1/.test(txt) && /Incluye 1 descalificación revertida, hoy en Rescate/.test(txt);
+    r.c3b = !!(L.pend && L.pend.dq && L.pend.dq.tipo === 'pendiente') && V.pendientes === 1;
+    r.c4 = !L.brk && !L.brk2 && V.brokers.map(x => x.id).sort().join() === 'brk,brk2';
+    r.c5 = !!(L.noche && L.noche.fh && L.noche.velOk) && !agg.leads.filter(l => !l.fh).some(l => l.id === 'noche');
+    r.c6 = !!(L.tarde && !L.tarde.fh && L.tarde.velOk === false);
+    r.c7 = !!(L.ncm && L.ncm.nc && L.ncm.nc[0].estado === 'valida' && L.ncm.breakup === true);
+    r.c8 = !!(L.nci && L.nci.nc[0].estado === 'sin' && L.nci.breakup === false) && /Etiquetas sin evidencia · 1/.test(txt) && /1 intento de llamada fallido más y intentos en 2 días distintos/.test(txt);
+    r.pendVal = !!(L.nciP && L.nciP.nc[0].estado === 'pendiente') && /Pendiente de validación · 1/.test(txt);
+    // 9: la fila de Mariano marca 30.0% con ⚠; la de Diana (1 de 10) no
+    const fila = (nom) => [...vista.querySelectorAll('tr')].find(tr => tr.querySelector('td') && tr.querySelector('td').innerText.trim() === nom && /sin llamada|\(\d+ de \d+\)|·/.test(tr.innerText) && tr.closest('table').innerText.includes('LEADS SIN LLAMADA'));
+    const fM = fila('Mariano Molina'), fD = fila('Diana Jiménez');
+    r.c9 = !!(fM && /30\.0% \(3 de 10\) ⚠/.test(fM.innerText) && fD && !/\(1 de 10\) ⚠/.test(fD.children[3].innerText)) && /Promedio del equipo\s+30\s+6\.7%\s+13\.3%/.test(txt);
+    // 10: ningún % de la pantalla pasa de 100
+    const pcts = (txt.match(/\d+(?:\.\d+)?%/g) || []).map(x => parseFloat(x));
+    r.c10 = pcts.length > 20 && Math.max(...pcts) <= 100;
+    r.maxPct = Math.max(...pcts);
+    r.rotulos = ['Reglas de medición vigentes desde el 1 de octubre de 2026', 'Leads inválidos (fuera de la nota)', 'Error de asignación', 'Descalificaciones revertidas', 'Fuera de horario atendidos antes de las 11:00', 'Etiquetas sin evidencia', 'Pendiente de validación', 'Leads sin llamada — % del asesor vs. promedio del equipo']
+      .filter(t => !txt.toLowerCase().includes(t.toLowerCase()));
+    r.velCampo = /Cumplieron su SLA de 1er toque manual/i.test(txt) && /antes de las 11:00/i.test(txt);
+    // Periodo anterior al 1-oct: reglas viejas, sin exclusiones nuevas ni banner v1.1
+    const aggViejo = buildSlaAgg(['2026-W39'], contactos.map(c => Object.assign({}, c, { c: new Date(Date.parse(c.c) - 14 * 86400e3).toISOString() })), sweeps, opps, users, campos, pipes, { oppFields, ncState, now });
+    r.viejo = aggViejo.v11 === null && aggViejo.leads.some(l => l.id === 'inv') && aggViejo.leads.some(l => l.id === 'brk') && !/Fuera de la nota/.test(slaBannerV11(aggViejo)) && /no se aplican hacia atrás/.test(slaBannerV11(aggViejo));
+    ADVISOR_LIST = advPrev; slaState.asesor = selPrev; slaState.agg = aggPrev;
+    r.ok = r.c1 && r.c2 && r.c3 && r.c3b && r.c4 && r.c5 && r.c6 && r.c7 && r.c8 && r.pendVal && r.c9 && r.c10 && !r.rotulos.length && r.velCampo && r.viejo;
+    return r;
+  });
+  // R-01 del lado de Marketing: Calidad de Leads ve los inválidos por fuente y campaña.
+  const lqInv = await page.evaluate(() => {
+    const a = lqInvalido({ dq: { causa: 'pruebas de marketing', evid: 'Registro de QA' } }, []);
+    const b = lqInvalido({ dq: { causa: 'Pruebas de marketing', evid: 'x' } }, ['descalificacion injustificada']);
+    const c = lqInvalido({ dq: { causa: 'Número equivocado', evid: '' } }, []);
+    const d = lqInvalido({ dq: { causa: 'No alineado', evid: 'x' } }, []);
+    const h = lqBloqueInvalidos([{ fuente: 'Meta', camp: 'INVESTORS_MX', inv: 'Pruebas de marketing' }, { fuente: 'Meta', camp: 'INVESTORS_MX', inv: '' }]);
+    return { ok: a === 'Pruebas de marketing' && b === '' && c === '' && d === '' && /INVESTORS_MX/.test(h) && /50\.0%/.test(h) };
+  });
+  v11.lq = lqInv.ok; if (!lqInv.ok) hallazgos.push({ vista: 'reglas:v1.1:lq', lqInv });
+  console.log('\n[reglas v1.1] aceptación', JSON.stringify(v11));
+  if (!v11.ok) hallazgos.push({ vista: 'reglas:v1.1', v11 });
   // Metas → Rúbrica de desempeño: los dos juegos de Velocidad, con su fecha
   const rbm = await page.evaluate(async () => { navIrLateral('metas'); await new Promise(r => setTimeout(r, 400)); const h = document.getElementById('metas-rubrica'); const t = h ? h.innerText : '';
     return { existe: !!h, viejo: /10 · 20 · 30 · 45%/.test(t), nuevo: /20 · 40 · 60 · 80%/.test(t), fecha: /1-oct-2026/.test(t), form: !!document.getElementById('rb-save') }; });

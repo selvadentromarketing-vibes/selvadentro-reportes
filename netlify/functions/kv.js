@@ -44,7 +44,8 @@ function canalesDeClave(k, op) {
   const m = key.match(/^([a-z_]+):(?:week|rec|metas|last_resp):/);
   if (m && CANALES_VENTAS.includes(m[1])) return [m[1], "direccion_general", "direccion_comercial"];
   if (key.startsWith("crm:agg")) return ["crm_live", "direccion_comercial"];
-  if (key.startsWith("sla:agg")) return ["sla_view", "crm_live", "direccion_comercial"];
+  // sla:agg (el reporte, con nombres) y sla:nocall (etiquetas "sin llamada" retiradas, spec v1.1).
+  if (key.startsWith("sla:")) return ["sla_view", "crm_live", "direccion_comercial"];
   // lq: cubre lq:agg y también lq:ia (el análisis compartido), que antes quedaba sin gate.
   if (key.startsWith("lq:")) return ["mkt_lq", "marketing"];
   // Los datos de Redes Sociales son de su módulo: mkt_lq no pinta nada ahí.

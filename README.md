@@ -24,8 +24,9 @@ Producción: https://team.selvadentrotulum.com (Netlify site: `slvd-reportes`).
   - `lq-analyze` — conclusiones y acciones recomendadas de Calidad de Leads con
     Claude (`claude-opus-5`, esfuerzo bajo para caber en el timeout de Netlify).
   - `sla-report` — proxy a GoHighLevel (contactos, conversaciones, citas,
-    oportunidades, usuarios) para **SLA y Seguimiento** (requiere canal
-    `crm_live`, `direccion_comercial` o admin).
+    oportunidades con sus campos personalizados, usuarios y catálogos de campos de
+    contacto y de oportunidad, contactos por etiqueta) para **Desempeño de Ventas**
+    (requiere canal `crm_live`, `direccion_comercial` o admin).
   - `kpi-analyze` / `notes-analyze` — conclusiones ejecutivas con Claude (requieren sesión).
   - `invite` — alta de usuarios por **liga mágica**: `create` / `relink` (admin, con su token de sesión)
     y `peek` / `claim` (públicas, para que la persona invitada defina su contraseña). No usa
@@ -100,6 +101,11 @@ node scripts/smoke-ui.js       # CHROME_PATH=… para usar otro binario · PORT=
 
 Sale con código 1 si encuentra algo. Los tres "502" en consola son los stubs del backend
 y son esperados. Correrla antes de cada `push` a `main`.
+
+`node scripts/test-sla-report.js` prueba el backend de Desempeño con GoHighLevel
+**simulado** (sin llaves ni red): el corte de actividad en la fecha de descalificación, la
+evidencia de las etiquetas "sin llamada", el contacto efectivo por llamada de ≥90 s y la
+lectura de campos de oportunidad (spec v1.1).
 
 ## CRM en vivo (GoHighLevel)
 
@@ -445,12 +451,56 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
     `selvadentro:rubrica`: lectura abierta, escritura solo `direccion_general` (o admin),
     aplicado también en `kv.js`. El reporte nunca mueve un umbral por su cuenta. La prueba
     de humo corre los nueve casos de aceptación de la spec.
+  - **Filtros de medición** (Change Spec v1.1 "Lead Filters" de Dirección General, desde
+    el **1-oct-2026**, mismo criterio de periodo que la v1.2: rigen en todo periodo cuyo
+    último día es el 1-oct o después; lo anterior no se recalcula). Principio: **una
+    exclusión funciona en los dos sentidos** — un lead que no cuenta en contra del asesor
+    tampoco cuenta a favor y sale de numerador y denominador de toda métrica desde su alta.
+    En pantalla: banner "Reglas de medición vigentes desde el 1 de octubre de 2026" con el
+    chequeo de las entradas del CRM (§2) y los rótulos literales de la §5.
+    - **R-01**: la oportunidad en Descalificado trae *Causa de descalificación* y *Evidencia*.
+      Causa del grupo **inválido** (Dejó datos por error, Pruebas de marketing, Sin datos
+      válidos, Número equivocado, Contacto inapropiado / broma) → fuera de todo, bloque
+      "Leads inválidos (fuera de la nota)" por asesor y causa, y en **Calidad de Leads** por
+      fuente y campaña. **Real descartado** (No alineado, Ya no interesado, Malinterpretó la
+      campaña) → se mide hasta *Fecha de entrada a Descalificado*: el barrido corta ahí
+      mensajes, tareas y citas (`opts.cut`). Sin causa o evidencia y <24 h → se mide como
+      activo. Sin la fecha de la automatización: el `lastStageChangeAt` si sigue en
+      Descalificado; si no, sin corte (= última actividad).
+    - **R-02**: etiqueta `descalificacion injustificada` → "Descalificaciones revertidas" en
+      la ficha del asesor (*Asesor que descalificó*, por id o nombre) con la lista; el
+      periodo lo fija la fecha de descalificación, así que se buscan también contactos
+      etiquetados de antes del rango (acción `tagged`). Lo que el asesor hizo antes cuenta
+      en su nota (`uNota`); como volumen el lead aparece con su dueño actual (Rescate) en
+      "Fuera del equipo de ventas".
+    - **R-03**: etiqueta `broker` o **cualquier** oportunidad en Brokers — Expansión y
+      activación (antes: solo si TODAS vivían ahí) → "Error de asignación", fuera de todo.
+    - **R-04**: horario de atención 09:00:00–18:59:59 hora Tulum; SLA 5 min en horario,
+      antes de las 11:00 del siguiente día de servicio fuera de horario. Los días de
+      servicio son un parámetro en Metas → Rúbrica de desempeño (`selvadentro:rubrica`,
+      `horario`; por defecto lunes a viernes, **pendiente de confirmar** con Dirección
+      Comercial). La mediana de 1er toque cuenta solo leads en horario; nueva cifra en la
+      ficha "Fuera de horario atendidos antes de las 11:00".
+    - **R-05**: `sin llamada - numero invalido` (≥2 intentos no conectados en ≥2 días) y
+      `sin llamada - solo mensaje` (un entrante del lead o una llamada ≥90 s), siempre antes
+      de *Sin llamada - fecha de inicio*. Válida → la escalera del break-up no exige llamadas
+      y "sin respuesta" cuenta desde la fecha de la etiqueta; sin evidencia → "Etiquetas sin
+      evidencia". El retiro de una etiqueta no tiene fecha en el CRM: se guarda la primera
+      sincronización donde ya no estaba (`sla:nocall:v1`). Tasa por asesor vs. equipo con
+      alerta roja a más de 2× (sin alerta con menos de `SLA_MIN_N` leads — hoy 5, no los 10
+      de la spec, por la decisión del 30-sep). Mientras la telefonía siga en 0% conectadas
+      (C-20, `SLA_C20_CERRADO = false`), número inválido con evidencia completa queda
+      "Pendiente de validación" y la excepción se aplica provisionalmente.
+    - **R-06**: contacto efectivo = respuesta del lead **o llamada de ≥90 s** (`fe` del
+      barrido); una acción manual sola nunca lo es. **R-07**: sin exención por Zoom o tour.
+    - La prueba de humo corre los diez casos de aceptación de la §6; `sla:agg:v11` y
+      `lq:agg:v15` fuerzan a reconstruir los agregados.
   - **Contacto manual**: se excluyen automatizaciones (`workflow`, `campaign`,
     `bulk_actions`) y actividad sin usuario asignado, por `source` y `userId`.
-  - **Reloj del SLA**: corre **24/7** desde que entra el lead (confirmado con el
-    cliente el 2026-08-26). No hay ventana laboral: noches y fines de semana cuentan.
-    Si algún día se quiere volver a una jornada, `SLA_HORARIO.activo = true` reactiva
-    el desplazamiento a la apertura del siguiente día hábil.
+  - **Reloj del SLA**: en periodos que terminaron antes del 1-oct-2026 corre **24/7**
+    desde que entra el lead (confirmado con el cliente el 2026-08-26): noches y fines de
+    semana cuentan. Desde el 1-oct-2026 rige el horario de atención de la spec v1.1 (R-04,
+    arriba). `SLA_HORARIO` queda solo para las reglas anteriores.
   - **Break-up** detectado del feed: ≥5 intentos de llamada + SMS/WhatsApp + email
     sin respuesta del lead. Denominador: descalificados del asesor, o el total si
     no tiene.

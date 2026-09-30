@@ -7,8 +7,14 @@
 // Acciones (POST JSON + Authorization: Bearer <token>):
 //   { action:"contacts", start, end, searchAfter? }
 //     → { contacts:[{id,n,c,src,u,tags,attr}], total, searchAfter|null }
-//   { action:"sweep", ids:[contactId,...] }   (máx 8 por llamada)
-//     → { results:[{id, fo, fi, lm, foM, foC, days[], calls, callsOk, chans[], deliv{}, users[], cerr, aerr, ap{}}] }
+//   { action:"sweep", ids:[contactId,...], opts?:{ [contactId]: { cut?, ncD?, ncR? } } }   (máx 8 por llamada)
+//     → { results:[{id, fo, fi, fe, lm, foM, foC, days[], calls, callsOk, chans[], deliv{}, users[], cerr, aerr, ap{}, nc?, cortados}] }
+//     Change Spec v1.1 (1-oct-2026): cut = fecha de entrada a Descalificado de un lead real
+//     descartado — nada posterior cuenta (mensajes, tareas con fecha posterior, citas
+//     posteriores). ncD = "Sin llamada - fecha de inicio": nc trae la evidencia ANTERIOR a
+//     esa fecha (intentos de llamada no conectados y sus días, mensaje entrante, llamada
+//     ≥90 s) y ncR = fecha en que la etiqueta se vio retirada: nc.post = intentos de llamada
+//     después de esa fecha. fe = primer contacto EFECTIVO: respuesta del lead o llamada ≥90 s.
 //     foM = primer contacto MANUAL (excluye workflows/campañas) · foC = primera llamada
 //     CONECTADA · days = días distintos con contacto manual · calls = intentos de llamada ·
 //     callsOk = llamadas conectadas · deliv = estado de entrega
@@ -16,7 +22,13 @@
 //     fo = primer mensaje SALIENTE (ts) · fi = primer mensaje ENTRANTE (ts)
 //     lm = último mensaje (ts) · ap = citas: total, showed, noshow, futuras, f = cita más temprana (ts)
 //   { action:"opps", startAfter?, startAfterId? }
-//     → { opps:[{u,st,c,stc,v}], cursor|null, total, fetched }
+//     → { opps:[{id,ct,u,st,c,stc,v,p,s,sc,cf}], cursor|null, total, fetched }
+//     cf = campos personalizados de la oportunidad (id → valor): Causa, Evidencia, Asesor
+//     que descalificó y Fecha de entrada a Descalificado (spec v1.1 §2).
+//   { action:"users" } → { users, fields, oppFields, pipelines }
+//   { action:"tagged", tag } → { contacts:[…como contacts], filtro }
+//     contactos con esa etiqueta, de cualquier fecha: las descalificaciones revertidas se
+//     cuentan por la fecha de descalificación, no por la de alta del lead.
 
 const S = require("./lib/shared.js");
 
@@ -42,6 +54,30 @@ function attrOf(c) {
   };
 }
 
+// Valor de un campo personalizado, tolerante a las formas del API de GHL: los contactos
+// traen `value`; las oportunidades `fieldValue` o `fieldValueString/Number/Date/Array`.
+function cfMap(list) {
+  const m = {};
+  (Array.isArray(list) ? list : []).forEach((f) => {
+    if (!f || f.id == null) return;
+    let v = f.fieldValue ?? f.fieldValueString ?? f.fieldValueNumber ?? f.fieldValueDate ?? f.fieldValueArray ?? f.value ?? "";
+    if (Array.isArray(v)) v = v.join(", ");
+    else if (v && typeof v === "object") v = JSON.stringify(v);
+    m[f.id] = String(v ?? "");
+  });
+  return m;
+}
+const mapContact = (c) => ({
+  id: c.id,
+  n: c.contactName || [c.firstName, c.lastName].filter(Boolean).join(" ") || c.email || c.phone || "(sin nombre)",
+  c: c.dateAdded || "",
+  src: (c.source || "").trim(),
+  u: c.assignedTo || "",
+  tags: Array.isArray(c.tags) ? c.tags : [],
+  attr: attrOf(c),
+  cf: cfMap(c.customFields),
+});
+
 async function contacts({ start, end, searchAfter }) {
   if (!start || !end) throw Object.assign(new Error("start y end requeridos (ISO datetime)"), { status: 400 });
   const out = [];
@@ -57,19 +93,7 @@ async function contacts({ start, end, searchAfter }) {
     if (cursor) body.searchAfter = cursor;
     const data = await ghl("/contacts/search", { method: "POST", body });
     const batch = data.contacts || [];
-    batch.forEach((c) => out.push({
-      id: c.id,
-      n: c.contactName || [c.firstName, c.lastName].filter(Boolean).join(" ") || c.email || c.phone || "(sin nombre)",
-      c: c.dateAdded || "",
-      src: (c.source || "").trim(),
-      u: c.assignedTo || "",
-      tags: Array.isArray(c.tags) ? c.tags : [],
-      attr: attrOf(c),
-      cf: (c.customFields || []).reduce((m, f) => {
-        if (f && f.id != null) m[f.id] = Array.isArray(f.value) ? f.value.join(", ") : String(f.value ?? "");
-        return m;
-      }, {}),
-    }));
+    batch.forEach((c) => out.push(mapContact(c)));
     total = data.total ?? total;
     const lastRaw = batch[batch.length - 1];
     cursor = batch.length === 100 && lastRaw && Array.isArray(lastRaw.searchAfter) ? lastRaw.searchAfter : null;
@@ -136,9 +160,18 @@ async function allMessages(convId) {
   return msgs.filter((m) => !/^TYPE_ACTIVITY/.test(m.messageType || ""));
 }
 
-async function sweepOne(id) {
+// Status de una llamada que SÍ conectó (ver el detalle en sweepOne).
+const CALL_OK = new Set(["connected", "answered", "completed"]);
+const callDur = (m) => { const d = Number(m.callDuration ?? m.duration ?? (m.meta && m.meta.call && m.meta.call.duration)); return isFinite(d) && d > 0 ? d : null; };
+
+async function sweepOne(id, opt) {
+  // Opciones de la spec v1.1, todas en ms. Sin opciones el barrido es el de siempre.
+  const num = (x) => { const n = Number(x); return isFinite(n) && n > 0 ? n : null; };
+  const cut = num(opt && opt.cut), ncD = num(opt && opt.ncD), ncR = num(opt && opt.ncR);
   const out = {
     id, fo: null, fi: null, lm: null, li: null, cerr: false, aerr: false,
+    fe: null,                             // primer contacto EFECTIVO: respuesta del lead o llamada ≥90 s (R-06)
+    cortados: 0,                          // mensajes posteriores a la fecha de descalificación, fuera (R-01)
     foM: null,                            // primer contacto MANUAL (base del SLA del asesor)
     foC: null,                            // primera llamada del asesor que SÍ conectó
     lmM: null,                            // ÚLTIMO toque manual (para "días sin toque")
@@ -161,6 +194,11 @@ async function sweepOne(id) {
     ap: { tot: 0, sh: 0, ns: 0, fut: 0, f: null },
   };
   const dset = new Set(), cset = new Set(), uset = new Set();
+  // Evidencia de una etiqueta "sin llamada" (R-05), SIEMPRE anterior a su fecha de inicio:
+  // intentos de llamada del asesor que no conectaron y en cuántos días distintos, algún
+  // mensaje entrante del lead, alguna llamada ≥90 s. post = intentos después del retiro.
+  const ncDias = new Set();
+  if (ncD) out.nc = { calls: 0, dias: 0, inb: false, c90: false, post: 0 };
   // Conversaciones del contacto
   try {
     const cs = await ghl(`/conversations/search?locationId=${LOCATION_ID}&contactId=${encodeURIComponent(id)}&limit=20`);
@@ -172,10 +210,27 @@ async function sweepOne(id) {
     let convFallidas = 0;
     for (const cv of convs) {
       const lmd = ts(cv.lastMessageDate);
-      if (lmd && (!out.lm || lmd > out.lm)) out.lm = lmd;
+      if (lmd && (!cut || lmd <= cut) && (!out.lm || lmd > out.lm)) out.lm = lmd;
       const msgs = await allMessages(cv.id).catch(() => { convFallidas++; return []; });
       for (const m of msgs) {
         const t = ts(m.dateAdded); if (!t) continue;
+        const esLlamada = chanOf(m) === "call", dur = esLlamada ? callDur(m) : null;
+        if (out.nc) {
+          if (t < ncD) {
+            if (m.direction === "inbound") out.nc.inb = true;
+            if (dur != null && dur >= 90) out.nc.c90 = true;
+            if (esLlamada && m.direction === "outbound" && isManual(m) && !CALL_OK.has(String(m.status || "").toLowerCase())) {
+              out.nc.calls++; ncDias.add(dayKey(t));
+            }
+          }
+          if (ncR && t > ncR && esLlamada && m.direction === "outbound" && isManual(m)) out.nc.post++;
+        }
+        // Lead real descartado (R-01): nada posterior a su entrada a Descalificado cuenta.
+        if (cut && t > cut) { out.cortados++; continue; }
+        // Contacto efectivo (R-06): el lead respondió, o hubo una llamada de ≥90 s —suya o
+        // del asesor—. Una acción manual sola nunca es contacto efectivo.
+        const efectivo = m.direction === "inbound" || (dur != null && dur >= 90 && (m.direction === "inbound" || isManual(m)));
+        if (efectivo && (!out.fe || t < out.fe)) out.fe = t;
         // Toda llamada (manual o no) alimenta el diagnóstico de telefonía (A4/D4)
         if (chanOf(m) === "call") {
           const cs = String(m.status || "").toLowerCase() || "(sin status)";
@@ -230,6 +285,7 @@ async function sweepOne(id) {
     // Había conversaciones pero NINGUNA devolvió mensajes: es un fallo de lectura
     // (típicamente falta el scope de mensajes en el token), no ausencia de contacto.
     if (convs.length && convFallidas === convs.length) out.cerr = true;
+    if (out.nc) out.nc.dias = ncDias.size;
   } catch (e) { out.cerr = true; /* conversaciones no disponibles: se marca, no se asume "sin contacto" */ }
   // Tareas del contacto (spec C1): programadas, cerradas en fecha y vencidas abiertas.
   // El manual gobierna cada cadencia con tareas, así que son evidencia que el asesor ya
@@ -242,8 +298,9 @@ async function sweepOne(id) {
     const tk = await ghl(`/contacts/${encodeURIComponent(id)}/tasks`);
     const now = Date.now();
     for (const t of (tk.tasks || [])) {
-      out.tk.prog++;
       const due = ts(t.dueDate);
+      if (cut && due && due > cut) continue;          // vencía después de descalificarlo: no cuenta
+      out.tk.prog++;
       const done = t.completed === true || /^complet/i.test(String(t.status || ""));
       // El API no siempre trae la fecha de cierre; se aproxima con la última
       // actualización. Si ni eso hay, una tarea completada con fecha límite cuenta
@@ -260,6 +317,7 @@ async function sweepOne(id) {
     const evs = ap.events || [];
     const now = Date.now();
     for (const ev of evs) {
+      if (cut && ts(ev.startTime) > cut) continue;    // cita posterior a la descalificación
       out.ap.tot++;
       const st = String(ev.appointmentStatus || ev.status || "").toLowerCase();
       if (st === "showed" || st === "completed") out.ap.sh++;
@@ -283,25 +341,31 @@ async function sweepOne(id) {
   return out;
 }
 
-async function sweep({ ids }) {
+async function sweep({ ids, opts }) {
   if (!Array.isArray(ids) || !ids.length) throw Object.assign(new Error("ids requerido"), { status: 400 });
   const batch = ids.slice(0, SWEEP_MAX).filter((x) => typeof x === "string" && x);
+  const o = opts && typeof opts === "object" ? opts : {};
   const results = [];
   // Concurrencia 4 para quedar lejos del burst limit de GHL (100 req/10s)
   for (let i = 0; i < batch.length; i += 4) {
-    const part = await Promise.all(batch.slice(i, i + 4).map((id) => sweepOne(id)));
+    const part = await Promise.all(batch.slice(i, i + 4).map((id) => sweepOne(id, o[id])));
     results.push(...part);
   }
   return { results };
 }
 
 async function users() {
-  const [resp, fieldsResp, pipesResp] = await Promise.all([
+  const [resp, fieldsResp, pipesResp, oppFieldsResp] = await Promise.all([
     ghl(`/users/?locationId=${LOCATION_ID}`).catch(() => null),
     ghl(`/locations/${LOCATION_ID}/customFields`).catch(() => null),
     // Catálogo de pipelines y etapas, LITERAL como lo escribe el CRM (spec B1/D1/E1):
     // contra esta columna se codifican los filtros de etapa, carácter por carácter.
     ghl(`/opportunities/pipelines?locationId=${LOCATION_ID}`).catch(() => null),
+    // Campos personalizados de OPORTUNIDAD (spec v1.1 §2: Causa, Evidencia, Asesor que
+    // descalificó, Fecha de entrada a Descalificado). El catálogo por defecto trae solo los
+    // de contacto; si el API no acepta model=opportunity se pide model=all y se filtra.
+    ghl(`/locations/${LOCATION_ID}/customFields?model=opportunity`)
+      .catch(() => ghl(`/locations/${LOCATION_ID}/customFields?model=all`).catch(() => null)),
   ]);
   const map = {};
   if (resp && Array.isArray(resp.users)) {
@@ -310,12 +374,48 @@ async function users() {
   const fields = ((fieldsResp && fieldsResp.customFields) || []).map((f) => ({
     id: f.id, name: f.name || f.fieldKey || "", key: f.fieldKey || "",
   }));
+  const oppFields = ((oppFieldsResp && oppFieldsResp.customFields) || [])
+    .filter((f) => !f.model || f.model === "opportunity")
+    .map((f) => ({ id: f.id, name: f.name || f.fieldKey || "", key: f.fieldKey || "" }));
   const pipelines = ((pipesResp && pipesResp.pipelines) || []).map((p) => ({
     id: p.id, name: p.name || "",
     stages: (p.stages || []).slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
       .map((s) => ({ id: s.id, name: s.name || "" })),
   }));
-  return { users: map, fields, pipelines };
+  return { users: map, fields, oppFields, oppFieldsOk: !!oppFieldsResp, pipelines };
+}
+
+// Contactos con una etiqueta, de cualquier fecha (spec v1.1 R-02). El filtro de etiquetas
+// del buscador de GHL se documenta de dos formas; se prueba la de arreglo y, si el API la
+// rechaza, la de valor simple. El front vuelve a comprobar la etiqueta exacta de cada uno.
+async function tagged({ tag }) {
+  if (typeof tag !== "string" || !tag.trim()) throw Object.assign(new Error("tag requerido"), { status: 400 });
+  const filtros = [
+    { field: "tags", operator: "contains", value: [tag] },
+    { field: "tags", operator: "eq", value: tag },
+  ];
+  let ultimo = null;
+  for (const filtro of filtros) {
+    try {
+      const out = [];
+      let cursor = null;
+      for (let i = 0; i < 5; i++) {
+        const body = { locationId: LOCATION_ID, pageLimit: 100, filters: [filtro], sort: [{ field: "dateAdded", direction: "asc" }] };
+        if (cursor) body.searchAfter = cursor;
+        const data = await ghl("/contacts/search", { method: "POST", body });
+        const batch = data.contacts || [];
+        batch.forEach((c) => out.push(mapContact(c)));
+        const lastRaw = batch[batch.length - 1];
+        cursor = batch.length === 100 && lastRaw && Array.isArray(lastRaw.searchAfter) ? lastRaw.searchAfter : null;
+        if (!cursor) break;
+      }
+      return { contacts: out, filtro: filtro.operator, truncado: !!cursor };
+    } catch (e) {
+      if (e.status !== 400 && e.status !== 422) throw e;
+      ultimo = e;
+    }
+  }
+  throw ultimo;
 }
 
 async function opps({ startAfter, startAfterId, since }) {
@@ -340,6 +440,7 @@ async function opps({ startAfter, startAfterId, since }) {
     }
     const batch = data.opportunities || [];
     batch.forEach((o) => out.push({
+      id: o.id || "",
       ct: o.contactId || (o.contact && o.contact.id) || "",   // para fijar el traspaso a ventas
       u: o.assignedTo || "",
       st: o.status || "open",
@@ -349,6 +450,10 @@ async function opps({ startAfter, startAfterId, since }) {
       p: o.pipelineId || "",                                   // pipeline (alcance D1)
       s: o.pipelineStageId || "",                              // etapa actual (E1)
       sc: o.lastStageChangeAt || o.lastStatusChangeAt || o.updatedAt || o.createdAt || "",
+      // Solo el timestamp REAL de cambio de etapa: respaldo de "Fecha de entrada a
+      // Descalificado" cuando la automatización no la llenó (spec v1.1 R-01).
+      scE: o.lastStageChangeAt || "",
+      cf: cfMap(o.customFields),
     }));
     total = (data.meta && data.meta.total) || total;
     const meta = data.meta || {};
@@ -385,7 +490,8 @@ exports.handler = async (event) => {
     if (payload.action === "sweep") return json(200, await sweep(payload));
     if (payload.action === "users") return json(200, await users());
     if (payload.action === "opps") return json(200, await opps(payload));
-    return json(400, { error: "action debe ser 'contacts', 'sweep', 'users' u 'opps'" });
+    if (payload.action === "tagged") return json(200, await tagged(payload));
+    return json(400, { error: "action debe ser 'contacts', 'sweep', 'users', 'opps' o 'tagged'" });
   } catch (e) {
     const status = e.status === 429 ? 429 : e.status === 400 ? 400 : 502;
     return json(status, { error: String(e.message || e), detail: e.detail });
