@@ -35,6 +35,11 @@ function canalesDeClave(k, op) {
   if (key === "selvadentro:metas") {
     return (op === "set" || op === "del") ? ["direccion_general", "direccion_comercial"] : null;
   }
+  // Los umbrales de la rúbrica del asesor (Change Spec v1.2) los lee Desempeño de Ventas,
+  // pero los fija Dirección General: el equipo que se califica no puede mover su propia vara.
+  if (key === "selvadentro:rubrica") {
+    return (op === "set" || op === "del") ? ["direccion_general"] : null;
+  }
   // Registros de un canal de ventas: "<canal>:week:…" o "<canal>:rec:…"
   const m = key.match(/^([a-z_]+):(?:week|rec|metas|last_resp):/);
   if (m && CANALES_VENTAS.includes(m[1])) return [m[1], "direccion_general", "direccion_comercial"];

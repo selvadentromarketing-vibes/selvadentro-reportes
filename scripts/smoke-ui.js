@@ -163,6 +163,63 @@ const PORT = process.env.PORT || 8765;
   console.log('\n[sla] índice de calidad por reglas', JSON.stringify(sla));
   // c1: OPP real → sqls aunque el CRM no traiga calificación; c2: solo respondió → mql; c3: campo manual MQL, reglas mql.
   if (!(sla.by.c1 && sla.by.c1.lv === 'sqls' && sla.by.c1.lvCrm === 'nc' && sla.by.c1.o === 1 && sla.by.c2.lv === 'mql' && sla.by.c3.lvCrm === 'mql' && sla.califCrm === 1 && sla.qTot === 3 && sla.q5 != null && sla.q5 > 1)) hallazgos.push({ vista: 'sla:indiceCalidad', sla });
+  // Change Spec v1.2 (25-sep-2026): Velocidad de primer contacto con umbrales 20·40·60·80
+  // desde el 1-oct-2026. Los nueve casos de la sección 5, más: la leyenda muestra los
+  // umbrales nuevos, una semana que terminó antes del 1-oct conserva su nota y un rango
+  // que cruza el 1-oct muestra la nota del cambio.
+  VISTA = 'rubrica:v1.2';
+  const rb = await page.evaluate(() => {
+    const leads = (x, n) => Array.from({ length: n }, (_, i) => ({ id: 'l' + i, u: 'u1', sd: false, bucket: i < x ? 'b5' : 'b30', d10: 0, lv: 'nc', ap: { tot: 0, sh: 0, ns: 0 }, ad: false, fi: null, opp: 0 }));
+    const nueva = slaRubrica('2026-10-05', '2026-10-11');            // W41, toda después del cambio
+    const nota = (x, n, rub) => { const c = slaScoreAsesor(leads(x, n), rub || nueva); return c.small ? 'insuficiente' : c.sub.vel; };
+    const casos = [[3, 20, 1], [4, 20, 2], [399, 1000, 2], [8, 20, 3], [12, 20, 4], [799, 1000, 4], [16, 20, 5], [20, 20, 5], [8, 9, 'insuficiente']]
+      .map(([x, n, esp]) => ({ caso: `${x}/${n}`, pct: (x * 100 / n).toFixed(1) + '%', esp, obt: nota(x, n) }));
+    const r = { casos, fallan: casos.filter(c => c.obt !== c.esp).map(c => c.caso) };
+    const w39 = slaUmbrales('vel', ...Object.values(slaPeriodoDe(['2026-W39'])));   // 21–27 sep: antes del cambio
+    const w40 = slaUmbrales('vel', ...Object.values(slaPeriodoDe(['2026-W40'])));   // 28 sep – 4 oct: la cruza
+    const w41 = slaUmbrales('vel', ...Object.values(slaPeriodoDe(['2026-W41'])));
+    const w3840 = slaUmbrales('vel', ...Object.values(slaPeriodoDe(['2026-W38', '2026-W39', '2026-W40'])));
+    r.periodos = { w39: w39.thr.join('/') + (w39.cambio ? ' · cambio ' + w39.cambio : ''), w40: w40.thr.join('/') + (w40.cambio ? ' · cambio ' + w40.cambio : ''),
+      w41: w41.thr.join('/') + (w41.cambio ? ' · cambio ' + w41.cambio : ''), w3840: w3840.thr.join('/') + (w3840.cambio ? ' · cambio ' + w3840.cambio : '') };
+    r.w39_8de20 = nota(8, 20, slaRubrica(...Object.values(slaPeriodoDe(['2026-W39']))));     // 40% con 10·20·30·45 → 4
+    r.w41_8de20 = nota(8, 20);                                                                // 40% con 20·40·60·80 → 3
+    // Pantalla: tabla + ficha + leyenda con un asesor del roster
+    const advPrev = ADVISOR_LIST, selPrev = slaState.asesor;
+    ADVISOR_LIST = [{ name: 'Asesor Uno', active: true }]; slaState.asesor = 'u1';
+    const pinta = (rango, x, n) => slaAsesorSection({ rango, users: { u1: 'Asesor Uno' }, leads: leads(x, n), califCrm: 0 }, leads(x, n));
+    const hCruza = pinta(['2026-W40'], 399, 1000), hAntes = pinta(['2026-W39'], 16, 20), hDespues = pinta(['2026-W41'], 16, 20), hChica = pinta(['2026-W41'], 8, 9);
+    ADVISOR_LIST = advPrev; slaState.asesor = selPrev;
+    const txt = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d.innerText || d.textContent; };
+    r.ui = {
+      leyendaNueva: /Velocidad de primer contacto: 20 · 40 · 60 · 80%/.test(txt(hDespues)),
+      tooltipNuevo: /title="Velocidad de primer contacto \(≤5 min\) · umbrales 20 · 40 · 60 · 80%/.test(hDespues),
+      notaCruza: /Rúbrica cambió el 1-oct-2026/.test(hCruza), sinNotaDespues: !/Rúbrica cambió/.test(hDespues), sinNotaAntes: !/Rúbrica cambió/.test(hAntes),
+      unDecimal: /2 · 39\.9%/.test(txt(hCruza)),                                   // 399/1000 → nota 2, % a un decimal
+      antesConserva: /Velocidad de primer contacto: 10 · 20 · 30 · 45%/.test(txt(hAntes)) && /conserva su nota/.test(txt(hAntes)) && /5 · 80\.0%/.test(txt(hAntes)),
+      despues5: /5 · 80\.0%/.test(txt(hDespues)),
+      chica: /sin muestra suficiente · 88\.9%/.test(txt(hChica)) && !/sla-pill s\d/.test(hChica),
+    };
+    // Parámetro, no código: un juego guardado con fecha manda; uno inválido cae al default.
+    const ovrPrev = SLA_RUBRICA_OVR;
+    SLA_RUBRICA_OVR = { vel: [{ desde: null, thr: [10, 20, 30, 45] }, { desde: '2026-10-01', thr: [20, 40, 60, 80] }, { desde: '2027-01-04', thr: [25, 50, 70, 90] }] };
+    r.guardado = slaUmbrales('vel', '2027-01-04', '2027-01-10').thr.join('/') + ' · ' + slaUmbrales('vel', '2026-12-28', '2027-01-03').thr.join('/');
+    SLA_RUBRICA_OVR = { vel: [{ desde: 'ayer', thr: [50, 40, 30, 20] }] };
+    r.invalido = slaUmbrales('vel', '2026-10-05', '2026-10-11').thr.join('/');
+    SLA_RUBRICA_OVR = ovrPrev;
+    r.ok = !r.fallan.length && r.periodos.w39 === '10/20/30/45' && r.periodos.w40 === '20/40/60/80 · cambio 2026-10-01' && r.periodos.w41 === '20/40/60/80'
+      && r.periodos.w3840 === '20/40/60/80 · cambio 2026-10-01' && r.w39_8de20 === 4 && r.w41_8de20 === 3 && Object.values(r.ui).every(Boolean)
+      && r.guardado === '25/50/70/90 · 20/40/60/80' && r.invalido === '20/40/60/80';
+    return r;
+  });
+  console.log('\n[rubrica v1.2] casos', rb.casos.map(c => `${c.caso}=${c.obt}${c.obt !== c.esp ? '≠' + c.esp : ''}`).join(' · '));
+  console.log('[rubrica v1.2] periodos', JSON.stringify(rb.periodos), '· W39 8/20 →', rb.w39_8de20, '· W41 8/20 →', rb.w41_8de20);
+  console.log('[rubrica v1.2] pantalla', JSON.stringify(rb.ui), '· guardado', rb.guardado, '· inválido →', rb.invalido);
+  if (!rb.ok) hallazgos.push({ vista: 'rubrica:v1.2', rb });
+  // Metas → Rúbrica de desempeño: los dos juegos de Velocidad, con su fecha
+  const rbm = await page.evaluate(async () => { navIrLateral('metas'); await new Promise(r => setTimeout(r, 400)); const h = document.getElementById('metas-rubrica'); const t = h ? h.innerText : '';
+    return { existe: !!h, viejo: /10 · 20 · 30 · 45%/.test(t), nuevo: /20 · 40 · 60 · 80%/.test(t), fecha: /1-oct-2026/.test(t), form: !!document.getElementById('rb-save') }; });
+  console.log('[rubrica v1.2] Metas', JSON.stringify(rbm));
+  if (!Object.values(rbm).every(Boolean)) hallazgos.push({ vista: 'rubrica:metas', rbm });
   // Dirección General: encabezados nuevos y guiones de Brokers
   const dg = await page.evaluate(() => { navIr('direccion', 'general'); return new Promise(r => setTimeout(() => { const t = document.querySelector('#view-resultados table.cons'); const ths = [...t.querySelectorAll('thead th')].map(x => x.innerText.trim()); const filaB = [...t.querySelectorAll('tbody tr')].find(tr => /Brokers/.test(tr.innerText)); r({ ths, brokers: filaB ? [...filaB.querySelectorAll('td')].map(x => x.innerText.trim()).slice(0, 10) : null }); }, 500)); });
   console.log('\n[DG] encabezados:', dg.ths.join(' | ')); console.log('[DG] fila Brokers (10 primeras):', dg.brokers && dg.brokers.join(' | '));

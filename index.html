@@ -494,11 +494,13 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .tag-up,.tag-mid,.tag-dn,.tag-sm{ display:inline-block; padding:2px 8px; border-radius:var(--r-s); font-size:var(--fs-xs); font-weight:700; }
   .tag-up{ background:#e4f0ec; color:var(--verde-prof); } .tag-mid{ background:#f3ecd9; color:#8a6a1f; }
   .tag-dn{ background:#f6e6df; color:#a2542c; } .tag-sm{ background:#eee; color:#777; font-weight:600; }
-  .sla-bar{ display:grid; grid-template-columns:200px 1fr 92px; align-items:center; gap:10px; font-size:var(--fs-s); padding:3px 0; }
+  .sla-bar{ display:grid; grid-template-columns:200px 1fr 190px; align-items:center; gap:10px; font-size:var(--fs-s); padding:3px 0; }
   .sla-bar .sb-track{ background:#eee; border-radius:var(--r-s); height:15px; overflow:hidden; }
   .sla-bar .sb-track i{ display:block; height:100%; border-radius:var(--r-s); }
   .sla-bar .sb-val{ font-weight:600; color:var(--texto); }
-  @media(max-width:680px){ .sla-bar{ grid-template-columns:120px 1fr 70px; } }
+  @media(max-width:680px){ .sla-bar{ grid-template-columns:120px 1fr 110px; } .sla-bar .tag-sm.sla-cambio{ white-space:normal; } }
+  .tag-sm.sla-cambio{ text-transform:none; letter-spacing:0; margin-top:3px; white-space:nowrap; }
+  .sla-bar .tag-sm.sla-cambio{ display:table; }
   .lq-legend-dots{ display:flex; gap:14px; align-items:center; font-size:var(--fs-xs); color:var(--neutro); margin:-4px 0 10px; }
   /* ---- Tablas desplegables (campaña → conjunto → anuncio) ---- */
   .lq-toolbar{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 10px; }
@@ -868,6 +870,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
       <p class="hint" id="metas-hint">Define la <b>meta mensual</b> de cada KPI. Se guarda automáticamente y el reporte del canal la usa, ajustada al periodo (meta mensual ÷ 4.35 semanas × semanas evaluadas). Deja en blanco para no fijar meta.</p>
       <div class="sistema-hdr" id="metas-sistema" style="display:none"></div>
       <div id="metas-global"></div>
+      <div id="metas-rubrica"></div>
       <div id="metas-body"></div>
     </div>
 
@@ -4968,14 +4971,11 @@ function slaBreakup(l){
    5 sub-notas independientes en escala 1-5, cada una con sus propios umbrales de %.
    La nota global es el promedio de las sub-notas DISPONIBLES y nunca se muestra sola.
    Una sub-nota sin dato queda N/A y no baja la global. */
-// Spec v1.0 (2026-09-02): Velocidad se mide en la ventana de 5 MINUTOS (A5) con
-// umbrales recalibrados — PROPUESTOS, pendientes de aprobación de Dirección General:
-// medida a 5 min la distribución actual del equipo es 22-45%, y conservar los umbrales
-// de la ventana vieja hundiría a todos por un cambio de regla, no de trabajo.
 // "Cumplimiento de tareas" sustituye a "Seguimiento a futuro" (C1), que era N/A
-// permanente porque sus campos no existen en GoHighLevel.
+// permanente porque sus campos no existen en GoHighLevel. `thr` es el juego de umbrales
+// de origen de cada sub-nota; los que cambian con el tiempo viven en SLA_RUBRICA_DEF.
 const SLA_DIMS = [
-  { key:"vel",    label:"Velocidad de primer contacto (≤5 min)", thr:[10,20,30,45], prop:true },
+  { key:"vel",    label:"Velocidad de primer contacto (≤5 min)", thr:[10,20,30,45] },
   { key:"cad",    label:"Cadencia / seguimiento (10 días)", thr:[20,40,60,80] },
   { key:"cierre", label:"Cierre de ciclo (break-up)", thr:[10,20,35,50] },
   { key:"tareas", label:"Cumplimiento de tareas", thr:[50,70,85,95], prop:true },
@@ -4983,19 +4983,90 @@ const SLA_DIMS = [
 ];
 const SLA_MIN_N = 10;                        // muestra pequeña: se marca y sale del ranking
 const SCORELAB = {5:"Excelente",4:"Bueno",3:"Adecuado",2:"Necesita mejorar",1:"Crítico"};
+// Límite inferior inclusivo (spec v1.2 §4): exactamente 20.0% es un 2 y 80.0% un 5.
+// Se califica sobre el % sin redondear; la pantalla lo muestra a un decimal.
 function scoreOf(pct, thr){
   if(pct==null) return null;
   if(pct>=thr[3]) return 5; if(pct>=thr[2]) return 4;
   if(pct>=thr[1]) return 3; if(pct>=thr[0]) return 2; return 1;
 }
 
+/* Umbrales con fecha de vigencia (Change Spec v1.2 de Dirección General, 25-sep-2026).
+   Cada sub-nota tiene una lista de juegos de cuatro umbrales, cada uno con el día en que
+   entra en vigor (`desde`, hora Tulum; null = desde siempre). Un periodo se califica con
+   el juego vigente en su ÚLTIMO día: lo que terminó antes de un cambio conserva la nota
+   que ya tenía —no hay recálculo retroactivo— y cualquier periodo que toque el día del
+   cambio o uno posterior usa el juego nuevo. Esto es solo el valor por defecto: Metas →
+   "Rúbrica de desempeño" guarda los juegos en selvadentro:rubrica, así que un cambio de
+   Dirección General no requiere un deploy. El reporte nunca mueve un umbral por su cuenta.
+   Velocidad: la spec v1.0 (2-sep) pasó la ventana de 2 h a 5 min y recalibró a
+   10·20·30·45 para no hundir al equipo por un cambio de regla. La v1.2 los rechaza por
+   laxos: 20·40·60·80 desde el 1-oct-2026, con 80% para un 5. */
+const SLA_RUBRICA_KEY = "selvadentro:rubrica";
+const SLA_RUBRICA_DEF = {
+  vel: [
+    { desde:null,         thr:[10,20,30,45], ref:"Spec v1.0 (2-sep-2026), ventana de 5 min" },
+    { desde:"2026-10-01", thr:[20,40,60,80], ref:"Change Spec v1.2 de Dirección General (25-sep-2026)" },
+  ],
+};
+let SLA_RUBRICA_OVR = {};                    // lo guardado en selvadentro:rubrica, por sub-nota
+const SLA_YMD_RX = /^\d{4}-\d{2}-\d{2}$/;
+function slaJuegoValido(j){
+  if(!j || typeof j!=="object" || !Array.isArray(j.thr) || j.thr.length!==4) return false;
+  if(j.desde!=null && !SLA_YMD_RX.test(j.desde)) return false;
+  return j.thr.every((t,i)=>Number.isFinite(t) && t>=0 && t<=100 && (i===0 || t>j.thr[i-1]));
+}
+// Juegos de una sub-nota, del más viejo al más nuevo. Lo guardado reemplaza al default
+// completo; si lo guardado no sirve, manda el default (nunca una sub-nota sin umbrales).
+function slaJuegos(key){
+  const guardado = Array.isArray(SLA_RUBRICA_OVR[key]) ? SLA_RUBRICA_OVR[key].filter(slaJuegoValido) : [];
+  const dim = SLA_DIMS.find(d=>d.key===key);
+  const lista = guardado.length ? guardado : (SLA_RUBRICA_DEF[key] || [{ desde:null, thr:dim.thr }]);
+  return lista.slice().sort((a,b)=>(a.desde||"").localeCompare(b.desde||""));
+}
+const slaHoyYMD = ()=> new Date(Date.now()-LQ_TZ_MS).toISOString().slice(0,10);
+// Juego vigente para el periodo [ini, fin] (YYYY-MM-DD): el más reciente con desde ≤ fin.
+// `cambio` = la fecha de un cambio que cae DENTRO del periodo (ini < desde ≤ fin): hay
+// días calificados con una regla y días con otra, y la pantalla lo tiene que decir.
+function slaUmbrales(key, ini, fin){
+  fin = fin || slaHoyYMD(); ini = ini || fin;
+  const js = slaJuegos(key);
+  let vig = js[0], cambio = null;
+  for(const j of js){
+    if(!j.desde || j.desde<=fin) vig = j;
+    if(j.desde && j.desde>ini && j.desde<=fin) cambio = j.desde;
+  }
+  return { thr:vig.thr, desde:vig.desde, ref:vig.ref||"", cambio };
+}
+// Las cinco sub-notas resueltas para un periodo: { vel:{thr,desde,ref,cambio}, … }
+function slaRubrica(ini, fin){
+  const r = {}; SLA_DIMS.forEach(d=>{ r[d.key] = slaUmbrales(d.key, ini, fin); }); return r;
+}
+// Periodo de un agregado de SLA: del lunes de su primera semana al domingo de la última.
+function slaPeriodoDe(rango){
+  if(!rango || !rango.length) return { ini:null, fin:null };
+  const b0 = lqWeekBounds(rango[0]), b1 = lqWeekBounds(rango[rango.length-1]);
+  return { ini: b0 ? b0.startYMD : null, fin: b1 ? b1.endYMD : null };
+}
+const SLA_MESES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+const slaFechaCorta = (ymd)=>{ const m = String(ymd||"").match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? `${+m[3]}-${SLA_MESES[+m[2]-1]}-${m[1]}` : "—"; };
+const slaThrTxt = (thr)=> thr.join(" · ")+"%";
+async function loadRubrica(){
+  const saved = await sGet(SLA_RUBRICA_KEY);
+  SLA_RUBRICA_OVR = (saved && typeof saved==="object" && !Array.isArray(saved)) ? saved : {};
+}
+
 // Calcula las 5 sub-notas, el índice de calidad y la tasa de oportunidades de un asesor.
 // Regla de la spec (A1): el numerador SIEMPRE es subconjunto del denominador, y cada
 // porcentaje viaja con sus dos números (cnt) para poder mostrarlos en pantalla.
-function slaScoreAsesor(arr){
+// `rub` = los umbrales vigentes del periodo (slaRubrica); sin él, los vigentes hoy.
+function slaScoreAsesor(arr, rub){
+  rub = rub || slaRubrica();
   const cd = arr.filter(l=>!l.sd);          // sin datos de conversación = no se puede juzgar
   const N = cd.length;
-  const pct = (x)=> N ? x/N*100 : 0;
+  // x·100/N y no x/N·100: con la división al final, un % que cae justo en un umbral sale
+  // exacto (57/100 → 57, no 56.999…) y el límite inferior inclusivo se respeta siempre.
+  const pct = (x)=> N ? x*100/N : 0;
   // Velocidad (A5): % con primer toque manual en ≤5 MINUTOS (antes: ventana de 2 h)
   const b5 = cd.filter(l=>l.bucket==="b5").length;
   // Cadencia: % con al menos 3 días distintos de contacto manual en los primeros 10 días
@@ -5014,12 +5085,12 @@ function slaScoreAsesor(arr){
   cd.forEach(l=>{ const d=l.deliv; if(!d) return;
     env += (d.sent||0)+(d.delivered||0)+(d.read||0)+(d.failed||0);
     ent += (d.delivered||0)+(d.read||0); });
-  const pctEfec = env > 0 ? ent/env*100 : null;
+  const pctEfec = env > 0 ? ent*100/env : null;
 
   const pcts = {
     vel: pct(b5), cad: pct(c3),
-    cierre: desc > 0 ? bk/desc*100 : null,
-    tareas: (tkLeidas && tkProg > 0) ? tkFecha/tkProg*100 : null,
+    cierre: desc > 0 ? bk*100/desc : null,
+    tareas: (tkLeidas && tkProg > 0) ? tkFecha*100/tkProg : null,
     efec: pctEfec,
     c5: pct(c5), d05: pct(b5),
     d30: pct(cd.filter(l=>l.bucket==="b30").length), d120: pct(cd.filter(l=>l.bucket==="b120").length),
@@ -5032,8 +5103,12 @@ function slaScoreAsesor(arr){
     tareas: (tkLeidas && tkProg>0) ? [tkFecha,tkProg] : null,
     efec: env>0 ? [ent,env] : null,
   };
+  // Con menos de SLA_MIN_N leads no hay nota (ni sub-notas ni global): "sin muestra
+  // suficiente", nunca un 1. Los % y sus dos números sí se conservan para la ficha.
+  const small = N < SLA_MIN_N;
   const sub = {};
-  SLA_DIMS.forEach(d=>{ sub[d.key] = scoreOf(pcts[d.key], d.thr); });
+  SLA_DIMS.forEach(d=>{ sub[d.key] = small ? null : scoreOf(pcts[d.key], rub[d.key].thr); });
+  // Nota global: promedio simple, mismo peso para las cinco sub-notas disponibles.
   const vals = Object.values(sub).filter(v=>v!=null);
   const global = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
 
@@ -5060,7 +5135,7 @@ function slaScoreAsesor(arr){
            oppRate: arr.length ? leadsConOpp/arr.length*100 : 0, opp, leadsConOpp, leadsTot: arr.length,
            tk: { prog: tkProg, enFecha: tkFecha, venc: tkVenc, leidas: tkLeidas },
            agend: { con: agCon, de: agBase.length, dias: diasCita },
-           small: N < SLA_MIN_N, bk, desc,
+           small, bk, desc,
            citas: arr.filter(l=>!l.ad).reduce((a,l)=>a+l.ap.tot,0),
            showed: arr.filter(l=>!l.ad).reduce((a,l)=>a+l.ap.sh,0),
            sinCitas: arr.filter(l=>l.ad).length };
@@ -5082,6 +5157,21 @@ function slaNormalizar(rows){
   return rows;
 }
 
+// Historia de los umbrales de una sub-nota contada desde el periodo que se está leyendo:
+// desde cuándo rigen los suyos, con qué umbrales conservan su nota los periodos anteriores
+// y, si el periodo terminó antes de un cambio ya programado, qué va a regir después.
+function slaHistorialTxt(key, rub){
+  const js = slaJuegos(key); if(js.length < 2) return "";
+  const u = rub[key], i = js.findIndex(j=>(j.desde||null)===(u.desde||null));
+  const prev = i > 0 ? js[i-1] : null, next = i >= 0 && i < js.length-1 ? js[i+1] : null;
+  const partes = [];
+  if(u.desde) partes.push(`Vigentes desde el <b>${escAttr(slaFechaCorta(u.desde))}</b>${u.ref?` (${escAttr(u.ref)})`:""}.`);
+  if(prev) partes.push(`Los periodos que terminaron antes del ${escAttr(slaFechaCorta(u.desde))} conservan su nota, calificada con ${escAttr(slaThrTxt(prev.thr))}.`);
+  if(next) partes.push(`Este periodo terminó antes del ${escAttr(slaFechaCorta(next.desde))} y conserva su nota; desde esa fecha rigen ${escAttr(slaThrTxt(next.thr))}.`);
+  if(u.cambio) partes.push(`<b>Rúbrica cambió el ${escAttr(slaFechaCorta(u.cambio))}</b>: el rango tiene días de antes y de después, y se califica completo con los umbrales nuevos.`);
+  return partes.join(" ");
+}
+
 function slaAsesorSection(agg, leadsIn){
   const name = (u)=> agg.users[u] || (u ? "(sin nombre)" : "(sin asesor)");
   const universo = leadsIn || agg.leads;
@@ -5094,7 +5184,10 @@ function slaAsesorSection(agg, leadsIn){
   universo.forEach(l=>{ if(rosterIds.has(l.u)) (groups[l.u]=groups[l.u]||[]).push(l); else fuera.push(l); });
   // Un asesor del roster sin leads aparece en cero, no desaparece.
   rosterIds.forEach(u=>{ groups[u] = groups[u] || []; });
-  let rows = Object.keys(groups).map(u=>({ u, a:groups[u], c:slaScoreAsesor(groups[u]) }));
+  // Umbrales del periodo del reporte (spec v1.2): los del juego vigente en su último día.
+  const per = slaPeriodoDe(agg.rango);
+  const rub = slaRubrica(per.ini, per.fin);
+  let rows = Object.keys(groups).map(u=>({ u, a:groups[u], c:slaScoreAsesor(groups[u], rub) }));
   rows.sort((x,y)=>(y.c.global??-1)-(x.c.global??-1));
   slaNormalizar(rows);
   // Si el roster no empató con ningún usuario de GHL (nombres distintos), avisar en vez
@@ -5102,6 +5195,10 @@ function slaAsesorSection(agg, leadsIn){
   const rosterVacio = !rosterIds.size;
 
   const pill = (v)=> v==null ? `<span class="sla-pill na">N/A</span>` : `<span class="sla-pill s${v}">${v}</span>`;
+  // Un rango que cruza un cambio de umbrales lo dice junto a la sub-nota (spec v1.2 §4).
+  const notaCambio = (k)=> rub[k].cambio
+    ? `<span class="tag-sm sla-cambio" title="Del ${escAttr(slaFechaCorta(rub[k].cambio))} en adelante: ${escAttr(slaThrTxt(rub[k].thr))}. El rango completo se califica con los umbrales nuevos.">Rúbrica cambió el ${escAttr(slaFechaCorta(rub[k].cambio))}</span>` : "";
+  const pct1 = (v)=> v==null ? "" : v.toFixed(1)+"%";
   const adjTag = (r)=> r.c.small ? `<span class="tag-sm">muestra chica</span>`
     : r.adj==="up" ? `<span class="tag-up">Supera</span>`
     : r.adj==="down" ? `<span class="tag-dn">Debajo</span>`
@@ -5141,7 +5238,7 @@ function slaAsesorSection(agg, leadsIn){
     ${selHtml}
     <div class="table-scroll" style="margin-bottom:8px"><table class="cons">
       <tr><th class="lft">Asesor</th><th>N</th>
-        ${SLA_DIMS.map(d=>`<th title="${escAttr(d.label)} · umbrales ${d.thr.join("/")}%">${escAttr(d.label.split(" ")[0])}</th>`).join("")}
+        ${SLA_DIMS.map(d=>`<th title="${escAttr(d.label)} · umbrales ${escAttr(slaThrTxt(rub[d.key].thr))} (≥ para 2 · 3 · 4 · 5)">${escAttr(d.label.split(" ")[0])}${rub[d.key].cambio?`<br>${notaCambio(d.key)}`:""}</th>`).join("")}
         <th>Nota global</th><th title="Escala 1-5: 1 + 4×[(SQL Selvadentro×4 + SQL×3 + MQL×2 + CQL×1) ÷ (4 × total calificado)], con la calificación por reglas de Calidad de Leads (la etapa del pipeline manda). En blanco = ningún lead con señal para calificar.">Índice calidad (1-5)</th>
         <th title="Percentil de su tasa de oportunidades vs. percentil de la calidad de lead que recibió">Resultado ajustado</th></tr>
       ${tbody || `<tr><td colspan="10" class="lft txt-nota">Sin leads en el rango.</td></tr>`}
@@ -5156,23 +5253,25 @@ function slaAsesorSection(agg, leadsIn){
     const col=(v)=> v==null?"#9aa39d":v===5?"var(--verde-prof)":v===4?"#5aa08f":v===3?"var(--cobre)":v===2?"#c9743a":"var(--rojo)";
     const bars = SLA_DIMS.map(d=>{
       const v=c.sub[d.key], pc=c.pcts[d.key], nd=c.cnt ? c.cnt[d.key] : null;
-      // Cada porcentaje muestra los dos números de los que sale (spec A1)
-      return `<div class="sla-bar"><span class="sb-lbl">${escAttr(d.label)}</span>
+      // Cada porcentaje muestra los dos números de los que sale (spec A1), a un decimal
+      // (spec v1.2): 39.9% redondeado a 40% junto a un 2 parecería un error de cálculo.
+      const nota = c.small ? `<span class="tag-sm">sin muestra suficiente</span>` : v==null ? "N/A" : v;
+      return `<div class="sla-bar"><span class="sb-lbl" title="Umbrales ${escAttr(slaThrTxt(rub[d.key].thr))} (≥ para 2 · 3 · 4 · 5)">${escAttr(d.label)}</span>
         <span class="sb-track"><i style="width:${v==null?0:v/5*100}%;background:${col(v)}"></i></span>
-        <span class="sb-val">${v==null?"N/A":v}${pc==null?"":` · ${Math.round(pc)}%`}${nd?` <span style="color:var(--neutro)">(${nd[0]} de ${nd[1]})</span>`:""}</span></div>`;
+        <span class="sb-val">${nota}${pc==null?"":` · ${pct1(pc)}`}${nd?` <span style="color:var(--neutro)">(${nd[0]} de ${nd[1]})</span>`:""}${notaCambio(d.key)}</span></div>`;
     }).join("");
     const dist = [["d05","0-5 min","var(--verde-prof)"],["d30","5-30 min","#5aa08f"],["d120","30 m-2 h","var(--cobre)"],["dout","fuera / sin contacto","#ddd8cb"]];
     return `<div class="lq-card" style="margin-bottom:14px">
       <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px">
         <h4 style="margin:0">${escAttr(name(r.u))}</h4>
         ${c.small?'<span class="tag-sm">muestra pequeña — interpretar con cautela</span>':''}
-        <span style="margin-left:auto;font-size:var(--fs-s);color:var(--neutro)">Nota global <b style="font-size:var(--fs-xl);color:var(--verde-prof)">${c.global==null?"—":c.global.toFixed(1)}</b>/5</span>
+        <span style="margin-left:auto;font-size:var(--fs-s);color:var(--neutro)">Nota global ${c.small?`<span class="tag-sm">sin muestra suficiente</span>`:`<b style="font-size:var(--fs-xl);color:var(--verde-prof)">${c.global==null?"—":c.global.toFixed(1)}</b>/5`}</span>
       </div>
       <div class="lq-sub" style="margin-bottom:10px">N = ${c.N} leads · oportunidades creadas: ${c.opp} · leads con oportunidad: ${c.leadsConOpp} de ${c.leadsTot} (${Math.round(c.oppRate)}%) · citas: ${c.showed}/${c.citas} asistidas · agendamiento: ${c.agend.de?`${c.agend.con} de ${c.agend.de} efectivos (${Math.round(c.agend.con/c.agend.de*100)}%)`:"—"} · índice de calidad: ${c.q5==null?"— (sin leads calificados en el CRM)":c.q5.toFixed(1)+"/5"} · break up: ${c.desc?`${c.bk} de ${c.desc} descalificados`:"N/A (sin descalificados)"} · tareas: ${c.tk.leidas?`${c.tk.prog} programadas · ${c.tk.enFecha} en fecha · ${c.tk.venc} vencidas abiertas`:"sin datos de tareas"}</div>
       ${bars}
       <div style="font-size:var(--fs-s);font-weight:600;color:var(--neutro);margin:12px 0 4px">Distribución de velocidad de primer contacto</div>
       <div class="lq-qbar">${dist.map(([k,,cl])=>`<span style="width:${c.pcts[k]}%;background:${cl}"></span>`).join("")}</div>
-      <div class="lq-legend-dots">${dist.map(([k,lbl,cl])=>`<span><i style="background:${cl};display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px"></i>${lbl} ${Math.round(c.pcts[k])}%</span>`).join("")}</div>
+      <div class="lq-legend-dots">${dist.map(([k,lbl,cl])=>`<span><i style="background:${cl};display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px"></i>${lbl} ${pct1(c.pcts[k])}</span>`).join("")}</div>
     </div>`;
   }).join("");
 
@@ -5182,13 +5281,14 @@ function slaAsesorSection(agg, leadsIn){
   }
   // Ventana y población de CADA sub-nota, junto a sus umbrales (spec C3): con esto un
   // denominador de reemplazo o una ventana desfasada no pueden volver a esconderse.
-  html += `<div class="lq-meth"><b>Rúbrica</b> — cada sub-nota sale del % del criterio contra sus umbrales (≥ para 2 / 3 / 4 / 5). Ventana: el rango de semanas seleccionado. Población: los leads del asesor con datos de conversación legibles, salvo donde se indica.
-    <br><b>Velocidad de primer contacto:</b> ${SLA_DIMS[0].thr.join(" · ")}% — leads con 1er toque manual en ≤5 minutos, desde la entrada del lead (o su traspaso a ventas). <b>Umbrales propuestos, pendientes de aprobación de Dirección General</b>: la ventana cambió de 2 h a 5 min y conservar los umbrales viejos hundiría al equipo por un cambio de regla. Pendiente además el calendario de horario de atención para excluir a los leads fuera de horario (spec B2-3).
-    <br><b>Cadencia / seguimiento:</b> ${SLA_DIMS[1].thr.join(" · ")}% — leads con ≥3 días distintos de contacto manual en sus primeros 10 días.
-    <br><b>Cierre de ciclo:</b> ${SLA_DIMS[2].thr.join(" · ")}% — de los leads DESCALIFICADOS del asesor, cuántos recibieron la escalera completa antes de retirarse. Sin descalificados: N/A. Nunca un denominador de reemplazo.
-    <br><b>Cumplimiento de tareas:</b> ${SLA_DIMS[3].thr.join(" · ")}% — tareas del CRM cerradas en o antes de su fecha, sobre las programadas. Sustituye a "Seguimiento a futuro" (sus campos no existen en GHL). El % nunca se lee sin sus tres cifras: programadas, en fecha y vencidas abiertas — un % alto con pocas tareas premia programar menos. Umbrales propuestos.
-    <br><b>Actividad efectiva:</b> ${SLA_DIMS[4].thr.join(" · ")}% — mensajes entregados + leídos (y llamadas conectadas) ÷ enviados, de las acciones manuales del asesor.
-    <br>Escala: 5 Excelente · 4 Bueno · 3 Adecuado · 2 Necesita mejorar · 1 Crítico. Con menos de ${SLA_MIN_N} leads no se emite nota: "sin muestra suficiente".
+  html += `<div class="lq-meth"><b>Rúbrica</b> — cada sub-nota sale del % del criterio contra sus umbrales (≥ para 2 / 3 / 4 / 5; el límite inferior cuenta: exactamente 20.0% ya es un 2). Se califica sobre el % sin redondear y se muestra a un decimal. Ventana: el rango de semanas seleccionado${per.ini?` (${escAttr(slaFechaCorta(per.ini))} → ${escAttr(slaFechaCorta(per.fin))})`:""}. Población: los leads del asesor con datos de conversación legibles, salvo donde se indica.
+    <br><b>Velocidad de primer contacto:</b> ${slaThrTxt(rub.vel.thr)} — leads con 1er toque manual en ≤5 minutos, desde la entrada del lead (o su traspaso a ventas), sobre todos sus leads del periodo; ${rub.vel.thr[3]}% o más es un 5. ${slaHistorialTxt("vel", rub)} Pendiente el calendario de horario de atención para los leads fuera de horario (spec B2-3).
+    <br><b>Cadencia / seguimiento:</b> ${slaThrTxt(rub.cad.thr)} — leads con ≥3 días distintos de contacto manual en sus primeros 10 días. ${slaHistorialTxt("cad", rub)}
+    <br><b>Cierre de ciclo:</b> ${slaThrTxt(rub.cierre.thr)} — de los leads DESCALIFICADOS del asesor, cuántos recibieron la escalera completa antes de retirarse. Sin descalificados: N/A. Nunca un denominador de reemplazo. ${slaHistorialTxt("cierre", rub)}
+    <br><b>Cumplimiento de tareas:</b> ${slaThrTxt(rub.tareas.thr)} — tareas del CRM cerradas en o antes de su fecha, sobre las programadas. Sustituye a "Seguimiento a futuro" (sus campos no existen en GHL). El % nunca se lee sin sus tres cifras: programadas, en fecha y vencidas abiertas — un % alto con pocas tareas premia programar menos. Umbrales propuestos. ${slaHistorialTxt("tareas", rub)}
+    <br><b>Actividad efectiva:</b> ${slaThrTxt(rub.efec.thr)} — mensajes entregados + leídos (y llamadas conectadas) ÷ enviados, de las acciones manuales del asesor. ${slaHistorialTxt("efec", rub)}
+    <br>Los umbrales tienen fecha de vigencia y se consultan en <b>Metas → Rúbrica de desempeño</b>: un periodo se califica con los vigentes en su último día, y el reporte nunca los cambia por su cuenta.
+    <br>Escala: 5 Excelente · 4 Bueno · 3 Adecuado · 2 Necesita mejorar · 1 Crítico. La nota global es el promedio simple de las sub-notas, todas con el mismo peso. Con menos de ${SLA_MIN_N} leads no se emite nota: "sin muestra suficiente".
     <br><b>Índice de calidad (1-5)</b> = 1 + 4 × [(SQL Selvadentro×4 + SQL×3 + MQL×2 + CQL×1) ÷ (4 × total calificado)], con la <b>calificación por reglas</b> de Calidad de Leads (etapa del pipeline, oportunidades, citas, respuesta, formulario; la etapa manda). Antes se leía el campo manual "Calificación del lead" del CRM, que el equipo dejó de llenar desde la semana 33 de 2026 (hoy lo traen ${agg.califCrm||0} de ${(agg.leads||[]).length} leads del rango), y el índice salía en blanco para todos. Los leads nuevos sin ninguna señal no entran. En blanco = el asesor no tiene leads con señal.
     <br><b>Resultado ajustado</b> compara el percentil de la tasa de oportunidades del asesor (leads con oportunidad ÷ sus leads) contra el percentil de la calidad de lead que recibió, entre asesores comparables: separa el mérito del proceso de la suerte en la asignación. En una evaluación, la conversación empieza aquí.
     <br><b>Pendiente:</b> la causa de descalificación necesita el campo de motivo (spec B2-8) para distinguir mala calidad de mala gestión.</div>`;
@@ -6500,6 +6600,7 @@ function renderMetas(){
     metasBuilt=true;
   }
   renderMetasGlobales();
+  renderRubricaMetas();
   if(!sel.value && !selM.value){ sel.value = Object.keys(CHANNELS)[0] || ""; }
   if(sel.value){
     metasShowFrame(false); renderMetasBody(sel.value);
@@ -6596,13 +6697,102 @@ function renderMetasGlobales(){
   };
 }
 
+/* --- Rúbrica de desempeño: umbrales con fecha de vigencia (Change Spec v1.2) -----------
+   Los juegos de umbrales de las cinco sub-notas del asesor. Un cambio se programa con la
+   fecha en que entra en vigor y nunca toca un periodo que terminó antes: los juegos que ya
+   rigen no se editan ni se quitan desde aquí, porque eso sería recalcular el pasado. Solo
+   Dirección General (o admin) los cambia; kv.js aplica la misma regla del lado del servidor. */
+const puedeRubrica = ()=> navPermiso("direccion_general");
+const slaDiaAntes = (ymd)=>{ const d = new Date(ymd+"T12:00:00Z"); d.setUTCDate(d.getUTCDate()-1); return d.toISOString().slice(0,10); };
+function renderRubricaMetas(){
+  const host = document.getElementById("metas-rubrica"); if(!host) return;
+  const hoy = slaHoyYMD(), puede = puedeRubrica();
+  const fila = (d)=>{
+    const js = slaJuegos(d.key), vig = slaUmbrales(d.key, hoy, hoy);
+    const items = js.map((j,i)=>{
+      const sig = js[i+1], futuro = !!(j.desde && j.desde > hoy), esVig = (j.desde||null)===(vig.desde||null);
+      const tramo = futuro ? `desde el ${slaFechaCorta(j.desde)} · <b>programado</b>`
+        : (j.desde ? `desde el ${slaFechaCorta(j.desde)}` : "desde el inicio") + (sig ? ` hasta el ${slaFechaCorta(slaDiaAntes(sig.desde))}` : "");
+      const quien = [j.ref ? escAttr(j.ref) : "", j.por ? `fijado por ${escAttr(j.por)}${Date.parse(j.en)?` el ${escAttr(slaFechaCorta(new Date(Date.parse(j.en)-LQ_TZ_MS).toISOString().slice(0,10)))}`:""}` : ""].filter(Boolean).join(" · ");
+      return `<div style="padding:3px 0${esVig?";font-weight:600":""}"><span style="font-variant-numeric:tabular-nums">${escAttr(slaThrTxt(j.thr))}</span>
+        <span class="lq-sub">— ${tramo}${esVig?" · <b>vigente hoy</b>":""}${quien?` · ${quien}`:""}</span>
+        ${puede && futuro ? `<button class="btn btn-ghost rb-quitar" type="button" data-rb-k="${escAttr(d.key)}" data-rb-desde="${escAttr(j.desde)}" style="padding:2px 10px;font-size:var(--fs-xs);margin-left:6px">Quitar</button>` : ""}</div>`;
+    }).join("");
+    return `<tr><td class="lft celda-fuerte">${escAttr(d.label)}</td><td class="lft">${items}</td></tr>`;
+  };
+  const inp = (id, lbl)=>`<label class="lq-sub" style="display:inline-flex;flex-direction:column;gap:2px;margin-right:8px">${lbl}
+    <span class="meta-pct-wrap"><input id="${id}" type="number" step="0.1" min="0" max="100" style="width:70px;text-align:right"><span>%</span></span></label>`;
+  host.innerHTML = `<div class="rep-section mb-sec">
+    <h3>Rúbrica de desempeño del asesor</h3>
+    <p class="hint pegada">Umbrales de las cinco sub-notas de <b>Ventas → Desempeño</b> (≥ para 2 · 3 · 4 · 5). Cada juego tiene fecha de entrada en vigor: un periodo se califica con el juego vigente en su <b>último día</b>, así que lo que terminó antes de un cambio conserva su nota y un rango que cruza el cambio lo avisa junto a la sub-nota. El reporte nunca mueve un umbral por su cuenta. Se guarda en <code>${SLA_RUBRICA_KEY}</code>${puede ? "." : ". <b>Solo Dirección General</b> puede cambiarla."}</p>
+    <div class="table-scroll" style="border:none;box-shadow:none"><table class="cons">
+      <tr><th class="lft">Sub-nota</th><th class="lft">Umbrales y vigencia</th></tr>
+      ${SLA_DIMS.map(fila).join("")}
+    </table></div>
+    ${puede ? `<div style="margin-top:10px">
+      <div class="lq-sub" style="font-weight:700;margin-bottom:6px">Programar un cambio de umbrales</div>
+      <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px">
+        <label class="lq-sub" style="display:inline-flex;flex-direction:column;gap:2px;margin-right:8px">Sub-nota
+          <select id="rb-dim">${SLA_DIMS.map(d=>`<option value="${escAttr(d.key)}">${escAttr(d.label)}</option>`).join("")}</select></label>
+        ${inp("rb-t2","2 desde")}${inp("rb-t3","3 desde")}${inp("rb-t4","4 desde")}${inp("rb-t5","5 desde")}
+        <label class="lq-sub" style="display:inline-flex;flex-direction:column;gap:2px;margin-right:8px">Entra en vigor
+          <input id="rb-desde" type="date" min="${hoy}" value=""></label>
+        <label class="lq-sub" style="display:inline-flex;flex-direction:column;gap:2px;margin-right:8px">Referencia (opcional)
+          <input id="rb-ref" type="text" maxlength="120" placeholder="p. ej. Change Spec v1.3" style="width:200px"></label>
+        <button class="btn" id="rb-save" type="button">Programar</button>
+      </div>
+      <p class="hint pegada" id="rb-estado" style="margin-top:6px">La fecha no puede ser anterior a hoy (${escAttr(slaFechaCorta(hoy))}): cambiar un juego que ya rige recalcularía notas ya emitidas.</p>
+    </div>` : ""}
+  </div>`;
+  if(!puede) return;
+
+  const estado = (txt, mal)=>{ const e=document.getElementById("rb-estado"); if(e){ e.textContent=txt; e.style.color = mal ? "var(--rojo)" : "var(--neutro)"; } };
+  const guardar = async (key, lista, okTxt)=>{
+    const antes = SLA_RUBRICA_OVR;
+    SLA_RUBRICA_OVR = { ...SLA_RUBRICA_OVR, [key]: lista };
+    try{
+      await sSet(SLA_RUBRICA_KEY, SLA_RUBRICA_OVR);
+      toast(okTxt); renderRubricaMetas(); estado(okTxt);
+      if(slaState.agg) slaRender();
+    }catch(e){
+      // Un 403 aquí significa que la sesión no es de Dirección General ni admin.
+      SLA_RUBRICA_OVR = antes;
+      estado("No se pudo guardar: "+(e.message||e), true);
+      toast("No se pudo guardar la rúbrica: "+(e.message||e));
+    }
+  };
+  const dimSel = document.getElementById("rb-dim");
+  const precargar = ()=>{ const t = slaUmbrales(dimSel.value, hoy, hoy).thr; ["rb-t2","rb-t3","rb-t4","rb-t5"].forEach((id,i)=>{ document.getElementById(id).value = t[i]; }); };
+  dimSel.onchange = precargar; precargar();
+  document.getElementById("rb-save").onclick = async ()=>{
+    const key = dimSel.value, dim = SLA_DIMS.find(d=>d.key===key);
+    const thr = ["rb-t2","rb-t3","rb-t4","rb-t5"].map(id=>{ const v = document.getElementById(id).value; return v==="" ? NaN : Number(v); });
+    const desde = document.getElementById("rb-desde").value;
+    const ref = document.getElementById("rb-ref").value.trim();
+    const j = { desde, thr, ref, por: (SESSION && SESSION.email) || "", en: new Date().toISOString() };
+    if(!SLA_YMD_RX.test(desde)) return estado("Falta la fecha de entrada en vigor.", true);
+    if(!slaJuegoValido(j)) return estado("Los cuatro umbrales van de 0 a 100 y cada uno tiene que ser mayor que el anterior.", true);
+    if(desde < hoy) return estado(`La fecha no puede ser anterior a hoy (${slaFechaCorta(hoy)}).`, true);
+    const js = slaJuegos(key), mismo = js.find(x=>x.desde===desde);
+    if(mismo && mismo.desde <= hoy) return estado(`Ya hay un juego que rige desde el ${slaFechaCorta(desde)}; programa el cambio para otra fecha.`, true);
+    if(!confirm(`${dim.label}: ${slaThrTxt(thr)} a partir del ${slaFechaCorta(desde)}.\n\nLos periodos que terminen antes de esa fecha conservan su nota.${mismo?`\nReemplaza al cambio ya programado para ese día (${slaThrTxt(mismo.thr)}).`:""}`)) return;
+    await guardar(key, js.filter(x=>x.desde!==desde).concat([j]), "Cambio de rúbrica programado ✓");
+  };
+  host.querySelectorAll(".rb-quitar").forEach(b=>b.onclick = async ()=>{
+    const key = b.dataset.rbK, desde = b.dataset.rbDesde, js = slaJuegos(key);
+    if(!(desde > slaHoyYMD())) return;       // solo lo que todavía no rige
+    if(!confirm(`¿Quitar el cambio programado para el ${slaFechaCorta(desde)}?`)) return;
+    await guardar(key, js.filter(x=>x.desde!==desde), "Cambio programado quitado ✓");
+  });
+}
+
 function metasShowFrame(show, modKey){
   const body = document.getElementById("metas-body");
   const hint = document.getElementById("metas-hint");
-  const glOn = document.getElementById("metas-global");
-  if(!show){ mktHostMostrar(false); body.style.display=""; hint.style.display=""; if(glOn) glOn.style.display=""; return; }
+  const glOn = document.getElementById("metas-global"), rbOn = document.getElementById("metas-rubrica");
+  if(!show){ mktHostMostrar(false); body.style.display=""; hint.style.display=""; if(glOn) glOn.style.display=""; if(rbOn) rbOn.style.display=""; return; }
   body.style.display="none"; hint.style.display="none"; mktHostMostrar(true);
-  const gl = document.getElementById("metas-global"); if(gl) gl.style.display = "none";
+  if(glOn) glOn.style.display = "none"; if(rbOn) rbOn.style.display = "none";
   pintarSistema("metas-sistema", "Marketing", nombreModuloMkt(modKey), "se guarda en el almacenamiento de Marketing (mkt_*), aparte de las metas de Ventas");
   mktFrameUsar(w=>{ w.mktSetEmbedMode(true); w.mktSetActive(modKey); w.mktShowView('metas'); }, mktFrameFallo);
 }
@@ -7140,7 +7330,7 @@ function dbExportCSV(ch){
 async function dbExportJSON(){
   const all={};
   for(const ch of Object.keys(CHANNELS)){ recList(chPrefix(ch)).forEach(k=>{ all[k]=recGet(k); }); }
-  for(const k of ["selvadentro:asesores","selvadentro:metas"]){ const v=await sGetRetry(k); if(v!=null) all[k]=v; }
+  for(const k of ["selvadentro:asesores","selvadentro:metas",SLA_RUBRICA_KEY]){ const v=await sGetRetry(k); if(v!=null) all[k]=v; }
   download("selvadentro-backup.json", JSON.stringify(all,null,2), "application/json");
   toast("Backup JSON exportado ✓");
 }
@@ -7355,7 +7545,7 @@ async function init(){
   // 2) En segundo plano: carga datos guardados (autoridad), persiste semillas faltantes y re-pinta si cambió algo
   (async()=>{
     try{
-      await loadAdvisors(); await loadMetas(); await loadLastResp();
+      await loadAdvisors(); await loadMetas(); await loadRubrica(); await loadLastResp();
       await primeCache(); await persistSeeds();
       resState.built=false; dcState.built=false; dbBuilt=false; metasBuilt=false;
       // Un usuario solo-Marketing no tiene ningún canal de ventas: CHANNELS queda vacío
@@ -7367,6 +7557,8 @@ async function init(){
       // Con los datos guardados ya en caché, repintar lo que esté abierto.
       if(NAV_GRUPO === "direccion") navIr("direccion", NAV_ULTIMA.direccion, false);
       else if(NAV_LATERAL === "db"){ renderDB(); if(dbLastCh && CHANNELS[dbLastCh]) await renderDBTable(dbLastCh); }
+      // Desempeño pudo pintarse con los umbrales por defecto antes de leer selvadentro:rubrica.
+      if(slaState.agg) slaRender();
     }catch(e){ LECTURA_FALLIDA = true; console.error("Fallo al cargar los datos guardados", e); }
     // La bandera existía y se levantaba bien, y sReadFailed() estaba escrito.
     // Nadie los consultaba jamás, así que un backend caído se veía igual que "todavía no hay

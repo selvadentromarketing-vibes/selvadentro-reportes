@@ -248,7 +248,9 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
 ## Metas del negocio
 
 Pantalla **Metas** de la barra lateral. Todo se guarda en la clave `selvadentro:metas`
-del kv y aplica para todo el equipo.
+del kv y aplica para todo el equipo, salvo el bloque **Rúbrica de desempeño** (umbrales de
+las sub-notas del asesor con fecha de vigencia), que vive en `selvadentro:rubrica` y solo
+lo cambia Dirección General — ver *Desempeño de Ventas*.
 
 - **Metas por KPI de cada canal** (meta mensual de cada campo, más KPIs personalizados y
   el orden de las secciones): ya existía.
@@ -417,10 +419,30 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
 - **Desempeño del asesor** — rúbrica del prototipo "Sistema de Calificación"
   (ago 2026), verificada con paridad exacta contra sus fórmulas: cinco sub-notas
   independientes en escala 1-5 (velocidad de primer contacto · cadencia 10 días ·
-  cierre de ciclo/break-up · seguimiento a futuro · actividad efectiva), cada una
-  con sus umbrales de % (20/40/60/80 · 20/40/60/80 · 10/20/35/50 · 10/25/40/60 ·
-  50/70/85/95). La nota global es el promedio de las sub-notas disponibles y nunca
-  se muestra sola; una sub-nota sin dato queda N/A y no la baja.
+  cierre de ciclo/break-up · cumplimiento de tareas · actividad efectiva), cada una
+  con sus umbrales de % (hoy: 20/40/60/80 · 20/40/60/80 · 10/20/35/50 · 50/70/85/95 ·
+  50/70/85/95). La nota global es el promedio simple de las sub-notas disponibles,
+  todas con el mismo peso, y nunca se muestra sola; una sub-nota sin dato queda N/A y
+  no la baja. Con menos de 10 leads no hay nota —ni sub-notas ni global, tampoco en la
+  ficha ni en el selector de asesor—: "sin muestra suficiente", nunca un 1.
+  - **Umbrales con fecha de vigencia** (Change Spec v1.2 de Dirección General,
+    25-sep-2026). Velocidad de primer contacto pasa de 10·20·30·45 (la recalibración de
+    la spec v1.0 al cambiar la ventana a 5 min, rechazada por laxa) a **20·40·60·80**,
+    con 80% para un 5, **desde el 1-oct-2026**. Sin recálculo retroactivo: cada periodo
+    se califica con el juego vigente en su **último día**, así que una semana que terminó
+    antes del 1-oct conserva su nota y cualquier periodo que toque el 1-oct o después
+    —incluida la semana del 28-sep— usa los nuevos. Si el rango tiene días de antes y de
+    después, la sub-nota lleva la nota "Rúbrica cambió el 1-oct-2026" (encabezado de la
+    tabla, ficha y leyenda). Límite inferior inclusivo (20.0% = 2, 80.0% = 5, 79.9% = 4);
+    se califica sobre el % sin redondear —calculado como `x·100/N` para que un % que cae
+    justo en un umbral salga exacto— y se muestra a un decimal.
+  - **Los umbrales son un parámetro, no código**: `SLA_RUBRICA_DEF` es solo el valor por
+    defecto; **Metas → Rúbrica de desempeño** muestra los juegos de las cinco sub-notas con
+    su vigencia y permite programar uno nuevo con fecha (hoy o después; nunca se edita ni
+    se quita un juego que ya rige, porque eso recalcularía notas emitidas). Se guarda en
+    `selvadentro:rubrica`: lectura abierta, escritura solo `direccion_general` (o admin),
+    aplicado también en `kv.js`. El reporte nunca mueve un umbral por su cuenta. La prueba
+    de humo corre los nueve casos de aceptación de la spec.
   - **Contacto manual**: se excluyen automatizaciones (`workflow`, `campaign`,
     `bulk_actions`) y actividad sin usuario asignado, por `source` y `userId`.
   - **Reloj del SLA**: corre **24/7** desde que entra el lead (confirmado con el
