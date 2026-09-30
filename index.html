@@ -4981,7 +4981,10 @@ const SLA_DIMS = [
   { key:"tareas", label:"Cumplimiento de tareas", thr:[50,70,85,95], prop:true },
   { key:"efec",   label:"Actividad efectiva", thr:[50,70,85,95] },
 ];
-const SLA_MIN_N = 10;                        // muestra pequeña: se marca y sale del ranking
+// Muestra mínima para emitir nota: con menos de SLA_MIN_N leads se marca y sale del ranking.
+// Era 10 (spec v1.0/v1.2); Dirección General la bajó a 5 el 30-sep-2026: con 5 o más se
+// analiza al asesor. Aplica a todos los periodos.
+const SLA_MIN_N = 5;
 const SCORELAB = {5:"Excelente",4:"Bueno",3:"Adecuado",2:"Necesita mejorar",1:"Crítico"};
 // Límite inferior inclusivo (spec v1.2 §4): exactamente 20.0% es un 2 y 80.0% un 5.
 // Se califica sobre el % sin redondear; la pantalla lo muestra a un decimal.
@@ -5205,7 +5208,7 @@ function slaAsesorSection(agg, leadsIn){
     : r.adj==="mid" ? `<span class="tag-mid">En línea</span>` : `<span style="color:var(--neutro)">—</span>`;
 
   const tbody = rows.map(r=>{
-    // Con menos de 10 leads NO se emite nota (regla de la spec): "sin muestra
+    // Con menos de SLA_MIN_N leads NO se emite nota (regla de la spec): "sin muestra
     // suficiente", nunca un 1.0 Crítico que persiga a alguien en una evaluación.
     const gl = r.c.small ? `<span class="tag-sm">sin muestra suficiente</span>`
       : r.c.global==null ? "—"
@@ -5910,7 +5913,7 @@ function slaRender(){
   html += `<div class="lq-meth"><b>Definiciones</b> (spec v1.0, sección 1) —
     <br><b>Universo y población</b> · <b>Universo de leads:</b> todo lead asignado a un asesor del roster, en cualquier pipeline de venta ·
     <b>Fuera del equipo de ventas:</b> una sola línea que agrega los leads de quien no está en el roster de Asesores; volumen a corregir, nunca se califica ·
-    <b>Muestra insuficiente:</b> menos de 10 leads en el periodo — no se emite nota ·
+    <b>Muestra insuficiente:</b> menos de ${SLA_MIN_N} leads en el periodo — no se emite nota ·
     <b>Registros de prueba:</b> excluidos de todo cálculo, con su conteo declarado ·
     <b>Fuera de horario:</b> pendiente del calendario de horario de atención (spec B2-3).
     <br><b>Contacto</b> · <b>1er toque manual:</b> primera acción del asesor en persona — su llamada, su WhatsApp, su SMS o su email escrito a mano.

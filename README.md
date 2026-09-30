@@ -423,8 +423,10 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
   con sus umbrales de % (hoy: 20/40/60/80 · 20/40/60/80 · 10/20/35/50 · 50/70/85/95 ·
   50/70/85/95). La nota global es el promedio simple de las sub-notas disponibles,
   todas con el mismo peso, y nunca se muestra sola; una sub-nota sin dato queda N/A y
-  no la baja. Con menos de 10 leads no hay nota —ni sub-notas ni global, tampoco en la
-  ficha ni en el selector de asesor—: "sin muestra suficiente", nunca un 1.
+  no la baja. Con menos de **5 leads** no hay nota —ni sub-notas ni global, tampoco en
+  la ficha ni en el selector de asesor—: "sin muestra suficiente", nunca un 1; con 5 o
+  más se califica. La spec v1.0/v1.2 pedía 10; Dirección General la bajó a 5 el
+  30-sep-2026 (`SLA_MIN_N`), para todos los periodos.
   - **Umbrales con fecha de vigencia** (Change Spec v1.2 de Dirección General,
     25-sep-2026). Velocidad de primer contacto pasa de 10·20·30·45 (la recalibración de
     la spec v1.0 al cambiar la ventana a 5 min, rechazada por laxa) a **20·40·60·80**,
@@ -454,7 +456,7 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
     no tiene.
   - **Índice de calidad** (SQLS×4 + SQL×3 + MQL×2 + CQL×1) ÷ (4×total) y **resultado
     ajustado** por percentiles (tasa de OPPs vs. calidad recibida) para separar
-    mérito del proceso de suerte en la asignación. Muestra pequeña: <10 leads.
+    mérito del proceso de suerte en la asignación. Muestra pequeña: <5 leads.
     Desde el 23-sep-2026 la calificación de cada lead sale de las **reglas de Calidad
     de Leads** (`lqAutoQualify`, la etapa del pipeline manda), no del campo manual
     "Calificación del lead": el equipo dejó de llenarlo en la semana 33 (0 de 51

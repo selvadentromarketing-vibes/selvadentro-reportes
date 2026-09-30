@@ -172,7 +172,9 @@ const PORT = process.env.PORT || 8765;
     const leads = (x, n) => Array.from({ length: n }, (_, i) => ({ id: 'l' + i, u: 'u1', sd: false, bucket: i < x ? 'b5' : 'b30', d10: 0, lv: 'nc', ap: { tot: 0, sh: 0, ns: 0 }, ad: false, fi: null, opp: 0 }));
     const nueva = slaRubrica('2026-10-05', '2026-10-11');            // W41, toda después del cambio
     const nota = (x, n, rub) => { const c = slaScoreAsesor(leads(x, n), rub || nueva); return c.small ? 'insuficiente' : c.sub.vel; };
-    const casos = [[3, 20, 1], [4, 20, 2], [399, 1000, 2], [8, 20, 3], [12, 20, 4], [799, 1000, 4], [16, 20, 5], [20, 20, 5], [8, 9, 'insuficiente']]
+    // Muestra mínima: 5 leads (Dirección General, 30-sep-2026; la spec decía 10 y 8/9 era
+    // "muestra insuficiente"). Con 5 o más se califica; con 4 o menos, nunca una nota.
+    const casos = [[3, 20, 1], [4, 20, 2], [399, 1000, 2], [8, 20, 3], [12, 20, 4], [799, 1000, 4], [16, 20, 5], [20, 20, 5], [8, 9, 5], [4, 5, 5], [3, 4, 'insuficiente'], [4, 4, 'insuficiente']]
       .map(([x, n, esp]) => ({ caso: `${x}/${n}`, pct: (x * 100 / n).toFixed(1) + '%', esp, obt: nota(x, n) }));
     const r = { casos, fallan: casos.filter(c => c.obt !== c.esp).map(c => c.caso) };
     const w39 = slaUmbrales('vel', ...Object.values(slaPeriodoDe(['2026-W39'])));   // 21–27 sep: antes del cambio
@@ -187,7 +189,7 @@ const PORT = process.env.PORT || 8765;
     const advPrev = ADVISOR_LIST, selPrev = slaState.asesor;
     ADVISOR_LIST = [{ name: 'Asesor Uno', active: true }]; slaState.asesor = 'u1';
     const pinta = (rango, x, n) => slaAsesorSection({ rango, users: { u1: 'Asesor Uno' }, leads: leads(x, n), califCrm: 0 }, leads(x, n));
-    const hCruza = pinta(['2026-W40'], 399, 1000), hAntes = pinta(['2026-W39'], 16, 20), hDespues = pinta(['2026-W41'], 16, 20), hChica = pinta(['2026-W41'], 8, 9);
+    const hCruza = pinta(['2026-W40'], 399, 1000), hAntes = pinta(['2026-W39'], 16, 20), hDespues = pinta(['2026-W41'], 16, 20), hChica = pinta(['2026-W41'], 3, 4);
     ADVISOR_LIST = advPrev; slaState.asesor = selPrev;
     const txt = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d.innerText || d.textContent; };
     r.ui = {
@@ -197,7 +199,7 @@ const PORT = process.env.PORT || 8765;
       unDecimal: /2 · 39\.9%/.test(txt(hCruza)),                                   // 399/1000 → nota 2, % a un decimal
       antesConserva: /Velocidad de primer contacto: 10 · 20 · 30 · 45%/.test(txt(hAntes)) && /conserva su nota/.test(txt(hAntes)) && /5 · 80\.0%/.test(txt(hAntes)),
       despues5: /5 · 80\.0%/.test(txt(hDespues)),
-      chica: /sin muestra suficiente · 88\.9%/.test(txt(hChica)) && !/sla-pill s\d/.test(hChica),
+      chica: /sin muestra suficiente · 75\.0%/.test(txt(hChica)) && !/sla-pill s\d/.test(hChica) && /Con menos de 5 leads no se emite nota/.test(txt(hChica)),
     };
     // Parámetro, no código: un juego guardado con fecha manda; uno inválido cae al default.
     const ovrPrev = SLA_RUBRICA_OVR;
