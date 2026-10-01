@@ -4867,10 +4867,19 @@ async function lqSync(){
     bar.style.width="92%"; lbl.textContent="Consultando inversión y anuncios (Windsor)…";
     let spendRows=[], adRows=[];
     if(boot.windsor){
-      try{ const sp = await lqFn({action:"spend", start:b0.startYMD, end:b1.endYMD}); spendRows = sp.rows||[]; monedas = sp.monedas||[]; }
+      let spendOk = false, adsOk = false;
+      try{ const sp = await lqFn({action:"spend", start:b0.startYMD, end:b1.endYMD}); spendRows = sp.rows||[]; monedas = sp.monedas||[]; spendOk = true; }
       catch(e){ fallos.push("inversión de Windsor (la columna Inversión sale vacía)"); toast("Windsor no respondió: "+(e.message||e)); }
-      try{ const ad = await lqFn({action:"ads", start:b0.startYMD, end:b1.endYMD}); adRows = ad.ads||[]; }
+      try{ const ad = await lqFn({action:"ads", start:b0.startYMD, end:b1.endYMD}); adRows = ad.ads||[]; adsOk = true; }
       catch(e){ fallos.push("detalle por anuncio de Windsor (no hay conjuntos ni anuncios)"); toast("Detalle por anuncio no disponible: "+(e.message||e)); }
+      // Windsor apaga Meta EN SILENCIO: si la cuenta de Meta Ads se desconecta de Windsor, el
+      // super-conector solo devuelve Google y el detalle por anuncio de Meta vuelve vacío sin
+      // error. El 1-oct-2026 las campañas de Meta desaparecieron de esta pestaña sin una sola
+      // línea de aviso. Doce semanas sin un peso de Meta no son un dato: son una conexión rota.
+      const hayMeta = spendRows.some(r=>/facebook|meta|instagram/i.test(r.src||"")) || adRows.some(r=>r.plat==="Meta");
+      if(spendOk && adsOk && !hayMeta){
+        fallos.push("Meta Ads: Windsor no devolvió inversión ni anuncios de Meta en las 12 semanas — la cuenta de Meta Ads se desconectó de Windsor y hay que volver a conectarla (onboard.windsor.ai)");
+      }
     } else {
       fallos.push("Windsor no está configurado (sin WINDSOR_API_KEY)");
     }
