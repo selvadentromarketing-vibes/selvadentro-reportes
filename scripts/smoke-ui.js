@@ -318,6 +318,19 @@ const PORT = process.env.PORT || 8765;
     return { ok: a === 'Pruebas de marketing' && b === '' && c === '' && d === '' && /INVESTORS_MX/.test(h) && /50\.0%/.test(h) };
   });
   v11.lq = lqInv.ok; if (!lqInv.ok) hallazgos.push({ vista: 'reglas:v1.1:lq', lqInv });
+  // Reporte Combinado (1-oct-2026): gastar sin leads en el CRM NO es lo mismo si la propia
+  // plataforma tampoco reporta leads (gastó sin producir) que si sí los reporta (falta cruce).
+  const combo = await page.evaluate(() => {
+    const wk = '2026-W39', rs = new Set([wk]);
+    const ad = (camp, spend, results) => ({ wk, d: '2026-09-22', plat: 'Meta', camp, grp: 'X', name: 'A', id: camp, spend, results, impr: 100, clicks: 5 });
+    const agg = { adw: [ad('INVESTORS_EN_FORMULARIOMETA_TULUM_100626', 862.91, 0), ad('INVESTORS_US/CA_WEBINAR_210726', 500, 4)], spend: [], leads: [] };
+    let h = ''; try { h = lqComboSection(agg, [], [wk], rs); } catch (e) { return { err: String(e) }; }
+    const d = document.createElement('div'); d.innerHTML = h; const t = d.textContent;
+    const a = 'Gasto sin un solo lead, según la propia plataforma: EN / Formulariometa / Tulum ($862.91)', b = 'Dinero que todavía no se puede juzgar: Us/ca / Webinar ($500.00, 4 leads según la plataforma)';
+    return { ok: t.includes(a) && t.includes(b) && !/Formulariometa[^·]{0,40}leads según la plataforma/.test(t), a: t.includes(a), b: t.includes(b) };
+  });
+  console.log('\n[combinado] gasto sin leads', JSON.stringify(combo));
+  if (!combo.ok) hallazgos.push({ vista: 'combinado:sinLeads', combo });
   console.log('\n[reglas v1.1] aceptación', JSON.stringify(v11));
   if (!v11.ok) hallazgos.push({ vista: 'reglas:v1.1', v11 });
   // Metas → Rúbrica de desempeño: los dos juegos de Velocidad, con su fecha
