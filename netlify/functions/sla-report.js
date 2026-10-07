@@ -30,8 +30,10 @@
 //     cf = campos personalizados de la oportunidad (id → valor): Causa, Evidencia, Asesor
 //     que descalificó y Fecha de entrada a Descalificado (spec v1.1 §2).
 //   { action:"users" } → { users, fields, oppFields, pipelines }
-//   { action:"citas", start, end } → { citas:[{id,ct,u,t,st,cal}], calendarios, errores[] }
-//     citas de TODOS los calendarios por fecha de la cita (no por alta del lead)
+//   { action:"citas", start, end } → { citas:[{id,ct,u,t,ag,st,cal}], calendarios, errores[] }
+//     citas de TODOS los calendarios con fecha de la cita en [start, end] (no por alta del
+//     lead); ag = cuándo se agendó. El front pide el fin del rango + 120 días para ver
+//     también las citas que se AGENDARON en el rango para fechas posteriores.
 //   { action:"tagged", tag } → { contacts:[…como contacts], filtro }
 //     contactos con esa etiqueta, de cualquier fecha: las descalificaciones revertidas se
 //     cuentan por la fecha de descalificación, no por la de alta del lead.
@@ -473,7 +475,8 @@ async function citas({ start, end }) {
           const t = ts(ev.startTime);
           if (!t || (ev.id && vistos.has(ev.id))) return;
           if (ev.id) vistos.add(ev.id);
-          out.push({ id: ev.id || "", ct: ev.contactId || "", u: ev.assignedUserId || "", t,
+          // ag = cuándo se AGENDÓ (alta del evento); t = cuándo es la cita.
+          out.push({ id: ev.id || "", ct: ev.contactId || "", u: ev.assignedUserId || "", t, ag: ts(ev.dateAdded),
             st: String(ev.appointmentStatus || ev.status || "").toLowerCase(), cal: c.name || "" });
         });
       } catch (e) { errores.push(c.name || c.id); }

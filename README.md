@@ -462,8 +462,17 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
   y, si la cita ya pasó sin estatus final, de la etapa del lead (Zoom/Tour realizado o
   posterior = asistió; no show / re agendar = no asistió). Lo que no dice ninguna de las dos
   queda **sin registrar**, visible y fuera del %. KPI, columna Show de la tabla por asesor,
-  ficha y bloque "Citas del periodo · asistencia". Si los calendarios no se pueden leer,
-  vuelve al cálculo por cohorte y lo dice. `sla:agg:v13`.
+  ficha y bloque "Citas del periodo · agendadas y asistencia". Si los calendarios no se
+  pueden leer, vuelve al cálculo por cohorte y lo dice. `sla:agg:v13`.
+- **Citas agendadas en el periodo y tasa de agendamiento** (7-oct-2026). En W40 salían "2
+  citas" con muchas más agendadas esa semana: la tasa solo veía citas de leads que entraron
+  en el rango, y su base solo incluía leads con contacto efectivo, así que quien agenda por
+  el link del calendario sin escribir no contaba ni arriba ni abajo. Ahora: la acción
+  `citas` trae también la fecha en que se **agendó** cada cita (`ag`) y el front la pide
+  hasta 120 días después del rango; **"Citas agendadas en el periodo"** cuenta las que se
+  agendaron en el rango, de cualquier lead y para cualquier fecha, sin canceladas (KPI y
+  columna por asesora). La **tasa de agendamiento** sigue siendo por los leads del rango,
+  pero su base es "contacto efectivo **o** cita" (`slaAgBase`). `sla:agg:v14`.
 - **Generación bajo demanda** (botón, 1–3 min): recorre conversaciones y citas de
   cada lead del rango en lotes de 8 vía `sla-report`; el resultado se cachea en el
   kv (`sla:agg:v1`) para todo el equipo. Acumulable dentro del mes eligiendo el

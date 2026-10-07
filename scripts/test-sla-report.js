@@ -77,7 +77,7 @@ S.ghlFetch = async (path, opts) => {
   if (path.startsWith("/calendars/?")) return { calendars: [{ id: "calZ", name: "Zoom" }, { id: "calT", name: "Tour" }, { id: "calX", name: "Roto" }] };
   if ((m = path.match(/^\/calendars\/events\?.*calendarId=([^&]+).*startTime=(\d+)&endTime=(\d+)/))) {
     if (m[1] === "calX") throw Object.assign(new Error("Forbidden"), { status: 403 });
-    const ev = { calZ: [{ id: "e1", contactId: "c1", assignedUserId: "u1", appointmentStatus: "confirmed", startTime: iso(T0 + 2 * H) }],
+    const ev = { calZ: [{ id: "e1", contactId: "c1", assignedUserId: "u1", appointmentStatus: "confirmed", startTime: iso(T0 + 2 * H), dateAdded: iso(T0 - 3 * 24 * H) }],
                  calT: [{ id: "e2", contactId: "c2", assignedUserId: "", appointmentStatus: "showed", startTime: "2026-10-06T11:00:00-05:00" }, { id: "e1", contactId: "c1", startTime: iso(T0 + 2 * H) }] }[m[1]] || [];
     return { events: ev };
   }
@@ -109,7 +109,8 @@ const call = async (body) => { const r = await handler({ httpMethod: "POST", hea
   ok(A20.foA === null && A20.nA === 0 && A20.fe === null, "llamada automática de 20 s: no es contacto", { foA: A20.foA, fe: A20.fe });
   const ci = await call({ action: "citas", start: iso(T0 - 24 * H), end: iso(T0 + 7 * 24 * H) });
   ok(ci.status === 200 && ci.d.citas.length === 2 && ci.d.calendarios === 3 && ci.d.errores.join() === "Roto"
-    && ci.d.citas.find((c) => c.id === "e1").st === "confirmed" && ci.d.citas.find((c) => c.id === "e2").t === Date.parse("2026-10-06T16:00:00Z"),
+    && ci.d.citas.find((c) => c.id === "e1").st === "confirmed" && ci.d.citas.find((c) => c.id === "e2").t === Date.parse("2026-10-06T16:00:00Z")
+    && ci.d.citas.find((c) => c.id === "e1").ag === T0 - 3 * 24 * H && ci.d.citas.find((c) => c.id === "e2").ag === null,
     "citas por fecha de la cita, de todos los calendarios, sin duplicados; un calendario que falla se reporta", ci.d);
   const og = await call({ action: "sweep", ids: ["telOrg"] });
   const P = og.d.results && og.d.results[0] && og.d.results[0].tel.por;

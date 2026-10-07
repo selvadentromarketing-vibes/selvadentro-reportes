@@ -402,7 +402,7 @@ const PORT = process.env.PORT || 8765;
     const contactos = [{ id: 'n1', n: 'Lead nuevo', c: iso(Z('2026-10-06T10:00:00')), src: 'facebook', u: 'u1', tags: [], attr: {}, cf: {} }];
     const sweeps = { n1: { foM: Z('2026-10-06T10:02:00'), days: [], calls: 0, chans: [], deliv: {}, ap: { tot: 1, sh: 0, ns: 1, fut: 0 }, tk: { prog: 0, enFecha: 0, venc: 0 } } };
     const opp = (ct, s) => ({ id: 'o' + ct, ct, u: 'u1', st: 'open', c: iso(Z('2026-08-10T10:00:00')), p: 'p1', s, sc: iso(Z('2026-10-07T12:00:00')), cf: {} });
-    const opps = [opp('v1', 'sZR'), opp('v2', 'sOPP'), opp('v3', 'sNS'), opp('v4', 'sCE'), opp('n1', 'sCE')];
+    const opps = [opp('v1', 'sZR'), opp('v2', 'sOPP'), opp('v3', 'sNS'), opp('v4', 'sCE'), opp('n1', 'sCE'), opp('v8', 'sCE')];
     const cita = (ct, local, st, u) => ({ id: 'e' + ct + local, ct, u: u === undefined ? 'u1' : u, t: Z(local), st, cal: 'Zoom' });
     const citas = [cita('n1', '2026-10-06T16:00:00', 'noshow'),            // la única que contaba antes: 0 de 1
       cita('v0', '2026-10-06T12:00:00', 'showed'),                           // asistió · calendario
@@ -411,7 +411,12 @@ const PORT = process.env.PORT || 8765;
       cita('v3', '2026-10-08T11:00:00', 'confirmed'),                        // no show · etapa
       cita('v4', '2026-10-08T12:00:00', 'confirmed'),                        // sin registrar: la etapa no dice nada
       cita('v5', '2026-10-09T12:00:00', 'cancelled'),                        // cancelada
-      cita('v6', '2026-10-15T12:00:00', 'confirmed')];                       // por venir (fuera de "ahora")
+      cita('v6', '2026-10-11T12:00:00', 'confirmed'),                        // por venir (después de "ahora", dentro de la semana)
+      // Agendadas en la semana para fechas posteriores (antes no contaban): 2, más una cancelada que no cuenta
+      Object.assign(cita('v7', '2026-10-20T12:00:00', 'confirmed'), { ag: Z('2026-10-07T09:00:00') }),
+      Object.assign(cita('v8', '2026-10-27T12:00:00', 'new', ''), { ag: Z('2026-10-08T09:00:00') }),
+      Object.assign(cita('v9', '2026-10-21T12:00:00', 'cancelled'), { ag: Z('2026-10-08T10:00:00') }),
+      Object.assign(cita('vA', '2026-10-22T12:00:00', 'confirmed'), { ag: Z('2026-09-20T10:00:00') })];   // agendada antes del rango
     const agg = buildSlaAgg(['2026-W41'], contactos, sweeps, opps, { u1: 'Daniela Arana' }, [], pipes, { now: Z('2026-10-10T09:00:00'), citas, citasOk: true });
     const R = slaCitasRes(agg.citasP.rows);
     const advPrev = ADVISOR_LIST, aggPrev = slaState.agg, selPrev = slaState.asesor;
@@ -425,11 +430,20 @@ const PORT = process.env.PORT || 8765;
     const r = { R: { tot: R.tot, asC: R.asC, asE: R.asE, ns: R.ns, can: R.can, sinreg: R.sinreg, fut: R.fut }, celdas,
       kpi: /Show rate · citas del periodo por fecha de la cita · 3 por etapa del pipeline · 1 pasada sin registrar asistencia/i.test(txt) && /60%\s*\n?\s*SHOW RATE/i.test(txt.replace(/\n+/g, '\n')) };
     // 3 asistieron (1 calendario + 2 etapa), 2 no show (1 calendario + 1 etapa) → 60%
+    r.agendadas = agg.citasP.agendadas.length;
     r.ok = R.tot === 8 && R.asC === 1 && R.asE === 2 && R.ns === 2 && R.can === 1 && R.sinreg === 1 && R.fut === 1
-      && !!celdas && celdas.slice(1).join('|') === '8|1|2|2|60% (3 de 5)|1|1|1' && /3 de 5/.test(txt);
+      && r.agendadas === 2 && !!celdas && celdas.slice(1).join('|') === '2|8|1|2|2|60% (3 de 5)|1|1|1' && /3 de 5/.test(txt)
+      && /2\s*\n?\s*CITAS AGENDADAS EN EL PERIODO/i.test(txt.replace(/\n+/g, '\n'));
     return r;
   });
   console.log('[show rate] citas del periodo', JSON.stringify(show));
+  // Tasa de agendamiento: quien agenda por el link sin escribir también cuenta en la base.
+  const agd = await page.evaluate(() => {
+    const L = [{ fi: 1, ap: { tot: 1 } }, { fi: 1, ap: { tot: 0 } }, { fi: null, ap: { tot: 2 } }, { fi: null, ap: { tot: 0 } }, { fi: 1, ad: true, ap: { tot: 0 } }];
+    const b = slaAgBase(L); return { base: b.length, con: b.filter(l => l.ap.tot > 0).length };
+  });
+  console.log('[agendamiento] base', JSON.stringify(agd));
+  if (!(agd.base === 3 && agd.con === 2)) hallazgos.push({ vista: 'agendamiento', agd });
   if (!show.ok) hallazgos.push({ vista: 'showrate', show });
   if (!auto.ok) hallazgos.push({ vista: 'telefonia:auto', auto });
   if (!tel.ok) hallazgos.push({ vista: 'telefonia:asesora', tel });

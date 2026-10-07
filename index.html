@@ -4928,7 +4928,7 @@ async function showLQ(){
 // Reporte de disciplina comercial directo del CRM: SLA de primera respuesta por
 // asesor y canal, leads >7 días sin toque, trabajados vs contactados efectivos,
 // citas y show rate, y OPPs/WONs por asesor. Con nombres, acumulable por semanas.
-const SLA_AGG_KEY = "sla:agg:v13";   // v13: citas del periodo por fecha de la cita y su asistencia (show rate)   // v12: telefonía por lead (canal del 1er toque, intentos, desenlace, duración conocida)   // v11: spec v1.1 (filtros de medición: inválidos, brokers, revertidas, horario, sin llamada, contacto efectivo)   // v10: calificación por reglas (la etapa manda), no el campo manual vacío   // v9: razón de descarte por lead   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
+const SLA_AGG_KEY = "sla:agg:v14";   // v14: citas agendadas en el periodo por fecha de agendado; base de agendamiento con quien agendó sin escribir   // v13: citas del periodo por fecha de la cita y su asistencia (show rate)   // v12: telefonía por lead (canal del 1er toque, intentos, desenlace, duración conocida)   // v11: spec v1.1 (filtros de medición: inválidos, brokers, revertidas, horario, sin llamada, contacto efectivo)   // v10: calificación por reglas (la etapa manda), no el campo manual vacío   // v9: razón de descarte por lead   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
 const SLA_STALE_MS = 7*86400e3; // "sin toque" = 7 días sin mensaje
 const slaState = { built:false, agg:null, syncing:false, asesor:"", camp:"" };   // asesor/camp "" = sin filtro
 
@@ -5351,9 +5351,9 @@ function slaScoreAsesor(arr, rub, opts){
   // Índice de calidad en escala 1-5 (C2): mismo criterio publicado, solo re-escalado.
   const q5 = qIndex==null ? null : 1 + 4*qIndex/100;
   // Tasa de agendamiento y días a la cita (D3): sobre contactados efectivos con citas legibles
-  const agBase = cd.filter(l=>l.fi && !l.ad);
+  const agBase = slaAgBase(cd);
   const agCon = agBase.filter(l=>l.ap && l.ap.tot>0).length;
-  const diasCita = slaMedian(agBase.filter(l=>l.ap && l.ap.f && l.ap.f>=l.fi).map(l=>(l.ap.f-l.fi)/86400e3));
+  const diasCita = slaMedian(agBase.filter(l=>l.fi && l.ap && l.ap.f && l.ap.f>=l.fi).map(l=>(l.ap.f-l.fi)/86400e3));
   return { N, sub, global, pcts, cnt, q, qTot, qIndex, q5,
            oppRate: arr.length ? leadsConOpp/arr.length*100 : 0, opp, leadsConOpp, leadsTot: arr.length,
            tk: { prog: tkProg, enFecha: tkFecha, venc: tkVenc, leidas: tkLeidas },
@@ -5608,7 +5608,7 @@ function slaAsesorSection(agg, leadsIn){
       </div>
       <div class="lq-sub" style="margin-bottom:10px">N = ${c.N} leads · oportunidades creadas: ${c.opp} · leads con oportunidad: ${c.leadsConOpp} de ${c.leadsTot} (${Math.round(c.oppRate)}%) · ${(()=>{ if(!(agg.citasP && agg.citasP.ok)) return `citas: ${c.showed}/${c.citas} asistidas (leads del rango) · `;
         const R = slaCitasRes(agg.citasP.rows.filter(x=>x.u===r.u));
-        return `citas del periodo: ${R.tot}${R.den?` · show ${Math.round(R.as*100/R.den)}% (${R.as} de ${R.den})`:""}${R.sinreg?` · ${R.sinreg} sin registrar asistencia`:""} · `; })()}agendamiento: ${c.agend.de?`${c.agend.con} de ${c.agend.de} efectivos (${Math.round(c.agend.con/c.agend.de*100)}%)`:"—"} · índice de calidad: ${c.q5==null?"— (sin leads calificados en el CRM)":c.q5.toFixed(1)+"/5"} · break up: ${c.desc?`${c.bk} de ${c.desc} descalificados`:"N/A (sin descalificados)"} · tareas: ${c.tk.leidas?`${c.tk.prog} programadas · ${c.tk.enFecha} en fecha · ${c.tk.venc} vencidas abiertas`:"sin datos de tareas"}</div>
+        return `citas del periodo: ${R.tot}${R.den?` · show ${Math.round(R.as*100/R.den)}% (${R.as} de ${R.den})`:""}${R.sinreg?` · ${R.sinreg} sin registrar asistencia`:""} · `; })()}agendamiento: ${c.agend.de?`${c.agend.con} de ${c.agend.de} con contacto o cita (${Math.round(c.agend.con/c.agend.de*100)}%)`:"—"} · índice de calidad: ${c.q5==null?"— (sin leads calificados en el CRM)":c.q5.toFixed(1)+"/5"} · break up: ${c.desc?`${c.bk} de ${c.desc} descalificados`:"N/A (sin descalificados)"} · tareas: ${c.tk.leidas?`${c.tk.prog} programadas · ${c.tk.enFecha} en fecha · ${c.tk.venc} vencidas abiertas`:"sin datos de tareas"}</div>
       ${v11 ? `<div class="lq-sub" style="margin:-4px 0 10px"><b>Fuera de horario atendidos antes de las 11:00:</b> ${c.fh.de ? `${c.fh.ok} de ${c.fh.de} (${(c.fh.ok*100/c.fh.de).toFixed(1)}%)` : "ninguno en el rango"}</div>` : ""}
       ${(()=>{ const T = slaTelefonia(r.a.filter(l=>!l.sd)); return T.leads ? `<div class="lq-sub" style="margin:-4px 0 10px"><b>Llamadas:</b> ${T.n} intentos (${T.h24} en las primeras 24 h) · ${(T.n/T.leads).toFixed(1)} por lead · sin marcar: ${T.sinMarcar} de ${T.leads} leads · conectadas ${T.ok} · sin respuesta ${T.na} · <b>falla de línea ${T.li}</b>${T.soloLinea?` (${T.soloLinea} lead${T.soloLinea===1?"":"s"} donde la línea falló en todos los intentos)`:""}</div>` : ""; })()}
       ${bars}
@@ -5889,22 +5889,30 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
   return { ts:Date.now(), rango, users:usersMap||{}, fields:F, leads, byRepOpp, hrs, dow,
            testExcl, callSt, callTot, tel, califCrm,
            exclExpansion: v11 ? 0 : exclExpansion, pipelines: pipesArr||[],
-           citasP: slaCitasDelPeriodo(X, contactsArr, oppsArr, ctPipe, v11 ? fueraDeTodo : null, now),
+           citasP: slaCitasDelPeriodo(X, contactsArr, oppsArr, ctPipe, v11 ? fueraDeTodo : null, now, per),
            v11: v11 ? slaResumenV11({ contactsArr, tagged: X.tagged||[], disp, esTest, rangoSet, per, C11, H11, X, leads }) : null };
 }
 
 // Citas del periodo por FECHA DE LA CITA, de cualquier lead (7-oct-2026), con su asistencia
 // y su asesor: el asignado en el calendario o, si no, el dueño del lead.
-function slaCitasDelPeriodo(X, contactsArr, oppsArr, ctPipe, fuera, now){
-  if(!Array.isArray(X.citas)) return X.citasOk === false ? { ok:false, rows:[] } : null;
+function slaCitasDelPeriodo(X, contactsArr, oppsArr, ctPipe, fuera, now, per){
+  if(!Array.isArray(X.citas)) return X.citasOk === false ? { ok:false, rows:[], agendadas:[] } : null;
+  const t0 = per && per.ini ? Date.parse(per.ini+"T00:00:00"+LQ_TZ) : -Infinity, t1 = per && per.fin ? Date.parse(per.fin+"T23:59:59.999"+LQ_TZ) : Infinity;
+  const enRango = (t)=> t != null && t >= t0 && t <= t1;
   const dueno = {}, tDueno = {};
   (oppsArr||[]).forEach(o=>{ if(!o.ct || !o.u) return; const t = Date.parse(o.sc||o.c||"")||0; if(!(o.ct in tDueno) || t >= tDueno[o.ct]){ tDueno[o.ct] = t; dueno[o.ct] = o.u; } });
   (contactsArr||[]).forEach(c=>{ if(c.u) dueno[c.id] = c.u; });
-  const rows = X.citas.filter(ci=>!(fuera && ci.ct && fuera(ci.ct))).map(ci=>{
+  const validas = X.citas.filter(ci=>!(fuera && ci.ct && fuera(ci.ct)));
+  // rows = citas CON FECHA en el periodo (show rate); agendadas = citas que se AGENDARON en el
+  // periodo, sea cual sea su fecha (tasa de agendamiento por volumen). Canceladas fuera de las
+  // agendadas: una cita que se canceló no es una cita agendada que cuente.
+  const rows = validas.filter(ci=>enRango(ci.t)).map(ci=>{
     const a = slaAsistencia(ci.st, ci.t, ctPipe[ci.ct] ? ctPipe[ci.ct].s : "", now);
     return { u: ci.u || dueno[ci.ct] || "", t: ci.t, est: a.est, via: a.via };
   });
-  return { ok:true, rows, err: X.citasErr || [] };
+  const cancel = (st)=> /^(cancelled|canceled|invalid)$/.test(String(st||"").toLowerCase());
+  const agendadas = validas.filter(ci=>enRango(ci.ag) && !cancel(ci.st)).map(ci=>({ u: ci.u || dueno[ci.ct] || "", ag: ci.ag, t: ci.t }));
+  return { ok:true, rows, agendadas, sinFechaAg: validas.filter(ci=>ci.ag == null).length, err: X.citasErr || [] };
 }
 
 // Lo que la pantalla necesita de la spec v1.1, compacto (el agregado vive en el kv, ≤512 KB).
@@ -5959,6 +5967,12 @@ const SLA_ETAPAS_OPP = new Set(["Seguimiento de OPP","Carta oferta","Apartado","
 // Descalificados del rango y si traen razón de descarte. Un lead cuenta como descalificado
 // por su etapa ("Descalificado") o por la calificación del CRM; la razón es el campo
 // "Razón de descarte". razonMedible=false cuando el campo no existe en el CRM.
+// Base de la tasa de agendamiento (spec D3): leads con contacto efectivo O con una cita. Un
+// lead que agenda solo por el link del calendario, sin escribir en la conversación, quedaba
+// fuera de numerador y denominador aunque una cita agendada es la prueba más clara de
+// contacto (Dirección General, 7-oct-2026). Sin citas legibles no se juzga.
+const slaAgBase = (arr)=> (arr||[]).filter(l=>!l.ad && (l.fi || (l.ap && l.ap.tot > 0)));
+
 // Asistencia de una cita (7-oct-2026). Manda el estatus FINAL del calendario (showed,
 // noshow, cancelled); si la cita ya pasó sin estatus final, la etapa del lead en el
 // pipeline, porque así registra el equipo la asistencia (Anexo A: "Zoom/Tour realizado", o
@@ -6121,9 +6135,9 @@ function slaRender(){
   const fhDe = conDatos.filter(l=>l.fh).length, fhOk = conDatos.filter(l=>l.fh && l.velOk).length;
   // Tasa de agendamiento (spec D3): citas sobre CONTACTADOS EFECTIVOS — no sobre todos
   // los leads, que era medir tasa de respuesta y castigar seis veces de más.
-  const agB = conDatos.filter(l=>l.fi && !l.ad);
+  const agB = slaAgBase(conDatos);
   const agN = agB.filter(l=>l.ap && l.ap.tot>0).length;
-  const diasCita = slaMedian(agB.filter(l=>l.ap && l.ap.f && l.ap.f>=l.fi).map(l=>(l.ap.f-l.fi)/86400e3));
+  const diasCita = slaMedian(agB.filter(l=>l.fi && l.ap && l.ap.f && l.ap.f>=l.fi).map(l=>(l.ap.f-l.fi)/86400e3));
   html += `<div class="crm-kpis">
     ${kpi(leads.length.toLocaleString(),"Leads en el rango")}
     ${kpiND(conDatos.filter(l=>l.foM).length,conDatos.length,"Con 1er toque manual del asesor")}
@@ -6138,7 +6152,8 @@ function slaRender(){
     ${kpi(fmtDur(slaMedian(slasEf)),"Med. contacto efectivo · desde la entrada del lead")}
     ${kpi(fmtDur(slaMedian(slasAt)),V11?"Med. 1er toque · cualquier canal o llamada automática con contacto · solo leads que entraron en horario":"Med. 1er toque manual · cualquier canal · desde la entrada del lead")}
     ${kpi(fmtDur(slaMedian(slasCall)),V11?"Med. 1er intento de llamada · solo leads que entraron en horario":"Med. 1er intento de llamada · desde la entrada del lead")}
-    ${kpiND(agN,agB.length,"Tasa de agendamiento · citas ÷ contactados efectivos")}
+    ${CP ? kpi(CP.agendadas.length.toLocaleString(), "Citas agendadas en el periodo · por fecha en que se agendaron, de cualquier lead") : ""}
+    ${kpiND(agN,agB.length,"Tasa de agendamiento · leads del rango con cita ÷ los que tuvieron contacto efectivo o agendaron")}
     ${kpi(diasCita==null?"—":(Math.round(diasCita*10)/10)+" d","Días a la cita (mediana, efectivo → fecha de cita) · estándar 1 semana")}
     ${CPres ? kpiND(CPres.as, CPres.den, `Show rate · citas del periodo por fecha de la cita${CPres.asE||CPres.nsE?` · ${CPres.asE+CPres.nsE} por etapa del pipeline`:""}${CPres.sinreg?` · ${CPres.sinreg} pasada${CPres.sinreg===1?"":"s"} sin registrar asistencia`:""}`, "meta 75%", CPres.den ? CPres.as/CPres.den>=0.75 : null)
             : kpiND(apSh,apSh+apNs,"Show rate de citas · solo citas de leads que entraron en el rango","meta 75%",(apSh+apNs)?apSh/(apSh+apNs)>=0.75:null)}
@@ -6201,7 +6216,7 @@ function slaRender(){
       // Tasa de agendamiento (spec D3): citas ÷ contactados efectivos con citas legibles.
       // Sustituye a "Cita ≤48h", que dividía entre TODOS los leads (medía tasa de
       // respuesta) y arrancaba el reloj en la entrada del lead (doble conteo de velocidad).
-      const agB2 = cd.filter(l=>l.fi && !l.ad);
+      const agB2 = slaAgBase(cd);
       const agN2 = agB2.filter(l=>l.ap && l.ap.tot>0).length;
       const sh = arr.reduce((a,l)=>a+l.ap.sh,0), ns = arr.reduce((a,l)=>a+l.ap.ns,0);
       // Llamadas del asesor por lead, y "no marcó" separado de "marcó y la línea falló".
@@ -6216,7 +6231,7 @@ function slaRender(){
         <td title="Leads a los que el asesor no hizo ningún intento de llamada">${T.leads?`${T.sinMarcar} <span class="lq-sub">(${Math.round(T.sinMarcar*100/T.leads)}%)</span>`:"—"}</td>
         <td title="Leads con intentos de llamada que TODOS volvieron failed, busy o canceled: marcó y la línea falló — telefonía, no desempeño"${T.soloLinea?' style="color:var(--cobre);font-weight:600"':""}>${T.leads?T.soloLinea:"—"}</td>
         <td>${fmtDur(slaMedian(ss))}</td><td class="pct">${u15}</td><td class="pct">${u60}</td>
-        <td class="pct" title="${agN2} de ${agB2.length} contactados efectivos con cita">${agB2.length?Math.round(agN2/agB2.length*100)+"%":"—"}</td>
+        <td class="pct" title="${agN2} de ${agB2.length} leads del rango con contacto efectivo o cita, que tienen cita">${agB2.length?Math.round(agN2/agB2.length*100)+"%":"—"}</td>
         ${(()=>{ const R = showDe ? showDe(k) : null;
           return R ? `<td title="Citas del periodo por fecha de la cita, no canceladas">${R.tot-R.can}</td><td class="pct" title="Asistió ${R.as} (${R.asC} calendario, ${R.asE} etapa) · no show ${R.ns} · sin registrar ${R.sinreg} · por venir ${R.fut}">${R.den?pcti(R.as,R.den):"—"}</td>`
                    : `<td>${arr.filter(l=>!l.ad).reduce((a,l)=>a+l.ap.tot,0)}</td><td class="pct">${(sh+ns)?pcti(sh,sh+ns):"—"}</td>`; })()}</tr>`;
@@ -6231,7 +6246,7 @@ function slaRender(){
         <th title="Intentos de llamada del asesor por lead: en las primeras 24 h desde la entrada del lead / en total">Llamadas por lead · 24 h / total</th>
         <th title="Leads sin ningún intento de llamada del asesor">Sin marcar</th>
         <th title="Leads cuyos intentos volvieron TODOS failed, busy o canceled: marcó y la línea falló">Solo falla de línea</th>
-        <th>Med. efectivo</th><th>≤15m</th><th>≤60m</th><th title="Citas ÷ contactados efectivos (spec D3)">Agend.</th>
+        <th>Med. efectivo</th><th>≤15m</th><th>≤60m</th><th title="De los leads del rango con contacto efectivo o con cita, cuántos tienen cita (spec D3)">Agend.</th>
         <th title="${showDe?"Citas del periodo por fecha de la cita, de cualquier lead":"Citas de los leads que entraron en el rango"}">Citas</th>
         <th title="${showDe?"Asistió ÷ (asistió + no show), de las citas del periodo; si el calendario no tiene la asistencia, la etapa del lead en el pipeline":"Showed ÷ (showed + no show), de las citas de los leads que entraron en el rango"}">Show · 75%</th></tr>
       ${rows || `<tr><td colspan="17" class="lft txt-nota">Sin datos.</td></tr>`}
@@ -6249,27 +6264,30 @@ function slaRender(){
   // del roster de Asesores se agrega en una sola línea de volumen.
   {
     const rosterIds = slaRosterIds(agg.users);
-    const citasDe = {};
-    if(CP) CP.rows.forEach(x=>{ const u = rosterIds.has(x.u) ? x.u : SLA_FUERA; (citasDe[u] = citasDe[u] || []).push(x); });
+    const citasDe = {}, agDe = {};
+    if(CP){
+      CP.rows.forEach(x=>{ const u = rosterIds.has(x.u) ? x.u : SLA_FUERA; (citasDe[u] = citasDe[u] || []).push(x); });
+      (CP.agendadas||[]).forEach(x=>{ const u = rosterIds.has(x.u) ? x.u : SLA_FUERA; agDe[u] = (agDe[u]||0) + 1; citasDe[u] = citasDe[u] || []; });
+    }
     html += groupTbl("Asesor", l=>rosterIds.has(l.u)?l.u:SLA_FUERA, k=>k===SLA_FUERA?"Fuera del equipo de ventas":name(k), CP ? (k=>slaCitasRes(citasDe[k]||[])) : null);
     // Asistencia de las citas del periodo, por asesora (7-oct-2026)
     if(CP){
       const filasC = Object.keys(citasDe).sort((a,b)=>(a===SLA_FUERA)-(b===SLA_FUERA) || citasDe[b].length-citasDe[a].length).map(u=>{
         const R = slaCitasRes(citasDe[u]);
-        return `<tr><td class="name">${u===SLA_FUERA?"Fuera del equipo de ventas":escAttr(name(u))}</td><td>${R.tot}</td>
+        return `<tr><td class="name">${u===SLA_FUERA?"Fuera del equipo de ventas":escAttr(name(u))}</td><td><b>${agDe[u]||"·"}</b></td><td>${R.tot}</td>
           <td>${R.asC||"·"}</td><td>${R.asE||"·"}</td><td>${R.ns||"·"}</td>
           <td class="pct" style="${R.den?(R.as/R.den>=0.75?"color:var(--verde-prof);font-weight:600":"color:var(--rojo)"):""}">${R.den?`${pcti(R.as,R.den)} <span class="lq-sub">(${R.as} de ${R.den})</span>`:"—"}</td>
           <td>${R.can||"·"}</td><td style="${R.sinreg?"color:var(--cobre);font-weight:600":""}">${R.sinreg||"·"}</td><td>${R.fut||"·"}</td></tr>`;
       }).join("");
-      html += `<h3 class="h-sec">Citas del periodo · asistencia</h3>
+      html += `<h3 class="h-sec">Citas del periodo · agendadas y asistencia</h3>
         <div class="table-scroll mb-sec"><table class="cons">
-          <tr><th class="lft">Asesor</th><th title="Citas con fecha dentro del rango, de cualquier lead">Citas</th>
+          <tr><th class="lft">Asesor</th><th title="Citas que se AGENDARON en el rango (por fecha en que se agendaron), de cualquier lead, sin canceladas">Agendadas</th><th title="Citas con fecha dentro del rango, de cualquier lead">Citas en el periodo</th>
             <th title="Estatus showed en el calendario">Asistió · calendario</th><th title="La cita pasó sin estatus final y el lead está en Zoom/Tour realizado o una etapa posterior">Asistió · etapa</th>
             <th title="noshow en el calendario, o el lead en Zoom/Tour no show / re agendar">No show</th><th>Show · 75%</th>
             <th>Canceladas</th><th title="Ya pasaron, sin estatus final en el calendario y sin etapa que diga si ocurrieron">Sin registrar</th><th>Por venir</th></tr>
-          ${filasC || `<tr><td colspan="9" class="lft txt-nota">Sin citas en el periodo.</td></tr>`}
+          ${filasC || `<tr><td colspan="10" class="lft txt-nota">Sin citas en el periodo.</td></tr>`}
         </table></div>
-        <p class="hint" style="margin-top:-10px">Citas con <b>fecha dentro del rango</b>, de cualquier lead —no solo de los que entraron en el rango—, por asesor asignado en el calendario (o el dueño del lead). La asistencia sale del estatus del calendario; si la cita ya pasó y sigue en confirmada o nueva, de la <b>etapa del lead</b> en el pipeline, que es donde el equipo la registra. <b>Sin registrar</b> = ni el calendario ni la etapa dicen si ocurrió: no entra al show rate, y conviene marcarla en GoHighLevel.${(CP.err||[]).length?` ⚠ No se pudieron leer los calendarios: ${escAttr(CP.err.join(", "))}.`:""}</p>`;
+        <p class="hint" style="margin-top:-10px"><b>Agendadas</b> = citas que se agendaron en el rango, para cualquier fecha${CP.sinFechaAg?` (${CP.sinFechaAg} sin fecha de agendado en el CRM no se pueden contar)`:""}. <b>Citas en el periodo</b> y el show rate: citas con <b>fecha dentro del rango</b>, de cualquier lead —no solo de los que entraron en el rango—, por asesor asignado en el calendario (o el dueño del lead). La asistencia sale del estatus del calendario; si la cita ya pasó y sigue en confirmada o nueva, de la <b>etapa del lead</b> en el pipeline, que es donde el equipo la registra. <b>Sin registrar</b> = ni el calendario ni la etapa dicen si ocurrió: no entra al show rate, y conviene marcarla en GoHighLevel.${(CP.err||[]).length?` ⚠ No se pudieron leer los calendarios: ${escAttr(CP.err.join(", "))}.`:""}</p>`;
     }
     // Telefonía por asesora (7-oct-2026): el volumen de marcación por persona no existía —
     // el bloque de telefonía era agregado y "no califica a nadie"—, y una falla de la línea
@@ -6554,7 +6572,7 @@ function slaRender(){
     <br><b>Riesgo</b> · <b>Lead sin toque:</b> lead activo con más de 7 días sin toque manual del asesor y sin respuesta del lead — la secuencia
     automática no cuenta como toque (si contara, un lead abandonado con drip activo nunca aparecería en la lista) ·
     <b>Tareas programadas · en fecha · vencidas:</b> tareas del CRM del asesor; cerradas en o antes de su fecha; abiertas ya pasada su fecha — el % nunca se lee sin el conteo.
-    <br><b>Embudo y resultado</b> · <b>Tasa de agendamiento:</b> citas agendadas ÷ contactados efectivos ·
+    <br><b>Embudo y resultado</b> · <b>Citas agendadas en el periodo:</b> citas que se agendaron en el rango, de cualquier lead, sin canceladas · <b>Tasa de agendamiento:</b> de los leads que entraron en el rango con contacto efectivo o con cita, cuántos tienen cita (quien agenda por el link sin escribir también cuenta) ·
     <b>Días a la cita:</b> mediana de días del contacto efectivo a la cita (medida a la fecha de la cita; el CRM no expone la fecha de agendado) ·
     <b>Show rate:</b> asistió ÷ (asistió + no show) de las citas con fecha en el rango, de cualquier lead; la asistencia sale del calendario y, si la cita pasó sin estatus final, de la etapa del lead (Zoom/Tour realizado o posterior = asistió; no show / re agendar = no asistió) · meta <b>75%</b> ·
     <b>OPP:</b> registros del pipeline que alcanzaron la etapa "Seguimiento de OPP" o posterior (Seguimiento de OPP, Carta oferta, Apartado, WON), por asesor asignado. Una cotización enviada todavía no cuenta como OPP. Cohorte: creados en el rango, en su etapa de hoy ·
@@ -6610,7 +6628,10 @@ async function slaSync(){
     // Citas del periodo por fecha de la cita, de cualquier lead (show rate, 7-oct-2026).
     lbl.textContent="Trayendo las citas del periodo…";
     let citasArr = null, citasOk = true, citasErr = [];
-    try{ const r = await slaFn({action:"citas", start:b0.startISO, end:b1.endISO}); citasArr = r.citas||[]; citasErr = r.errores||[];
+    // Hasta 120 días después del rango: así llegan también las citas que se AGENDARON en el
+    // rango para fechas posteriores (la tasa de agendamiento contaba solo las de la semana).
+    const finCitas = new Date((Date.parse(b1.endISO)||Date.now()) + 120*86400e3).toISOString();
+    try{ const r = await slaFn({action:"citas", start:b0.startISO, end:finCitas}); citasArr = r.citas||[]; citasErr = r.errores||[];
       if(citasErr.length) fallos.push(`las citas de ${citasErr.length} calendario${citasErr.length===1?"":"s"} (${citasErr.join(", ")})`); }
     catch(e){ citasOk = false; fallos.push("las citas por fecha de la cita (el show rate vuelve a las citas de los leads del rango)"); }
     bar.style.width="8%";
