@@ -218,7 +218,12 @@ async function sweepOne(id, opt) {
     // Duración de TODAS las llamadas: dExp = la trae el CRM (0 incluido); d0 = no la trae
     // pero no conectó (0 s por definición); dNo = conectó o sin status y NO la trae — de
     // esas no se puede saber si llegaron a 90 s. c90 = llamadas de ≥90 s (spec D4).
-    tel: { tot: 0, dExp: 0, d0: 0, dNo: 0, c90: 0, noSt: {}, llaves: [] },
+    tel: { tot: 0, dExp: 0, d0: 0, dNo: 0, c90: 0, noSt: {}, llaves: [],
+      // Por ORIGEN: del asesor (manual), automática (workflow, campaña, envío masivo, API o
+      // sin usuario) y entrante (llamó el lead). El diagnóstico agregado mezclaba las tres.
+      por: { manual: { tot: 0, ok: 0, na: 0, linea: 0, otro: 0, c90: 0, dNo: 0 },
+             auto: { tot: 0, ok: 0, na: 0, linea: 0, otro: 0, c90: 0, dNo: 0 },
+             entrante: { tot: 0, ok: 0, na: 0, linea: 0, otro: 0, c90: 0, dNo: 0 } } },
     // Llamadas MANUALES del asesor a este lead: intentos y su desenlace, y los momentos de
     // cada intento (para el primero y los de las primeras 24 h). dn = conectadas sin duración.
     cl: { n: 0, ok: 0, na: 0, linea: 0, otro: 0, dn: 0, t: [] },
@@ -273,6 +278,10 @@ async function sweepOne(id, opt) {
           const st = callStatus(m), des = callDesenlace(st);
           out.cst[st || "(sin status)"] = (out.cst[st || "(sin status)"] || 0) + 1;
           out.tel.tot++;
+          const po = out.tel.por[m.direction === "inbound" ? "entrante" : isManual(m) ? "manual" : "auto"];
+          po.tot++; po[des]++;
+          if (dur != null && dur >= 90) po.c90++;
+          if (dur == null && (des === "ok" || des === "otro")) po.dNo++;
           if (dur != null) { out.tel.dExp++; if (dur >= 90) out.tel.c90++; }
           else if (des === "na" || des === "linea") out.tel.d0++;
           else {

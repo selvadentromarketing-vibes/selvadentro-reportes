@@ -46,6 +46,13 @@ const CONV = {
     msg("e", T0 + 5 * H, { messageType: "TYPE_CALL", status: "busy" }),                                // falla de línea
     msg("f", T0 + 30 * H, { messageType: "TYPE_CALL", status: "", meta: { call: { status: "canceled" } } }),        // falla de línea por meta.call.status
   ],
+  // Origen de cada llamada: del asesor, automática (workflow / marcador de campaña) o entrante.
+  telOrg: [
+    msg("a", T0 + 1 * H, { messageType: "TYPE_CALL", status: "busy" }),                                              // asesor: falla de línea
+    msg("b", T0 + 2 * H, { messageType: "TYPE_CALL", status: "failed", source: "workflow", userId: null }),          // workflow: falla de línea
+    msg("c", T0 + 3 * H, { messageType: "TYPE_CAMPAIGN_CALL", status: "completed", callDuration: 100 }),             // marcador de campaña, aunque traiga usuario
+    msg("d", T0 + 4 * H, { messageType: "TYPE_CALL", status: "completed", direction: "inbound", userId: null, source: "", callDuration: 120 }),  // llamó el lead
+  ],
 };
 const TAREAS = { real: [{ dueDate: iso(T0 + 20 * H), completed: true, dateUpdated: iso(T0 + 19 * H) }, { dueDate: iso(T0 + 50 * H), completed: false }] };
 const CITAS = { real: [{ startTime: iso(T0 + 45 * H), appointmentStatus: "confirmed" }] };
@@ -84,6 +91,11 @@ const call = async (body) => { const r = await handler({ httpMethod: "POST", hea
   ok(T && T.tel.noSt.completed === 1 && T.tel.llaves.includes("meta.call.recordingUrl"), "la llamada sin duración se diagnostica por status y por las llaves que sí trae", T && { noSt: T.tel.noSt, llaves: T.tel.llaves });
   ok(T && T.deliv.linea === 2 && T.deliv.failed === 1 && T.deliv.read === 3, "las fallas de línea van aparte en la actividad efectiva", T && T.deliv);
   ok(T && T.fe === T0 + 2 * H, "la llamada de 2:05 es contacto efectivo (R-06)", T && T.fe && iso(T.fe));
+  const og = await call({ action: "sweep", ids: ["telOrg"] });
+  const P = og.d.results && og.d.results[0] && og.d.results[0].tel.por;
+  ok(P && P.manual.tot === 1 && P.manual.linea === 1 && P.auto.tot === 2 && P.auto.linea === 1 && P.auto.ok === 1 && P.auto.c90 === 1 && P.entrante.tot === 1 && P.entrante.c90 === 1,
+    "origen de cada llamada: 1 del asesor (falla de línea), 2 automáticas (workflow y marcador de campaña), 1 entrante", P);
+  ok(og.d.results[0].cl.n === 1, "solo la llamada del asesor entra en sus intentos", og.d.results[0].cl);
   const sw = await call({ action: "sweep", ids: ["real", "llamada90", "soloToques", "nciOk", "nciMal", "ncmOk"],
     opts: { real: { cut: T0 + 30 * H }, nciOk: { ncD: T0 + 50 * H, ncR: T0 + 70 * H }, nciMal: { ncD: T0 + 50 * H }, ncmOk: { ncD: T0 + 50 * H } } });
   ok(sw.status === 200, "sweep responde 200", sw.status);

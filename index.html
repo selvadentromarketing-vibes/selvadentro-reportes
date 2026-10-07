@@ -5812,13 +5812,15 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
   // la trae pero no conectó (0 s por definición) y conectó sin traerla. Solo la última es
   // desconocida; antes el 0 contaba como "ilegible" y la pantalla daba 40% legible.
   const callSt = {}; let callTot = 0;
-  const tel = { tot:0, dExp:0, d0:0, dNo:0, c90:0, noSt:{}, llaves:[] }, llavesSet = new Set();
+  const telOrg = ()=>({ tot:0, ok:0, na:0, linea:0, otro:0, c90:0, dNo:0 });
+  const tel = { tot:0, dExp:0, d0:0, dNo:0, c90:0, noSt:{}, llaves:[], por:{ manual:telOrg(), auto:telOrg(), entrante:telOrg() } }, llavesSet = new Set();
   Object.values(sweepMap||{}).forEach(sw=>{
     Object.entries(sw.cst||{}).forEach(([s,n])=>{ callSt[s]=(callSt[s]||0)+n; callTot+=n; });
     const t = sw.tel; if(!t) return;
     tel.tot += t.tot||0; tel.dExp += t.dExp||0; tel.d0 += t.d0||0; tel.dNo += t.dNo||0; tel.c90 += t.c90||0;
     Object.entries(t.noSt||{}).forEach(([k,n])=>{ tel.noSt[k]=(tel.noSt[k]||0)+n; });
     (t.llaves||[]).forEach(k=>{ if(llavesSet.size < 40) llavesSet.add(k); });
+    Object.entries(t.por||{}).forEach(([o,v])=>{ const d = tel.por[o]; if(d) Object.keys(d).forEach(k=>{ d[k] += v[k]||0; }); });
   });
   tel.llaves = [...llavesSet];
   // OPPs (cotizaciones) y WONs por asesor dentro del rango. Las oportunidades del
@@ -6103,6 +6105,13 @@ function slaRender(){
         const noSt = Object.entries(T.noSt||{}).sort((a,b)=>b[1]-a[1]).map(([k,n])=>`${escAttr(k)} ${n}`).join(" · ");
         partes.push(`<b>Duración de llamada</b>: conocida en <b>${conoc} de ${T.tot}</b> (${Math.round(conoc*100/T.tot)}%) — ${T.dExp} la traen en el CRM y ${T.d0} no conectaron (0 s por definición)${T.dNo?`; <b style="color:var(--rojo)">${T.dNo} conectaron sin duración legible</b> (${noSt}): de esas no se puede saber si llegaron a 90 s${(T.llaves||[]).length?`. Lo que sí traen: <code>${escAttr(T.llaves.join(", "))}</code>`:""}`:""}`);
         partes.push(`<b>Llamada efectiva ≥90 s</b>: ${T.c90} de ${conoc} llamadas con duración conocida`);
+        // Origen (7-oct-2026): del asesor, automáticas o entrantes. Las columnas por asesora
+        // ya cuentan solo las del asesor; el diagnóstico agregado mezclaba las tres.
+        const P = T.por;
+        if(P && (P.manual.tot + P.auto.tot + P.entrante.tot)){
+          const lin = (o)=> o.tot ? `${o.linea} con falla de línea (${Math.round(o.linea*100/o.tot)}%)` : "";
+          partes.push(`<b>Origen de las llamadas</b>: <b>${P.manual.tot} del asesor</b>${P.manual.tot?` — ${lin(P.manual)}, ${P.manual.ok} conectadas${P.manual.dNo?`, ${P.manual.dNo} sin duración`:""}`:""} · <b>${P.auto.tot} automáticas</b> (workflow, campaña, envío masivo, API o sin usuario)${P.auto.tot?` — ${lin(P.auto)}, ${P.auto.ok} conectadas${P.auto.dNo?`, ${P.auto.dNo} sin duración`:""}`:""} · <b>${P.entrante.tot} entrantes</b> del lead. Solo las del asesor cuentan en su nota y en sus columnas`);
+        }
       }
     }
     if(partes.length) html += `<div class="lq-meth">🔎 <b>Diagnóstico de datos</b> — ${partes.join(" · ")}.</div>`;

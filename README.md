@@ -418,6 +418,11 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
     asesora". Desde el 7-oct-2026 (`SLA_LINEA_DESDE`, mismo criterio de periodo que la
     v1.1/v1.2) las fallas de línea salen del denominador de la **actividad efectiva**: son
     telefonía, no desempeño. `sla:agg:v12`.
+  - **Manual vs automática**: todas las columnas por asesora cuentan solo llamadas del
+    asesor (`isManual`: con usuario, y sin `source` workflow/campaign/bulk_actions/api ni
+    `TYPE_CAMPAIGN_*`). El diagnóstico agregado de telefonía (las 594 llamadas) mezclaba
+    las del asesor con las automáticas y las entrantes; ahora las separa (`tel.por`) con
+    su falla de línea y duración desconocida, para saber de quién es cada falla.
 - **Los tres parámetros del Anexo 1 que faltaban** (2026-09-11), derivados de lo que el
   barrido ya lee por contacto: **SLA de 60 segundos** del Ejecutivo de Primer Contacto
   (contra el primer toque manual); **integridad del pipeline** (spec B2-2:

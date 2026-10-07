@@ -347,7 +347,8 @@ const PORT = process.env.PORT || 8765;
         tel: { tot: 2, dExp: 0, d0: 2, dNo: 0, c90: 0, noSt: {}, llaves: [] } }),
       t3: sw(3, { foMch: 'email', cl: { n: 0, ok: 0, na: 0, linea: 0, otro: 0, dn: 0, t: [] }, deliv: { sent: 0, delivered: 1, read: 0, failed: 0, linea: 0 } }),
       t4: sw(4, { foMch: 'call', calls: 1, cl: { n: 1, ok: 1, na: 0, linea: 0, otro: 0, dn: 1, t: [base(4) + 4 * M] }, deliv: { sent: 0, delivered: 0, read: 1, failed: 0, linea: 0 },
-        tel: { tot: 1, dExp: 0, d0: 0, dNo: 1, c90: 0, noSt: { completed: 1 }, llaves: ['meta.call.recordingUrl'] } }),
+        tel: { tot: 1, dExp: 0, d0: 0, dNo: 1, c90: 0, noSt: { completed: 1 }, llaves: ['meta.call.recordingUrl'],
+          por: { manual: { tot: 6, ok: 2, na: 1, linea: 3, otro: 0, c90: 1, dNo: 1 }, auto: { tot: 4, ok: 0, na: 0, linea: 4, otro: 0, c90: 0, dNo: 0 }, entrante: { tot: 2, ok: 2, na: 0, linea: 0, otro: 0, c90: 2, dNo: 0 } } } }),
     };
     const agg = buildSlaAgg(['2026-W41'], contactos, sweeps, [], { u1: 'Daniela Arana' }, [], [], { now: Z('2026-10-12T12:00:00') });
     const advPrev = ADVISOR_LIST, aggPrev = slaState.agg, selPrev = slaState.asesor;
@@ -365,11 +366,12 @@ const PORT = process.env.PORT || 8765;
     ADVISOR_LIST = advPrev; slaState.agg = aggPrev; slaState.asesor = selPrev;
     const r = { g, t, efec: { nuevo, viejo }, sinGris: !/1er msj \(autom\.\)/i.test(txt) && !/Cualquier salida ≤60 s/i.test(txt),
       duracion: /conocida en 5 de 6 \(83%\)/.test(txt) && /1 conectaron sin duración legible/.test(txt) && /meta\.call\.recordingUrl/.test(txt),
+      origen: /6 del asesor — 3 con falla de línea \(50%\), 2 conectadas, 1 sin duración · 4 automáticas \(workflow, campaña, envío masivo, API o sin usuario\) — 4 con falla de línea \(100%\)/.test(txt) && /2 entrantes del lead/.test(txt),
       kpi: /Med\. 1er intento de llamada/i.test(txt) && /1 no medible: llamada conectada sin duración/i.test(txt), ficha: /Llamadas: 6 intentos \(5 en las primeras 24 h\)/.test(txt) && /falla de línea 3/.test(txt) };
     // groupTbl: [nombre, leads, 1er toque, canal, conectada, efectivos, med toque, med 1er llamada, llamadas/lead, sin marcar, solo línea, ...]
     r.ok = !!g && g[3] === 'Llamada 50% · WhatsApp 25% SMS 0% · Correo 25%' && g[7] === '4 min' && g[8] === '1.3 / 1.5' && g[9] === '1 (25%)' && g[10] === '1'
       && !!t && t.slice(1).join('|') === '4|1|3|5|6|2 (33%)|1 (17%)|3 (50%)|·|1|1|1'
-      && nuevo[0] === 2 && nuevo[1] === 3 && viejo[1] === 6 && r.sinGris && r.duracion && r.kpi && r.ficha;
+      && nuevo[0] === 2 && nuevo[1] === 3 && viejo[1] === 6 && r.sinGris && r.duracion && r.kpi && r.ficha && r.origen;
     return r;
   });
   console.log('\n[telefonía] por asesora', JSON.stringify(tel));
