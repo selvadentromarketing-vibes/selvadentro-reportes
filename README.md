@@ -389,15 +389,38 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
 - **Primer toque = acción MANUAL del asesor**, nunca la automatización. La columna
   contaba cualquier mensaje saliente y marcaba **100% en todos los asesores** — la
   secuencia de bienvenida le escribe a todos los leads, así que medía el workflow, no al
-  equipo. Ahora hay tres columnas separadas: **1er toque manual** (`foM`: su llamada, su
-  WhatsApp, su SMS o su email escrito a mano), **llamada conectada** (`foC`: llamada con
-  estatus `connected` o `answered` — un intento a buzón es trabajo, no contacto) y el
-  número viejo en gris como referencia. La mediana del primer intento también pasó a
-  medirse contra el toque manual.
+  equipo. Ahora hay dos columnas separadas: **1er toque manual** (`foM`: su llamada, su
+  WhatsApp, su SMS o su email escrito a mano) y **llamada conectada** (`foC`: llamada con
+  estatus `connected` o `answered` — un intento a buzón es trabajo, no contacto). La
+  columna gris "1er msj (autom.)" y el KPI "Cualquier salida ≤60 s, automatización
+  incluida", que estaban solo como referencia, se quitaron el 7-oct-2026 a pedido de
+  Dirección General. La mediana del primer intento también pasó a medirse contra el
+  toque manual.
+- **Telefonía por asesora** (Dirección General, 7-oct-2026). Tres columnas nuevas en la
+  tabla por asesor y dos arreglos sin los cuales mentirían:
+  - **Canal del 1er toque** (`foMch`): % llamada · WhatsApp · SMS · correo. La mediana de
+    1er toque mezcla canales que no se comparan; se lee con este mix.
+  - **Med. 1er llamada** (`slaCall`): hasta el primer *intento* de llamada, conecte o no.
+    Siempre columna aparte de la mediana de 1er toque (con las reglas v1.1, solo leads en
+    horario, igual que esa).
+  - **Llamadas por lead · 24 h / total** (`cl.h24`, `cl.n`): el volumen de marcación por
+    persona, que antes solo existía agregado.
+  - **Duración**: el backend descartaba toda duración igual a 0, así que una llamada que no
+    conectó salía "sin duración legible" (238 de 594, 40%). Ahora una llamada sin respuesta
+    o con falla de línea dura 0 s por definición; solo es **desconocida** la de una llamada
+    conectada que no la trae, y la pantalla dice cuántas son, con qué status y qué llaves
+    sí traen (para encontrar dónde la escribe GHL). Se acepta también `mm:ss`. Los leads
+    sin respuesta escrita cuyo contacto efectivo depende de una de esas llamadas salen
+    como "contacto efectivo no medible".
+  - **Sin marcar vs falla de línea**: cada intento trae su desenlace —conectada, sin
+    respuesta (no-answer/buzón), **falla de línea** (failed/busy/canceled: 153 de 594, 26%)
+    o sin estatus—. Columnas "Sin marcar" y "Solo falla de línea" y el bloque "Telefonía por
+    asesora". Desde el 7-oct-2026 (`SLA_LINEA_DESDE`, mismo criterio de periodo que la
+    v1.1/v1.2) las fallas de línea salen del denominador de la **actividad efectiva**: son
+    telefonía, no desempeño. `sla:agg:v12`.
 - **Los tres parámetros del Anexo 1 que faltaban** (2026-09-11), derivados de lo que el
   barrido ya lee por contacto: **SLA de 60 segundos** del Ejecutivo de Primer Contacto
-  (contra el primer toque manual, con la referencia "cualquier salida, automatización
-  incluida" aparte y rotulada como referencia); **integridad del pipeline** (spec B2-2:
+  (contra el primer toque manual); **integridad del pipeline** (spec B2-2:
   toda OPP abierta —Seguimiento de OPP, Carta oferta, Apartado— debe tener un *next step
   con fecha* = tarea abierta con fecha límite hoy o después, o cita futura; se lista con
   nombres, por asesor, y los leads cuyas tareas o citas no se pudieron leer salen del

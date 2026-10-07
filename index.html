@@ -4928,7 +4928,7 @@ async function showLQ(){
 // Reporte de disciplina comercial directo del CRM: SLA de primera respuesta por
 // asesor y canal, leads >7 días sin toque, trabajados vs contactados efectivos,
 // citas y show rate, y OPPs/WONs por asesor. Con nombres, acumulable por semanas.
-const SLA_AGG_KEY = "sla:agg:v11";   // v11: spec v1.1 (filtros de medición: inválidos, brokers, revertidas, horario, sin llamada, contacto efectivo)   // v10: calificación por reglas (la etapa manda), no el campo manual vacío   // v9: razón de descarte por lead   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
+const SLA_AGG_KEY = "sla:agg:v12";   // v12: telefonía por lead (canal del 1er toque, intentos, desenlace, duración conocida)   // v11: spec v1.1 (filtros de medición: inválidos, brokers, revertidas, horario, sin llamada, contacto efectivo)   // v10: calificación por reglas (la etapa manda), no el campo manual vacío   // v9: razón de descarte por lead   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
 const SLA_STALE_MS = 7*86400e3; // "sin toque" = 7 días sin mensaje
 const slaState = { built:false, agg:null, syncing:false, asesor:"", camp:"" };   // asesor/camp "" = sin filtro
 
@@ -5034,6 +5034,12 @@ function slaBreakup(l, sinLlamada){
    etiquetas se comparan exactas; los nombres y valores de campos, sin mayúsculas, acentos
    ni espacios alrededor. */
 const SLA_V11_DESDE = "2026-10-01";
+// Fallas de línea (Dirección General, 7-oct-2026): una llamada que la telefonía devolvió
+// failed, busy o canceled no es desempeño del asesor y deja de contar en su actividad
+// efectiva. Mismo criterio de periodo que la v1.1/v1.2 —el último día manda—: lo que
+// terminó antes no se recalcula.
+const SLA_LINEA_DESDE = "2026-10-07";
+const slaLineaFuera = (per)=> !!(per && per.fin && per.fin >= SLA_LINEA_DESDE);
 const SLA_V11_TAGS = { nci:"sin llamada - numero invalido", ncm:"sin llamada - solo mensaje", inj:"descalificacion injustificada", broker:"broker" };
 const SLA_V11_CAMPOS = { causa:"Causa de descalificación", evid:"Evidencia de descalificación", asesor:"Asesor que descalificó", fecha:"Fecha de entrada a Descalificado", ncDesde:"Sin llamada - fecha de inicio" };
 // R-01: dos grupos. Inválido = sale de todo; real descartado = se mide hasta su descalificación.
@@ -5268,7 +5274,8 @@ async function loadRubrica(){
 // Regla de la spec (A1): el numerador SIEMPRE es subconjunto del denominador, y cada
 // porcentaje viaja con sus dos números (cnt) para poder mostrarlos en pantalla.
 // `rub` = los umbrales vigentes del periodo (slaRubrica); sin él, los vigentes hoy.
-function slaScoreAsesor(arr, rub){
+// opts.lineaFuera: las fallas de línea salen del denominador de la actividad efectiva.
+function slaScoreAsesor(arr, rub, opts){
   rub = rub || slaRubrica();
   const cd = arr.filter(l=>!l.sd);          // sin datos de conversación = no se puede juzgar
   const N = cd.length;
@@ -5293,9 +5300,13 @@ function slaScoreAsesor(arr, rub){
   let tkProg=0, tkFecha=0, tkVenc=0, tkLeidas=false;
   cd.forEach(l=>{ if(l.terr || !l.tk) return; tkLeidas=true; tkProg+=l.tk.prog||0; tkFecha+=l.tk.enFecha||0; tkVenc+=l.tk.venc||0; });
   // Actividad efectiva: entregados + leídos ÷ enviados
-  let env=0, ent=0;
+  // Las llamadas que volvieron por falla de línea (failed/busy/canceled) llegan aparte
+  // (d.linea): fuera del denominador desde SLA_LINEA_DESDE; antes, contaban como fallidas.
+  let env=0, ent=0, lineaN=0;
+  const lineaFuera = !!(opts && opts.lineaFuera);
   cd.forEach(l=>{ const d=l.deliv; if(!d) return;
-    env += (d.sent||0)+(d.delivered||0)+(d.read||0)+(d.failed||0);
+    lineaN += d.linea||0;
+    env += (d.sent||0)+(d.delivered||0)+(d.read||0)+(d.failed||0)+(lineaFuera ? 0 : (d.linea||0));
     ent += (d.delivered||0)+(d.read||0); });
   const pctEfec = env > 0 ? ent*100/env : null;
 
@@ -5348,7 +5359,7 @@ function slaScoreAsesor(arr, rub){
            tk: { prog: tkProg, enFecha: tkFecha, venc: tkVenc, leidas: tkLeidas },
            fh: { de: fhDe, ok: fhOk },               // fuera de horario atendidos antes de las 11:00 (R-04)
            agend: { con: agCon, de: agBase.length, dias: diasCita },
-           small, bk, desc,
+           small, bk, desc, lineaN, lineaFuera,
            citas: arr.filter(l=>!l.ad).reduce((a,l)=>a+l.ap.tot,0),
            showed: arr.filter(l=>!l.ad).reduce((a,l)=>a+l.ap.sh,0),
            sinCitas: arr.filter(l=>l.ad).length };
@@ -5514,7 +5525,8 @@ function slaAsesorSection(agg, leadsIn){
   // Umbrales del periodo del reporte (spec v1.2): los del juego vigente en su último día.
   const per = slaPeriodoDe(agg.rango);
   const rub = slaRubrica(per.ini, per.fin);
-  let rows = Object.keys(groups).map(u=>({ u, a:groups[u], c:slaScoreAsesor(groups[u], rub) }));
+  const lineaFuera = slaLineaFuera(per);
+  let rows = Object.keys(groups).map(u=>({ u, a:groups[u], c:slaScoreAsesor(groups[u], rub, { lineaFuera }) }));
   rows.sort((x,y)=>(y.c.global??-1)-(x.c.global??-1));
   slaNormalizar(rows);
   // Si el roster no empató con ningún usuario de GHL (nombres distintos), avisar en vez
@@ -5596,6 +5608,7 @@ function slaAsesorSection(agg, leadsIn){
       </div>
       <div class="lq-sub" style="margin-bottom:10px">N = ${c.N} leads · oportunidades creadas: ${c.opp} · leads con oportunidad: ${c.leadsConOpp} de ${c.leadsTot} (${Math.round(c.oppRate)}%) · citas: ${c.showed}/${c.citas} asistidas · agendamiento: ${c.agend.de?`${c.agend.con} de ${c.agend.de} efectivos (${Math.round(c.agend.con/c.agend.de*100)}%)`:"—"} · índice de calidad: ${c.q5==null?"— (sin leads calificados en el CRM)":c.q5.toFixed(1)+"/5"} · break up: ${c.desc?`${c.bk} de ${c.desc} descalificados`:"N/A (sin descalificados)"} · tareas: ${c.tk.leidas?`${c.tk.prog} programadas · ${c.tk.enFecha} en fecha · ${c.tk.venc} vencidas abiertas`:"sin datos de tareas"}</div>
       ${v11 ? `<div class="lq-sub" style="margin:-4px 0 10px"><b>Fuera de horario atendidos antes de las 11:00:</b> ${c.fh.de ? `${c.fh.ok} de ${c.fh.de} (${(c.fh.ok*100/c.fh.de).toFixed(1)}%)` : "ninguno en el rango"}</div>` : ""}
+      ${(()=>{ const T = slaTelefonia(r.a.filter(l=>!l.sd)); return T.leads ? `<div class="lq-sub" style="margin:-4px 0 10px"><b>Llamadas:</b> ${T.n} intentos (${T.h24} en las primeras 24 h) · ${(T.n/T.leads).toFixed(1)} por lead · sin marcar: ${T.sinMarcar} de ${T.leads} leads · conectadas ${T.ok} · sin respuesta ${T.na} · <b>falla de línea ${T.li}</b>${T.soloLinea?` (${T.soloLinea} lead${T.soloLinea===1?"":"s"} donde la línea falló en todos los intentos)`:""}</div>` : ""; })()}
       ${bars}
       ${rev.length ? `<details style="margin:8px 0"><summary class="lq-sub" style="cursor:pointer;font-weight:700">Descalificaciones revertidas · ${rev.length}</summary>
         <div class="table-scroll" style="margin-top:6px"><table class="cons"><tr><th class="lft">Lead</th><th class="lft">Causa</th><th class="lft">Evidencia</th><th class="lft">Fecha</th></tr>
@@ -5619,7 +5632,7 @@ function slaAsesorSection(agg, leadsIn){
     <br><b>Cadencia / seguimiento:</b> ${slaThrTxt(rub.cad.thr)} — leads con ≥3 días distintos de contacto manual en sus primeros 10 días. ${slaHistorialTxt("cad", rub)}
     <br><b>Cierre de ciclo:</b> ${slaThrTxt(rub.cierre.thr)} — de los leads DESCALIFICADOS del asesor, cuántos recibieron la escalera completa antes de retirarse. Sin descalificados: N/A. Nunca un denominador de reemplazo.${v11?` Con una excepción "sin llamada" válida o pendiente de validación, cada paso se completa con 1 mensaje + 1 email mientras la etiqueta está puesta, y "sin respuesta" se cuenta desde la fecha de la etiqueta (R-05).`:""} ${slaHistorialTxt("cierre", rub)}
     <br><b>Cumplimiento de tareas:</b> ${slaThrTxt(rub.tareas.thr)} — tareas del CRM cerradas en o antes de su fecha, sobre las programadas. Sustituye a "Seguimiento a futuro" (sus campos no existen en GHL). El % nunca se lee sin sus tres cifras: programadas, en fecha y vencidas abiertas — un % alto con pocas tareas premia programar menos. Umbrales propuestos. ${slaHistorialTxt("tareas", rub)}
-    <br><b>Actividad efectiva:</b> ${slaThrTxt(rub.efec.thr)} — mensajes entregados + leídos (y llamadas conectadas) ÷ enviados, de las acciones manuales del asesor. ${slaHistorialTxt("efec", rub)}
+    <br><b>Actividad efectiva:</b> ${slaThrTxt(rub.efec.thr)} — mensajes entregados + leídos (y llamadas conectadas) ÷ enviados, de las acciones manuales del asesor. ${lineaFuera ? `Las llamadas que la línea no completó (failed, busy, canceled) no cuentan: son telefonía, no desempeño (desde el ${escAttr(slaFechaCorta(SLA_LINEA_DESDE))}).` : `En este periodo las fallas de línea todavía cuentan como fallidas; desde el ${escAttr(slaFechaCorta(SLA_LINEA_DESDE))} salen del cálculo.`} ${slaHistorialTxt("efec", rub)}
     ${v11?`<br><b>Qué leads cuentan (spec v1.1):</b> los <b>leads inválidos</b> y los <b>errores de asignación</b> (brokers) salen del numerador y del denominador de todas las sub-notas desde su alta: no cuentan ni a favor ni en contra (R-01, R-03). Un <b>lead real descartado</b> se mide hasta su entrada a Descalificado; nada posterior cuenta. Una <b>descalificación revertida</b> cuenta para quien la descalificó, hasta esa fecha (R-02). <b>Contacto efectivo</b> = respuesta del lead o llamada de ≥90 s; una acción manual sola nunca lo es (R-06).`:""}
     <br>Los umbrales tienen fecha de vigencia y se consultan en <b>Metas → Rúbrica de desempeño</b>: un periodo se califica con los vigentes en su último día, y el reporte nunca los cambia por su cuenta.
     <br>Escala: 5 Excelente · 4 Bueno · 3 Adecuado · 2 Necesita mejorar · 1 Crítico. La nota global es el promedio simple de las sub-notas, todas con el mismo peso. Con menos de ${SLA_MIN_N} leads no se emite nota: "sin muestra suficiente".
@@ -5766,6 +5779,13 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
              ad: !!(sw.sin || sw.aerr),
              // Desempeño del asesor: contacto MANUAL, reloj con horario, seguimiento y break up
              foM: sw.foM||null, calls: sw.calls||0, chans: sw.chans||[], deliv: sw.deliv||null,
+             // Telefonía por lead (Dirección General, 7-oct-2026): canal del 1er toque manual,
+             // 1er intento de llamada (cualquier desenlace), intentos en las primeras 24 h y en
+             // total, y su desenlace — para separar "no marcó" de "marcó y la línea falló".
+             fch: sw.foMch || null,
+             slaCall: sw.cl && sw.cl.t && sw.cl.t.length ? Math.max(0, sw.cl.t[0]-created) : null,
+             cl: sw.cl ? { n: sw.cl.n||0, ok: sw.cl.ok||0, na: sw.cl.na||0, li: sw.cl.linea||0, ot: sw.cl.otro||0, dn: sw.cl.dn||0,
+                           h24: (sw.cl.t||[]).filter(t=>t>=created && t<=created+24*3600e3).length } : null,
              bucket: (()=>{ const r=slaReloj(created); return slaBucket(sw.foM && sw.foM>=r ? (sw.foM-r)/60000 : (sw.foM ? 0 : null)); })(),
              d10: (sw.days||[]).filter(d=>{ const t=Date.parse(d+"T12:00:00Z"); return t>=created-86400e3 && t<=created+10*86400e3; }).length,
              breakup: slaBreakup({calls:sw.calls, chans:sw.chans, fi:fiEf, li:sw.li}, sinLlamada),
@@ -5788,11 +5808,19 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
              ap: sw.ap || {tot:0,sh:0,ns:0,fut:0} };
   }).filter(Boolean);
   // Diagnóstico de telefonía (spec A4): valores reales del status de llamadas + duración
-  const callSt = {}; let callDur = 0, call90 = 0, callTot = 0;
+  // y la DURACIÓN de todas las llamadas, separada en tres: la trae el CRM (0 incluido), no
+  // la trae pero no conectó (0 s por definición) y conectó sin traerla. Solo la última es
+  // desconocida; antes el 0 contaba como "ilegible" y la pantalla daba 40% legible.
+  const callSt = {}; let callTot = 0;
+  const tel = { tot:0, dExp:0, d0:0, dNo:0, c90:0, noSt:{}, llaves:[] }, llavesSet = new Set();
   Object.values(sweepMap||{}).forEach(sw=>{
     Object.entries(sw.cst||{}).forEach(([s,n])=>{ callSt[s]=(callSt[s]||0)+n; callTot+=n; });
-    callDur += sw.cdur||0; call90 += sw.c90||0;
+    const t = sw.tel; if(!t) return;
+    tel.tot += t.tot||0; tel.dExp += t.dExp||0; tel.d0 += t.d0||0; tel.dNo += t.dNo||0; tel.c90 += t.c90||0;
+    Object.entries(t.noSt||{}).forEach(([k,n])=>{ tel.noSt[k]=(tel.noSt[k]||0)+n; });
+    (t.llaves||[]).forEach(k=>{ if(llavesSet.size < 40) llavesSet.add(k); });
   });
+  tel.llaves = [...llavesSet];
   // OPPs (cotizaciones) y WONs por asesor dentro del rango. Las oportunidades del
   // pipeline de expansión de brokers quedan fuera, igual que sus leads (spec D1).
   const esPipeExp = (p)=> /expansi[oó]n\s*y\s*activaci[oó]n/i.test(pipeName[p]||"");
@@ -5848,7 +5876,7 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
     (sw.dow||[]).forEach((n,i)=>{ dow[i]+=n||0; });
   });
   return { ts:Date.now(), rango, users:usersMap||{}, fields:F, leads, byRepOpp, hrs, dow,
-           testExcl, callSt, callDur, call90, callTot, califCrm,
+           testExcl, callSt, callTot, tel, califCrm,
            exclExpansion: v11 ? 0 : exclExpansion, pipelines: pipesArr||[],
            v11: v11 ? slaResumenV11({ contactsArr, tagged: X.tagged||[], disp, esTest, rangoSet, per, C11, H11, X, leads }) : null };
 }
@@ -5905,6 +5933,23 @@ const SLA_ETAPAS_OPP = new Set(["Seguimiento de OPP","Carta oferta","Apartado","
 // Descalificados del rango y si traen razón de descarte. Un lead cuenta como descalificado
 // por su etapa ("Descalificado") o por la calificación del CRM; la razón es el campo
 // "Razón de descarte". razonMedible=false cuando el campo no existe en el CRM.
+// Llamadas manuales de un grupo de leads (7-oct-2026): intentos totales y en las primeras
+// 24 h, su desenlace, y dos conteos que antes eran indistinguibles: leads SIN MARCAR (ningún
+// intento) y leads cuyos intentos volvieron TODOS por falla de línea (failed, busy,
+// canceled: marcó y la telefonía no completó la llamada). efNoMed = leads sin respuesta
+// escrita con llamadas conectadas sin duración: su contacto efectivo no se puede medir.
+function slaTelefonia(arr){
+  const T = { leads:0, n:0, h24:0, ok:0, na:0, li:0, ot:0, dn:0, sinMarcar:0, soloLinea:0, efNoMed:0 };
+  (arr||[]).forEach(l=>{
+    const c = l.cl; if(!c) return;
+    T.leads++; T.n += c.n; T.h24 += c.h24; T.ok += c.ok; T.na += c.na; T.li += c.li; T.ot += c.ot; T.dn += c.dn;
+    if(!c.n) T.sinMarcar++;
+    else if(c.li === c.n) T.soloLinea++;
+    if(!l.fi && c.dn > 0) T.efNoMed++;
+  });
+  return T;
+}
+
 function slaDescalificados(leads, rosterIds, razonMedible){
   const desc = leads.filter(l=>l.lv==="desc" || l.stage==="Descalificado");
   const porA = {}, razones = {};
@@ -5975,6 +6020,8 @@ function slaRender(){
   const slasEf = leads.map(l=>l.slaEf).filter(x=>x!=null);   // contacto efectivo (definición del Anexo 1)
   // Mediana del 1er toque manual: con las reglas v1.1, solo leads que entraron en horario (R-04).
   const slasAt = leads.filter(l=>!(agg.v11 && l.fh)).map(l=>l.slaAt).filter(x=>x!=null);   // primer intento
+  // Hasta el 1er INTENTO DE LLAMADA, aparte del 1er toque por cualquier canal (7-oct-2026).
+  const slasCall = leads.filter(l=>!(agg.v11 && l.fh)).map(l=>l.slaCall).filter(x=>x!=null);
   const und = (mins)=> slasEf.length ? Math.round(slasEf.filter(x=>x<=mins*60000).length/slasEf.length*100)+"%" : "—";
   const conCitas = leads.filter(l=>!l.ad);        // solo los que sí se pudieron leer
   const apTot = conCitas.reduce((a,l)=>a+l.ap.tot,0), apSh = conCitas.reduce((a,l)=>a+l.ap.sh,0), apNs = conCitas.reduce((a,l)=>a+l.ap.ns,0);
@@ -5982,6 +6029,7 @@ function slaRender(){
 
   const kpi = (v,l)=>`<div class="crm-kpi"><div class="k-val">${v}</div><div class="k-lbl">${l}</div></div>`;
   const conDatos = leads.filter(l=>!l.sd);
+  const telG = slaTelefonia(conDatos);
   const sinDatos = leads.length - conDatos.length;
   // El aviso de sincronización incompleta va ARRIBA de todo: si faltan conversaciones, la
   // nota de los asesores está subestimada y eso hay que verlo antes que los números.
@@ -6021,16 +6069,16 @@ function slaRender(){
     ${kpi(leads.length.toLocaleString(),"Leads en el rango")}
     ${kpiND(conDatos.filter(l=>l.foM).length,conDatos.length,"Con 1er toque manual del asesor")}
     ${kpiND(conDatos.filter(l=>l.foC).length,conDatos.length,"Con llamada que sí conectó")}
-    ${kpiND(conDatos.filter(l=>l.fi).length,conDatos.length,V11?"Contactados efectivos · respuesta del lead o llamada ≥90 s":"Contactados efectivos")}
+    ${kpiND(conDatos.filter(l=>l.fi).length,conDatos.length,(V11?"Contactados efectivos · respuesta del lead o llamada ≥90 s":"Contactados efectivos")+(telG.efNoMed?` · ${telG.efNoMed} no medible${telG.efNoMed===1?"":"s"}: llamada conectada sin duración`:""))}
     ${V11 ? kpiND(v5n,conDatos.length,"Cumplieron su SLA de 1er toque manual · 5 min en horario, antes de las 11:00 fuera de horario")
           : kpiND(v5n,conDatos.length,"1er toque manual ≤5 min · desde la entrada del lead","meta 5 min")}
     ${V11 ? kpiND(fhOk,fhDe,"Fuera de horario atendidos antes de las 11:00") : ""}
     ${kpi(und(60),"Contacto efectivo ≤60 min (handoff WhatsApp) · desde la entrada")}
     ${kpi(und(15),"Contacto efectivo ≤15 min (transferencia en caliente)")}
     ${kpiND(conDatos.filter(l=>l.slaAt!=null && l.slaAt<=60000).length,conDatos.length,"1er toque manual ≤60 s · SLA del Ejecutivo de Primer Contacto","meta 60 s")}
-    ${kpiND(conDatos.filter(l=>l.fo && l.fo>=l.created && (l.fo-l.created)<=60000).length,conDatos.length,"Cualquier salida ≤60 s, automatización incluida · referencia, no mide al equipo")}
     ${kpi(fmtDur(slaMedian(slasEf)),"Med. contacto efectivo · desde la entrada del lead")}
-    ${kpi(fmtDur(slaMedian(slasAt)),V11?"Med. 1er toque manual · solo leads que entraron en horario":"Med. 1er toque manual · desde la entrada del lead")}
+    ${kpi(fmtDur(slaMedian(slasAt)),V11?"Med. 1er toque manual · cualquier canal · solo leads que entraron en horario":"Med. 1er toque manual · cualquier canal · desde la entrada del lead")}
+    ${kpi(fmtDur(slaMedian(slasCall)),V11?"Med. 1er intento de llamada · solo leads que entraron en horario":"Med. 1er intento de llamada · desde la entrada del lead")}
     ${kpiND(agN,agB.length,"Tasa de agendamiento · citas ÷ contactados efectivos")}
     ${kpi(diasCita==null?"—":(Math.round(diasCita*10)/10)+" d","Días a la cita (mediana, efectivo → fecha de cita) · estándar 1 semana")}
     ${kpiND(apSh,apSh+apNs,"Show rate de citas","meta 75%",(apSh+apNs)?apSh/(apSh+apNs)>=0.75:null)}
@@ -6043,17 +6091,34 @@ function slaRender(){
     if(agg.callTot != null){
       const stStr = Object.entries(agg.callSt||{}).sort((a,b)=>b[1]-a[1]).map(([s,n])=>`${escAttr(s)} ${n}`).join(" · ");
       const contestadas = (agg.callSt&&agg.callSt.completed)||0;
+      const linea = ["failed","busy","canceled","cancelled"].reduce((a,k)=>a+((agg.callSt||{})[k]||0),0);
       partes.push(agg.callTot
-        ? `<b>Telefonía</b>: ${agg.callTot} llamadas en el CRM · status vistos: ${stStr} · <b>llamada contestada</b> (completed): ${contestadas} — es diagnóstico de las líneas, no califica a nadie`
+        ? `<b>Telefonía</b>: ${agg.callTot} llamadas en el CRM · status vistos: ${stStr} · <b>llamada contestada</b> (completed): ${contestadas} · <b>falla de línea</b> (failed, busy, canceled): ${linea} (${Math.round(linea*100/agg.callTot)}%) — la línea no completó la llamada; no se cuenta como desempeño del asesor`
         : `<b>Telefonía</b>: el CRM no registró ninguna llamada en el rango — si los asesores sí llaman, las llamadas corren por un canal que el CRM no registra (spec A4)`);
-      partes.push(agg.callDur
-        ? `<b>Llamada efectiva ≥90 s</b>: ${agg.call90} de ${agg.callDur} llamadas con duración legible`
-        : `El CRM no expone la <b>duración</b> de las llamadas: "llamada efectiva ≥90 s" (spec D4) no se puede medir todavía y la nota usa entregas/lecturas en su lugar`);
+      // Duración (7-oct-2026): una llamada que no conectó dura 0 s aunque el CRM no lo
+      // escriba; solo es DESCONOCIDA la que conectó sin traer duración.
+      const T = agg.tel;
+      if(T && T.tot){
+        const conoc = T.dExp + T.d0;
+        const noSt = Object.entries(T.noSt||{}).sort((a,b)=>b[1]-a[1]).map(([k,n])=>`${escAttr(k)} ${n}`).join(" · ");
+        partes.push(`<b>Duración de llamada</b>: conocida en <b>${conoc} de ${T.tot}</b> (${Math.round(conoc*100/T.tot)}%) — ${T.dExp} la traen en el CRM y ${T.d0} no conectaron (0 s por definición)${T.dNo?`; <b style="color:var(--rojo)">${T.dNo} conectaron sin duración legible</b> (${noSt}): de esas no se puede saber si llegaron a 90 s${(T.llaves||[]).length?`. Lo que sí traen: <code>${escAttr(T.llaves.join(", "))}</code>`:""}`:""}`);
+        partes.push(`<b>Llamada efectiva ≥90 s</b>: ${T.c90} de ${conoc} llamadas con duración conocida`);
+      }
     }
     if(partes.length) html += `<div class="lq-meth">🔎 <b>Diagnóstico de datos</b> — ${partes.join(" · ")}.</div>`;
   }
 
   // --- SLA por asesor y por canal
+  // Canal del 1er toque manual (7-oct-2026): con qué abrió el asesor. La mediana de 1er
+  // toque mezcla canales que no se comparan entre sí —un WhatsApp sale en segundos, una
+  // llamada no— y sin este mix no se puede leer.
+  const CANALES_1T = [["call","Llamada"],["whatsapp","WhatsApp"],["sms","SMS"],["email","Correo"]];
+  const mixCanal = (arr)=>{
+    const con = arr.filter(l=>l.foM && l.fch); if(!con.length) return "—";
+    const p = CANALES_1T.map(([c,lbl])=>[lbl, con.filter(l=>l.fch===c).length]);
+    const txt = (x)=> `${x[0]} ${Math.round(x[1]*100/con.length)}%`;
+    return `<span title="${escAttr(p.map(x=>`${x[0]}: ${x[1]}`).join(" · "))} — de ${con.length} leads con 1er toque manual">${txt(p[0])} · ${txt(p[1])}<br>${txt(p[2])} · ${txt(p[3])}</span>`;
+  };
   const groupTbl = (title, keyFn, labelFn)=>{
     const groups = {};
     leads.forEach(l=>{ const k=keyFn(l); (groups[k]=groups[k]||[]).push(l); });
@@ -6061,6 +6126,7 @@ function slaRender(){
       const cd = arr.filter(l=>!l.sd);
       const ss = arr.map(l=>l.slaEf).filter(x=>x!=null);
       const sa = arr.filter(l=>!(V11 && l.fh)).map(l=>l.slaAt).filter(x=>x!=null);   // v1.1: solo en horario
+      const sc = arr.filter(l=>!(V11 && l.fh)).map(l=>l.slaCall).filter(x=>x!=null);  // 1er intento de llamada, mismo criterio
       const u15 = ss.length ? Math.round(ss.filter(x=>x<=15*60000).length/ss.length*100)+"%" : "—";
       const u60 = ss.length ? Math.round(ss.filter(x=>x<=60*60000).length/ss.length*100)+"%" : "—";
       // Tasa de agendamiento (spec D3): citas ÷ contactados efectivos con citas legibles.
@@ -6069,22 +6135,33 @@ function slaRender(){
       const agB2 = cd.filter(l=>l.fi && !l.ad);
       const agN2 = agB2.filter(l=>l.ap && l.ap.tot>0).length;
       const sh = arr.reduce((a,l)=>a+l.ap.sh,0), ns = arr.reduce((a,l)=>a+l.ap.ns,0);
+      // Llamadas del asesor por lead, y "no marcó" separado de "marcó y la línea falló".
+      const T = slaTelefonia(cd);
       return `<tr><td class="name">${escAttr(labelFn(k))}</td><td>${arr.length}${arr.length-cd.length?`<span style="color:var(--neutro);font-size:var(--fs-xs)"> (${arr.length-cd.length} s/d)</span>`:""}</td>
         <td class="pct">${pcti(cd.filter(l=>l.foM).length,cd.length)}</td>
+        <td class="lft" style="white-space:nowrap;font-size:var(--fs-xs)">${mixCanal(cd)}</td>
         <td class="pct">${pcti(cd.filter(l=>l.foC).length,cd.length)}</td>
-        <td class="pct" style="color:var(--neutro)">${pcti(cd.filter(l=>l.fo).length,cd.length)}</td>
         <td class="pct">${pcti(cd.filter(l=>l.fi).length,cd.length)}</td>
-        <td>${fmtDur(slaMedian(sa))}</td><td>${fmtDur(slaMedian(ss))}</td><td class="pct">${u15}</td><td class="pct">${u60}</td>
+        <td>${fmtDur(slaMedian(sa))}</td><td>${fmtDur(slaMedian(sc))}</td>
+        <td title="${T.leads?`${T.h24} intentos en las primeras 24 h y ${T.n} en total, sobre ${T.leads} leads · conectadas ${T.ok} · sin respuesta ${T.na} · falla de línea ${T.li} · sin estatus ${T.ot}`:""}">${T.leads?`${(T.h24/T.leads).toFixed(1)} / ${(T.n/T.leads).toFixed(1)}`:"—"}</td>
+        <td title="Leads a los que el asesor no hizo ningún intento de llamada">${T.leads?`${T.sinMarcar} <span class="lq-sub">(${Math.round(T.sinMarcar*100/T.leads)}%)</span>`:"—"}</td>
+        <td title="Leads con intentos de llamada que TODOS volvieron failed, busy o canceled: marcó y la línea falló — telefonía, no desempeño"${T.soloLinea?' style="color:var(--cobre);font-weight:600"':""}>${T.leads?T.soloLinea:"—"}</td>
+        <td>${fmtDur(slaMedian(ss))}</td><td class="pct">${u15}</td><td class="pct">${u60}</td>
         <td class="pct" title="${agN2} de ${agB2.length} contactados efectivos con cita">${agB2.length?Math.round(agN2/agB2.length*100)+"%":"—"}</td>
         <td>${arr.filter(l=>!l.ad).reduce((a,l)=>a+l.ap.tot,0)}</td><td class="pct">${(sh+ns)?pcti(sh,sh+ns):"—"}</td></tr>`;
     }).join("");
     return `<div class="table-scroll mb-sec"><table class="cons">
       <tr><th class="lft">${title}</th><th>Leads</th>
         <th title="Primera acción manual del asesor: su llamada, su WhatsApp, su SMS o su email escrito a mano">1er toque manual</th>
+        <th class="lft" title="Con qué canal fue el 1er toque manual: % llamada, WhatsApp, SMS y correo. La mediana de 1er toque mezcla canales que no se comparan entre sí; léela con este mix">Canal del 1er toque</th>
         <th title="Primera llamada del asesor que sí conectó (estatus completed)">Llamada conectada</th>
-        <th title="Incluye la automatización de bienvenida: sale ~100% en todos y no mide al asesor" style="color:var(--neutro);font-weight:500">1er msj (autom.)</th>
-        <th>Efectivos</th><th${V11?' title="Solo leads que entraron en horario de atención (spec v1.1 R-04)"':""}>Med. toque manual</th><th>Med. efectivo</th><th>≤15m</th><th>≤60m</th><th title="Citas ÷ contactados efectivos (spec D3)">Agend.</th><th>Citas</th><th>Show · 75%</th></tr>
-      ${rows || `<tr><td colspan="13" class="lft txt-nota">Sin datos.</td></tr>`}
+        <th>Efectivos</th><th${V11?' title="Solo leads que entraron en horario de atención (spec v1.1 R-04)"':""}>Med. toque manual</th>
+        <th title="Mediana desde la entrada del lead hasta el PRIMER INTENTO de llamada del asesor, conecte o no. Es otra cifra que la mediana de 1er toque, que cuenta cualquier canal${V11?". Solo leads en horario (R-04)":""}">Med. 1er llamada</th>
+        <th title="Intentos de llamada del asesor por lead: en las primeras 24 h desde la entrada del lead / en total">Llamadas por lead · 24 h / total</th>
+        <th title="Leads sin ningún intento de llamada del asesor">Sin marcar</th>
+        <th title="Leads cuyos intentos volvieron TODOS failed, busy o canceled: marcó y la línea falló">Solo falla de línea</th>
+        <th>Med. efectivo</th><th>≤15m</th><th>≤60m</th><th title="Citas ÷ contactados efectivos (spec D3)">Agend.</th><th>Citas</th><th>Show · 75%</th></tr>
+      ${rows || `<tr><td colspan="17" class="lft txt-nota">Sin datos.</td></tr>`}
     </table></div>`;
   };
   if(sinDatos){
@@ -6100,6 +6177,32 @@ function slaRender(){
   {
     const rosterIds = slaRosterIds(agg.users);
     html += groupTbl("Asesor", l=>rosterIds.has(l.u)?l.u:SLA_FUERA, k=>k===SLA_FUERA?"Fuera del equipo de ventas":name(k));
+    // Telefonía por asesora (7-oct-2026): el volumen de marcación por persona no existía —
+    // el bloque de telefonía era agregado y "no califica a nadie"—, y una falla de la línea
+    // se veía igual que no haber marcado. Aquí cada intento con su desenlace.
+    const porA = {};
+    conDatos.forEach(l=>{ const u = rosterIds.has(l.u) ? l.u : SLA_FUERA; (porA[u] = porA[u] || []).push(l); });
+    const filasT = Object.keys(porA).sort((a,b)=>(a===SLA_FUERA)-(b===SLA_FUERA) || porA[b].length-porA[a].length).map(u=>{
+      const T = slaTelefonia(porA[u]); if(!T.leads) return "";
+      const pc = (n)=> T.n ? `<span class="lq-sub">(${Math.round(n*100/T.n)}%)</span>` : "";
+      return `<tr><td class="name">${u===SLA_FUERA?"Fuera del equipo de ventas":escAttr(name(u))}</td><td>${T.leads}</td>
+        <td>${T.sinMarcar||"·"}</td><td>${(T.leads-T.sinMarcar)||"·"}</td><td>${T.h24}</td><td><b>${T.n}</b></td>
+        <td>${T.ok||"·"} ${T.ok?pc(T.ok):""}</td><td>${T.na||"·"} ${T.na?pc(T.na):""}</td>
+        <td style="${T.li?"color:var(--cobre);font-weight:600":""}">${T.li||"·"} ${T.li?pc(T.li):""}</td><td>${T.ot||"·"}</td>
+        <td>${T.soloLinea||"·"}</td><td style="${T.dn?"color:var(--rojo)":""}">${T.dn||"·"}</td><td style="${T.efNoMed?"color:var(--rojo)":""}">${T.efNoMed||"·"}</td></tr>`;
+    }).join("");
+    html += `<h3 class="h-sec">Telefonía por asesora</h3>
+      <div class="table-scroll mb-sec"><table class="cons">
+        <tr><th class="lft">Asesor</th><th>Leads</th><th title="Leads sin ningún intento de llamada del asesor">Sin marcar</th><th title="Leads con al menos un intento">Marcados</th>
+          <th title="Intentos en las primeras 24 h desde la entrada del lead">Intentos 24 h</th><th>Intentos total</th>
+          <th title="completed / connected / answered">Conectadas</th><th title="no-answer o buzón: sonó y nadie contestó">Sin respuesta</th>
+          <th title="failed, busy o canceled: la línea no completó la llamada">Falla de línea</th><th title="Sin status legible o intermedio (queued, ringing…)">Sin estatus</th>
+          <th title="Leads cuyos intentos volvieron TODOS por falla de línea">Leads solo con falla de línea</th>
+          <th title="Llamadas conectadas que no traen duración: no se puede saber si llegaron a 90 s">Conectadas sin duración</th>
+          <th title="Leads sin respuesta escrita cuyo contacto efectivo depende de una llamada conectada sin duración">Contacto efectivo no medible</th></tr>
+        ${filasT || `<tr><td colspan="13" class="lft txt-nota">Sin llamadas legibles en el rango.</td></tr>`}
+      </table></div>
+      <p class="hint" style="margin-top:-10px">Solo llamadas manuales del asesor. <b>Sin marcar</b> = no hubo intento; <b>falla de línea</b> = marcó y la telefonía devolvió failed, busy o canceled — no es desempeño del asesor y, desde el ${escAttr(slaFechaCorta(SLA_LINEA_DESDE))}, no cuenta en su actividad efectiva. Una llamada sin respuesta o con falla de línea dura 0 s aunque el CRM no lo escriba; solo es desconocida la duración de una llamada <b>conectada</b> que no la trae.</p>`;
   }
   html += groupTbl("Canal", l=>l.canal, k=>k);
   // Desglose por pipeline (spec D1): un canal débil se ve, no se promedia hasta desaparecer
@@ -6344,12 +6447,15 @@ function slaRender(){
     <b>Fuera de horario:</b> desde el ${escAttr(slaFechaCorta(SLA_V11_DESDE))}, lead que entra fuera de 09:00–18:59 hora Tulum o en un día que no es de servicio (${escAttr(slaDiasTxt(slaHorarioV11().dias))}); su SLA de 1er toque es antes de las 11:00 del siguiente día de servicio. Antes, el reloj corría 24/7.
     <br><b>Contacto</b> · <b>1er toque manual:</b> primera acción del asesor en persona — su llamada, su WhatsApp, su SMS o su email escrito a mano.
     <b>No cuenta ninguna automatización</b>: workflows, campañas, envíos masivos ni nada que entre por API. Antes esta columna contaba cualquier
-    mensaje saliente y marcaba 100% en todos — la automatización de bienvenida le escribe a todos los leads, así que medía el workflow, no al equipo.
-    La columna gris <b>1er msj (autom.)</b> es ese número viejo, ahí para poder comparar ·
+    mensaje saliente y marcaba 100% en todos — la automatización de bienvenida le escribe a todos los leads, así que medía el workflow, no al equipo ·
+    <b>Canal del 1er toque:</b> % de leads cuyo 1er toque manual fue llamada, WhatsApp, SMS o correo; la mediana de 1er toque se lee con este mix, porque los canales no se comparan entre sí ·
+    <b>Med. 1er llamada:</b> mediana desde la entrada del lead hasta el primer intento de llamada del asesor, conecte o no — cifra aparte de la mediana de 1er toque ·
+    <b>Llamadas por lead:</b> intentos de llamada del asesor en las primeras 24 h y en total ·
+    <b>Sin marcar:</b> lead sin ningún intento de llamada · <b>Falla de línea:</b> intento que la telefonía devolvió failed, busy o canceled — marcó, pero la llamada no se completó; no es desempeño ·
     <b>Contacto efectivo:</b> el lead respondió — hubo conversación —, o desde el ${escAttr(slaFechaCorta(SLA_V11_DESDE))} una llamada de ≥90 s; un mensaje entregado o una acción manual sola no es contacto efectivo ·
     <b>Excepción sin llamada:</b> etiqueta sin llamada - numero invalido o sin llamada - solo mensaje con su evidencia previa; la escalera pide 1 mensaje + 1 email por paso mientras está puesta ·
     <b>Llamada contestada / conectada:</b> llamada con estatus <i>completed</i> — un intento que cayó a buzón es trabajo, pero no es un contacto. Mide que las líneas funcionan; no califica a nadie ·
-    <b>Llamada efectiva:</b> llamada de ≥90 s; el único nivel de llamada que alimenta una nota (pendiente de que el CRM exponga duración) ·
+    <b>Llamada efectiva:</b> llamada de ≥90 s; el único nivel de llamada que alimenta una nota. Una llamada sin respuesta o con falla de línea dura 0 s aunque el CRM no lo escriba; solo es desconocida la duración de una llamada conectada que no la trae ·
     <b>Med. 1er contacto / Med. efectivo:</b> medianas desde la entrada del lead (o su traspaso a ventas) al primer toque manual y al contacto efectivo.
     <br><b>Riesgo</b> · <b>Lead sin toque:</b> lead activo con más de 7 días sin toque manual del asesor y sin respuesta del lead — la secuencia
     automática no cuenta como toque (si contara, un lead abandonado con drip activo nunca aparecería en la lista) ·

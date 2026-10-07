@@ -36,6 +36,16 @@ const CONV = {
   nciMal: [msg("a", T0 + 1 * H, { messageType: "TYPE_CALL", status: "no-answer" })],
   // Caso 7: solo mensaje con un WhatsApp entrante previo del lead.
   ncmOk: [msg("a", T0 + 1 * H), msg("b", T0 + 3 * H, { direction: "inbound", userId: null, source: "" })],
+  // Telefonía (oct-2026): 6 intentos manuales con todos los desenlaces y formas de duración.
+  tel: [
+    msg("w", T0 + 1 * 60e3, { messageType: "TYPE_EMAIL" }),                                         // 1er toque: correo
+    msg("a", T0 + 10 * 60e3, { messageType: "TYPE_CALL", status: "no-answer" }),                      // sin duración: 0 s por no conectar
+    msg("b", T0 + 2 * H, { messageType: "TYPE_CALL", status: "completed", meta: { call: { duration: "2:05" } } }),   // 125 s en mm:ss
+    msg("c", T0 + 3 * H, { messageType: "TYPE_CALL", status: "completed", callDuration: 0 }),         // 0 explícito: legible
+    msg("d", T0 + 4 * H, { messageType: "TYPE_CALL", status: "completed", meta: { call: { recordingUrl: "x" } } }),  // conectó, sin duración
+    msg("e", T0 + 5 * H, { messageType: "TYPE_CALL", status: "busy" }),                                // falla de línea
+    msg("f", T0 + 30 * H, { messageType: "TYPE_CALL", status: "", meta: { call: { status: "canceled" } } }),        // falla de línea por meta.call.status
+  ],
 };
 const TAREAS = { real: [{ dueDate: iso(T0 + 20 * H), completed: true, dateUpdated: iso(T0 + 19 * H) }, { dueDate: iso(T0 + 50 * H), completed: false }] };
 const CITAS = { real: [{ startTime: iso(T0 + 45 * H), appointmentStatus: "confirmed" }] };
@@ -65,6 +75,15 @@ const call = async (body) => { const r = await handler({ httpMethod: "POST", hea
 (async () => {
   const fallas = [];
   const ok = (cond, txt, extra) => { console.log((cond ? "  ✓ " : "  ✗ ") + txt + (extra !== undefined ? "  " + JSON.stringify(extra) : "")); if (!cond) fallas.push(txt); };
+  const tl = await call({ action: "sweep", ids: ["tel"] });
+  const T = tl.d.results && tl.d.results[0];
+  ok(T && T.foMch === "email", "canal del primer toque manual", T && T.foMch);
+  ok(T && T.cl.n === 6 && T.cl.ok === 3 && T.cl.na === 1 && T.cl.linea === 2 && T.cl.otro === 0 && T.cl.dn === 1, "intentos de llamada por desenlace: 3 conectadas, 1 sin respuesta, 2 fallas de línea, 1 conectada sin duración", T && T.cl);
+  ok(T && T.cl.t.length === 6 && T.cl.t[0] === T0 + 10 * 60e3, "momentos de cada intento, el primero a los 10 min", T && T.cl.t.map(iso));
+  ok(T && T.tel.tot === 6 && T.tel.dExp === 2 && T.tel.d0 === 3 && T.tel.dNo === 1 && T.tel.c90 === 1, "duración: 2 la traen (una es 0), 3 no conectaron (0 s), 1 conectó sin duración; 1 de ≥90 s", T && T.tel);
+  ok(T && T.tel.noSt.completed === 1 && T.tel.llaves.includes("meta.call.recordingUrl"), "la llamada sin duración se diagnostica por status y por las llaves que sí trae", T && { noSt: T.tel.noSt, llaves: T.tel.llaves });
+  ok(T && T.deliv.linea === 2 && T.deliv.failed === 1 && T.deliv.read === 3, "las fallas de línea van aparte en la actividad efectiva", T && T.deliv);
+  ok(T && T.fe === T0 + 2 * H, "la llamada de 2:05 es contacto efectivo (R-06)", T && T.fe && iso(T.fe));
   const sw = await call({ action: "sweep", ids: ["real", "llamada90", "soloToques", "nciOk", "nciMal", "ncmOk"],
     opts: { real: { cut: T0 + 30 * H }, nciOk: { ncD: T0 + 50 * H, ncR: T0 + 70 * H }, nciMal: { ncD: T0 + 50 * H }, ncmOk: { ncD: T0 + 50 * H } } });
   ok(sw.status === 200, "sweep responde 200", sw.status);

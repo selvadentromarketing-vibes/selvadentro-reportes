@@ -330,6 +330,50 @@ const PORT = process.env.PORT || 8765;
     return { ok: t.includes(a) && t.includes(b) && !/Formulariometa[^·]{0,40}leads según la plataforma/.test(t), a: t.includes(a), b: t.includes(b) };
   });
   console.log('\n[combinado] gasto sin leads', JSON.stringify(combo));
+  // Telefonía por asesora (Dirección General, 7-oct-2026): canal del 1er toque, mediana del
+  // 1er intento de llamada, intentos en 24 h y en total, sin marcar vs falla de línea,
+  // duración conocida, y la actividad efectiva sin fallas de línea desde el 7-oct.
+  const tel = await page.evaluate(() => {
+    const Z = (local) => Date.parse(local + '-05:00'), M = 60e3, H = 3600e3, iso = (t) => new Date(t).toISOString();
+    const c0 = Z('2026-10-06T10:00:00');
+    const contactos = [1, 2, 3, 4].map(i => ({ id: 't' + i, n: 'Lead t' + i, c: iso(c0 + i * M), src: 'facebook', u: 'u1', tags: [], attr: {}, cf: {} }));
+    const base = (i) => c0 + i * M;
+    const sw = (i, o) => Object.assign({ foM: base(i) + 2 * M, fi: null, fe: null, days: ['2026-10-06'], calls: 0, chans: [], deliv: { sent: 0, delivered: 0, read: 0, failed: 0, linea: 0 }, ap: { tot: 0, sh: 0, ns: 0, fut: 0 }, tk: { prog: 0, enFecha: 0, venc: 0 },
+      tel: { tot: 0, dExp: 0, d0: 0, dNo: 0, c90: 0, noSt: {}, llaves: [] } }, o);
+    const sweeps = {
+      t1: sw(1, { foMch: 'whatsapp', calls: 3, cl: { n: 3, ok: 1, na: 1, linea: 1, otro: 0, dn: 0, t: [base(1) + 10 * M, base(1) + 2 * H, base(1) + 30 * H] }, deliv: { sent: 0, delivered: 1, read: 1, failed: 1, linea: 1 },
+        tel: { tot: 3, dExp: 1, d0: 2, dNo: 0, c90: 1, noSt: {}, llaves: [] } }),
+      t2: sw(2, { foMch: 'call', calls: 2, cl: { n: 2, ok: 0, na: 0, linea: 2, otro: 0, dn: 0, t: [base(2) + 3 * M, base(2) + 5 * H] }, deliv: { sent: 0, delivered: 0, read: 0, failed: 0, linea: 2 },
+        tel: { tot: 2, dExp: 0, d0: 2, dNo: 0, c90: 0, noSt: {}, llaves: [] } }),
+      t3: sw(3, { foMch: 'email', cl: { n: 0, ok: 0, na: 0, linea: 0, otro: 0, dn: 0, t: [] }, deliv: { sent: 0, delivered: 1, read: 0, failed: 0, linea: 0 } }),
+      t4: sw(4, { foMch: 'call', calls: 1, cl: { n: 1, ok: 1, na: 0, linea: 0, otro: 0, dn: 1, t: [base(4) + 4 * M] }, deliv: { sent: 0, delivered: 0, read: 1, failed: 0, linea: 0 },
+        tel: { tot: 1, dExp: 0, d0: 0, dNo: 1, c90: 0, noSt: { completed: 1 }, llaves: ['meta.call.recordingUrl'] } }),
+    };
+    const agg = buildSlaAgg(['2026-W41'], contactos, sweeps, [], { u1: 'Daniela Arana' }, [], [], { now: Z('2026-10-12T12:00:00') });
+    const advPrev = ADVISOR_LIST, aggPrev = slaState.agg, selPrev = slaState.asesor;
+    ADVISOR_LIST = [{ name: 'Daniela Arana', active: true }]; slaState.agg = agg; slaState.asesor = 'u1'; agg.ts = Date.now();
+    navIr('ventas', 'desempeno'); slaRender();
+    const vista = document.getElementById('view-sla');
+    const tablaCon = (txt) => [...vista.querySelectorAll('table')].find(t => t.querySelector('tr') && t.querySelector('tr').innerText.toUpperCase().includes(txt));
+    const filaDe = (t) => t && [...t.querySelectorAll('tr')].find(tr => tr.querySelector('td') && tr.querySelector('td').innerText.trim() === 'Daniela Arana');
+    const celdas = (tr) => tr ? [...tr.querySelectorAll('td')].map(td => td.innerText.replace(/\s+/g, ' ').trim()) : null;
+    const g = celdas(filaDe(tablaCon('CANAL DEL 1ER TOQUE'))), t = celdas(filaDe(tablaCon('INTENTOS 24 H')));
+    const txt = vista.innerText;
+    // Actividad efectiva: deliv {read 2, failed 1, linea 3} → 2 de 3 desde el 7-oct; 2 de 6 antes
+    const leadsE = [{ sd: false, deliv: { read: 2, failed: 1, linea: 3 }, ap: { tot: 0, sh: 0 }, bucket: 'b5' }];
+    const nuevo = slaScoreAsesor(leadsE, slaRubrica('2026-10-05', '2026-10-11'), { lineaFuera: true }).cnt.efec, viejo = slaScoreAsesor(leadsE, slaRubrica('2026-09-28', '2026-10-04'), { lineaFuera: false }).cnt.efec;
+    ADVISOR_LIST = advPrev; slaState.agg = aggPrev; slaState.asesor = selPrev;
+    const r = { g, t, efec: { nuevo, viejo }, sinGris: !/1er msj \(autom\.\)/i.test(txt) && !/Cualquier salida ≤60 s/i.test(txt),
+      duracion: /conocida en 5 de 6 \(83%\)/.test(txt) && /1 conectaron sin duración legible/.test(txt) && /meta\.call\.recordingUrl/.test(txt),
+      kpi: /Med\. 1er intento de llamada/i.test(txt) && /1 no medible: llamada conectada sin duración/i.test(txt), ficha: /Llamadas: 6 intentos \(5 en las primeras 24 h\)/.test(txt) && /falla de línea 3/.test(txt) };
+    // groupTbl: [nombre, leads, 1er toque, canal, conectada, efectivos, med toque, med 1er llamada, llamadas/lead, sin marcar, solo línea, ...]
+    r.ok = !!g && g[3] === 'Llamada 50% · WhatsApp 25% SMS 0% · Correo 25%' && g[7] === '4 min' && g[8] === '1.3 / 1.5' && g[9] === '1 (25%)' && g[10] === '1'
+      && !!t && t.slice(1).join('|') === '4|1|3|5|6|2 (33%)|1 (17%)|3 (50%)|·|1|1|1'
+      && nuevo[0] === 2 && nuevo[1] === 3 && viejo[1] === 6 && r.sinGris && r.duracion && r.kpi && r.ficha;
+    return r;
+  });
+  console.log('\n[telefonía] por asesora', JSON.stringify(tel));
+  if (!tel.ok) hallazgos.push({ vista: 'telefonia:asesora', tel });
   if (!combo.ok) hallazgos.push({ vista: 'combinado:sinLeads', combo });
   console.log('\n[reglas v1.1] aceptación', JSON.stringify(v11));
   if (!v11.ok) hallazgos.push({ vista: 'reglas:v1.1', v11 });

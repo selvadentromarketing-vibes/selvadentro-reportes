@@ -8,7 +8,10 @@
 //   { action:"contacts", start, end, searchAfter? }
 //     → { contacts:[{id,n,c,src,u,tags,attr}], total, searchAfter|null }
 //   { action:"sweep", ids:[contactId,...], opts?:{ [contactId]: { cut?, ncD?, ncR? } } }   (máx 8 por llamada)
-//     → { results:[{id, fo, fi, fe, lm, foM, foC, days[], calls, callsOk, chans[], deliv{}, users[], cerr, aerr, ap{}, nc?, cortados}] }
+//     → { results:[{id, fo, fi, fe, lm, foM, foMch, foC, days[], calls, callsOk, chans[], deliv{}, users[], cerr, aerr, ap{}, cl{}, tel{}, nc?, cortados}] }
+//     cl = llamadas manuales del asesor: intentos, desenlace (ok/na/linea/otro), conectadas sin
+//     duración (dn) y el momento de cada intento (t) · tel = diagnóstico de duración de TODAS
+//     las llamadas (con duración, 0 s por no conectar, sin duración) · foMch = canal del 1er toque
 //     Change Spec v1.1 (1-oct-2026): cut = fecha de entrada a Descalificado de un lead real
 //     descartado — nada posterior cuenta (mensajes, tareas con fecha posterior, citas
 //     posteriores). ncD = "Sin llamada - fecha de inicio": nc trae la evidencia ANTERIOR a
@@ -160,9 +163,37 @@ async function allMessages(convId) {
   return msgs.filter((m) => !/^TYPE_ACTIVITY/.test(m.messageType || ""));
 }
 
-// Status de una llamada que SÍ conectó (ver el detalle en sweepOne).
+// Desenlace de una llamada por su status. La telefonía de GHL lo escribe en m.status; se
+// usa meta.call.status solo si m.status viene vacío.
+//   ok    conectó (completed / connected / answered)
+//   na    sonó y nadie contestó (no-answer, buzón)
+//   linea la línea falló: failed, busy, canceled — no es desempeño del asesor (oct-2026:
+//         153 de 594 llamadas, 26%, y caían igual que "nunca marcó")
+//   otro  sin status legible o intermedio (queued, ringing, in-progress…)
 const CALL_OK = new Set(["connected", "answered", "completed"]);
-const callDur = (m) => { const d = Number(m.callDuration ?? m.duration ?? (m.meta && m.meta.call && m.meta.call.duration)); return isFinite(d) && d > 0 ? d : null; };
+const CALL_NA = new Set(["no-answer", "no_answer", "noanswer", "voicemail"]);
+const CALL_LINEA = new Set(["failed", "busy", "canceled", "cancelled"]);
+const callStatus = (m) => String(m.status || (m.meta && m.meta.call && m.meta.call.status) || "").toLowerCase().trim();
+const callDesenlace = (st) => CALL_OK.has(st) ? "ok" : CALL_NA.has(st) ? "na" : CALL_LINEA.has(st) ? "linea" : "otro";
+// Duración de una llamada en segundos, o null si el CRM no la trae. 0 ES una duración
+// válida: antes `dur > 0` mandaba a "ilegible" toda llamada que no conectó, y por eso la
+// pantalla decía que solo el 40% traía duración. Se acepta número, texto numérico y
+// "mm:ss" / "hh:mm:ss", en los lugares donde GHL la ha puesto según el origen.
+function callDur(m) {
+  const mt = m.meta || {}, mc = mt.call || {};
+  for (const v of [m.callDuration, m.duration, mc.duration, mt.callDuration, mt.duration, mc.callDuration]) {
+    if (v == null || v === "") continue;
+    if (typeof v === "number") { if (isFinite(v) && v >= 0) return v; continue; }
+    const s = String(v).trim();
+    if (/^\d+(\.\d+)?$/.test(s)) return Number(s);
+    const hm = s.match(/^(?:(\d+):)?(\d{1,2}):(\d{2})$/);
+    if (hm) return (+(hm[1] || 0)) * 3600 + (+hm[2]) * 60 + (+hm[3]);
+  }
+  return null;
+}
+// Llaves presentes en una llamada sin duración: dice dónde buscarla si GHL la cambia de lugar.
+const llavesDe = (m) => [...Object.keys(m || {}), ...Object.keys((m && m.meta) || {}).map((k) => "meta." + k),
+  ...Object.keys((m && m.meta && m.meta.call) || {}).map((k) => "meta.call." + k)];
 
 async function sweepOne(id, opt) {
   // Opciones de la spec v1.1, todas en ms. Sin opciones el barrido es el de siempre.
@@ -179,13 +210,19 @@ async function sweepOne(id, opt) {
     days: [],                             // días distintos con contacto manual (para la regla de 10 días)
     calls: 0,                             // intentos de llamada manuales
     chans: [],                            // canales usados manualmente
-    deliv: { sent: 0, delivered: 0, read: 0, failed: 0, sin: 0 },  // actividad efectiva vs realizada; sin = sin status legible
+    deliv: { sent: 0, delivered: 0, read: 0, failed: 0, linea: 0, sin: 0 },  // actividad efectiva vs realizada; sin = sin status legible; linea = llamadas failed/busy/canceled
     // Diagnóstico de telefonía (spec A4): qué valores trae DE VERDAD el campo status de
     // las llamadas, con conteo, y cuántas llamadas traen duración legible. Con esto la
     // pantalla puede responder "por qué las llamadas conectadas daban 0%" con datos.
     cst: {},                              // { status: n } de TODOS los mensajes tipo CALL
-    cdur: 0,                              // llamadas con duración legible
-    c90: 0,                               // llamadas de ≥90 s (llamada efectiva, spec D4)
+    // Duración de TODAS las llamadas: dExp = la trae el CRM (0 incluido); d0 = no la trae
+    // pero no conectó (0 s por definición); dNo = conectó o sin status y NO la trae — de
+    // esas no se puede saber si llegaron a 90 s. c90 = llamadas de ≥90 s (spec D4).
+    tel: { tot: 0, dExp: 0, d0: 0, dNo: 0, c90: 0, noSt: {}, llaves: [] },
+    // Llamadas MANUALES del asesor a este lead: intentos y su desenlace, y los momentos de
+    // cada intento (para el primero y los de las primeras 24 h). dn = conectadas sin duración.
+    cl: { n: 0, ok: 0, na: 0, linea: 0, otro: 0, dn: 0, t: [] },
+    foMch: null,                          // canal del primer toque manual (call/whatsapp/sms/email)
     // Histograma de la hora (Tulum) de cada acción manual del asesor: permite MEDIR el
     // horario real de trabajo en vez de asumirlo. hrs[0..23], dow[0..6] (0 = domingo).
     hrs: new Array(24).fill(0),
@@ -193,7 +230,7 @@ async function sweepOne(id, opt) {
     users: [],                            // asesores que tocaron el contacto
     ap: { tot: 0, sh: 0, ns: 0, fut: 0, f: null },
   };
-  const dset = new Set(), cset = new Set(), uset = new Set();
+  const dset = new Set(), cset = new Set(), uset = new Set(), llaves = new Set();
   // Evidencia de una etiqueta "sin llamada" (R-05), SIEMPRE anterior a su fecha de inicio:
   // intentos de llamada del asesor que no conectaron y en cuántos días distintos, algún
   // mensaje entrante del lead, alguna llamada ≥90 s. post = intentos después del retiro.
@@ -219,7 +256,7 @@ async function sweepOne(id, opt) {
           if (t < ncD) {
             if (m.direction === "inbound") out.nc.inb = true;
             if (dur != null && dur >= 90) out.nc.c90 = true;
-            if (esLlamada && m.direction === "outbound" && isManual(m) && !CALL_OK.has(String(m.status || "").toLowerCase())) {
+            if (esLlamada && m.direction === "outbound" && isManual(m) && !CALL_OK.has(callStatus(m))) {
               out.nc.calls++; ncDias.add(dayKey(t));
             }
           }
@@ -232,11 +269,16 @@ async function sweepOne(id, opt) {
         const efectivo = m.direction === "inbound" || (dur != null && dur >= 90 && (m.direction === "inbound" || isManual(m)));
         if (efectivo && (!out.fe || t < out.fe)) out.fe = t;
         // Toda llamada (manual o no) alimenta el diagnóstico de telefonía (A4/D4)
-        if (chanOf(m) === "call") {
-          const cs = String(m.status || "").toLowerCase() || "(sin status)";
-          out.cst[cs] = (out.cst[cs] || 0) + 1;
-          const dur = Number(m.callDuration ?? m.duration ?? (m.meta && m.meta.call && m.meta.call.duration));
-          if (isFinite(dur) && dur > 0) { out.cdur++; if (dur >= 90) out.c90++; }
+        if (esLlamada) {
+          const st = callStatus(m), des = callDesenlace(st);
+          out.cst[st || "(sin status)"] = (out.cst[st || "(sin status)"] || 0) + 1;
+          out.tel.tot++;
+          if (dur != null) { out.tel.dExp++; if (dur >= 90) out.tel.c90++; }
+          else if (des === "na" || des === "linea") out.tel.d0++;
+          else {
+            out.tel.dNo++; out.tel.noSt[st || "(sin status)"] = (out.tel.noSt[st || "(sin status)"] || 0) + 1;
+            if (llaves.size < 30) llavesDe(m).forEach((k) => llaves.add(k));
+          }
         }
         if (m.direction === "outbound" && (!out.fo || t < out.fo)) out.fo = t;
         if (m.direction === "inbound") {
@@ -245,15 +287,21 @@ async function sweepOne(id, opt) {
         }
         if (!out.lm || t > out.lm) out.lm = t;
         if (m.direction === "outbound" && isManual(m)) {
-          if (!out.foM || t < out.foM) out.foM = t;
+          if (!out.foM || t < out.foM) { out.foM = t; out.foMch = chanOf(m); }
           if (!out.lmM || t > out.lmM) out.lmM = t;   // último toque manual del asesor
           dset.add(dayKey(t));
           const ch = chanOf(m); cset.add(ch);
-          if (ch === "call") out.calls++;
+          if (ch === "call") {
+            out.calls++;
+            const des = callDesenlace(callStatus(m));
+            out.cl.n++; out.cl[des]++;
+            if (des === "ok" && dur == null) out.cl.dn++;
+            if (out.cl.t.length < 80) out.cl.t.push(t);
+          }
           const loc = new Date(t - TZ_MS);
           out.hrs[loc.getUTCHours()]++;
           out.dow[loc.getUTCDay()]++;
-          const st = String(m.status || "").toLowerCase();
+          const st = ch === "call" ? callStatus(m) : String(m.status || "").toLowerCase();
           // Llamada que SÍ entró. Un intento que cayó a buzón es una acción del asesor
           // pero no es un contacto, y el reporte por asesor no distinguía las dos cosas.
           // "completed" incluido: es el status que la telefonía de GHL escribe de verdad
@@ -273,7 +321,10 @@ async function sweepOne(id, opt) {
           // GoHighLevel: los valores "connected"/"answered" que se filtraban antes no
           // existen en esa capa (queued, ringing, in-progress, completed, busy,
           // no-answer, canceled, failed) — por eso "llamadas conectadas" daba 0% (A4).
-          if (st === "read" || st === "connected" || st === "answered" || st === "completed" || st === "opened" || st === "clicked") out.deliv.read++;
+          // Llamada que la LÍNEA no completó (failed, busy, canceled): aparte. Es telefonía,
+          // no desempeño, y el front decide desde qué periodo sale del denominador.
+          if (ch === "call" && CALL_LINEA.has(st)) out.deliv.linea++;
+          else if (st === "read" || st === "connected" || st === "answered" || st === "completed" || st === "opened" || st === "clicked") out.deliv.read++;
           else if (st === "delivered") out.deliv.delivered++;
           else if (st === "failed" || st === "undelivered" || st === "no-answer" || st === "busy" || st === "voicemail" || st === "canceled") out.deliv.failed++;
           else if (st === "sent" || st === "pending" || st === "scheduled" || st === "queued" || st === "ringing" || st === "in-progress") out.deliv.sent++;
@@ -286,6 +337,8 @@ async function sweepOne(id, opt) {
     // (típicamente falta el scope de mensajes en el token), no ausencia de contacto.
     if (convs.length && convFallidas === convs.length) out.cerr = true;
     if (out.nc) out.nc.dias = ncDias.size;
+    out.cl.t.sort((a, b) => a - b);
+    out.tel.llaves = [...llaves].slice(0, 30);
   } catch (e) { out.cerr = true; /* conversaciones no disponibles: se marca, no se asume "sin contacto" */ }
   // Tareas del contacto (spec C1): programadas, cerradas en fecha y vencidas abiertas.
   // El manual gobierna cada cadencia con tareas, así que son evidencia que el asesor ya
