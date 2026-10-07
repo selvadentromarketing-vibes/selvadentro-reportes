@@ -423,6 +423,13 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
     `TYPE_CAMPAIGN_*`). El diagnóstico agregado de telefonía (las 594 llamadas) mezclaba
     las del asesor con las automáticas y las entrantes; ahora las separa (`tel.por`) con
     su falla de línea y duración desconocida, para saber de quién es cada falla.
+  - **Llamada automática con contacto** (spec v1.2 §3; Dirección General, 7-oct-2026): si
+    el CRM marcó solo (workflow, campaña, marcador, API) y la llamada duró **≥90 s**, cuenta
+    como **contacto efectivo** y como **1er toque a su hora real** —SLA de 60 s, umbral de 5
+    minutos (u 11:00 fuera de horario) y mediana de 1er toque— con las reglas v1.1 (periodos
+    desde el 1-oct). El barrido devuelve `foA`/`nA`; el front toma lo primero entre `foM` y
+    `foA` (`tAuto` marca a quién se le acreditó así). La columna "1er toque manual", los
+    intentos y el canal del 1er toque siguen contando solo lo que hizo el asesor.
 - **Los tres parámetros del Anexo 1 que faltaban** (2026-09-11), derivados de lo que el
   barrido ya lee por contacto: **SLA de 60 segundos** del Ejecutivo de Primer Contacto
   (contra el primer toque manual); **integridad del pipeline** (spec B2-2:

@@ -46,6 +46,10 @@ const CONV = {
     msg("e", T0 + 5 * H, { messageType: "TYPE_CALL", status: "busy" }),                                // falla de línea
     msg("f", T0 + 30 * H, { messageType: "TYPE_CALL", status: "", meta: { call: { status: "canceled" } } }),        // falla de línea por meta.call.status
   ],
+  // Llamada automática con contacto (7-oct-2026): el workflow marca a los 40 s y la llamada
+  // dura 2 min; el asesor escribe a mano a los 10 min. Y una automática de 20 s, sin contacto.
+  auto90: [msg("a", T0 + 40e3, { messageType: "TYPE_CALL", status: "completed", source: "workflow", userId: null, callDuration: 120 }), msg("b", T0 + 10 * 60e3)],
+  auto20: [msg("a", T0 + 40e3, { messageType: "TYPE_CALL", status: "completed", source: "workflow", userId: null, callDuration: 20 }), msg("b", T0 + 10 * 60e3)],
   // Origen de cada llamada: del asesor, automática (workflow / marcador de campaña) o entrante.
   telOrg: [
     msg("a", T0 + 1 * H, { messageType: "TYPE_CALL", status: "busy" }),                                              // asesor: falla de línea
@@ -91,6 +95,11 @@ const call = async (body) => { const r = await handler({ httpMethod: "POST", hea
   ok(T && T.tel.noSt.completed === 1 && T.tel.llaves.includes("meta.call.recordingUrl"), "la llamada sin duración se diagnostica por status y por las llaves que sí trae", T && { noSt: T.tel.noSt, llaves: T.tel.llaves });
   ok(T && T.deliv.linea === 2 && T.deliv.failed === 1 && T.deliv.read === 3, "las fallas de línea van aparte en la actividad efectiva", T && T.deliv);
   ok(T && T.fe === T0 + 2 * H, "la llamada de 2:05 es contacto efectivo (R-06)", T && T.fe && iso(T.fe));
+  const au = await call({ action: "sweep", ids: ["auto90", "auto20"] });
+  const A90 = au.d.results.find((r) => r.id === "auto90"), A20 = au.d.results.find((r) => r.id === "auto20");
+  ok(A90.foA === T0 + 40e3 && A90.nA === 1 && A90.fe === T0 + 40e3 && A90.foM === T0 + 10 * 60e3 && A90.cl.n === 0,
+    "llamada automática de 2 min: contacto a su hora real (40 s) y contacto efectivo; no es intento del asesor", { foA: A90.foA && iso(A90.foA), fe: A90.fe && iso(A90.fe), foM: iso(A90.foM), cl: A90.cl.n });
+  ok(A20.foA === null && A20.nA === 0 && A20.fe === null, "llamada automática de 20 s: no es contacto", { foA: A20.foA, fe: A20.fe });
   const og = await call({ action: "sweep", ids: ["telOrg"] });
   const P = og.d.results && og.d.results[0] && og.d.results[0].tel.por;
   ok(P && P.manual.tot === 1 && P.manual.linea === 1 && P.auto.tot === 2 && P.auto.linea === 1 && P.auto.ok === 1 && P.auto.c90 === 1 && P.entrante.tot === 1 && P.entrante.c90 === 1,

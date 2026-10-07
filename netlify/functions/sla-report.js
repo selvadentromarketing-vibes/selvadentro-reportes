@@ -11,7 +11,8 @@
 //     → { results:[{id, fo, fi, fe, lm, foM, foMch, foC, days[], calls, callsOk, chans[], deliv{}, users[], cerr, aerr, ap{}, cl{}, tel{}, nc?, cortados}] }
 //     cl = llamadas manuales del asesor: intentos, desenlace (ok/na/linea/otro), conectadas sin
 //     duración (dn) y el momento de cada intento (t) · tel = diagnóstico de duración de TODAS
-//     las llamadas (con duración, 0 s por no conectar, sin duración) · foMch = canal del 1er toque
+//     las llamadas (con duración, 0 s por no conectar, sin duración) · foMch = canal del 1er toque ·
+//     foA / nA = primera llamada AUTOMÁTICA con contacto (≥90 s) y cuántas hubo
 //     Change Spec v1.1 (1-oct-2026): cut = fecha de entrada a Descalificado de un lead real
 //     descartado — nada posterior cuenta (mensajes, tareas con fecha posterior, citas
 //     posteriores). ncD = "Sin llamada - fecha de inicio": nc trae la evidencia ANTERIOR a
@@ -228,6 +229,10 @@ async function sweepOne(id, opt) {
     // cada intento (para el primero y los de las primeras 24 h). dn = conectadas sin duración.
     cl: { n: 0, ok: 0, na: 0, linea: 0, otro: 0, dn: 0, t: [] },
     foMch: null,                          // canal del primer toque manual (call/whatsapp/sms/email)
+    // Llamada AUTOMÁTICA con contacto (spec v1.2 §3; Dirección General, 7-oct-2026): el CRM
+    // marcó solo —workflow, campaña, marcador— y la llamada duró ≥90 s. Cuenta como contacto
+    // a su hora real, con la misma evidencia que una llamada del asesor. foA = la primera.
+    foA: null, nA: 0,
     // Histograma de la hora (Tulum) de cada acción manual del asesor: permite MEDIR el
     // horario real de trabajo en vez de asumirlo. hrs[0..23], dow[0..6] (0 = domingo).
     hrs: new Array(24).fill(0),
@@ -271,7 +276,9 @@ async function sweepOne(id, opt) {
         if (cut && t > cut) { out.cortados++; continue; }
         // Contacto efectivo (R-06): el lead respondió, o hubo una llamada de ≥90 s —suya o
         // del asesor—. Una acción manual sola nunca es contacto efectivo.
-        const efectivo = m.direction === "inbound" || (dur != null && dur >= 90 && (m.direction === "inbound" || isManual(m)));
+        const autoContacto = esLlamada && m.direction === "outbound" && !isManual(m) && dur != null && dur >= 90;
+        if (autoContacto) { out.nA++; if (!out.foA || t < out.foA) out.foA = t; }
+        const efectivo = m.direction === "inbound" || (dur != null && dur >= 90 && (m.direction === "inbound" || isManual(m) || autoContacto));
         if (efectivo && (!out.fe || t < out.fe)) out.fe = t;
         // Toda llamada (manual o no) alimenta el diagnóstico de telefonía (A4/D4)
         if (esLlamada) {

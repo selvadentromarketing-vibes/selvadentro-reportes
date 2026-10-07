@@ -300,7 +300,7 @@ const PORT = process.env.PORT || 8765;
     r.maxPct = Math.max(...pcts);
     r.rotulos = ['Reglas de medición vigentes desde el 1 de octubre de 2026', 'Leads inválidos (fuera de la nota)', 'Error de asignación', 'Descalificaciones revertidas', 'Fuera de horario atendidos antes de las 11:00', 'Etiquetas sin evidencia', 'Pendiente de validación', 'Leads sin llamada — % del asesor vs. promedio del equipo']
       .filter(t => !txt.toLowerCase().includes(t.toLowerCase()));
-    r.velCampo = /Cumplieron su SLA de 1er toque manual/i.test(txt) && /antes de las 11:00/i.test(txt);
+    r.velCampo = /Cumplieron su SLA de 1er toque/i.test(txt) && /antes de las 11:00/i.test(txt);
     // Periodo anterior al 1-oct: reglas viejas, sin exclusiones nuevas ni banner v1.1
     const aggViejo = buildSlaAgg(['2026-W39'], contactos.map(c => Object.assign({}, c, { c: new Date(Date.parse(c.c) - 14 * 86400e3).toISOString() })), sweeps, opps, users, campos, pipes, { oppFields, ncState, now });
     r.viejo = aggViejo.v11 === null && aggViejo.leads.some(l => l.id === 'inv') && aggViejo.leads.some(l => l.id === 'brk') && !/Fuera de la nota/.test(slaBannerV11(aggViejo)) && /no se aplican hacia atrás/.test(slaBannerV11(aggViejo));
@@ -375,6 +375,25 @@ const PORT = process.env.PORT || 8765;
     return r;
   });
   console.log('\n[telefonía] por asesora', JSON.stringify(tel));
+  // Llamada automática con contacto (Dirección General, 7-oct-2026): el workflow marca a los
+  // 40 s y conecta 2 min; el asesor escribe a mano a los 10 min. Con las reglas v1.1 cuenta
+  // como contacto efectivo y como 1er toque a su hora real (60 s y 5 min); antes del 1-oct, no.
+  const auto = await page.evaluate(() => {
+    const iso = (t) => new Date(t).toISOString();
+    const mk = (local) => { const c0 = Date.parse(local + '-05:00');
+      return [[{ id: 'a1', n: 'Lead a1', c: iso(c0), src: 'facebook', u: 'u1', tags: [], attr: {}, cf: {} }],
+        { a1: { foM: c0 + 10 * 60e3, foA: c0 + 40e3, nA: 1, fe: c0 + 40e3, fi: null, days: [], calls: 0, chans: ['whatsapp'], deliv: {}, ap: { tot: 0, sh: 0, ns: 0, fut: 0 }, tk: { prog: 0, enFecha: 0, venc: 0 }, cl: { n: 0, ok: 0, na: 0, linea: 0, otro: 0, dn: 0, t: [] } } }]; };
+    const [c1, s1] = mk('2026-10-06T10:00:00'), [c0, s0] = mk('2026-09-22T10:00:00');
+    const nuevo = buildSlaAgg(['2026-W41'], c1, s1, [], { u1: 'Daniela Arana' }, [], [], { now: Date.parse('2026-10-12T17:00:00Z') }).leads[0];
+    const viejo = buildSlaAgg(['2026-W39'], c0, s0, [], { u1: 'Daniela Arana' }, [], [], { now: Date.parse('2026-10-12T17:00:00Z') }).leads[0];
+    const r = { nuevo: { velOk: nuevo.velOk, slaAt: nuevo.slaAt, fi: !!nuevo.fi, tAuto: nuevo.tAuto, bucket: nuevo.bucket, foM: !!nuevo.foM },
+                viejo: { velOk: viejo.velOk, slaAt: viejo.slaAt, fi: !!viejo.fi, tAuto: viejo.tAuto } };
+    r.ok = nuevo.velOk === true && nuevo.slaAt === 40e3 && nuevo.slaAt <= 60e3 && !!nuevo.fi && nuevo.tAuto === true && nuevo.bucket === 'b5'
+      && viejo.velOk === false && viejo.slaAt === 600e3 && !viejo.fi && viejo.tAuto === false;
+    return r;
+  });
+  console.log('[telefonía] llamada automática con contacto', JSON.stringify(auto));
+  if (!auto.ok) hallazgos.push({ vista: 'telefonia:auto', auto });
   if (!tel.ok) hallazgos.push({ vista: 'telefonia:asesora', tel });
   if (!combo.ok) hallazgos.push({ vista: 'combinado:sinLeads', combo });
   console.log('\n[reglas v1.1] aceptación', JSON.stringify(v11));

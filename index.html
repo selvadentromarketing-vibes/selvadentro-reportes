@@ -5627,7 +5627,7 @@ function slaAsesorSection(agg, leadsIn){
   // denominador de reemplazo o una ventana desfasada no pueden volver a esconderse.
   html += `<div class="lq-meth"><b>Rúbrica</b> — cada sub-nota sale del % del criterio contra sus umbrales (≥ para 2 / 3 / 4 / 5; el límite inferior cuenta: exactamente 20.0% ya es un 2). Se califica sobre el % sin redondear y se muestra a un decimal. Ventana: el rango de semanas seleccionado${per.ini?` (${escAttr(slaFechaCorta(per.ini))} → ${escAttr(slaFechaCorta(per.fin))})`:""}. Población: los leads del asesor con datos de conversación legibles, salvo donde se indica.
     <br><b>Velocidad de primer contacto:</b> ${slaThrTxt(rub.vel.thr)} — ${v11
-      ? `leads que cumplieron su SLA de 1er toque manual, en cualquier canal, desde la entrada del lead (o su traspaso a ventas): <b>5 minutos</b> si entró en horario de atención (09:00–18:59, ${escAttr(slaDiasTxt(v11.horario.dias))}), <b>antes de las 11:00</b> del siguiente día de servicio si entró fuera de horario (R-04). Sin excepción si el asesor estaba en un Zoom o un tour: eso lo resuelve la rotación del CRM (R-07)`
+      ? `leads que cumplieron su SLA de 1er toque —manual, en cualquier canal, o una llamada que el CRM marcó solo y que conectó ≥90 s, a su hora real (spec v1.2 §3)—, desde la entrada del lead (o su traspaso a ventas): <b>5 minutos</b> si entró en horario de atención (09:00–18:59, ${escAttr(slaDiasTxt(v11.horario.dias))}), <b>antes de las 11:00</b> del siguiente día de servicio si entró fuera de horario (R-04). Sin excepción si el asesor estaba en un Zoom o un tour: eso lo resuelve la rotación del CRM (R-07)`
       : `leads con 1er toque manual en ≤5 minutos, desde la entrada del lead (o su traspaso a ventas), las 24 horas (reglas anteriores al ${escAttr(slaFechaCorta(SLA_V11_DESDE))})`}, sobre todos sus leads del periodo; ${rub.vel.thr[3]}% o más es un 5. ${slaHistorialTxt("vel", rub)}
     <br><b>Cadencia / seguimiento:</b> ${slaThrTxt(rub.cad.thr)} — leads con ≥3 días distintos de contacto manual en sus primeros 10 días. ${slaHistorialTxt("cad", rub)}
     <br><b>Cierre de ciclo:</b> ${slaThrTxt(rub.cierre.thr)} — de los leads DESCALIFICADOS del asesor, cuántos recibieron la escalera completa antes de retirarse. Sin descalificados: N/A. Nunca un denominador de reemplazo.${v11?` Con una excepción "sin llamada" válida o pendiente de validación, cada paso se completa con 1 mensaje + 1 email mientras la etiqueta está puesta, y "sin respuesta" se cuenta desde la fecha de la etiqueta (R-05).`:""} ${slaHistorialTxt("cierre", rub)}
@@ -5720,13 +5720,19 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
     const created = (hand && hand > alta) ? hand : alta;
     // El Anexo 1 define el SLA de primera respuesta contra el CONTACTO EFECTIVO
     // (el lead respondió), no contra el intento. Se miden los dos por separado.
-    const slaAt = (sw.foM && sw.foM>=created) ? sw.foM-created : null;  // hasta el 1er intento MANUAL
+    // Primer toque para la VELOCIDAD y el SLA de 60 s: el toque manual del asesor o, con las
+    // reglas v1.1, una llamada que el CRM marcó solo y que conectó ≥90 s (spec v1.2 §3:
+    // "automatización con contacto cuenta a su hora real"; Dirección General, 7-oct-2026) —
+    // lo que llegue primero. La columna "1er toque manual" sigue contando solo lo manual.
+    const tAuto = !!(v11 && sw.foA && (!sw.foM || sw.foA < sw.foM));
+    const foT = tAuto ? sw.foA : sw.foM;
+    const slaAt = (foT && foT>=created) ? foT-created : null;  // hasta el 1er toque
     const slaEf = (fiEf && fiEf>=created) ? fiEf-created : null;        // hasta el contacto efectivo
     // Velocidad (R-04): en horario, 1er toque manual en ≤5 min; fuera de horario, antes de
     // las 11:00 del siguiente día de servicio. Con las reglas v1.0, ≤5 min las 24 horas.
     const vt = v11 ? slaVentanaV11(created, H11) : null;
-    const velOk = !sw.foM ? false : sw.foM < created ? true
-      : vt ? (vt.enHorario ? sw.foM-created <= 5*60000 : sw.foM < vt.limite) : sw.foM-slaReloj(created) <= 5*60000;
+    const velOk = !foT ? false : foT < created ? true
+      : vt ? (vt.enHorario ? foT-created <= 5*60000 : foT < vt.limite) : foT-slaReloj(created) <= 5*60000;
     // Excepciones "sin llamada" (R-05): etiqueta presente, o retirada desde la última vez que
     // se vio, con su evidencia anterior a la fecha de inicio.
     const nc = [];
@@ -5786,7 +5792,8 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
              slaCall: sw.cl && sw.cl.t && sw.cl.t.length ? Math.max(0, sw.cl.t[0]-created) : null,
              cl: sw.cl ? { n: sw.cl.n||0, ok: sw.cl.ok||0, na: sw.cl.na||0, li: sw.cl.linea||0, ot: sw.cl.otro||0, dn: sw.cl.dn||0,
                            h24: (sw.cl.t||[]).filter(t=>t>=created && t<=created+24*3600e3).length } : null,
-             bucket: (()=>{ const r=slaReloj(created); return slaBucket(sw.foM && sw.foM>=r ? (sw.foM-r)/60000 : (sw.foM ? 0 : null)); })(),
+             bucket: (()=>{ const r=slaReloj(created); return slaBucket(foT && foT>=r ? (foT-r)/60000 : (foT ? 0 : null)); })(),
+             tAuto,                                   // el 1er toque fue una llamada automática con contacto ≥90 s
              d10: (sw.days||[]).filter(d=>{ const t=Date.parse(d+"T12:00:00Z"); return t>=created-86400e3 && t<=created+10*86400e3; }).length,
              breakup: slaBreakup({calls:sw.calls, chans:sw.chans, fi:fiEf, li:sw.li}, sinLlamada),
              // lvCrm = campo manual "Calificación del lead" tal cual. lv se fija más abajo
@@ -6032,6 +6039,7 @@ function slaRender(){
   const kpi = (v,l)=>`<div class="crm-kpi"><div class="k-val">${v}</div><div class="k-lbl">${l}</div></div>`;
   const conDatos = leads.filter(l=>!l.sd);
   const telG = slaTelefonia(conDatos);
+  const nAuto = conDatos.filter(l=>l.tAuto).length;   // 1er toque por llamada automática con contacto
   const sinDatos = leads.length - conDatos.length;
   // El aviso de sincronización incompleta va ARRIBA de todo: si faltan conversaciones, la
   // nota de los asesores está subestimada y eso hay que verlo antes que los números.
@@ -6072,14 +6080,14 @@ function slaRender(){
     ${kpiND(conDatos.filter(l=>l.foM).length,conDatos.length,"Con 1er toque manual del asesor")}
     ${kpiND(conDatos.filter(l=>l.foC).length,conDatos.length,"Con llamada que sí conectó")}
     ${kpiND(conDatos.filter(l=>l.fi).length,conDatos.length,(V11?"Contactados efectivos · respuesta del lead o llamada ≥90 s":"Contactados efectivos")+(telG.efNoMed?` · ${telG.efNoMed} no medible${telG.efNoMed===1?"":"s"}: llamada conectada sin duración`:""))}
-    ${V11 ? kpiND(v5n,conDatos.length,"Cumplieron su SLA de 1er toque manual · 5 min en horario, antes de las 11:00 fuera de horario")
+    ${V11 ? kpiND(v5n,conDatos.length,`Cumplieron su SLA de 1er toque · 5 min en horario, antes de las 11:00 fuera de horario${nAuto?` · ${nAuto} por llamada automática con contacto ≥90 s`:""}`)
           : kpiND(v5n,conDatos.length,"1er toque manual ≤5 min · desde la entrada del lead","meta 5 min")}
     ${V11 ? kpiND(fhOk,fhDe,"Fuera de horario atendidos antes de las 11:00") : ""}
     ${kpi(und(60),"Contacto efectivo ≤60 min (handoff WhatsApp) · desde la entrada")}
     ${kpi(und(15),"Contacto efectivo ≤15 min (transferencia en caliente)")}
-    ${kpiND(conDatos.filter(l=>l.slaAt!=null && l.slaAt<=60000).length,conDatos.length,"1er toque manual ≤60 s · SLA del Ejecutivo de Primer Contacto","meta 60 s")}
+    ${kpiND(conDatos.filter(l=>l.slaAt!=null && l.slaAt<=60000).length,conDatos.length,V11?"1er toque ≤60 s · SLA del Ejecutivo de Primer Contacto · manual o llamada automática con contacto ≥90 s":"1er toque manual ≤60 s · SLA del Ejecutivo de Primer Contacto","meta 60 s")}
     ${kpi(fmtDur(slaMedian(slasEf)),"Med. contacto efectivo · desde la entrada del lead")}
-    ${kpi(fmtDur(slaMedian(slasAt)),V11?"Med. 1er toque manual · cualquier canal · solo leads que entraron en horario":"Med. 1er toque manual · cualquier canal · desde la entrada del lead")}
+    ${kpi(fmtDur(slaMedian(slasAt)),V11?"Med. 1er toque · cualquier canal o llamada automática con contacto · solo leads que entraron en horario":"Med. 1er toque manual · cualquier canal · desde la entrada del lead")}
     ${kpi(fmtDur(slaMedian(slasCall)),V11?"Med. 1er intento de llamada · solo leads que entraron en horario":"Med. 1er intento de llamada · desde la entrada del lead")}
     ${kpiND(agN,agB.length,"Tasa de agendamiento · citas ÷ contactados efectivos")}
     ${kpi(diasCita==null?"—":(Math.round(diasCita*10)/10)+" d","Días a la cita (mediana, efectivo → fecha de cita) · estándar 1 semana")}
@@ -6164,7 +6172,7 @@ function slaRender(){
         <th title="Primera acción manual del asesor: su llamada, su WhatsApp, su SMS o su email escrito a mano">1er toque manual</th>
         <th class="lft" title="Con qué canal fue el 1er toque manual: % llamada, WhatsApp, SMS y correo. La mediana de 1er toque mezcla canales que no se comparan entre sí; léela con este mix">Canal del 1er toque</th>
         <th title="Primera llamada del asesor que sí conectó (estatus completed)">Llamada conectada</th>
-        <th>Efectivos</th><th${V11?' title="Solo leads que entraron en horario de atención (spec v1.1 R-04)"':""}>Med. toque manual</th>
+        <th>Efectivos</th><th${V11?' title="Mediana hasta el 1er toque: manual, o una llamada automática del CRM que conectó ≥90 s (a su hora real). Solo leads que entraron en horario de atención (spec v1.1 R-04)"':""}>${V11?"Med. 1er toque":"Med. toque manual"}</th>
         <th title="Mediana desde la entrada del lead hasta el PRIMER INTENTO de llamada del asesor, conecte o no. Es otra cifra que la mediana de 1er toque, que cuenta cualquier canal${V11?". Solo leads en horario (R-04)":""}">Med. 1er llamada</th>
         <th title="Intentos de llamada del asesor por lead: en las primeras 24 h desde la entrada del lead / en total">Llamadas por lead · 24 h / total</th>
         <th title="Leads sin ningún intento de llamada del asesor">Sin marcar</th>
