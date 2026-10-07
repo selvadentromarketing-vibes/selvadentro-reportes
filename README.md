@@ -451,8 +451,19 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
 - **Contactados efectivos** (el lead respondió) vs trabajados; **>7 días sin toque**
   con lista nominal — se mide contra el último toque **real** (acción manual del asesor o
   respuesta del lead), porque con el último mensaje de cualquier origen un lead abandonado
-  con drip activo nunca aparecía en la lista; **citas y show rate**
-  (`showed` ÷ `showed`+`noshow`); **OPPs y WONs por asesor** en el rango.
+  con drip activo nunca aparecía en la lista; **citas y show rate**; **OPPs y WONs por
+  asesor** en el rango.
+- **Show rate por fecha de la cita** (7-oct-2026). Salía "0 de 1" con citas que sí
+  ocurrieron, por dos razones: solo contaba citas de leads que **entraron** en el rango (una
+  cita de esta semana de un lead de agosto no existía) y solo las marcadas `showed`/`noshow`
+  en el calendario (el equipo registra la asistencia moviendo la oportunidad y deja la cita
+  en `confirmed`). Ahora la acción `citas` del backend trae las citas de **todos los
+  calendarios** con fecha en el rango, de cualquier lead; la asistencia sale del calendario
+  y, si la cita ya pasó sin estatus final, de la etapa del lead (Zoom/Tour realizado o
+  posterior = asistió; no show / re agendar = no asistió). Lo que no dice ninguna de las dos
+  queda **sin registrar**, visible y fuera del %. KPI, columna Show de la tabla por asesor,
+  ficha y bloque "Citas del periodo · asistencia". Si los calendarios no se pueden leer,
+  vuelve al cálculo por cohorte y lo dice. `sla:agg:v13`.
 - **Generación bajo demanda** (botón, 1–3 min): recorre conversaciones y citas de
   cada lead del rango en lotes de 8 vía `sla-report`; el resultado se cachea en el
   kv (`sla:agg:v1`) para todo el equipo. Acumulable dentro del mes eligiendo el

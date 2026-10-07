@@ -30,6 +30,8 @@
 //     cf = campos personalizados de la oportunidad (id → valor): Causa, Evidencia, Asesor
 //     que descalificó y Fecha de entrada a Descalificado (spec v1.1 §2).
 //   { action:"users" } → { users, fields, oppFields, pipelines }
+//   { action:"citas", start, end } → { citas:[{id,ct,u,t,st,cal}], calendarios, errores[] }
+//     citas de TODOS los calendarios por fecha de la cita (no por alta del lead)
 //   { action:"tagged", tag } → { contacts:[…como contacts], filtro }
 //     contactos con esa etiqueta, de cualquier fecha: las descalificaciones revertidas se
 //     cuentan por la fecha de descalificación, no por la de alta del lead.
@@ -454,6 +456,32 @@ async function users() {
   return { users: map, fields, oppFields, oppFieldsOk: !!oppFieldsResp, pipelines };
 }
 
+// Citas por FECHA DE LA CITA (7-oct-2026). El show rate se medía solo con las citas de los
+// leads que ENTRARON en el rango: una cita de esta semana de un lead de agosto no existía, y
+// con un rango de una o dos semanas el show rate salía de una sola cita ("0 de 1"). Se
+// listan los calendarios de la cuenta y se piden sus eventos del rango, de cualquier lead.
+async function citas({ start, end }) {
+  const t0 = Date.parse(start), t1 = Date.parse(end);
+  if (!isFinite(t0) || !isFinite(t1) || t1 <= t0) throw Object.assign(new Error("start y end requeridos (ISO datetime)"), { status: 400 });
+  const cals = ((await ghl(`/calendars/?locationId=${LOCATION_ID}`)).calendars || []).filter((c) => c && c.id);
+  const vistos = new Set(), out = [], errores = [];
+  for (let i = 0; i < cals.length; i += 4) {
+    await Promise.all(cals.slice(i, i + 4).map(async (c) => {
+      try {
+        const d = await ghl(`/calendars/events?locationId=${LOCATION_ID}&calendarId=${encodeURIComponent(c.id)}&startTime=${t0}&endTime=${t1}`);
+        (d.events || []).forEach((ev) => {
+          const t = ts(ev.startTime);
+          if (!t || (ev.id && vistos.has(ev.id))) return;
+          if (ev.id) vistos.add(ev.id);
+          out.push({ id: ev.id || "", ct: ev.contactId || "", u: ev.assignedUserId || "", t,
+            st: String(ev.appointmentStatus || ev.status || "").toLowerCase(), cal: c.name || "" });
+        });
+      } catch (e) { errores.push(c.name || c.id); }
+    }));
+  }
+  return { citas: out, calendarios: cals.length, errores };
+}
+
 // Contactos con una etiqueta, de cualquier fecha (spec v1.1 R-02). El filtro de etiquetas
 // del buscador de GHL se documenta de dos formas; se prueba la de arreglo y, si el API la
 // rechaza, la de valor simple. El front vuelve a comprobar la etiqueta exacta de cada uno.
@@ -560,7 +588,8 @@ exports.handler = async (event) => {
     if (payload.action === "users") return json(200, await users());
     if (payload.action === "opps") return json(200, await opps(payload));
     if (payload.action === "tagged") return json(200, await tagged(payload));
-    return json(400, { error: "action debe ser 'contacts', 'sweep', 'users', 'opps' o 'tagged'" });
+    if (payload.action === "citas") return json(200, await citas(payload));
+    return json(400, { error: "action debe ser 'contacts', 'sweep', 'users', 'opps', 'tagged' o 'citas'" });
   } catch (e) {
     const status = e.status === 429 ? 429 : e.status === 400 ? 400 : 502;
     return json(status, { error: String(e.message || e), detail: e.detail });

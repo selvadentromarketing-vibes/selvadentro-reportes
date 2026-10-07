@@ -393,6 +393,44 @@ const PORT = process.env.PORT || 8765;
     return r;
   });
   console.log('[telefonía] llamada automática con contacto', JSON.stringify(auto));
+  // Show rate (7-oct-2026): "0 de 1" con citas que sí ocurrieron. Ahora: citas del periodo
+  // por FECHA DE LA CITA, de cualquier lead, y asistencia por calendario o por etapa.
+  const show = await page.evaluate(() => {
+    const Z = (local) => Date.parse(local + '-05:00'), iso = (t) => new Date(t).toISOString();
+    const pipes = [{ id: 'p1', name: 'Seguimiento de ventas', stages: [{ id: 'sCE', name: 'Contacto establecido' }, { id: 'sZR', name: 'Zoom realizado' }, { id: 'sNS', name: 'Zoom no show / re agendar' }, { id: 'sOPP', name: 'Seguimiento de OPP' }] }];
+    // Un solo lead entró en la semana; los demás son de agosto (antes no contaban sus citas).
+    const contactos = [{ id: 'n1', n: 'Lead nuevo', c: iso(Z('2026-10-06T10:00:00')), src: 'facebook', u: 'u1', tags: [], attr: {}, cf: {} }];
+    const sweeps = { n1: { foM: Z('2026-10-06T10:02:00'), days: [], calls: 0, chans: [], deliv: {}, ap: { tot: 1, sh: 0, ns: 1, fut: 0 }, tk: { prog: 0, enFecha: 0, venc: 0 } } };
+    const opp = (ct, s) => ({ id: 'o' + ct, ct, u: 'u1', st: 'open', c: iso(Z('2026-08-10T10:00:00')), p: 'p1', s, sc: iso(Z('2026-10-07T12:00:00')), cf: {} });
+    const opps = [opp('v1', 'sZR'), opp('v2', 'sOPP'), opp('v3', 'sNS'), opp('v4', 'sCE'), opp('n1', 'sCE')];
+    const cita = (ct, local, st, u) => ({ id: 'e' + ct + local, ct, u: u === undefined ? 'u1' : u, t: Z(local), st, cal: 'Zoom' });
+    const citas = [cita('n1', '2026-10-06T16:00:00', 'noshow'),            // la única que contaba antes: 0 de 1
+      cita('v0', '2026-10-06T12:00:00', 'showed'),                           // asistió · calendario
+      cita('v1', '2026-10-07T11:00:00', 'confirmed'),                        // asistió · etapa Zoom realizado
+      cita('v2', '2026-10-07T12:00:00', 'confirmed', ''),                    // asistió · etapa posterior; asesor = dueño del lead
+      cita('v3', '2026-10-08T11:00:00', 'confirmed'),                        // no show · etapa
+      cita('v4', '2026-10-08T12:00:00', 'confirmed'),                        // sin registrar: la etapa no dice nada
+      cita('v5', '2026-10-09T12:00:00', 'cancelled'),                        // cancelada
+      cita('v6', '2026-10-15T12:00:00', 'confirmed')];                       // por venir (fuera de "ahora")
+    const agg = buildSlaAgg(['2026-W41'], contactos, sweeps, opps, { u1: 'Daniela Arana' }, [], pipes, { now: Z('2026-10-10T09:00:00'), citas, citasOk: true });
+    const R = slaCitasRes(agg.citasP.rows);
+    const advPrev = ADVISOR_LIST, aggPrev = slaState.agg, selPrev = slaState.asesor;
+    ADVISOR_LIST = [{ name: 'Daniela Arana', active: true }]; slaState.agg = agg; slaState.asesor = ''; agg.ts = Date.now();
+    navIr('ventas', 'desempeno'); slaRender();
+    const vista = document.getElementById('view-sla'), txt = vista.innerText;
+    const tabla = [...vista.querySelectorAll('table')].find(t => t.querySelector('tr') && /ASISTIÓ · CALENDARIO/.test(t.querySelector('tr').innerText.toUpperCase()));
+    const fila = tabla && [...tabla.querySelectorAll('tr')].find(tr => tr.querySelector('td') && tr.querySelector('td').innerText.trim() === 'Daniela Arana');
+    const celdas = fila ? [...fila.querySelectorAll('td')].map(td => td.innerText.replace(/\s+/g, ' ').trim()) : null;
+    ADVISOR_LIST = advPrev; slaState.agg = aggPrev; slaState.asesor = selPrev;
+    const r = { R: { tot: R.tot, asC: R.asC, asE: R.asE, ns: R.ns, can: R.can, sinreg: R.sinreg, fut: R.fut }, celdas,
+      kpi: /Show rate · citas del periodo por fecha de la cita · 3 por etapa del pipeline · 1 pasada sin registrar asistencia/i.test(txt) && /60%\s*\n?\s*SHOW RATE/i.test(txt.replace(/\n+/g, '\n')) };
+    // 3 asistieron (1 calendario + 2 etapa), 2 no show (1 calendario + 1 etapa) → 60%
+    r.ok = R.tot === 8 && R.asC === 1 && R.asE === 2 && R.ns === 2 && R.can === 1 && R.sinreg === 1 && R.fut === 1
+      && !!celdas && celdas.slice(1).join('|') === '8|1|2|2|60% (3 de 5)|1|1|1' && /3 de 5/.test(txt);
+    return r;
+  });
+  console.log('[show rate] citas del periodo', JSON.stringify(show));
+  if (!show.ok) hallazgos.push({ vista: 'showrate', show });
   if (!auto.ok) hallazgos.push({ vista: 'telefonia:auto', auto });
   if (!tel.ok) hallazgos.push({ vista: 'telefonia:asesora', tel });
   if (!combo.ok) hallazgos.push({ vista: 'combinado:sinLeads', combo });
