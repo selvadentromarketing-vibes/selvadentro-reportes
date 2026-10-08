@@ -42,7 +42,8 @@ const ghl = S.ghlFetch;   // cliente compartido (lib/shared.js)
 // con fallback a la primera; los nombres de propiedad varían entre versiones del API.
 function attrOf(c) {
   const list = Array.isArray(c.attributions) ? c.attributions : [];
-  const pick = (o, ...keys) => { for (const k of keys) { if (o && typeof o[k] === "string" && o[k]) return o[k]; } return ""; };
+  // Números también: GHL puede mandar campaignId como número.
+  const pick = (o, ...keys) => { for (const k of keys) { const v = o && o[k]; if ((typeof v === "string" && v) || (typeof v === "number" && isFinite(v))) return String(v); } return ""; };
   const last = list[list.length - 1] || c.lastAttributionSource || {};
   const first = list[0] || c.attributionSource || {};
   // GoHighLevel usa distintas grafías segun el origen (formulario nativo, lead ad de
@@ -52,12 +53,29 @@ function attrOf(c) {
   const MED = ["utmMedium", "utm_medium", "medium"];
   const AD = ["adName", "ad_name", "utmContent", "utm_content", "adId", "ad_id"];
   const GRP = ["adGroupName", "adsetName", "adSetName", "adset_name", "ad_group_name", "utmTerm", "utm_term", "adGroupId", "adset_id"];
+  // ID de campaña de la plataforma: es la llave buena para cruzar con la inversión. GHL lo
+  // guarda en la atribución (campaignId; en Meta el nombre que acompaña suele ser el del
+  // formulario, no el de la campaña) y Google lo manda en la URL como hsa_cam.
+  const CID = ["campaignId", "campaign_id", "utmCampaignId", "utm_campaign_id", "utmId", "utm_id", "hsa_cam", "hsaCam"];
+  const URLS = ["url", "pageUrl", "page_url", "landingPage", "landingPageUrl", "fullUrl"];
+  const deUrl = (o) => {
+    const u = pick(o, ...URLS);
+    if (!u) return { cid: "", host: "" };
+    try {
+      const x = new URL(u);
+      const q = (k) => String(x.searchParams.get(k) || "").trim();
+      return { cid: q("hsa_cam") || q("utm_id") || q("campaign_id") || q("campaignid"), host: x.hostname.toLowerCase() };
+    } catch (e) { return { cid: "", host: "" }; }
+  };
+  const uL = deUrl(last), uF = deUrl(first);
   return {
     camp: pick(last, ...CAMP) || pick(first, ...CAMP),
     src: pick(last, ...SRC) || pick(first, ...SRC),
     med: pick(last, ...MED) || pick(first, ...MED),
     ad: pick(last, ...AD) || pick(first, ...AD),
     grp: pick(last, ...GRP) || pick(first, ...GRP),
+    cid: pick(last, ...CID) || uL.cid || pick(first, ...CID) || uF.cid,
+    host: uL.host || uF.host,
   };
 }
 

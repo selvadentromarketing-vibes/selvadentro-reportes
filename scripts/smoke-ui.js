@@ -15,6 +15,7 @@
 // No toca el kv, no llama a GoHighLevel ni a Windsor: todo es local.
 const { chromium } = require('playwright');
 const { spawn } = require('child_process'); const path = require('path');
+const { fixture } = require('./lq-fixture.js');
 const ALL = ["brokers","paid_organico","seminarios","referidos","pd_leads","pd_brokers","rp_vip","direccion_general","direccion_comercial","crm_live","sla_view","marketing","mkt_rrss","mkt_lq"];
 const PORT = process.env.PORT || 8765;
 (async () => {
@@ -318,18 +319,105 @@ const PORT = process.env.PORT || 8765;
     return { ok: a === 'Pruebas de marketing' && b === '' && c === '' && d === '' && /INVESTORS_MX/.test(h) && /50\.0%/.test(h) };
   });
   v11.lq = lqInv.ok; if (!lqInv.ok) hallazgos.push({ vista: 'reglas:v1.1:lq', lqInv });
-  // Reporte Combinado (1-oct-2026): gastar sin leads en el CRM NO es lo mismo si la propia
-  // plataforma tampoco reporta leads (gastó sin producir) que si sí los reporta (falta cruce).
-  const combo = await page.evaluate(() => {
-    const wk = '2026-W39', rs = new Set([wk]);
-    const ad = (camp, spend, results) => ({ wk, d: '2026-09-22', plat: 'Meta', camp, grp: 'X', name: 'A', id: camp, spend, results, impr: 100, clicks: 5 });
-    const agg = { adw: [ad('INVESTORS_EN_FORMULARIOMETA_TULUM_100626', 862.91, 0), ad('INVESTORS_US/CA_WEBINAR_210726', 500, 4)], spend: [], leads: [] };
-    let h = ''; try { h = lqComboSection(agg, [], [wk], rs); } catch (e) { return { err: String(e) }; }
-    const d = document.createElement('div'); d.innerHTML = h; const t = d.textContent;
-    const a = 'Gasto sin un solo lead, según la propia plataforma: EN / Formulariometa / Tulum ($862.91)', b = 'Dinero que todavía no se puede juzgar: Us/ca / Webinar ($500.00, 4 leads según la plataforma)';
-    return { ok: t.includes(a) && t.includes(b) && !/Formulariometa[^·]{0,40}leads según la plataforma/.test(t), a: t.includes(a), b: t.includes(b) };
-  });
-  console.log('\n[combinado] gasto sin leads', JSON.stringify(combo));
+  // Calidad de Leads rediseñada (Dirección, 8-oct-2026): costo por SQL y semáforo, atribución
+  // inferida de la landing de seguridad, cruce por ID de campaña, alias de Google, aviso de
+  // "sin campaña" = filas de la tabla, embudo Zoom/OPP/WON, % contactados, alerta de CPL,
+  // todo en MXN, matriz de reglas detrás de un botón y Datos de campañas plegado.
+  VISTA = 'lq:rediseño';
+  await page.evaluate(() => navIr('marketing', 'calidad'));
+  await page.waitForTimeout(1500);
+  const lqx = await page.evaluate((fx) => {
+    const agg = buildLqAgg(fx.boot, fx.rawLeads, fx.spendRows, fx.weeks, fx.opps, fx.adRows);
+    agg.fallos = []; agg.monedas = ['MXN'];
+    Object.assign(lqState, { agg, exp: {}, q: '', plat: 'all', level: 'camp', qual: 'auto', diagReglas: false, ia: null });
+    lqPopulateWeeks();
+    document.getElementById('lq-sem-ini').value = '2026-W37'; document.getElementById('lq-sem-fin').value = '2026-W40';
+    const r = {};
+    const inf = agg.leads.filter(l => l.inf);
+    r.inferidos = inf.length + ' ' + [...new Set(inf.map(l => l.camp + ' / ' + l.grp))].join('|');
+    const tarde = agg.leads.find(l => String(l.c).startsWith('2026-10-08'));
+    r.tardeNoInferido = !!tarde && !tarde.inf && tarde.camp !== 'INVESTORS_MX_DYNAMIC-TOPLPS_090926';
+    r.porId = agg.leads.filter(l => l.pid && l.camp === 'INVESTORS_EN_FORMULARIOMETA_TULUM_100626').length;
+    r.alias = agg.leads.filter(l => l.camp === 'INVESTORS - GOOGLE SEARCH -- MX' && l.fuente === 'Google').length;
+    r.numerico = agg.leads.filter(l => l.camp === 'INVESTORS - GOOGLE SEARCH - US+CAN').length;
+    const S = (inv, n) => { const x = lqSemaforo(inv, n); return x ? x.c + (x.chica ? '*' : '') + ':' + x.k : 'null'; };
+    r.sem = [S(0, 0), S(7999, 0), S(8000, 0), S(8000, 2), S(12000, 3), S(12001, 3), S(18000, 3), S(18001, 3), S(3000, 1), S(7000, 2)].join(' ');
+    r.alertas = Object.keys(lqAlertasCpl(agg, ['2026-W37', '2026-W38', '2026-W39', '2026-W40'])).join('|');
+    const txt = () => document.getElementById('lq-content').textContent;
+    const filas = (sel) => [...document.querySelectorAll(sel + ' tr')].filter(tr => tr.querySelector('td.name'));
+    const hdr = (sel) => [...document.querySelector(sel + ' tr').querySelectorAll('th')].map(th => th.textContent.trim());
+    // Reporte Combinado
+    lqState.sub = 'combinado'; lqRender();
+    let t = txt();
+    r.tarjetas = ['Inversión total', 'Leads CRM', 'SQL+', 'Costo por SQL', 'WON'].every(k => [...document.querySelectorAll('#lq-content .crm-kpi .k-lbl')].some(e => e.textContent.trim() === k))
+      && !/% calificados|Costo \/ calificado/i.test(t);
+    const H = hdr('table.lq-combo');
+    r.columnas = H.join('|');
+    const sem = {}, celda = {};
+    filas('table.lq-combo').forEach(tr => {
+      const td = [...tr.querySelectorAll('td')], nombre = td[0].textContent.replace(/^(META|GOOGLE)\s*/, '').replace(/\s*\d+ con atribución inferida$/, '').trim();
+      const sc = tr.querySelector('td.lq-semcell .lq-sem');
+      sem[nombre] = sc ? sc.textContent + (tr.querySelector('.lq-chica') ? '*' : '') + '|' + tr.querySelector('.lq-sem-acc').textContent : '—';
+      celda[nombre] = Object.fromEntries(H.map((h, i) => [h, td[i] ? td[i].textContent.trim() : '']));
+    });
+    r.semaforos = sem;
+    const d090 = celda['INVESTORS_MX_DYNAMIC-TOPLPS_090926'] || {};
+    r.embudo090 = [d090['SQL+'], d090['Zoom realizado'], d090['OPP'], d090['WON'], d090['% contactados'], d090['Costo por SQL']].join(' ');
+    r.alertaFila = Object.entries(celda).filter(([k, v]) => /⚠/.test(v['CPL'] || '')).map(([k]) => k).join('|');
+    const tot = [...document.querySelectorAll('table.lq-combo tr.total')][0];
+    r.totalPagado = tot ? tot.textContent.replace(/\s+/g, ' ') : '';
+    r.inferidaBadge = /8 con atribución inferida/.test(t);
+    r.sinPesos = !/\$/.test(t);
+    // Calidad de Lead
+    lqState.sub = 'calidad'; lqRender();
+    t = txt();
+    const av = t.match(/(\d+) de (\d+) leads del rango llegaron sin campaña/);
+    const sinFilas = filas('table.lq-tree').filter(tr => /\(sin campaña atribuida\)/.test(tr.querySelector('td.name').textContent));
+    const hT = hdr('table.lq-tree'), iN = hT.indexOf('Leads CRM');
+    r.sinCampania = (av ? av[1] + ' de ' + av[2] : 'sin aviso') + ' · filas ' + sinFilas.reduce((a, tr) => a + Number(tr.querySelectorAll('td')[iN].textContent.replace(/\D/g, '') || 0), 0);
+    r.semEnCalidad = hT.includes('SQL+') && hT.includes('Costo por SQL') && hT.includes('Semáforo') && hT.includes('Zoom realizado') && hT.includes('% contactados');
+    r.sinMetricasViejas = !/Alto valor|alto valor|Costo\/alto valor|% calificados|Calif\.(?!\w)/.test(t) && !/\$\d/.test(t);
+    r.matrizOculta = !!document.getElementById('lq-diag-reglas') && !/Reglas automáticas vs\. captura del equipo/.test([...document.querySelectorAll('#lq-content h3')].map(h => h.textContent).join('|'));
+    document.getElementById('lq-diag-reglas').click();
+    r.matrizConBoton = /Reglas automáticas vs\. captura del equipo/.test([...document.querySelectorAll('#lq-content h3')].map(h => h.textContent).join('|'));
+    lqState.diagReglas = false;
+    // Datos de campañas
+    lqState.sub = 'datos'; lqState.exp = { [lqExpKey('ads|Meta · INVESTORS_MX_DYNAMIC-TOPLPS_090926')]: true }; lqRender();
+    r.datosFila = hdr('table.lq-datos').join('|');
+    const pl = document.querySelector('#lq-content .lq-pliegue');
+    r.datosPliegue = !!pl && ['Impresiones', 'Clics', 'CTR', 'CPC', 'Plataformas'].every(k => pl.textContent.includes(k));
+    lqState.exp = {};
+    // Conclusiones: una acción por campaña con su regla, aun sin IA
+    lqState.sub = 'conclusiones'; lqRender();
+    const acc = [...document.querySelectorAll('#lq-content table.cons tr')].filter(tr => tr.querySelector('td.name')).map(tr => tr.querySelectorAll('td')[2].textContent.trim());
+    r.conclusiones = acc.join('|');
+    lqState.sub = 'combinado'; lqRender();
+    return r;
+  }, fixture());
+  const semEsp = {
+    'INVESTORS_US/CA_ESCAPE_090926': 'ROJO|Pausar',
+    'INVESTORS_MX_DYNAMIC-TOPLPS_150726': 'VERDE|Subir presupuesto 20%',
+    'INVESTORS_MX_DYNAMIC-TOPLPS_090926': 'AMARILLO|Optimizar, no subir',
+    'INVESTORS_EN_FORMULARIOMETA_TULUM_100626': 'VERDE*|Subir presupuesto 20%',
+    'INVESTORS - GOOGLE SEARCH - US+CAN': 'EN EVALUACIÓN|Mantener, aún sin juicio',
+    'INVESTORS - GOOGLE SEARCH -- MX': 'AMARILLO*|Mantener, no subir',
+    '(sin campaña atribuida)': '—', 'Social orgánico · IG / WhatsApp': '—',
+  };
+  lqx.ok = lqx.inferidos === '8 INVESTORS_MX_DYNAMIC-TOPLPS_090926 / ES_LLAMADA_NUEVO6-SEGURIDAD_PATRIMONIO' && lqx.tardeNoInferido
+    && lqx.porId === 9 && lqx.alias === 4 && lqx.numerico === 3
+    && lqx.sem === 'null gris:mantener rojo:pausar verde:subir verde:subir amarillo:optimizar amarillo:optimizar rojo:pausar amarillo*:mantener verde*:subir'
+    && lqx.alertas === 'INVESTORSENFORMULARIOMETATULUM100626' && lqx.alertaFila === 'INVESTORS_EN_FORMULARIOMETA_TULUM_100626'
+    && lqx.tarjetas && lqx.columnas === 'Campaña|Inversión|Leads CRM|CPL|% contactados|CQL|MQL|SQL+|Zoom realizado|OPP|WON|Costo por SQL|Semáforo'
+    && Object.entries(semEsp).every(([k, v]) => lqx.semaforos[k] === v)
+    && lqx.embudo090 === '2 2 1 · 40% 4,600 MXN' && /Total pagado.*47,400 MXN.*5,925 MXN/.test(lqx.totalPagado)
+    && lqx.inferidaBadge && lqx.sinPesos && lqx.sinCampania === '4 de 45 · filas 4' && lqx.semEnCalidad && lqx.sinMetricasViejas
+    && lqx.matrizOculta && lqx.matrizConBoton && lqx.datosFila === 'Campaña|Inversión|Leads plataforma|Leads CRM|CPL' && lqx.datosPliegue
+    && lqx.conclusiones === 'Pausar|Subir presupuesto 20%|Optimizar, no subir|Subir presupuesto 20%|Mantener, aún sin juicio|Mantener, no subir';
+  console.log('\n[calidad de leads] rediseño', JSON.stringify(lqx));
+  for (const sub of ['combinado', 'calidad', 'datos', 'conclusiones']) {
+    await page.evaluate((sub) => { lqState.sub = sub; lqRender(); }, sub);
+    await escanear('lq:' + sub);
+  }
   // Telefonía por asesora (Dirección General, 7-oct-2026): canal del 1er toque, mediana del
   // 1er intento de llamada, intentos en 24 h y en total, sin marcar vs falla de línea,
   // duración conocida, y la actividad efectiva sin fallas de línea desde el 7-oct.
@@ -447,7 +535,7 @@ const PORT = process.env.PORT || 8765;
   if (!show.ok) hallazgos.push({ vista: 'showrate', show });
   if (!auto.ok) hallazgos.push({ vista: 'telefonia:auto', auto });
   if (!tel.ok) hallazgos.push({ vista: 'telefonia:asesora', tel });
-  if (!combo.ok) hallazgos.push({ vista: 'combinado:sinLeads', combo });
+  if (!lqx.ok) hallazgos.push({ vista: 'lq:rediseño', lqx });
   console.log('\n[reglas v1.1] aceptación', JSON.stringify(v11));
   if (!v11.ok) hallazgos.push({ vista: 'reglas:v1.1', v11 });
   // Metas → Rúbrica de desempeño: los dos juegos de Velocidad, con su fecha

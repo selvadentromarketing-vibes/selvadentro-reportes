@@ -5,16 +5,20 @@
 // Env vars: ANTHROPIC_API_KEY — sk-ant-… (console.anthropic.com → API Keys)
 //
 // Body (POST JSON + Authorization: Bearer <token>):
-//   { rango, totales:{inv,leads,calif,cpl,costoCalif}, familias:[{nombre,inv,resultAds,
-//     leads,calif,cpl,costoCalif,mezcla:{...}}], anuncios:[{nombre,estado,inv,leads,calif}],
-//     integridad:{fuente,asesor,calificacion,duplicados}, mesAnterior:{...}, mesActual:{...} }
+//   { rango, moneda:"MXN", parametros:{metaCostoSql,minSqlVerde,subirPct,topeAmarillo,umbralEval,alertaCpl},
+//     totales:{inv,leads,sqlPlus,invPagada,sqlPlusPagado,costoSql,won,sinCampania:{leads,sqlPlus}},
+//     campanias:[{nombre,plataforma,inv,leadsPlataforma,leads,sqlPlus,costoSql,cpl,zoom,opp,won,
+//       contactadosPct,semaforo,accion,regla,muestraChica,alertaCpl,inferidos}],
+//     anuncios:[{nombre,estado,inv,leads,sqlPlus}], integridad:{fuente,asesor,calificacion,duplicados} }
+//
+// El semáforo (y por lo tanto la acción de cada campaña) lo calcula la app con sus
+// parámetros; la IA no lo reinterpreta, lo explica y agrega el detalle.
 
 const S = require("./lib/shared.js");
 const API_KEY = process.env.ANTHROPIC_API_KEY;
 const json = S.json;
 
-const money = (n) => "$" + Math.round(Number(n) || 0).toLocaleString("en-US");
-const pct = (n, d) => (d ? Math.round((n / d) * 100) + "%" : "—");
+const money = (n) => (n == null ? "—" : Math.round(Number(n) || 0).toLocaleString("en-US") + " MXN");
 
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return S.corsPreflight();
@@ -39,33 +43,36 @@ exports.handler = async (event) => {
   catch { return json(400, { error: "JSON inválido" }); }
 
   const T = d.totales || {};
+  const P = Object.assign({ metaCostoSql: 4000, minSqlVerde: 2, subirPct: 20, topeAmarillo: 6000, umbralEval: 8000 }, d.parametros || {});
   // Tope de tamaño: sin él, un body arbitrario infla el prompt (y la cuenta de la API).
-  const fam = (d.familias || []).slice(0, 40).map((f) =>
-    `- ${f.nombre}: inversión ${money(f.inv)} · ${f.resultAds ?? "—"} resultados en plataforma · ${f.leads} leads en CRM · ` +
-    `${f.calif} calificados (${pct(f.calif, f.leads)}) · CPL ${f.leads ? money(f.cpl) : "—"} · costo por calificado ${f.calif ? money(f.costoCalif) : "sin calificados"}` +
-    (f.mezcla ? ` · mezcla: ${Object.entries(f.mezcla).filter(([, v]) => v).map(([k, v]) => `${v} ${k}`).join(", ") || "sin leads"}` : "")
+  const camps = (d.campanias || []).slice(0, 20).map((c) =>
+    `- ${c.nombre} [${c.plataforma || "?"}]: inversión ${money(c.inv)} · ${c.leadsPlataforma ?? "—"} leads en plataforma · ${c.leads} leads en CRM · ` +
+    `${c.sqlPlus} SQL+ · costo por SQL ${c.costoSql != null ? money(c.costoSql) : "sin SQL+"} · CPL ${money(c.cpl)} · ` +
+    `${c.zoom} Zoom realizado · ${c.opp} OPP · ${c.won} WON · ${c.contactadosPct ?? "—"}% contactados · ` +
+    `SEMÁFORO ${c.semaforo}${c.muestraChica ? " (muestra chica)" : ""} → acción "${c.accion}" porque ${c.regla}` +
+    (c.alertaCpl ? ` · ALERTA CPL: ${c.alertaCpl}` : "") +
+    (c.inferidos ? ` · ${c.inferidos} leads con atribución inferida (landing de seguridad sin UTM)` : "")
   ).join("\n");
 
-  const ads = (d.anuncios || []).slice(0, 15).map((a) =>
-    `- ${a.nombre} [${a.estado || "?"}]: ${money(a.inv)} · ${a.leads} leads · ${a.calif} calificados`
+  const ads = (d.anuncios || []).slice(0, 12).map((a) =>
+    `- ${a.nombre} [${a.estado || "?"}]: ${money(a.inv)} · ${a.leads} leads · ${a.sqlPlus ?? 0} SQL+`
   ).join("\n");
 
   const integ = d.integridad || {};
-  const mesLinea = d.mesAnterior && d.mesActual
-    ? `Mes anterior → mes actual: leads ${d.mesAnterior.leads}→${d.mesActual.leads} · calificados ${d.mesAnterior.calif}→${d.mesActual.calif} · inversión ${money(d.mesAnterior.inv)}→${money(d.mesActual.inv)}.`
-    : "";
+  const sinC = T.sinCampania || {};
 
-  const prompt = `Eres el analista de paid media y CRM de Selvadentro, un desarrollo inmobiliario boutique en Tulum que vende lotes premium para inversión (ticket mínimo 100,000 USD). Analizas el cruce entre inversión publicitaria (Meta y Google) y la calidad real de los leads que llegaron al CRM.
+  const prompt = `Eres el analista de paid media y CRM de Selvadentro, un desarrollo inmobiliario boutique en Tulum que vende lotes premium para inversión (ticket mínimo 100,000 USD). Analizas el cruce entre la inversión publicitaria (Meta y Google) y la calidad real de los leads que llegaron al CRM. Todo el dinero está en MXN: escribe las cifras como "12,345 MXN", nunca con "$".
 
-Definiciones que NO se reinterpretan: CQL = lead capturado con primer alcance · MQL = respondió o mostró interés · SQL = interés real y activo sin perfil confirmado · SQL Selvadentro = interés real + presupuesto ≥100K USD y horizonte ≤6 meses o señal fuerte (cita asistida, cotización) · Descalificado = sin fit. "Calificados" = MQL + SQL + SQL Selvadentro.
+Definiciones que NO se reinterpretan: SQL+ = SQL + SQL Selvadentro, la métrica principal (la única definición de lead "bueno") · Costo por SQL = inversión de la campaña en el rango ÷ SQL+ de esa campaña · CQL y MQL son solo volumen · Embudo: Lead → CQL → MQL → SQL → Zoom realizado → OPP → WON (una cita o visita de sitio no es Zoom realizado) · % contactados = leads que salieron de Nuevo / Sin respuesta; si es bajo, el problema puede ser de seguimiento, no de la campaña.
+
+SEMÁFORO (ya calculado por la app, no lo recalcules ni lo cambies): meta de costo por SQL ${money(P.metaCostoSql)}. VERDE = costo por SQL ≤ ${money(P.metaCostoSql)} con al menos ${P.minSqlVerde} SQL+ → subir ${P.subirPct}% · AMARILLO = costo por SQL entre ${money(P.metaCostoSql)} y ${money(P.topeAmarillo)} → optimizar, no subir (si está en meta pero con menos de ${P.minSqlVerde} SQL+ → mantener) · ROJO = costo por SQL > ${money(P.topeAmarillo)}, o inversión ≥ ${money(P.umbralEval)} con 0 SQL+ → pausar · EN EVALUACIÓN = inversión < ${money(P.umbralEval)} sin SQL+ → mantener. "Muestra chica" = inversión < ${money(P.umbralEval)}. La alerta de CPL es solo una alerta: no cambia la acción.
 
 PERIODO: ${d.rango || "—"}
 
-TOTALES: inversión ${money(T.inv)} · ${T.leads} leads en CRM · ${T.calif} calificados (${pct(T.calif, T.leads)}) · CPL ${money(T.cpl)} · costo por calificado ${T.calif ? money(T.costoCalif) : "no hubo calificados"}.
-${mesLinea}
+TOTALES: inversión ${money(T.inv)} · ${T.leads} leads en CRM · ${T.sqlPlus} SQL+ · campañas con inversión: ${money(T.invPagada)} y ${T.sqlPlusPagado} SQL+ → costo por SQL ${T.costoSql != null ? money(T.costoSql) : "sin SQL+"} · ${T.won} WON · ${sinC.leads || 0} leads sin campaña atribuida (${sinC.sqlPlus || 0} SQL+).
 
-POR FAMILIA DE CAMPAÑA:
-${fam || "(sin datos de campaña)"}
+CAMPAÑAS CON INVERSIÓN (con su semáforo):
+${camps || "(sin campañas con inversión)"}
 
 ANUNCIOS (los de mayor inversión):
 ${ads || "(sin detalle por anuncio)"}
@@ -74,13 +81,14 @@ INTEGRIDAD DEL CRM: ${integ.fuente || "—"} de los leads con fuente identificad
 
 Devuelve SOLO un objeto JSON válido, sin texto alrededor y sin bloques de código, con esta forma exacta:
 {
-  "lectura": "2 a 4 oraciones en prosa: qué pasó con el dinero y la calidad este periodo. Cuantifica. Nombra las campañas concretas.",
-  "acciones": [{"prioridad":"alta|media|baja","titulo":"acción concreta en 6-10 palabras","detalle":"1-2 oraciones: qué hacer exactamente y por qué, con la cifra que lo justifica","responsable":"Ads|CRM|Ventas|Dirección"}],
-  "riesgos": ["riesgo o dato que no cuadra, 1 oración cada uno"],
+  "lectura": "2 a 3 oraciones: qué pasó con el dinero y los SQL+ este periodo, con el costo por SQL total contra la meta y las campañas concretas.",
+  "campanias": [{"nombre":"nombre exacto de la campaña","accion":"subir ${P.subirPct}%|mantener|optimizar|pausar","regla":"la regla del semáforo que la justifica, con su cifra","detalle":"1 oración, máximo 25 palabras: qué hacer exactamente en esa campaña"}],
+  "acciones": [{"prioridad":"alta|media|baja","titulo":"acción transversal en 6-10 palabras","detalle":"1-2 oraciones con la cifra que la justifica","responsable":"Ads|CRM|Ventas|Dirección"}],
+  "riesgos": ["dato que no cuadra o riesgo, 1 oración cada uno"],
   "preguntas": ["pregunta concreta que el reporte no puede responder y hay que verificar en la fuente"]
 }
 
-Reglas: entre 3 y 6 acciones, ordenadas por prioridad, específicas (pausar X, subir presupuesto de Y, revisar el formulario de Z, llamar a los N leads en tal etapa) y nunca genéricas tipo "optimizar campañas". Si una familia gastó dinero sin producir calificados, dilo con el monto. Si el volumen es demasiado bajo para concluir, dilo en riesgos en vez de inventar una tendencia. Todo en español de México, tono directo y ejecutivo.`;
+Reglas: "campanias" lleva TODAS las campañas de la lista, en el mismo orden, y su "accion" es exactamente la del semáforo. En "detalle" sé concreto (qué conjunto o anuncio tocar, cuánto subir, qué revisar) y menciona si aplica: muestra chica, alerta de CPL, % contactados bajo (seguimiento, no campaña), leads de plataforma que no llegaron al CRM (atribución antes de pausar) o atribución inferida. "acciones" son 2 a 4 acciones que no son de una sola campaña (atribución, seguimiento, CRM). Si el volumen es demasiado bajo para concluir, dilo en riesgos. Todo en español de México, tono directo y ejecutivo.`;
 
   try {
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
@@ -88,7 +96,7 @@ Reglas: entre 3 y 6 acciones, ordenadas por prioridad, específicas (pausar X, s
       headers: { "x-api-key": API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
       body: JSON.stringify({
         model: "claude-opus-5",
-        max_tokens: 2000,
+        max_tokens: 2500,
         // Netlify corta las funciones sincrónicas a los ~10 s: esfuerzo bajo para responder a tiempo
         output_config: { effort: "low" },
         messages: [{ role: "user", content: prompt }],

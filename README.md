@@ -83,6 +83,67 @@ netlify dev --port 8888
 
 Sirve la app + functions en http://localhost:8888.
 
+### Rediseño por costo por SQL (Dirección, 8-oct-2026)
+
+La métrica que se usa para decidir ya no es el costo por "calificado" (MQL + SQL + SQL
+Selvadentro) sino el **costo por SQL**. Una sola definición de lead bueno en toda la
+sección: **SQL+ = SQL + SQL Selvadentro** (según el interruptor de calificación: reglas
+automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", "Calif." y
+"% calificados" desaparecen; CQL y MQL quedan como columnas secundarias de volumen.
+
+- **Costo por SQL** = inversión de la campaña en el rango ÷ SQL+ de esa campaña.
+- **Semáforo por campaña** — parámetros en un solo lugar, `LQ_SEMAFORO` en `index.html`
+  (la pantalla, la lectura automática y el prompt de la IA los leen de ahí):
+
+  | Estado | Regla (valores por defecto) | Acción |
+  |---|---|---|
+  | VERDE | costo por SQL ≤ 4,000 MXN y al menos 2 SQL+ | Subir presupuesto 20% |
+  | AMARILLO | costo por SQL entre 4,000 y 6,000 MXN | Optimizar, no subir |
+  | AMARILLO | costo por SQL ≤ 4,000 MXN pero 1 solo SQL+ (caso que la regla no cubría) | Mantener, no subir |
+  | ROJO | costo por SQL > 6,000 MXN, o inversión ≥ 8,000 MXN con 0 SQL+ | Pausar |
+  | EN EVALUACIÓN (gris) | inversión < 8,000 MXN y sin SQL+ | Mantener |
+
+  Con SQL+ pero inversión < 8,000 MXN se calcula normal y se marca *(muestra chica)*.
+  Filas sin inversión (orgánico, "sin campaña") no tienen semáforo.
+- **Columnas por campaña** (Calidad de Lead y Reporte Combinado): Inversión · Leads CRM ·
+  CPL · % contactados · CQL · MQL · **SQL+ · Zoom realizado · OPP · WON** · Costo por SQL ·
+  Semáforo, y dos totales: **Total pagado** (solo campañas con inversión, con su costo por
+  SQL) y todos los leads del rango.
+- **Embudo canónico** Lead → CQL → MQL → SQL → Zoom realizado → OPP → WON, del cohorte de
+  leads del rango y por lead (no por oportunidad). **Zoom realizado** = etapa "Zoom
+  realizado" o una posterior del embudo (OPP y WON incluidos); las etapas de tour/visita y
+  las cubetas que no son embudo no cuentan. Es la etapa actual: el CRM no da historial.
+- **% contactados** = leads que salieron de Nuevo / Sin respuesta (etapa de "Contacto
+  establecido" o posterior, respuesta por tag, cita, OPP o WON). Tooltip: *si es bajo, el
+  problema puede ser de seguimiento, no de la campaña*.
+- **Alerta de CPL** ⚠ (solo visual, no cambia el semáforo): CPL de los últimos 7 días más
+  de 30% arriba del promedio de 30 días de la misma campaña, anclado al final del rango.
+- **Cruce por ID de campaña**: `lead-quality` ahora devuelve `attr.cid` (el `campaignId`
+  de la atribución de GHL, o `hsa_cam` / `utm_id` de la URL de la landing) y `attr.host`
+  (dominio de la landing). En Meta, GHL guarda el ID real aunque el nombre que lo acompaña
+  sea el del formulario ("Intelligent Investors"); con el ID manda el nombre de la cuenta y
+  el nombre del UTM queda de respaldo. `LQ_CAMP_ALIAS` traduce
+  `INVESTORS-GOOGLE-SEARCH-MX` / `-USCAN` a "INVESTORS - GOOGLE SEARCH -- MX" /
+  "INVESTORS - GOOGLE SEARCH - US+CAN".
+- **Atribución inferida** (`LQ_INFERIDA`): leads con origen `landing-seguridad`
+  (seguridad.selvadentrotulum.com) **sin utm_campaign y creados antes del 08-oct-2026**
+  se asignan a `INVESTORS_MX_DYNAMIC-TOPLPS_090926`, conjunto SEGURIDAD_PATRIMONIO, con la
+  marca "N con atribución inferida". Desde el 08-oct llegan con UTMs reales y manda el UTM.
+- **Aviso de leads sin campaña**: cuenta exactamente los leads de las filas
+  "(sin campaña atribuida)" de la tabla (antes contaba aparte los de Meta/Google con
+  utm_campaign vacío y no cuadraba: decía 1 de 60 con 10 en la tabla).
+- **Limpieza**: la matriz "Reglas automáticas vs. captura del equipo" queda detrás del
+  botón **Ver diagnóstico de reglas**; la tabla de inversión por campaña de Calidad de Lead
+  se volvió **Inversión por plataforma** (el detalle por campaña ya está en la tabla del
+  semáforo, con la misma cuenta que el Combinado).
+- **Conclusiones IA**: el prompt recibe el semáforo ya calculado y devuelve una acción por
+  campaña (subir 20% / mantener / optimizar / pausar) con la regla que la justifica; la
+  tabla de acciones se arma con el semáforo aunque no se haya corrido la IA, y si la IA
+  propone otra acción manda el semáforo. Cache `lq:ia:v4:`.
+- Pruebas: `node scripts/test-lq.js` (backend con GHL y Anthropic simulados) y el bloque
+  `lq:rediseño` de `scripts/smoke-ui.js` con los datos sintéticos de
+  `scripts/lq-fixture.js` (W37–W40, los cinco estados del semáforo).
+
 ### Prueba de humo de la interfaz (`scripts/smoke-ui.js`)
 
 La app no tiene build ni pruebas automáticas y todo lo que se rompía en pantalla lo veía
@@ -148,9 +209,10 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
   por tags (`seguridad` → Meta MX · `premium`/`escape` → Meta US/CA ·
   `accesibilidad`/`google` → Google · `webinar-registered` → Webinar).
 - **Inversión**: si `WINDSOR_API_KEY` está configurada, se consulta Windsor.ai
-  (Meta + Google) y se muestra inversión y costo por lead / por lead de alto valor,
-  por campaña (empate por nombre) y por plataforma (siempre calculable).
-- **Cache compartido**: agregado en el kv (`lq:agg:v1`), staleness de 30 min, igual
+  (Meta + Google) y se muestra inversión, CPL y **costo por SQL** por campaña (cruce por
+  ID de campaña y, de respaldo, por nombre) y por plataforma (siempre calculable). Todo
+  en **MXN** ("12,345 MXN", nunca "$").
+- **Cache compartido**: agregado en el kv (`lq:agg:v16`), staleness de 30 min, igual
   que CRM en vivo.
 - **Permisos**: canal `mkt_lq` (o `marketing`, o admin). El módulo manual de
   Calidad de Leads dentro de Marketing **se retiró el 2026-08-26** junto con PPC Ads
@@ -164,7 +226,7 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
   pipeline, estatus y valor de la oportunidad, citas asistidas/agendadas, campos de
   presupuesto y horizonte, tags — y se evalúan en orden: descalificado → SQL
   Selvadentro (oportunidad real de cierre o WON en el pipeline, **o** cita asistida /
-  etapa avanzada + perfil ≥$100K USD y ≤6 meses) → SQL (señal fuerte sin perfil, o
+  etapa avanzada + perfil ≥100,000 USD y ≤6 meses) → SQL (señal fuerte sin perfil, o
   perfil del formulario sin etapa que lo respalde) → MQL (respondió / mostró interés) →
   CQL (capturado). **La etapa del pipeline manda sobre el formulario** (Dirección
   General, 15-sep-2026): una OPP o una venta cerrada es el veredicto del asesor tras
@@ -187,21 +249,19 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
   registros del pipeline se guardan aparte (`pr`) y alimentan las reglas de
   calificación. **WON = venta cerrada.** La pestaña de Diagnóstico lista las etapas
   que hoy cuentan como OPP, leídas del CRM.
-- **Cuatro sub-pestañas**: (1) **Datos de Campañas** — inversión y desempeño por
-  campaña desde Windsor, desplegable a anuncios por plataforma; (2) **Calidad de
-  Lead** — mezcla de calificación desplegable de campaña → conjunto → anuncio;
-  (3) **Reporte Combinado** — cruce de inversión y calidad por *familia* de campaña
-  (nombres normalizados porque difieren entre plataforma y CRM), con KPIs, lectura
-  automática, gráfica de inversión vs. calificados y dona de distribución;
-  (4) **Conclusiones** — diagnóstico y acciones priorizadas con IA
-  (`lq-analyze`, requiere `ANTHROPIC_API_KEY`; envía solo agregados, nunca datos
-  personales de leads).
-- **Desglose con toggles**: la mezcla completa de calificación (SQL Selvadentro,
-  SQL, MQL, CQL, descalificados, sin calificar) más % alto valor, % SQL+,
-  % descalificación, OPPs, WONs, inversión y costo por lead / por lead de alto
-  valor, con dos interruptores: **nivel** (campaña · conjunto/grupo · anuncio) y
-  **plataforma** (todas · Meta · Google · otras fuentes). Incluye tendencia
-  semana a semana al nivel elegido.
+- **Cuatro sub-pestañas**: (1) **Datos de Campañas** — por campaña solo Inversión ·
+  Leads plataforma · Leads CRM · CPL; impresiones, clics, CTR, CPC, plataformas y
+  anuncios quedan plegados dentro de cada campaña; (2) **Calidad de Lead** — tabla por
+  campaña desplegable a conjunto → anuncio con el semáforo; (3) **Reporte Combinado** —
+  tarjetas Inversión total · Leads CRM · SQL+ · Costo por SQL · WON, lectura automática
+  del semáforo, gráfica de inversión vs. SQL+ por campaña, dona de distribución y la
+  tabla por **campaña** (antes por familia: el semáforo mueve presupuesto y el
+  presupuesto vive en la campaña); (4) **Conclusiones** — una acción por campaña según el
+  semáforo, con su regla, y el detalle y la lectura de la IA (`lq-analyze`, requiere
+  `ANTHROPIC_API_KEY`; envía solo agregados, nunca datos personales de leads).
+- **Desglose con toggles**: **nivel** (campaña · conjunto/grupo · anuncio) y
+  **plataforma** (todas · Meta · Google · otras fuentes), más tendencia semana a semana
+  (leads / SQL+) al nivel elegido.
 - **Atribución de anuncio y conjunto**: del `adName`/`utm_content` y
   `adGroupName`/`utm_term` del contacto en GHL; si el conjunto no viene, se deriva
   cruzando el nombre del anuncio contra el catálogo de Windsor (anuncio → conjunto).
