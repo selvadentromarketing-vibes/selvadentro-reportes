@@ -3,12 +3,13 @@
 // Devuelve exactamente lo que recibe buildLqAgg(boot, rawLeads, spendRows, weeks,
 // oppsByContact, adRows), en JSON plano para pasarlo a la página con page.evaluate.
 //
-// Resultado esperado del semáforo (meta 4,000 MXN por SQL, umbral 8,000 MXN):
+// Resultado esperado del semáforo (meta 4,000 MXN por SQL, umbral 8,000 MXN; con menos de
+// 8,000 invertidos el color se calcula igual pero la acción es "Mantener (muestra chica)"):
 //   MX_DYNAMIC_090926   9,200 · 2 SQL+ (8 leads con atribución inferida) → AMARILLO optimizar
 //   US/CA_ESCAPE       11,200 · 0 SQL+                                  → ROJO pausar
-//   EN_FORMULARIOMETA   7,000 · 2 SQL+ (cruce por ID)  · alerta de CPL   → VERDE (muestra chica)
-//   GOOGLE SEARCH MX    3,600 · 1 SQL+ (alias de UTM)                    → AMARILLO mantener (muestra chica)
-//   GOOGLE US+CAN       6,000 · 0 SQL+ (utm numérico)                    → EN EVALUACIÓN
+//   EN_FORMULARIOMETA   7,000 · 2 SQL+ (cruce por ID)  · alerta de CPL   → VERDE, mantener (muestra chica)
+//   GOOGLE SEARCH MX    3,600 · 1 SQL+ (alias de UTM)                    → AMARILLO, mantener (muestra chica)
+//   GOOGLE US+CAN       6,000 · 0 SQL+ (utm numérico)                    → EN EVALUACIÓN, mantener (muestra chica)
 //   MX_DYNAMIC_150726  10,400 · 3 SQL+                                  → VERDE subir 20%
 //   Total pagado       47,400 · 8 SQL+ → 5,925 MXN por SQL · 4 leads sin campaña
 function fixture() {

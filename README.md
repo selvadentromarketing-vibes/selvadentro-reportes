@@ -99,11 +99,13 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
   |---|---|---|
   | VERDE | costo por SQL ≤ 4,000 MXN y al menos 2 SQL+ | Subir presupuesto 20% |
   | AMARILLO | costo por SQL entre 4,000 y 6,000 MXN | Optimizar, no subir |
-  | AMARILLO | costo por SQL ≤ 4,000 MXN pero 1 solo SQL+ (caso que la regla no cubría) | Mantener, no subir |
+  | AMARILLO | costo por SQL ≤ 4,000 MXN pero 1 solo SQL+ (con los valores actuales siempre cae en muestra chica) | Mantener, no subir |
   | ROJO | costo por SQL > 6,000 MXN, o inversión ≥ 8,000 MXN con 0 SQL+ | Pausar |
-  | EN EVALUACIÓN (gris) | inversión < 8,000 MXN y sin SQL+ | Mantener |
+  | EN EVALUACIÓN (gris) | inversión < 8,000 MXN y sin SQL+ | Mantener (muestra chica) |
 
-  Con SQL+ pero inversión < 8,000 MXN se calcula normal y se marca *(muestra chica)*.
+  **Muestra chica** (inversión < 8,000 MXN): el color se calcula igual, pero la acción es
+  siempre **"Mantener (muestra chica)"**: nunca "Subir presupuesto 20%" ni "Pausar"
+  (Dirección, 8-oct-2026). La lectura automática agrupa por acción, no por color.
   Filas sin inversión (orgánico, "sin campaña") no tienen semáforo.
 - **Columnas por campaña** (Calidad de Lead y Reporte Combinado): Inversión · Leads CRM ·
   CPL · % contactados · CQL · MQL · **SQL+ · Zoom realizado · OPP · WON** · Costo por SQL ·
@@ -139,7 +141,7 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
 - **Conclusiones IA**: el prompt recibe el semáforo ya calculado y devuelve una acción por
   campaña (subir 20% / mantener / optimizar / pausar) con la regla que la justifica; la
   tabla de acciones se arma con el semáforo aunque no se haya corrido la IA, y si la IA
-  propone otra acción manda el semáforo. Cache `lq:ia:v4:`.
+  propone otra acción manda el semáforo. Cache `lq:ia:v5:`.
 - Pruebas: `node scripts/test-lq.js` (backend con GHL y Anthropic simulados) y el bloque
   `lq:rediseño` de `scripts/smoke-ui.js` con los datos sintéticos de
   `scripts/lq-fixture.js` (W37–W40, los cinco estados del semáforo).

@@ -80,6 +80,7 @@ S.ghlFetch = async (path) => {
   ok(/"campanias": \[\{"nombre"/.test(prompt) && /subir 20%\|mantener\|optimizar\|pausar/.test(prompt), "pide una acción por campaña con el vocabulario fijo");
   ok(/meta de costo por SQL 4,000 MXN/.test(prompt) && /costo por SQL 6,000 MXN/.test(prompt), "cifras en MXN");
   ok(!/\$\d/.test(prompt), "ningún monto con $ en el prompt");
+  ok(/MUESTRA CHICA = inversión < 8,000 MXN: el color se calcula igual, pero la acción SIEMPRE es mantener/.test(prompt), "muestra chica: la acción siempre es mantener, nunca subir");
   ok(/SQL\+ = SQL \+ SQL Selvadentro/.test(prompt) && !/MQL \+ SQL \+ SQL Selvadentro/.test(prompt), "una sola definición de bueno: SQL+");
 
   console.log(fallas.length ? `\n${fallas.length} prueba(s) fallaron` : "\nTodas las pruebas del backend de Calidad de Leads pasaron");

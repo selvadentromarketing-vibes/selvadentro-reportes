@@ -548,7 +548,6 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .lq-sem.verde{ background:#3f7d4e; } .lq-sem.amarillo{ background:#c99a1e; color:#2b2410; } .lq-sem.rojo{ background:var(--rojo); } .lq-sem.gris{ background:#9aa39d; }
   .lq-semcell{ text-align:left; }
   .lq-sem-acc{ font-size:var(--fs-xs); color:var(--texto); font-weight:600; margin-top:3px; }
-  .lq-chica{ display:block; font-size:var(--fs-xs); color:var(--neutro); font-weight:400; margin-top:2px; }
   .lq-cps.verde{ color:#3f7d4e; font-weight:700; } .lq-cps.amarillo{ color:#9a7414; font-weight:700; } .lq-cps.rojo{ color:var(--rojo); font-weight:700; }
   .lq-sqlp{ font-weight:700; color:var(--verde-prof); }
   th.lq-sec, td.lq-sec{ color:var(--neutro); font-weight:400; }
@@ -3011,25 +3010,32 @@ function lqSemaforo(inv, sqlp){
   const P = LQ_SEMAFORO;
   if(!(inv > 0)) return null;
   const chica = inv < P.umbralEval;
-  if(!sqlp){
-    return chica
-      ? { c:"gris", txt:"EN EVALUACIÓN", k:"mantener", acc:"Mantener, aún sin juicio", chica:false, cps:null,
-          regla:`inversión ${lqMXN(inv)} < ${lqMXN(P.umbralEval)} y sin SQL+ todavía` }
-      : { c:"rojo", txt:"ROJO", k:"pausar", acc:"Pausar", chica:false, cps:null,
-          regla:`inversión ${lqMXN(inv)} ≥ ${lqMXN(P.umbralEval)} con 0 SQL+` };
-  }
-  const cps = inv / sqlp;
   let r;
-  if(cps <= P.metaCostoSql && sqlp >= P.minSqlVerde)
-    r = { c:"verde", txt:"VERDE", k:"subir", acc:`Subir presupuesto ${P.subirPct}%`, regla:`costo por SQL ${lqMXN(cps)} ≤ meta de ${lqMXN(P.metaCostoSql)}, con ${sqlp} SQL+` };
-  else if(cps <= P.metaCostoSql)
-    r = { c:"amarillo", txt:"AMARILLO", k:"mantener", acc:"Mantener, no subir", regla:`costo por SQL ${lqMXN(cps)} dentro de la meta, pero con ${sqlp} SQL+ (se necesitan ${P.minSqlVerde} para subir)` };
-  else if(cps <= P.topeAmarillo)
-    r = { c:"amarillo", txt:"AMARILLO", k:"optimizar", acc:"Optimizar, no subir", regla:`costo por SQL ${lqMXN(cps)} entre ${lqMXN(P.metaCostoSql)} y ${lqMXN(P.topeAmarillo)}` };
-  else
-    r = { c:"rojo", txt:"ROJO", k:"pausar", acc:"Pausar", regla:`costo por SQL ${lqMXN(cps)} > ${lqMXN(P.topeAmarillo)}` };
-  r.chica = chica; r.cps = cps;
-  if(chica) r.regla += ` · muestra chica: inversión ${lqMXN(inv)} < ${lqMXN(P.umbralEval)}`;
+  if(!sqlp){
+    r = chica
+      ? { c:"gris", txt:"EN EVALUACIÓN", k:"mantener", acc:"Mantener", regla:"sin SQL+ todavía" }
+      : { c:"rojo", txt:"ROJO", k:"pausar", acc:"Pausar", regla:`inversión ${lqMXN(inv)} ≥ ${lqMXN(P.umbralEval)} con 0 SQL+` };
+    r.cps = null;
+  } else {
+    const cps = inv / sqlp;
+    if(cps <= P.metaCostoSql && sqlp >= P.minSqlVerde)
+      r = { c:"verde", txt:"VERDE", k:"subir", acc:`Subir presupuesto ${P.subirPct}%`, regla:`costo por SQL ${lqMXN(cps)} ≤ meta de ${lqMXN(P.metaCostoSql)}, con ${sqlp} SQL+` };
+    else if(cps <= P.metaCostoSql)
+      r = { c:"amarillo", txt:"AMARILLO", k:"mantener", acc:"Mantener, no subir", regla:`costo por SQL ${lqMXN(cps)} dentro de la meta, pero con ${sqlp} SQL+ (se necesitan ${P.minSqlVerde} para subir)` };
+    else if(cps <= P.topeAmarillo)
+      r = { c:"amarillo", txt:"AMARILLO", k:"optimizar", acc:"Optimizar, no subir", regla:`costo por SQL ${lqMXN(cps)} entre ${lqMXN(P.metaCostoSql)} y ${lqMXN(P.topeAmarillo)}` };
+    else
+      r = { c:"rojo", txt:"ROJO", k:"pausar", acc:"Pausar", regla:`costo por SQL ${lqMXN(cps)} > ${lqMXN(P.topeAmarillo)}` };
+    r.cps = cps;
+  }
+  r.chica = chica;
+  // MUESTRA CHICA (Dirección, 8-oct-2026): con menos de `umbralEval` invertido el color se
+  // calcula igual —dice cómo va la campaña— pero la acción SIEMPRE es mantener: con tan
+  // poca inversión no se sube presupuesto (ni se pausa) por un resultado que puede ser suerte.
+  if(chica){
+    r.k = "mantener"; r.acc = "Mantener (muestra chica)";
+    r.regla = `inversión ${lqMXN(inv)} < ${lqMXN(P.umbralEval)}: muestra chica, se mantiene sin importar el color (${r.regla})`;
+  }
   return r;
 }
 // Color del costo por SQL contra la meta, para totales y celdas.
@@ -3919,7 +3925,7 @@ function lqLeyenda(){
       <span><b>WON</b> leads del cohorte con venta cerrada, sin importar cuándo se cerró. Todo el dinero en MXN</span>
       <span><b>SQL+</b> SQL + SQL Selvadentro: la única definición de lead bueno. CQL y MQL son volumen</span>
       <span><b>Costo por SQL</b> inversión de la campaña en el rango ÷ sus SQL+ · meta ${lqMXN(LQ_SEMAFORO.metaCostoSql)}</span>
-      <span><b>Semáforo</b> verde subir ${LQ_SEMAFORO.subirPct}% · amarillo optimizar · rojo pausar · gris en evaluación (reglas completas arriba de cada tabla)</span>
+      <span><b>Semáforo</b> verde subir ${LQ_SEMAFORO.subirPct}% · amarillo optimizar · rojo pausar · gris en evaluación · inversión < ${lqMXN(LQ_SEMAFORO.umbralEval)}: mantener (muestra chica) (reglas completas arriba de cada tabla)</span>
       <span><b>Zoom realizado</b> etapa "Zoom realizado" o posterior. Cita o visita de sitio no cuenta</span>
       <span><b>% contactados</b> salieron de Nuevo / Sin respuesta. Si es bajo, el problema puede ser de seguimiento, no de la campaña</span>
       <span><b>CPL</b> costo por lead = inversión ÷ leads CRM · <b>⚠</b> CPL de 7 días más de ${LQ_SEMAFORO.alertaCpl.pct}% arriba de su promedio de 30</span>
@@ -4237,7 +4243,7 @@ const lqPct = (n,d)=> d ? Math.round(n/d*100)+"%" : "—";
 function lqSemCell(sem, vacio, sinAcc){
   if(vacio) return `<td></td>`;
   if(!sem) return `<td class="lq-semcell"><span class="lq-sub" title="Sin inversión en el rango: no hay presupuesto que mover">—</span></td>`;
-  return `<td class="lq-semcell" title="${escAttr(sem.regla)}"><span class="lq-sem ${sem.c}">${sem.txt}</span>${sem.chica?`<span class="lq-chica">(muestra chica)</span>`:""}${sinAcc?"":`<div class="lq-sem-acc">${escAttr(sem.acc)}</div>`}</td>`;
+  return `<td class="lq-semcell" title="${escAttr(sem.regla)}"><span class="lq-sem ${sem.c}">${sem.txt}</span>${sinAcc?"":`<div class="lq-sem-acc">${escAttr(sem.acc)}</div>`}</td>`;
 }
 function lqAlertaIcono(al){
   if(!al) return "";
@@ -4474,9 +4480,10 @@ function lqReglasSemaforo(){
   return `<details class="lq-leyenda lq-reglas-sem"><summary>Reglas del semáforo · meta ${lqMXN(P.metaCostoSql)} por SQL</summary>
     <div class="lq-leyenda-cuerpo">
       <span><span class="lq-sem verde">VERDE</span> costo por SQL ≤ ${lqMXN(P.metaCostoSql)} y al menos ${P.minSqlVerde} SQL+ → <b>Subir presupuesto ${P.subirPct}%</b></span>
-      <span><span class="lq-sem amarillo">AMARILLO</span> costo por SQL entre ${lqMXN(P.metaCostoSql)} y ${lqMXN(P.topeAmarillo)} → <b>Optimizar, no subir</b> (en meta pero con menos de ${P.minSqlVerde} SQL+ → <b>Mantener, no subir</b>)</span>
+      <span><span class="lq-sem amarillo">AMARILLO</span> costo por SQL entre ${lqMXN(P.metaCostoSql)} y ${lqMXN(P.topeAmarillo)} → <b>Optimizar, no subir</b></span>
       <span><span class="lq-sem rojo">ROJO</span> costo por SQL > ${lqMXN(P.topeAmarillo)}, o inversión ≥ ${lqMXN(P.umbralEval)} con 0 SQL+ → <b>Pausar</b></span>
-      <span><span class="lq-sem gris">EN EVALUACIÓN</span> inversión < ${lqMXN(P.umbralEval)} y sin SQL+ todavía. Con SQL+ pero inversión < ${lqMXN(P.umbralEval)} se calcula normal y se marca <i>(muestra chica)</i></span>
+      <span><span class="lq-sem gris">EN EVALUACIÓN</span> inversión < ${lqMXN(P.umbralEval)} y sin SQL+ todavía</span>
+      <span><b>Muestra chica</b>: con inversión < ${lqMXN(P.umbralEval)} el color se calcula igual, pero la acción siempre es <b>Mantener (muestra chica)</b>: nunca subir presupuesto ni pausar</span>
       <span><b>⚠ junto al CPL</b>: el CPL de los últimos ${A.dias} días va más de ${A.pct}% arriba de su propio promedio de ${A.base} días. Solo alerta: no cambia el semáforo.</span>
     </div>
     <div class="lq-leyenda-pie">Costo por SQL = inversión de la campaña en el rango ÷ SQL+ (SQL + SQL Selvadentro) de esa campaña. Todo en MXN.</div>
@@ -4505,11 +4512,14 @@ function lqComboSection(agg, leadsAll, rango, rangoSet){
 
   // Lectura automática (determinista, sin IA): el semáforo dicho en prosa.
   const conInv = rows.filter(m=>m.sem);
-  const grupo = (c)=> conInv.filter(m=>m.sem.c===c);
   const nom = (m)=> `<b>${escAttr(m.camp)}</b>`;
   const cps = (m)=> m.cps!=null ? lqMXN(m.cps)+" por SQL" : "0 SQL+";
-  const chica = (m)=> m.sem.chica ? " (muestra chica)" : "";
-  const verdes = grupo("verde"), amarillos = grupo("amarillo"), rojos = grupo("rojo"), grises = grupo("gris");
+  const pill = (m)=> `<span class="lq-sem ${m.sem.c}">${m.sem.txt}</span>`;
+  // Por ACCIÓN, no por color: con muestra chica una campaña puede ir en verde y aun así
+  // mantenerse, y la lectura no puede ponerla en la línea de "subir presupuesto".
+  const accion = (k, chica)=> conInv.filter(m=>m.sem.k===k && !!m.sem.chica===chica);
+  const subir = accion("subir", false), optimizar = accion("optimizar", false), pausar = accion("pausar", false);
+  const mantener = accion("mantener", false), chicas = conInv.filter(m=>m.sem.chica);
   const sinAttr = rows.filter(m=>m.sinCamp);
   const sinAttrN = sinAttr.reduce((a,m)=>a+m.n,0), sinAttrS = sinAttr.reduce((a,m)=>a+m.sqlp,0);
   const alertas = rows.filter(m=>m.alerta);
@@ -4518,10 +4528,11 @@ function lqComboSection(agg, leadsAll, rango, rangoSet){
     <h4>Lectura automática — en corto</h4>
     <p>Se invirtieron <b>${lqMXN(todo.inv)}</b> y llegaron <b>${leads.length} leads</b> al CRM; <b>${todo.sqlp} son SQL+</b> (SQL + SQL Selvadentro).
       Las campañas con inversión trajeron <b>${pag.sqlp} SQL+</b>${pag.cps!=null?`: <b>${lqMXN(pag.cps)} por SQL</b> contra una meta de ${lqMXN(P.metaCostoSql)}`:", así que todavía no hay costo por SQL"}.</p>
-    ${verdes.length?`<p class="ok"><span class="lq-sem verde">VERDE</span> <b>Subir presupuesto ${P.subirPct}%:</b> ${verdes.map(m=>`${nom(m)} — ${cps(m)}, ${m.sqlp} SQL+${chica(m)}`).join(" · ")}.</p>`:""}
-    ${amarillos.length?`<p><span class="lq-sem amarillo">AMARILLO</span> ${amarillos.map(m=>`${nom(m)} — ${escAttr(m.sem.acc)}: ${cps(m)}, ${m.sqlp} SQL+${chica(m)}`).join(" · ")}.</p>`:""}
-    ${rojos.length?`<p class="warn"><span class="lq-sem rojo">ROJO</span> <b>Pausar:</b> ${rojos.map(m=>`${nom(m)} — ${escAttr(m.sem.regla)}${ojoAtrib(m)}`).join(" · ")}.</p>`:""}
-    ${grises.length?`<p><span class="lq-sem gris">EN EVALUACIÓN</span> ${grises.map(m=>`${nom(m)} (${lqMXN(m.inv)})`).join(" · ")}: todavía no llegan a ${lqMXN(P.umbralEval)} de inversión ni tienen SQL+.</p>`:""}
+    ${subir.length?`<p class="ok"><span class="lq-sem verde">VERDE</span> <b>Subir presupuesto ${P.subirPct}%:</b> ${subir.map(m=>`${nom(m)} — ${cps(m)}, ${m.sqlp} SQL+`).join(" · ")}.</p>`:""}
+    ${optimizar.length?`<p><span class="lq-sem amarillo">AMARILLO</span> <b>Optimizar, no subir:</b> ${optimizar.map(m=>`${nom(m)} — ${cps(m)}, ${m.sqlp} SQL+`).join(" · ")}.</p>`:""}
+    ${mantener.length?`<p><span class="lq-sem amarillo">AMARILLO</span> <b>Mantener, no subir:</b> ${mantener.map(m=>`${nom(m)} — ${escAttr(m.sem.regla)}`).join(" · ")}.</p>`:""}
+    ${pausar.length?`<p class="warn"><span class="lq-sem rojo">ROJO</span> <b>Pausar:</b> ${pausar.map(m=>`${nom(m)} — ${escAttr(m.sem.regla)}${ojoAtrib(m)}`).join(" · ")}.</p>`:""}
+    ${chicas.length?`<p><b>Mantener (muestra chica)</b>, todavía no llegan a ${lqMXN(P.umbralEval)} de inversión: ${chicas.map(m=>`${nom(m)} ${pill(m)} ${lqMXN(m.inv)}, ${cps(m)}`).join(" · ")}. El color dice cómo van; con tan poca inversión no se sube ni se pausa.</p>`:""}
     ${sinAttrN?`<p><b>${sinAttrN} leads llegaron sin campaña</b>${sinAttrS?` (${sinAttrS} SQL+)`:""}: no entran en el costo por SQL de ninguna campaña hasta que los anuncios pasen su utm_campaign o su ID de campaña.</p>`:""}
     ${alertas.length?`<p class="warn">⚠ <b>CPL al alza</b> (últimos ${P.alertaCpl.dias} días más de ${P.alertaCpl.pct}% arriba de su promedio de ${P.alertaCpl.base}): ${alertas.map(m=>`${nom(m)}${m.alerta.cpl7!=null?` ${lqMXN(m.alerta.cpl7)} vs. ${lqMXN(m.alerta.prom)}`:` ${lqMXN(m.alerta.sp7)} sin leads`}`).join(" · ")}. Solo alerta: no cambia el semáforo.</p>`:""}
     ${leads.length<20?`<p class="warn">⚠ Volumen bajo (${leads.length} leads): las proporciones de este periodo son indicativas, no concluyentes.</p>`:""}
@@ -4635,13 +4646,15 @@ function lqConclusionesSection(){
   return html;
 }
 
+// v5 (2026-10-08): muestra chica (< 8,000 MXN) = mantener, nunca subir; un análisis de la
+// v4 pudo recomendar subir una campaña con muestra chica.
 // v4 (2026-10-08): semáforo por costo por SQL y una acción por campaña; un análisis
 // guardado con la v3 habla de "calificados" y ya no cuadra con la pantalla.
 // v3 (2026-09-15): OPP/WON es SQL Selvadentro aunque el formulario esté vacío o por debajo.
 // v2 (2026-09-11): la calificación cambió —OPP eleva a SQL, Budget Range en pesos, fuera
 // pruebas y sin contacto—, así que un análisis guardado con la v1 cita cifras que ya no
 // son las de la pantalla. Se paga una vez más por rango y se comparte otra vez.
-const LQ_IA_KEY = "lq:ia:v4:";
+const LQ_IA_KEY = "lq:ia:v5:";
 const LQ_IA_TTL = 12*3600e3;          // 12 h: el rango no cambia tanto como para pagar de nuevo
 
 // Devuelve el análisis guardado de este rango si sigue vigente. La clave incluye la
