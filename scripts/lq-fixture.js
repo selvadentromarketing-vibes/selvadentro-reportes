@@ -101,7 +101,11 @@ function fixture() {
     [C.esc2.cid]: { plat: "Meta", cb: 400, grps: {} }, [C.form.cid]: { plat: "Meta", cb: 100, grps: {} },
     [C.gus.cid]: { plat: "Google", cb: 480, grps: {} }, [C.gmx.cid]: { plat: "Google", cb: 150, grps: {} },
   };
-  const adExtra = { kw, presu };
+  // Como en producción: la URL de destino de Meta llega aparte (adsExtra), por ID de anuncio;
+  // la de Google viene en la fila del anuncio (su URL final).
+  const url = {};
+  adRows.forEach((r) => { if (r.plat === "Meta") { if (r.url) url[r.id] = r.url; delete r.url; } });
+  const adExtra = { kw, presu, url, faltan: [] };
   const rawLeads = [], opps = {};
   let n = 0;
   const lead = (w, k, o) => {

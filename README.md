@@ -149,11 +149,16 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
   Se abren con **Qué hacer** bajo el semáforo (fila completa debajo de la campaña), salen en
   Conclusiones ("Regla y qué hacer"), la lectura automática cita la primera de cada campaña
   y la IA las recibe ya calculadas. Muestra chica sin alerta: sin acciones.
-  Datos nuevos de Windsor para esto (`ads()`): URL de destino por anuncio
-  (`website_destination_url`), presupuesto diario vigente por campaña/conjunto (Meta
-  `campaign_daily_budget` / `adset_daily_budget` en centavos → MXN; Google `budget_amount`
-  ya en MXN) y gasto por keyword de Google (`keyword_text`); si la cuenta rechaza los campos
-  nuevos se cae a la consulta anterior.
+  Datos nuevos de Windsor para esto, en la acción **`adsExtra`** (una llamada aparte de
+  `ads`, después de ella, con un tope de 7.5 s por consulta): URL de destino por anuncio de
+  Meta (`website_destination_url`; la de Google ya viene en `ads` como URL final),
+  presupuesto diario vigente por campaña/conjunto (Meta `campaign_daily_budget` /
+  `adset_daily_budget` en centavos → MXN; Google `budget_amount` ya en MXN) y gasto por
+  keyword de Google (`keyword_text`), sumado por semana ISO. Lo que no llegue a tiempo se
+  lista en `faltan` (aviso en Conclusiones) y las acciones dicen dónde verlo.
+  **No pedir estos campos en `ads`**: el 9-oct-2026 se agregaron a la consulta del detalle por
+  anuncio, se volvió lenta y la sincronización se quedó sin anuncios ("Sin datos de anuncios
+  en el rango"); por eso van aparte. Agregado `lq:agg:v21`.
 
   **Muestra chica** (inversión < 8,000 MXN): el color se calcula igual, pero la acción es
   siempre **"Mantener (muestra chica)"**: nunca "Subir presupuesto 20%" ni "Pausar"
@@ -291,7 +296,7 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
   (Meta + Google) y se muestra inversión, CPL y **costo por SQL** por campaña (cruce por
   ID de campaña y, de respaldo, por nombre) y por plataforma (siempre calculable). Todo
   en **MXN** ("12,345 MXN", nunca "$").
-- **Cache compartido**: agregado en el kv (`lq:agg:v20`), staleness de 30 min, igual
+- **Cache compartido**: agregado en el kv (`lq:agg:v21`), staleness de 30 min, igual
   que CRM en vivo.
 - **Permisos**: canal `mkt_lq` (o `marketing`, o admin). El módulo manual de
   Calidad de Leads dentro de Marketing **se retiró el 2026-08-26** junto con PPC Ads

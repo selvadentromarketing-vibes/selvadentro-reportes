@@ -2993,7 +2993,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v20";  // v20: URL de destino por anuncio, gasto por keyword de Google y presupuesto diario (recomendaciones concretas)  // v19: trabajado (tr) y contactado (ct) por etapa, separados  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
+const LQ_AGG_KEY = "lq:agg:v21";  // v21: el v20 guardado el 9-oct pudo quedar sin detalle por anuncio (la consulta con campos extra se volvía lenta)  // v20: URL de destino por anuncio, gasto por keyword de Google y presupuesto diario (recomendaciones concretas)  // v19: trabajado (tr) y contactado (ct) por etapa, separados  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 // (LQ_TZ y LQ_TZ_MS ahora viven junto al resto de helpers de fecha, arriba)
@@ -4027,7 +4027,8 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
            weeks:weeks||[], spend:spendRows||[], adw:adw0, leads,
            // Para las recomendaciones: URL de destino por anuncio, gasto por keyword por semana
            // y presupuesto diario vigente (MXN/día) por ID de campaña.
-           adUrl: lqAdUrls(adRows), kww: lqBucketKw(adExtra && adExtra.kw), presu: (adExtra && adExtra.presu) || {} };
+           adUrl: { ...lqAdUrls(adRows), ...((adExtra && adExtra.url) || {}) }, kww: lqBucketKw(adExtra && adExtra.kw), presu: (adExtra && adExtra.presu) || {},
+           faltanRec: (adExtra && adExtra.faltan) || [] };
 }
 // A dónde lleva hoy cada anuncio (la URL del día más reciente), por ID de anuncio.
 function lqAdUrls(adRows){
@@ -5202,6 +5203,8 @@ function lqConclusionesSection(){
     <p class="hint" style="margin-top:0">Una acción por campaña según el semáforo (costo por SQL contra la meta de ${lqMXN(LQ_SEMAFORO.metaCostoSql)}), con la regla que la justifica y hasta ${LQ_SEMAFORO.maxAcciones} pasos concretos: qué conjunto, anuncio, keyword o URL tocar, con su gasto, leads, SQL+ y CPL del rango. La IA agrega el detalle; los datos van agregados: no se envía información personal de ningún lead.</p>
     <div style="margin-bottom:16px"><button class="btn btn-olive" id="lq-ia-btn">${a?"Volver a analizar":"Analizar con IA"}</button>
       ${a&&a.ts?`<span class="hint" style="margin-left:12px">Generado ${crmAgo(a.ts)}</span>`:""}</div>`;
+  const faltan = (lqState.agg && lqState.agg.faltanRec) || [];
+  if(faltan.length) html += `<p class="hint">No llegó de Windsor en la última sincronización: ${escAttr(faltan.join(", "))}. Las acciones que lo necesitan dicen dónde verlo; vuelve a sincronizar para completarlas.</p>`;
   const d = lqState._combo || {};
   const camps = (d.rows||[]).filter(m=>m.sem);
   const A = (a && a.analisis) || {};
@@ -5808,8 +5811,16 @@ async function lqSync(){
       let spendOk = false, adsOk = false;
       try{ const sp = await lqFn({action:"spend", start:b0.startYMD, end:b1.endYMD}); spendRows = sp.rows||[]; monedas = sp.monedas||[]; spendOk = true; }
       catch(e){ fallos.push("inversión de Windsor (la columna Inversión sale vacía)"); toast("Windsor no respondió: "+(e.message||e)); }
-      try{ const ad = await lqFn({action:"ads", start:b0.startYMD, end:b1.endYMD}); adRows = ad.ads||[]; adExtra = { kw:ad.kw||[], presu:ad.presu||{} }; adsOk = true; }
+      try{ const ad = await lqFn({action:"ads", start:b0.startYMD, end:b1.endYMD}); adRows = ad.ads||[]; adsOk = true; }
       catch(e){ fallos.push("detalle por anuncio de Windsor (no hay conjuntos ni anuncios)"); toast("Detalle por anuncio no disponible: "+(e.message||e)); }
+      // URL de destino, presupuesto diario y gasto por keyword, para las recomendaciones: en una
+      // llamada APARTE para que, si Windsor tarda, nunca se lleve de corbata el detalle por anuncio
+      // (9-oct-2026: pedirlo junto lo dejó vacío). Si falta, las recomendaciones dicen dónde verlo.
+      if(adsOk){
+        lbl.textContent="Consultando URLs, presupuestos y keywords (Windsor)…";
+        try{ const ex = await lqFn({action:"adsExtra", start:b0.startYMD, end:b1.endYMD}); adExtra = { url:ex.url||{}, presu:ex.presu||{}, kw:ex.kw||[], faltan:ex.faltan||[] }; }
+        catch(e){ adExtra = { faltan:["URL de destino, presupuesto y keywords"] }; }
+      }
       // Windsor apaga Meta EN SILENCIO: si la cuenta de Meta Ads se desconecta de Windsor, el
       // super-conector solo devuelve Google y el detalle por anuncio de Meta vuelve vacío sin
       // error. El 1-oct-2026 las campañas de Meta desaparecieron de esta pestaña sin una sola
