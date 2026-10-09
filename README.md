@@ -146,19 +146,58 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
   | Revisar seguimiento | Cuántos leads sin trabajar tiene cada asesor (y desde cuándo) y en qué etapa; reevaluar en 7 días y, si sigue en rojo, pausar |
   | ⚠ CPL al alza | El conjunto (Meta) o la keyword (Google) que más subió el CPL en las semanas que tocan los últimos 7 días contra las previas de los 30 (sin el conjunto que ya se recomienda pausar), y dónde ver la causa (Frecuencia en Meta, términos de búsqueda en Google; si es la misma keyword de las negativas, se vuelven una sola acción). Siempre entra entre las 3 |
 
-  Se abren con **Qué hacer** bajo el semáforo (fila completa debajo de la campaña), salen en
-  Conclusiones ("Regla y qué hacer"), la lectura automática cita la primera de cada campaña
-  y la IA las recibe ya calculadas. Muestra chica sin alerta: sin acciones.
-  Datos nuevos de Windsor para esto, en la acción **`adsExtra`** (una llamada aparte de
-  `ads`, después de ella, con un tope de 7.5 s por consulta): URL de destino por anuncio de
-  Meta (`website_destination_url`; la de Google ya viene en `ads` como URL final),
-  presupuesto diario vigente por campaña/conjunto (Meta `campaign_daily_budget` /
-  `adset_daily_budget` en centavos → MXN; Google `budget_amount` ya en MXN) y gasto por
-  keyword de Google (`keyword_text`), sumado por semana ISO. Lo que no llegue a tiempo se
-  lista en `faltan` (aviso en Conclusiones) y las acciones dicen dónde verlo.
-  **No pedir estos campos en `ads`**: el 9-oct-2026 se agregaron a la consulta del detalle por
-  anuncio, se volvió lenta y la sincronización se quedó sin anuncios ("Sin datos de anuncios
-  en el rango"); por eso van aparte. Agregado `lq:agg:v21`.
+  Solo salen en **Conclusiones** (desde el 9-oct-2026 la exploración ya no muestra
+  acciones) y la IA las recibe ya calculadas. Muestra chica sin alerta: sin acciones. Las
+  reglas de todas: ruta exacta del objeto, evidencia en la misma línea (de la ventana de
+  decisión), cálculo por anuncio **dentro de su conjunto** (el mismo creativo en dos
+  conjuntos son dos anuncios), 800 MXN mínimo por anuncio para recomendar pausarlo (si no,
+  "Sin muestra suficiente para pausar; esperar."), máximo 3 acciones y "Un cambio a la vez;
+  reevaluar en 7 días." "Subir 20%" dice además qué anuncio/conjunto sostiene el resultado.
+  Frecuencia > 3 en un anuncio activo → renovar ese creativo (nombrado).
+
+- **Decisión de hoy (Conclusiones)** — Dirección, 9-oct-2026. Conclusiones ya **no depende
+  del filtro de fechas**:
+  - **Ventanas fijas** (hora de Tulum): semáforo y acciones = últimos 30 días cerrados
+    (hoy−30 a ayer); tendencia y alerta ⚠ = últimos 7 días cerrados contra los 7 anteriores.
+    Etiqueta fija: "Decisión de hoy — basada en <inicio> a <fin> (últimos 30 días). No
+    cambia con el filtro de fechas."
+  - **Solo campañas activas** llevan semáforo, acción y fecha de decisión. Las que dejaron de
+    gastar dentro de los 30 días (o están pausadas en la plataforma) van en **Pausadas
+    recientemente**: una línea con gasto, leads, SQL+, costo por SQL y fecha de pausa (último
+    día con gasto), sin acción. Pausadas hace más de 30 días no salen.
+  - **Fecha de decisión** = la más tardía de: último cambio + 7 días; la fecha estimada en
+    que el gasto de los últimos 30 días llega a 8,000 MXN al ritmo del promedio diario de los
+    últimos 7 (simulada día por día porque la ventana es móvil: si a ese ritmo no llega en 30
+    días, no hay fecha y lo dice, con el presupuesto diario si tampoco alcanza); inicio + 7
+    días. Si ya pasó: "<Acción> — Decidir hoy"; si no: "<Acción> (preliminar) — Decisión el
+    <fecha> (faltan N días): <motivo>".
+  - **Último cambio**: Meta no expone "última edición significativa" en Windsor
+    (`adset_learning_stage_info` solo trae LEARNING/SUCCESS/FAIL), así que se usa lo más
+    reciente de `ad_created_time`, `adset_created_time` y `adset_updated_time`. Google no da
+    fecha de inicio ni historial de cambios (inicio = primer día con gasto). Para los dos
+    manda también la **bitácora** (fecha, campaña, cambio, motivo; kv `lq:bitacora:v1`,
+    formulario al pie de Conclusiones; quien registra queda guardado) y se toma lo más
+    reciente de ambas fuentes.
+  - **Atender hoy** (arriba de todo, ignora la fecha): anuncio rechazado (Meta
+    DISAPPROVED/WITH_ISSUES, Google DISAPPROVED), gasto detenido (0 MXN ayer con gasto los 7
+    días previos) y medición rota (la plataforma reporta 2+ leads en 3 días y al CRM no llegó
+    ninguno). Windsor solo trae anuncios con entrega: uno rechazado que nunca se publicó no se
+    ve. Orden: Atender hoy → Decidir hoy → Preliminares (fecha más cercana primero) →
+    Pausadas recientemente.
+  - **Exploración** (selector de semanas): solo explora; el color por campaña dice
+    "histórico", no hay acciones y un aviso discreto dice "Estás viendo <rango>. La decisión
+    de hoy está en Conclusiones."
+  - Datos: acción **`decision`** de `lead-quality` (reemplazó a `adsExtra`), con la ventana
+    calculada en el navegador. Meta: estado, inicio, presupuesto (CBO = `campaign_daily_budget`
+    en centavos o `campaign_lifetime_budget` en unidades > 0; si no, `adset_daily_budget` /
+    `adset_lifetime_budget`), último cambio, por anuncio gasto/resultados/clics/impresiones,
+    `frequency`, `website_destination_url` y 7 vs 7, Audience Network por conjunto
+    (`publisher_platform`) y gasto/resultados diarios. Google: estado y motivos, aprobación
+    del anuncio, `ad_final_urls`, presupuesto (`budget_amount`, MXN), keywords 30 días y 7 vs
+    7, diarios. Cada consulta con tope de 7.5 s; lo que no llegue se lista en `faltan` y la
+    acción dice dónde verlo. **No pedir estos campos en `ads`**: el 9-oct-2026 se agregaron a
+    la consulta del detalle por anuncio, se volvió lenta y la sincronización se quedó sin
+    anuncios ("Sin datos de anuncios en el rango"). Agregado `lq:agg:v22`, IA `lq:ia:v11:`.
 
   **Muestra chica** (inversión < 8,000 MXN): el color se calcula igual, pero la acción es
   siempre **"Mantener (muestra chica)"**: nunca "Subir presupuesto 20%" ni "Pausar"
@@ -183,8 +222,9 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
   mezclaba las dos y contaba citas y tags de respuesta aunque el lead siguiera en "Sin
   respuesta"). Un lead sin oportunidad usa los tags: toque sin respuesta = trabajado,
   respuesta = contactado.
-- **Alerta de CPL** ⚠ (solo visual, no cambia el semáforo): CPL de los últimos 7 días más
-  de 30% arriba del promedio de 30 días de la misma campaña, anclado al final del rango.
+- **Alerta de CPL** ⚠ (solo visual, no cambia el semáforo; solo en Conclusiones): CPL de los
+  últimos 7 días cerrados más de 30% arriba del de los 7 anteriores, con el conjunto (Meta) o
+  la keyword (Google) que más lo subió.
 - **Cruce por ID de campaña**: `lead-quality` ahora devuelve `attr.cid` (el `campaignId`
   de la atribución de GHL, o `hsa_cam` / `utm_id` de la URL de la landing) y `attr.host`
   (dominio de la landing). En Meta, GHL guarda el ID real aunque el nombre que lo acompaña
@@ -223,7 +263,9 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
   tabla de acciones se arma con el semáforo aunque no se haya corrido la IA, y si la IA
   propone otra acción manda el semáforo. Cada campaña llega con sus acciones concretas
   (`recomendaciones`, `esperar`) y el prompt exige el objeto exacto, no inventar objetos,
-  la muestra mínima, dónde revisar lo que falta y la nota CBO. Cache `lq:ia:v10:`.
+  la muestra mínima, dónde revisar lo que falta y la nota CBO. Desde el 9-oct-2026 recibe la
+  decisión de hoy (ventana fija, fecha de decisión, Atender hoy) y las pausadas aparte, sin
+  acción. Cache `lq:ia:v11:`.
 - Pruebas: `node scripts/test-lq.js` (backend con GHL y Anthropic simulados) y el bloque
   `lq:rediseño` de `scripts/smoke-ui.js` con los datos sintéticos de
   `scripts/lq-fixture.js` (W37–W40, los cinco estados del semáforo).
@@ -296,7 +338,7 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
   (Meta + Google) y se muestra inversión, CPL y **costo por SQL** por campaña (cruce por
   ID de campaña y, de respaldo, por nombre) y por plataforma (siempre calculable). Todo
   en **MXN** ("12,345 MXN", nunca "$").
-- **Cache compartido**: agregado en el kv (`lq:agg:v21`), staleness de 30 min, igual
+- **Cache compartido**: agregado en el kv (`lq:agg:v22`), staleness de 30 min, igual
   que CRM en vivo.
 - **Permisos**: canal `mkt_lq` (o `marketing`, o admin). El módulo manual de
   Calidad de Leads dentro de Marketing **se retiró el 2026-08-26** junto con PPC Ads

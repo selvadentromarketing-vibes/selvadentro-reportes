@@ -314,7 +314,7 @@ async function ads({ start, end }) {
   // OJO (9-oct-2026): esta consulta NO se toca. Pedirle además la URL de destino y el
   // presupuesto (campos del creativo y de la campaña) la volvió lo bastante lenta como para
   // que la función rebasara su tiempo y el detalle por anuncio llegara vacío ("Sin datos de
-  // anuncios en el rango"). Eso va aparte, en `adsExtra`, con su propia llamada y un tope.
+  // anuncios en el rango"). Eso va aparte, en `decision`, con su propia llamada y un tope.
   const [fb, gg] = await Promise.all([
     windsorGet("facebook", `${range}&fields=date,campaign,campaign_id,adset_name,adset_id,ad_id,ad_name,publisher_platform,effective_status,ad_preview_shareable_link,url_tags,spend,impressions,clicks,actions_lead`)
       // si el campo de leads no está disponible en la cuenta, degradar sin resultados
@@ -364,62 +364,148 @@ async function ads({ start, end }) {
   return { configured: true, ads: rows.filter((r) => r.spend || r.clicks || r.impr || r.results) };
 }
 
-// --- Datos para las recomendaciones concretas (Dirección, 9-oct-2026) ---
-// URL de destino de cada anuncio de Meta, presupuesto diario vigente por campaña / conjunto
-// y gasto por palabra clave de Google. Va en su PROPIA llamada (con su propio tiempo de
-// función) y cada consulta tiene un tope: si Windsor tarda, las recomendaciones dicen dónde
-// ver el dato, pero el detalle por anuncio nunca se queda sin llegar por esto.
+// --- Datos de la DECISIÓN DE HOY (Conclusiones; Dirección, 9-oct-2026) ---
+// Conclusiones ya no dependen del selector de fechas: el semáforo y las acciones se calculan
+// con los últimos 30 días cerrados y la tendencia / alerta con los últimos 7 contra los 7
+// anteriores. El navegador manda las fechas (hora de Tulum) y aquí se piden a Windsor los
+// agregados EXACTOS de esas ventanas, por anuncio dentro de su conjunto. Va en su propia
+// llamada (una por plataforma) y cada consulta tiene tope de tiempo: si Windsor tarda, la
+// decisión dice qué faltó, pero el detalle por anuncio de exploración (`ads`) no se toca.
+//
+// Campos verificados en Windsor (get_fields, 9-oct-2026):
+//   Meta: campaign_effective_status, campaign_start_time, campaign_daily_budget (centavos),
+//   campaign_lifetime_budget (unidades), adset_daily_budget / adset_lifetime_budget (centavos),
+//   effective_status del anuncio, website_destination_url, frequency, ad_created_time,
+//   adset_created_time, adset_updated_time. Windsor NO expone la "última edición
+//   significativa" de Meta (adset_learning_stage_info solo trae LEARNING / SUCCESS / FAIL):
+//   el último cambio se toma de la fecha más reciente entre anuncio creado, conjunto creado y
+//   conjunto editado, y la bitácora del reporte lo completa.
+//   Google: campaign_status, campaign_primary_status(_reasons), ad_group_ad_status,
+//   ad_group_ad_policy_summary_approval_status, ad_final_urls, budget_amount, keyword_text.
+//   Google no tiene fecha de inicio ni historial de cambios en Windsor: el inicio es el primer
+//   día con gasto y los cambios salen de la bitácora.
+// Solo se devuelven anuncios con entrega en la ventana: uno rechazado que nunca se publicó
+// no aparece (Windsor no lo trae).
 const conTope = (p, ms) => Promise.race([p.catch(() => null), new Promise((r) => setTimeout(() => r(null), ms))]);
-// Lunes de la semana ISO de una fecha YYYY-MM-DD (las keywords se mandan por semana: 7× menos filas)
-const lunesDe = (ymd) => { const d = new Date(String(ymd) + "T12:00:00Z"); if (isNaN(d)) return ""; d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() || 7) - 1)); return d.toISOString().slice(0, 10); };
-async function adsExtra({ start, end }) {
-  if (!WINDSOR_KEY) return { configured: false, url: {}, presu: {}, kw: [], faltan: [] };
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(start)) || !/^\d{4}-\d{2}-\d{2}$/.test(String(end))) {
-    throw Object.assign(new Error("start y end requeridos (YYYY-MM-DD)"), { status: 400 });
+// Timestamp de Meta ("2026-10-09T12:07:42-0600") → fecha en hora de Tulum (UTC-5, sin horario de verano)
+const diaTulum = (ts) => { const t = Date.parse(String(ts || "").replace(/([+-]\d{2})(\d{2})$/, "$1:$2")); return isNaN(t) ? "" : new Date(t - 5 * 3600e3).toISOString().slice(0, 10); };
+const esYmd = (x) => /^\d{4}-\d{2}-\d{2}$/.test(String(x || ""));
+async function decision(p) {
+  const plat = p.plat === "google" ? "google" : "meta";
+  const V = p.ventana || {};
+  if (!WINDSOR_KEY) return { configured: false, plat, faltan: [] };
+  if (!["ini", "fin", "ini7", "fin7", "iniP", "finP", "hoy"].every((k) => esYmd(V[k]))) {
+    throw Object.assign(new Error("ventana requerida: ini, fin, ini7, fin7, iniP, finP, hoy (YYYY-MM-DD)"), { status: 400 });
   }
-  const range = `date_from=${start}&date_to=${end}`;
+  const R = (a, b) => `date_from=${a}&date_to=${b}`;
   const num = (x) => Number(x) || 0;
+  const r2 = (x) => Math.round(num(x) * 100) / 100;
   const TOPE = Number(process.env.LQ_TOPE_MS) || 7500;   // la función se corta a los ~10 s
-  const [fbx, kw, ggPresu] = await Promise.all([
-    // Sin fecha ni plataforma: una fila por anuncio. website_destination_url sirve también para
-    // los creativos dinámicos (donde `link` llega vacío); "http://fb.me/" = formulario
-    // instantáneo. Presupuestos de Meta en centavos (40000 = 400 MXN/día).
-    conTope(windsorGet("facebook", `${range}&fields=campaign_id,adset_id,adset_name,ad_id,website_destination_url,link,campaign_daily_budget,adset_daily_budget,spend`), TOPE),
-    // Gasto por keyword: la recomendación nombra la keyword que gasta sin SQL+. Los términos de
-    // búsqueda no se piden: el reporte dice dónde verlos (Google Ads › Palabras clave › Términos).
-    conTope(windsorGet("google_ads", `${range}&fields=date,campaign,campaign_id,ad_group_name,ad_group_id,keyword_text,spend,clicks,conversions`), TOPE),
-    // Presupuesto diario de Google por día: ya viene en pesos (no en micros).
-    conTope(windsorGet("google_ads", `${range}&fields=date,campaign_id,budget_amount`), TOPE),
-  ]);
-  const url = {}, presu = {};
-  (fbx || []).forEach((r) => {
-    const id = String(r.ad_id || ""), u = String(r.website_destination_url || r.link || "").trim();
-    if (id && u) url[id] = u.slice(0, 200);
-    const cid = String(r.campaign_id || ""); if (!cid) return;
-    const P = presu[cid] = presu[cid] || { plat: "Meta", cb: null, grps: {} };
-    const cb = num(r.campaign_daily_budget) / 100, gb = num(r.adset_daily_budget) / 100;
-    if (cb > 0) P.cb = Math.round(cb * 100) / 100;
-    if (gb > 0 && r.adset_id) P.grps[String(r.adset_id)] = { name: r.adset_name || "", gb: Math.round(gb * 100) / 100 };
-  });
-  // Google: el presupuesto del día más reciente de cada campaña
-  const dG = {};
-  (ggPresu || []).forEach((r) => { const cid = String(r.campaign_id || ""), b = num(r.budget_amount), d = r.date || "";
-    if (cid && b > 0 && d >= (dG[cid] || "")) { dG[cid] = d; presu[cid] = { plat: "Google", cb: Math.round(b * 100) / 100, grps: {} }; } });
-  Object.keys(presu).forEach((k) => { if (presu[k].cb == null && !Object.keys(presu[k].grps).length) delete presu[k]; });
-  // Keywords sumadas por semana ISO (d = su lunes)
-  const byKw = {};
-  (kw || []).forEach((r) => {
-    const t = String(r.keyword_text || "").trim(), d = lunesDe(r.date); if (!t || !d) return;
-    const k = [r.campaign_id, r.ad_group_id, t, d].join("|");
-    const b = byKw[k] = byKw[k] || { d, cid: String(r.campaign_id || ""), camp: r.campaign || "", grp: r.ad_group_name || "", gid: String(r.ad_group_id || ""), kw: t, spend: 0, clicks: 0, conv: 0 };
-    b.spend += num(r.spend); b.clicks += num(r.clicks); b.conv += num(r.conversions);
-  });
-  const kws = Object.values(byKw).filter((r) => r.spend || r.clicks || r.conv).map((r) => ({ ...r, spend: Math.round(r.spend * 100) / 100, conv: Math.round(r.conv * 100) / 100 }));
+  const enV = (d, a, b) => d >= a && d <= b;
   const faltan = [];
-  if (fbx === null) faltan.push("URL de destino y presupuesto de Meta");
-  if (kw === null) faltan.push("gasto por keyword de Google");
-  if (ggPresu === null) faltan.push("presupuesto de Google");
-  return { configured: true, url, presu, kw: kws, faltan };
+  const dias = {};                                        // { cid: { fecha: { sp, res } } } últimos 14 días
+  const sumDia = (cid, d, sp, res) => { if (!cid || !d) return; const D = dias[cid] = dias[cid] || {}; const x = D[d] = D[d] || { sp: 0, res: 0 }; x.sp = r2(x.sp + sp); x.res += res; };
+
+  if (plat === "meta") {
+    const [a30, hoyQ, an, d14] = await Promise.all([
+      conTope(windsorGet("facebook", `${R(V.ini, V.fin)}&fields=campaign_id,campaign,campaign_effective_status,campaign_start_time,campaign_daily_budget,campaign_lifetime_budget,adset_id,adset_name,adset_daily_budget,adset_lifetime_budget,adset_created_time,adset_updated_time,ad_id,ad_name,effective_status,ad_created_time,website_destination_url,link,frequency,spend,actions_lead,clicks,impressions`), TOPE),
+      // Ayer y hoy: estado actual y anuncios / conjuntos nuevos que todavía no entran en los 30 días
+      conTope(windsorGet("facebook", `${R(V.fin, V.hoy)}&fields=campaign_id,campaign,campaign_effective_status,adset_id,adset_name,ad_id,ad_name,effective_status,ad_created_time,adset_created_time,adset_updated_time,spend`), TOPE),
+      conTope(windsorGet("facebook", `${R(V.ini, V.fin)}&fields=campaign_id,adset_id,adset_name,publisher_platform,spend,actions_lead`), TOPE),
+      conTope(windsorGet("facebook", `${R(V.iniP, V.fin)}&fields=date,campaign_id,adset_id,ad_id,spend,actions_lead`), TOPE),
+    ]);
+    if (a30 === null) faltan.push("detalle de los 30 días de Meta (anuncios, URL, presupuesto, frecuencia)");
+    if (hoyQ === null) faltan.push("estado de hoy de Meta");
+    if (an === null) faltan.push("Audience Network de Meta");
+    if (d14 === null) faltan.push("últimos 14 días de Meta por anuncio");
+    const camps = {}, grps = {}, ads = {};
+    const camp = (r) => {
+      const cid = String(r.campaign_id || ""); if (!cid) return null;
+      const C = camps[cid] = camps[cid] || { name: r.campaign || "", estado: "", inicio: "", cb: null, lb: null, cambio: null };
+      if (r.campaign && !C.name) C.name = r.campaign;
+      return C;
+    };
+    const cambio = (C, d, que) => { if (d && (!C.cambio || d > C.cambio.fecha)) C.cambio = { fecha: d, que }; };
+    const fila = (r, conMetricas) => {
+      const C = camp(r); if (!C) return;
+      const cid = String(r.campaign_id);
+      if (r.campaign_effective_status) C.estado = String(r.campaign_effective_status);
+      if (r.campaign_start_time) C.inicio = diaTulum(r.campaign_start_time) || C.inicio;
+      if (num(r.campaign_daily_budget) > 0) C.cb = r2(num(r.campaign_daily_budget) / 100);          // centavos
+      if (num(r.campaign_lifetime_budget) > 0) C.lb = r2(r.campaign_lifetime_budget);                 // unidades
+      const gid = String(r.adset_id || "");
+      if (gid) {
+        const G = grps[gid] = grps[gid] || { cid, name: r.adset_name || "", gb: null, glb: null };
+        if (num(r.adset_daily_budget) > 0) G.gb = r2(num(r.adset_daily_budget) / 100);
+        if (num(r.adset_lifetime_budget) > 0) G.glb = r2(num(r.adset_lifetime_budget) / 100);
+        const dc = diaTulum(r.adset_created_time), du = diaTulum(r.adset_updated_time);
+        cambio(C, dc, `conjunto nuevo ${r.adset_name || gid}`);
+        if (du && du !== dc) cambio(C, du, `conjunto editado ${r.adset_name || gid}`);
+      }
+      const id = String(r.ad_id || ""); if (!id) return;
+      cambio(C, diaTulum(r.ad_created_time), `anuncio nuevo ${r.ad_name || id}${r.adset_name ? ` en ${r.adset_name}` : ""}`);
+      const A = ads[id] = ads[id] || { cid, gid, grp: r.adset_name || "", id, name: r.ad_name || "", estado: "", url: "", sp: 0, res: 0, cl: 0, im: 0, fq: null, sp7: 0, res7: 0, spP: 0, resP: 0 };
+      if (r.effective_status) A.estado = String(r.effective_status);
+      const u = String(r.website_destination_url || r.link || "").trim(); if (u) A.url = u.slice(0, 200);
+      if (conMetricas) { A.sp = r2(A.sp + num(r.spend)); A.res += num(r.actions_lead); A.cl += num(r.clicks); A.im += num(r.impressions); if (num(r.frequency) > 0) A.fq = Math.round(num(r.frequency) * 100) / 100; }
+    };
+    (a30 || []).forEach((r) => fila(r, true));
+    (hoyQ || []).forEach((r) => fila(r, false));      // el estado de hoy pisa al de los 30 días
+    (d14 || []).forEach((r) => {
+      const d = String(r.date || ""), sp = num(r.spend), res = num(r.actions_lead);
+      sumDia(String(r.campaign_id || ""), d, sp, res);
+      const A = ads[String(r.ad_id || "")]; if (!A) return;
+      if (enV(d, V.ini7, V.fin7)) { A.sp7 = r2(A.sp7 + sp); A.res7 += res; } else if (enV(d, V.iniP, V.finP)) { A.spP = r2(A.spP + sp); A.resP += res; }
+    });
+    const anL = (an || []).filter((r) => String(r.publisher_platform || "").toLowerCase() === "audience_network" && num(r.spend) > 0)
+      .map((r) => ({ cid: String(r.campaign_id || ""), gid: String(r.adset_id || ""), grp: r.adset_name || "", sp: r2(r.spend), res: num(r.actions_lead) }));
+    return { configured: true, plat: "Meta", camps, grps, ads: Object.values(ads).filter((A) => A.sp || A.res || A.sp7 || A.spP || A.estado), an: anL, dias, faltan };
+  }
+
+  // Google
+  const [a30, g14, k30, k14] = await Promise.all([
+    conTope(windsorGet("google_ads", `${R(V.ini, V.fin)}&fields=campaign_id,campaign,campaign_status,campaign_primary_status,campaign_primary_status_reasons,ad_group_name,ad_group_id,ad_id,ad_name,ad_group_ad_status,ad_group_ad_policy_summary_approval_status,ad_final_urls,spend,clicks,conversions,impressions`), TOPE),
+    conTope(windsorGet("google_ads", `${R(V.iniP, V.hoy)}&fields=date,campaign_id,spend,conversions,budget_amount`), TOPE),
+    conTope(windsorGet("google_ads", `${R(V.ini, V.fin)}&fields=campaign_id,ad_group_name,ad_group_id,keyword_text,spend,clicks,conversions`), TOPE),
+    conTope(windsorGet("google_ads", `${R(V.iniP, V.fin)}&fields=date,campaign_id,ad_group_id,keyword_text,spend,conversions`), TOPE),
+  ]);
+  if (a30 === null) faltan.push("detalle de los 30 días de Google (anuncios, estado, URL)");
+  if (g14 === null) faltan.push("últimos 14 días y presupuesto de Google");
+  if (k30 === null) faltan.push("gasto por keyword de Google (30 días)");
+  if (k14 === null) faltan.push("keywords de Google de los últimos 14 días");
+  const primeraUrl = (v) => { const t = String(v || "").trim(); if (!t) return ""; try { const a = JSON.parse(t); if (Array.isArray(a) && a.length) return String(a[0]); } catch (e) { /* texto */ } return t.replace(/^[\[\s"']+|[\]\s"']+$/g, "").split(",")[0].trim(); };
+  const camps = {}, ads = {};
+  (a30 || []).forEach((r) => {
+    const cid = String(r.campaign_id || ""); if (!cid) return;
+    const C = camps[cid] = camps[cid] || { name: r.campaign || "", estado: "", primario: "", motivos: "", cb: null, inicio: "", cambio: null };
+    if (r.campaign_status) C.estado = String(r.campaign_status);
+    if (r.campaign_primary_status) C.primario = String(r.campaign_primary_status);
+    if (r.campaign_primary_status_reasons) C.motivos = String(r.campaign_primary_status_reasons).replace(/[\[\]"]/g, "");
+    const id = String(r.ad_id || ""); if (!id) return;
+    const A = ads[id] = ads[id] || { cid, gid: String(r.ad_group_id || ""), grp: r.ad_group_name || "", id, name: r.ad_name || "", estado: "", aprobacion: "", url: "", sp: 0, res: 0, cl: 0, im: 0 };
+    A.estado = String(r.ad_group_ad_status || A.estado); A.aprobacion = String(r.ad_group_ad_policy_summary_approval_status || A.aprobacion);
+    A.url = primeraUrl(r.ad_final_urls) || A.url;
+    A.sp = r2(A.sp + num(r.spend)); A.res += num(r.conversions); A.cl += num(r.clicks); A.im += num(r.impressions);
+  });
+  const ultB = {};
+  (g14 || []).forEach((r) => {
+    const cid = String(r.campaign_id || ""), d = String(r.date || "");
+    if (enV(d, V.iniP, V.fin)) sumDia(cid, d, num(r.spend), num(r.conversions));
+    if (cid && num(r.budget_amount) > 0 && d >= (ultB[cid] || "")) { ultB[cid] = d; (camps[cid] = camps[cid] || { name: "", estado: "", primario: "", motivos: "", cb: null, inicio: "", cambio: null }).cb = r2(r.budget_amount); }
+  });
+  const kw = {};
+  const kKey = (r) => [r.campaign_id, r.ad_group_id, String(r.keyword_text || "").trim().toLowerCase()].join("|");
+  (k30 || []).forEach((r) => {
+    const t = String(r.keyword_text || "").trim(); if (!t) return;
+    const b = kw[kKey(r)] = kw[kKey(r)] || { cid: String(r.campaign_id || ""), gid: String(r.ad_group_id || ""), grp: r.ad_group_name || "", kw: t, sp: 0, cl: 0, cv: 0, sp7: 0, cv7: 0, spP: 0, cvP: 0 };
+    b.sp = r2(b.sp + num(r.spend)); b.cl += num(r.clicks); b.cv = r2(b.cv + num(r.conversions));
+  });
+  (k14 || []).forEach((r) => {
+    const b = kw[kKey(r)]; if (!b) return; const d = String(r.date || "");
+    if (enV(d, V.ini7, V.fin7)) { b.sp7 = r2(b.sp7 + num(r.spend)); b.cv7 = r2(b.cv7 + num(r.conversions)); }
+    else if (enV(d, V.iniP, V.finP)) { b.spP = r2(b.spP + num(r.spend)); b.cvP = r2(b.cvP + num(r.conversions)); }
+  });
+  return { configured: true, plat: "Google", camps, ads: Object.values(ads), kw: Object.values(kw).filter((k) => k.sp || k.cl || k.cv || k.sp7 || k.spP), dias, faltan };
 }
 
 // --- Diagnóstico: la app se responde a sí misma ---
@@ -615,8 +701,8 @@ exports.handler = async (event) => {
     if (payload.action === "opps") return json(200, await opps(payload));
     if (payload.action === "spend") return json(200, await spend(payload));
     if (payload.action === "ads") return json(200, await ads(payload));
-    if (payload.action === "adsExtra") return json(200, await adsExtra(payload));
-    return json(400, { error: "action debe ser 'bootstrap', 'diag', 'leads', 'opps', 'spend', 'ads' o 'adsExtra'" });
+    if (payload.action === "decision") return json(200, await decision(payload));
+    return json(400, { error: "action debe ser 'bootstrap', 'diag', 'leads', 'opps', 'spend', 'ads' o 'decision'" });
   } catch (e) {
     const status = e.status === 429 ? 429 : e.status === 400 ? 400 : 502;
     return json(status, { error: String(e.message || e), detail: e.detail });

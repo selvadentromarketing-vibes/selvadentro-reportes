@@ -10,8 +10,9 @@
 // Y las recomendaciones concretas del 9-oct-2026:
 //   · El detalle por anuncio (`ads`) hace las mismas 2 consultas de siempre: pedirle más
 //     campos la volvió lenta y la sincronización se quedó sin anuncios.
-//   · `adsExtra` trae aparte, con tope de tiempo, la URL de destino, el presupuesto diario
-//     vigente (Meta en centavos → MXN; Google ya en MXN) y el gasto por keyword por semana.
+//   · `decision` trae aparte, con tope de tiempo, el rango FIJO de Conclusiones (30 días
+//     cerrados y 7 contra 7): estado, inicio, último cambio, presupuesto, frecuencia, URL,
+//     Audience Network, días por campaña y keywords, por anuncio dentro de su conjunto.
 //   · El prompt manda las acciones ya calculadas y la regla general (objeto exacto, evidencia,
 //     muestra mínima, dónde revisar, CBO, máximo 3, un cambio a la vez).
 //
@@ -76,7 +77,7 @@ S.ghlFetch = async (path) => {
   ok(/fields=[^&]*campaign_id/.test(pedidas[0] || ""), "pide campaign_id a /all", pedidas[0]);
   ok(rs.statusCode === 200 && dsp.rows[0].cid === "23710551755" && dsp.rows[1].cid === "120251374772050275", "cada fila de inversión trae su ID de campaña", dsp.rows);
 
-  console.log("\n[lead-quality] detalle por anuncio sin campos extra; URL, presupuesto y keywords aparte (adsExtra)");
+  console.log("\n[lead-quality] detalle por anuncio sin campos extra (lo de la decisión va aparte)");
   // Regresión del 9-oct-2026: pedir URL de destino y presupuesto en la consulta del detalle por
   // anuncio la volvió lenta y la sincronización se quedó sin anuncios. `ads` pide lo de siempre.
   const simularWindsor = (cuelga) => async (url) => {
@@ -111,24 +112,73 @@ S.ghlFetch = async (path) => {
      && !/website_destination_url|campaign_daily_budget|adset_daily_budget|[=,]link(,|&|$)/.test(pidioFb) && !/keyword_text|budget_amount/.test(pedidas.map(decodeURIComponent).join(" ")),
     "el detalle por anuncio hace las 2 consultas de siempre, sin campos extra (no se vuelve lento)", pidioFb);
   ok(ggRow && ggRow.url === "https://seguridad.selvadentrotulum.com/en/seguridadselva", "el anuncio de Google trae su URL final (ya venía en la consulta)", ggRow);
+
+  console.log("\n[lead-quality] decision: rango fijo de 30 días cerrados y 7 contra 7, por anuncio dentro de su conjunto");
+  const V = { hoy: "2026-10-09", ini: "2026-09-09", fin: "2026-10-08", ini7: "2026-10-02", fin7: "2026-10-08", iniP: "2026-09-25", finP: "2026-10-01" };
+  const E9 = "120251374799490275";
+  const simDec = (cuelga) => async (url) => {
+    const u = String(url), f = decodeURIComponent((u.match(/fields=([^&]*)/) || [])[1] || ""), desde = (u.match(/date_from=([\d-]+)/) || [])[1];
+    pedidas.push(u);
+    if (cuelga && cuelga.test(f)) return new Promise(() => {});
+    let data = [];
+    if (u.includes("/facebook") && f.includes("frequency")) data = [
+      { campaign_id: E9, campaign: "INVESTORS_US/CA_ESCAPE_090926", campaign_effective_status: "ACTIVE", campaign_start_time: "2026-09-09T13:30:00-0600", campaign_daily_budget: 40000, campaign_lifetime_budget: 0,
+        adset_id: "g1", adset_name: "EN_LLAMADA_ESCAPE", adset_daily_budget: null, adset_lifetime_budget: null, adset_created_time: "2026-09-09T12:50:58-0600", adset_updated_time: "2026-09-28T15:27:19-0600",
+        ad_id: "a1", ad_name: "EN_LLAMADA_ESCAPE-TY-COLD", effective_status: "ACTIVE", ad_created_time: "2026-09-09T12:51:02-0600", website_destination_url: "https://lotes.selvadentrotulum.com/en/escape", link: "", frequency: 3.4, spend: 1771.2, actions_lead: 2, clicks: 40, impressions: 900 },
+      { campaign_id: E9, campaign: "INVESTORS_US/CA_ESCAPE_090926", campaign_effective_status: "ACTIVE", campaign_start_time: "2026-09-09T13:30:00-0600", campaign_daily_budget: 40000,
+        adset_id: "g2", adset_name: "EN_LLAMADA_SEGURIDAD-TULUM", adset_created_time: "2026-09-28T15:27:27-0600", adset_updated_time: "2026-09-28T15:27:46-0600",
+        ad_id: "a2", ad_name: "EN_LLAMADA_ESCAPE-TY-COLD", effective_status: "ACTIVE", ad_created_time: "2026-09-28T15:27:29-0600", website_destination_url: "https://seguridad.selvadentrotulum.com/en/seguridadtulum/", frequency: 1.2, spend: 300, actions_lead: 1, clicks: 9, impressions: 300 }];
+    else if (u.includes("/facebook") && f.includes("publisher_platform")) data = [
+      { campaign_id: E9, adset_id: "g1", adset_name: "EN_LLAMADA_ESCAPE", publisher_platform: "audience_network", spend: 900, actions_lead: 1 },
+      { campaign_id: E9, adset_id: "g1", adset_name: "EN_LLAMADA_ESCAPE", publisher_platform: "facebook", spend: 871.2, actions_lead: 1 }];
+    else if (u.includes("/facebook") && f.startsWith("date,")) data = [
+      { date: "2026-10-03", campaign_id: E9, adset_id: "g1", ad_id: "a1", spend: 100, actions_lead: 0 }, { date: "2026-10-08", campaign_id: E9, adset_id: "g1", ad_id: "a1", spend: 50, actions_lead: 1 },
+      { date: "2026-09-26", campaign_id: E9, adset_id: "g1", ad_id: "a1", spend: 80, actions_lead: 1 }, { date: "2026-09-26", campaign_id: E9, adset_id: "g2", ad_id: "a2", spend: 20, actions_lead: 0 }];
+    else if (u.includes("/facebook")) data = desde === V.fin ? [
+      { campaign_id: E9, campaign: "INVESTORS_US/CA_ESCAPE_090926", campaign_effective_status: "ACTIVE", adset_id: "g3", adset_name: "EN_LLAMADA_PREMIUMLOTS", ad_id: "a3",
+        ad_name: "EN_LLAMADA_PREMIUMLOTS-SUSPIRO-SELVA-CLEAN_091026", effective_status: "ACTIVE", ad_created_time: "2026-10-09T12:07:42-0600", adset_created_time: "2026-09-09T12:50:58-0600", adset_updated_time: "2026-09-09T12:51:17-0600", spend: 3.87 }] : [];
+    else if (f.includes("campaign_status")) data = [
+      { campaign_id: "23715389989", campaign: "INVESTORS - GOOGLE SEARCH - US+CAN", campaign_status: "PAUSED", campaign_primary_status: "PAUSED", campaign_primary_status_reasons: '["CAMPAIGN_PAUSED"]',
+        ad_group_name: "Investment Intent", ad_group_id: "193313814165", ad_id: "803228657690", ad_name: "Tulum Real Estate Investment | Invest in Tulum", ad_group_ad_status: "ENABLED",
+        ad_group_ad_policy_summary_approval_status: "APPROVED", ad_final_urls: '["https://lotes.selvadentrotulum.com/"]', spend: 8053.14, clicks: 120, conversions: 4, impressions: 3000 }];
+    else if (f.startsWith("date,campaign_id,spend")) data = [
+      { date: "2026-10-07", campaign_id: "23715389989", spend: 79.85, conversions: 0, budget_amount: 480 }, { date: "2026-09-30", campaign_id: "23715389989", spend: 406.44, conversions: 0, budget_amount: 450 }];
+    else if (f.startsWith("campaign_id,ad_group_name,ad_group_id,keyword_text")) data = [
+      { campaign_id: "23715389989", ad_group_name: "Investment Intent", ad_group_id: "193313814165", keyword_text: "buying property in tulum mexico", spend: 2500.5, clicks: 60, conversions: 1 }];
+    else if (f.startsWith("date,campaign_id,ad_group_id,keyword_text")) data = [
+      { date: "2026-10-04", campaign_id: "23715389989", ad_group_id: "193313814165", keyword_text: "Buying property in tulum mexico", spend: 300, conversions: 0 },
+      { date: "2026-09-28", campaign_id: "23715389989", ad_group_id: "193313814165", keyword_text: "buying property in tulum mexico", spend: 200, conversions: 1 }];
+    return { ok: true, status: 200, json: async () => ({ data }), text: async () => "" };
+  };
+  pedidas.length = 0; global.fetch = simDec(null);
+  const rdm = await LQ.handler(ev({ action: "decision", plat: "meta", ventana: V }));
+  const dm = JSON.parse(rdm.body);
+  const cE9 = dm.camps && dm.camps[E9];
+  ok(rdm.statusCode === 200 && pedidas.length === 4 && pedidas.every((u) => !u.includes("date_from=2026-07")), "Meta: 4 consultas con las fechas de la ventana, no las del selector", pedidas.length);
+  ok(cE9 && cE9.estado === "ACTIVE" && cE9.inicio === "2026-09-09" && cE9.cb === 400 && cE9.lb === null, "estado de hoy, inicio en hora de Tulum y presupuesto de campaña (CBO) en MXN", cE9);
+  ok(cE9 && cE9.cambio && cE9.cambio.fecha === "2026-10-09" && /anuncio nuevo EN_LLAMADA_PREMIUMLOTS-SUSPIRO-SELVA-CLEAN_091026 en EN_LLAMADA_PREMIUMLOTS/.test(cE9.cambio.que),
+    "último cambio: el anuncio nuevo de hoy (Windsor no da la edición significativa; se usa anuncio / conjunto creado o editado)", cE9 && cE9.cambio);
+  const a1 = (dm.ads || []).find((a) => a.id === "a1"), a2 = (dm.ads || []).find((a) => a.id === "a2");
+  ok(a1 && a2 && a1.grp === "EN_LLAMADA_ESCAPE" && a2.grp === "EN_LLAMADA_SEGURIDAD-TULUM" && a1.sp === 1771.2 && a1.res === 2 && a1.fq === 3.4 && a1.url === "https://lotes.selvadentrotulum.com/en/escape",
+    "el mismo creativo en dos conjuntos son dos anuncios (id), con gasto, leads, frecuencia y URL de 30 días", { a1, a2 });
+  ok(a1 && a1.sp7 === 150 && a1.res7 === 1 && a1.spP === 80 && a1.resP === 1 && a2.spP === 20, "gasto y leads de los últimos 7 días y de los 7 anteriores, por anuncio", a1);
+  ok(dm.an && dm.an.length === 1 && dm.an[0].grp === "EN_LLAMADA_ESCAPE" && dm.an[0].sp === 900, "Audience Network por conjunto (solo esa ubicación)", dm.an);
+  ok(dm.dias && dm.dias[E9] && dm.dias[E9]["2026-09-26"].sp === 100 && dm.dias[E9]["2026-10-08"].res === 1, "gasto y leads de plataforma por día y campaña (para gasto detenido y medición rota)", dm.dias && dm.dias[E9]);
   pedidas.length = 0;
-  const rex = await LQ.handler(ev({ action: "adsExtra", start: "2026-09-21", end: "2026-09-28" }));
-  const dex = JSON.parse(rex.body);
-  ok(rex.statusCode === 200 && dex.url && dex.url["120251374799500275"] === "https://lotes.selvadentrotulum.com/en/escape" && dex.url["120250807356450275"] === "http://fb.me/",
-    "adsExtra: URL de destino por anuncio de Meta (fb.me = formulario instantáneo)", dex.url);
-  ok(dex.presu && dex.presu["120251374799490275"] && dex.presu["120251374799490275"].cb === 400 && dex.presu["120248002284280275"].grps["120248002284270275"].gb === 150,
-    "adsExtra: presupuesto de Meta en centavos → MXN (campaña CBO y conjunto)", dex.presu);
-  ok(dex.presu["23715389989"] && dex.presu["23715389989"].cb === 480, "adsExtra: presupuesto de Google ya en MXN, el del día más reciente", dex.presu["23715389989"]);
-  const k39 = (dex.kw || []).find((x) => x.d === "2026-09-21"), k40 = (dex.kw || []).find((x) => x.d === "2026-09-28");
-  ok(dex.kw.length === 2 && k39 && k39.spend === 400 && k39.clicks === 10 && k39.conv === 1 && k39.grp === "Investment Intent" && k40 && k40.spend === 10 && !dex.faltan.length,
-    "adsExtra: gasto por keyword sumado por semana ISO (d = lunes), sin filas vacías", dex.kw);
-  process.env.LQ_TOPE_MS = "200"; global.fetch = simularWindsor(/keyword_text/);
+  const rdg = await LQ.handler(ev({ action: "decision", plat: "google", ventana: V }));
+  const dg = JSON.parse(rdg.body), cUS = dg.camps && dg.camps["23715389989"], kUS = (dg.kw || [])[0];
+  ok(rdg.statusCode === 200 && cUS && cUS.estado === "PAUSED" && cUS.cb === 480 && (dg.ads || [])[0].url === "https://lotes.selvadentrotulum.com/" && dg.dias["23715389989"]["2026-10-07"].sp === 79.85,
+    "Google: estado de la campaña, presupuesto del día más reciente, URL final (ad_final_urls) y días", { cUS, ads: dg.ads });
+  ok(kUS && kUS.sp === 2500.5 && kUS.sp7 === 300 && kUS.spP === 200 && kUS.cvP === 1, "keywords: 30 días y 7 contra 7 (sin importar mayúsculas)", kUS);
+  process.env.LQ_TOPE_MS = "200"; global.fetch = simDec(/publisher_platform/);
   const t0 = Date.now();
-  const rex2 = await LQ.handler(ev({ action: "adsExtra", start: "2026-09-21", end: "2026-09-27" }));
-  const dex2 = JSON.parse(rex2.body);
-  ok(rex2.statusCode === 200 && Date.now() - t0 < 2000 && dex2.faltan.join("|") === "gasto por keyword de Google" && dex2.url["120251374799500275"] && !dex2.kw.length,
-    "si Windsor no contesta a tiempo, adsExtra responde igual con lo que llegó y dice qué faltó", { ms: Date.now() - t0, faltan: dex2.faltan });
+  const rdt = await LQ.handler(ev({ action: "decision", plat: "meta", ventana: V }));
+  const dt = JSON.parse(rdt.body);
+  ok(rdt.statusCode === 200 && Date.now() - t0 < 2000 && dt.faltan.join("|") === "Audience Network de Meta" && dt.ads.length >= 2,
+    "si Windsor no contesta a tiempo, decision responde con lo que llegó y dice qué faltó", { ms: Date.now() - t0, faltan: dt.faltan });
   delete process.env.LQ_TOPE_MS;
+  const rbad = await LQ.handler(ev({ action: "decision", plat: "meta", ventana: { ini: "2026-09-09" } }));
+  ok(rbad.statusCode === 400, "sin ventana completa responde 400", rbad.statusCode);
 
   console.log("\n[lq-analyze] el prompt usa el semáforo y pide una acción por campaña");
   let enviado = null;

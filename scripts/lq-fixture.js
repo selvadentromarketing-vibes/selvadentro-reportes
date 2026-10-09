@@ -29,6 +29,14 @@
 //   ESCAPE_090926      → trabajar los leads sin trabajar, por asesor; reevaluar en 7 días
 //   Google US+CAN      → pausar la campaña (keywords con leads por utm_term)
 //   EN_FORMULARIOMETA  → ⚠ CPL al alza: conjunto EN_LLAMADA_PREMIUMLOTS, frecuencia en Meta Ads
+//
+// Decisión de hoy (Conclusiones) con hoy fijo = 2026-10-05 (window.LQ_HOY_FIJO en la prueba):
+//   Atender hoy   ESCAPE_100626 (anuncio rechazado EN_LLAMADA_ESCAPE-DIANA; preliminar hasta el 09-oct)
+//                 Google MX (medición rota: 2 conversiones el 03–04 oct y 0 leads en el CRM)
+//   Decidir hoy   ESCAPE_090926 (revisar seguimiento) y MX_DYNAMIC_090926 (optimizar costo)
+//   Preliminares  EN_FORMULARIOMETA (faltan 1,000 MXN de gasto, ~4 días: la ventana de 30 días es móvil) y MX_DYNAMIC_150726 si la
+//                 bitácora trae un cambio reciente
+//   Pausadas      Google US+CAN (PAUSED, último gasto 04-oct)
 function fixture() {
   const ETAPAS = ["Nuevo lead (no contactado)", "1er toque", "2ndo toque", "3er toque", "Ultimátum", "Break up", "Sin respuesta",
     "Contacto establecido", "Interés identificado", "Zoom agendado", "Zoom no show / re agendar", "Zoom realizado", "Tour agendado",
@@ -96,16 +104,47 @@ function fixture() {
   const kw = [];
   Object.entries(KW).forEach(([k, lista]) => weeks.forEach((w, wi) => lista.forEach(([t, f]) =>
     kw.push({ d: dia(w, 2), cid: C[k].cid, camp: C[k].camp, grp: C[k].grp, gid: "g_" + k + "_" + lqSlug(C[k].grp), kw: t, spend: C[k].sem[wi] * f, clicks: Math.round(C[k].sem[wi] * f / 40), conv: wi === 1 ? 1 : 0 }))));
-  const presu = {
-    [C.dyn2.cid]: { plat: "Meta", cb: 360, grps: {} }, [C.dyn.cid]: { plat: "Meta", cb: 360, grps: {} }, [C.esc.cid]: { plat: "Meta", cb: 400, grps: {} },
-    [C.esc2.cid]: { plat: "Meta", cb: 400, grps: {} }, [C.form.cid]: { plat: "Meta", cb: 100, grps: {} },
-    [C.gus.cid]: { plat: "Google", cb: 480, grps: {} }, [C.gmx.cid]: { plat: "Google", cb: 150, grps: {} },
-  };
-  // Como en producción: la URL de destino de Meta llega aparte (adsExtra), por ID de anuncio;
-  // la de Google viene en la fila del anuncio (su URL final).
+  // La URL de destino de Meta solo llega con la decisión (no en el detalle de exploración).
   const url = {};
   adRows.forEach((r) => { if (r.plat === "Meta") { if (r.url) url[r.id] = r.url; delete r.url; } });
-  const adExtra = { kw, presu, url, faltan: [] };
+  // Datos de la DECISIÓN DE HOY, como los devuelve la acción `decision` con hoy = 2026-10-05:
+  // 30 días cerrados = 05-sep → 04-oct (toda la data W37–W40), 7 días = W40, 7 anteriores = W39.
+  const V = { hoy: "2026-10-05", ini: "2026-09-05", fin: "2026-10-04", ini7: "2026-09-28", fin7: "2026-10-04", iniP: "2026-09-21", finP: "2026-09-27" };
+  const en = (d, a, b) => d >= a && d <= b;
+  const META = { camps: {}, grps: {}, ads: [], an: [], dias: {}, faltan: [] }, GOO = { camps: {}, ads: [], kw: [], dias: {}, faltan: [] };
+  const ESTADO = { dyn: "ACTIVE", esc: "ACTIVE", esc2: "ACTIVE", form: "ACTIVE", dyn2: "ACTIVE", gus: "PAUSED", gmx: "ENABLED" };
+  const INICIO = { dyn: "2026-09-09", esc: "2026-09-09", esc2: "2026-06-10", form: "2026-06-10", dyn2: "2026-07-15" };
+  const CB = { dyn: 360, esc: 400, esc2: 400, form: 100, dyn2: 360, gus: 480, gmx: 150 };
+  //   ESCAPE_090926: conjunto nuevo el 28-sep → decidir hoy (28-sep + 7 = 05-oct)
+  //   ESCAPE_100626: anuncio nuevo el 02-oct → preliminar hasta el 09-oct; además un anuncio rechazado → Atender hoy
+  const CAMBIO = { esc: { fecha: "2026-09-28", que: "conjunto nuevo EN_LLAMADA_SEGURIDAD-TULUM" }, esc2: { fecha: "2026-10-02", que: "anuncio nuevo EN_LLAMADA_PREMIUMLOTS-5MIN en EN_LLAMADA_PREMIUMLOTS" } };
+  const FQ = { "ad_esc2_0": 3.6, "ad_esc2_1": 3.6 };          // EN_LLAMADA_PREMIUMLOTS-5MIN cansado
+  const RECHAZADO = { "ad_esc2_3": "DISAPPROVED" };            // EN_LLAMADA_ESCAPE-DIANA
+  Object.entries(C).forEach(([k, c]) => {
+    const meta = c.plat === "Meta", P = meta ? META : GOO;
+    P.camps[c.cid] = meta ? { name: c.camp, estado: ESTADO[k], inicio: INICIO[k] || "", cb: CB[k], lb: null, cambio: CAMBIO[k] || null }
+                          : { name: c.camp, estado: ESTADO[k], primario: ESTADO[k] === "PAUSED" ? "PAUSED" : "ELIGIBLE", motivos: "", cb: CB[k], inicio: "", cambio: null };
+    const porAd = {};
+    adRows.filter((r) => r.cid === c.cid).forEach((r) => {
+      // (la fila de Audience Network es una ubicación del MISMO anuncio: se une por conjunto + nombre)
+      const A = porAd[r.grp + "|" + r.name] = porAd[r.grp + "|" + r.name] || { cid: c.cid, gid: r.gid, grp: r.grp, id: r.id, name: r.name, estado: RECHAZADO[r.id] || (meta ? "ACTIVE" : "ENABLED"), aprobacion: meta ? undefined : "APPROVED",
+        url: url[r.id] || r.url || "", sp: 0, res: 0, cl: 0, im: 0, fq: meta ? (FQ[r.id] || 1.8) : undefined, sp7: 0, res7: 0, spP: 0, resP: 0 };
+      A.sp += r.spend; A.res += r.results; A.cl += r.clicks; A.im += r.impr;
+      if (en(r.d, V.ini7, V.fin7)) { A.sp7 += r.spend; A.res7 += r.results; } else if (en(r.d, V.iniP, V.finP)) { A.spP += r.spend; A.resP += r.results; }
+      if (meta && r.pp === "audience_network") { const b = P.an.find((x) => x.cid === c.cid && x.grp === r.grp) || (P.an.push({ cid: c.cid, gid: r.gid, grp: r.grp, sp: 0, res: 0 }), P.an[P.an.length - 1]); b.sp += r.spend; b.res += r.results; }
+    });
+    P.ads.push(...Object.values(porAd));
+    spendRows.filter((r) => r.cid === c.cid && en(r.d, V.iniP, V.fin)).forEach((r) => { const D = P.dias[c.cid] = P.dias[c.cid] || {}; D[r.d] = { sp: r.spend, res: 0 }; });
+  });
+  //   Google MX: la plataforma reporta 2 conversiones el 03 y 04-oct y al CRM no llegó ninguna → medición rota
+  GOO.dias[C.gmx.cid]["2026-10-03"].res = 1; GOO.dias[C.gmx.cid]["2026-10-04"].res = 1;
+  const porKw = {};
+  kw.forEach((r) => { const k = r.cid + "|" + r.kw;
+    const b = porKw[k] = porKw[k] || { cid: r.cid, gid: r.gid, grp: r.grp, kw: r.kw, sp: 0, cl: 0, cv: 0, sp7: 0, cv7: 0, spP: 0, cvP: 0 };
+    b.sp += r.spend; b.cl += r.clicks; b.cv += r.conv;
+    if (en(r.d, V.ini7, V.fin7)) { b.sp7 += r.spend; b.cv7 += r.conv; } else if (en(r.d, V.iniP, V.finP)) { b.spP += r.spend; b.cvP += r.conv; } });
+  GOO.kw = Object.values(porKw);
+  const adExtra = { ventana: V, meta: META, google: GOO, faltan: [] };
   const rawLeads = [], opps = {};
   let n = 0;
   const lead = (w, k, o) => {
