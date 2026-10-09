@@ -92,13 +92,14 @@ S.ghlFetch = async (path) => {
   const prompt = enviado ? enviado.messages[0].content : "";
   ok(ra.statusCode === 200 && da.analisis && Array.isArray(da.analisis.campanias), "devuelve el análisis con campanias", ra.statusCode);
   ok(/SEMÁFORO ROJO → acción "pausar" porque inversión 11,360 MXN ≥ 8,000 MXN con 0 SQL\+/.test(prompt), "cada campaña llega con su semáforo, acción y regla");
-  ok(/"campanias": \[\{"nombre"/.test(prompt) && /subir 20%\|mantener\|optimizar\|pausar\|revisar seguimiento/.test(prompt), "pide una acción por campaña con el vocabulario fijo");
+  ok(/"campanias": \[\{"nombre"/.test(prompt) && /subir presupuesto diario 20%\|mantener\|optimizar\|pausar\|revisar seguimiento/.test(prompt), "pide una acción por campaña con el vocabulario fijo");
   ok(/si menos del 50% de sus leads está trabajado \(la mayoría sigue en "Nuevo lead"\) → revisar seguimiento antes de pausar/.test(prompt)
      && /si ya están trabajados y no contestan, se pausa/.test(prompt), "ROJO: revisar seguimiento solo si menos del 50% está trabajado; trabajados que no contestan, pausar");
   ok(/% trabajados = leads que ya salieron de "Nuevo lead/.test(prompt) && /Sin respuesta y toques no cuentan/.test(prompt), "define trabajados y contactados por separado");
   ok(/meta de costo por SQL 4,000 MXN/.test(prompt) && /costo por SQL 6,000 MXN/.test(prompt), "cifras en MXN");
   ok(!/\$\d/.test(prompt), "ningún monto con $ en el prompt");
   ok(/MUESTRA CHICA = inversión < 8,000 MXN: el color se calcula igual, pero la acción SIEMPRE es mantener/.test(prompt), "muestra chica: la acción siempre es mantener, nunca subir");
+  ok(/subir presupuesto diario 20% \(máx\. 1 vez por semana/.test(prompt) && /tasa SQL \(SQL\+ ÷ leads\) < 10% = optimizar calidad, CPL > 400 MXN = optimizar costo/.test(prompt), "verde con su nota y amarillo con su diagnóstico en el prompt");
   ok(/SQL\+ = SQL \+ SQL Selvadentro/.test(prompt) && !/MQL \+ SQL \+ SQL Selvadentro/.test(prompt), "una sola definición de bueno: SQL+");
 
   console.log(fallas.length ? `\n${fallas.length} prueba(s) fallaron` : "\nTodas las pruebas del backend de Calidad de Leads pasaron");

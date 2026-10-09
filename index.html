@@ -557,7 +557,21 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .lq-sem.verde{ background:#3f7d4e; } .lq-sem.amarillo{ background:#c99a1e; color:#2b2410; } .lq-sem.rojo{ background:var(--rojo); } .lq-sem.gris{ background:#9aa39d; }
   .lq-semcell{ text-align:left; }
   .lq-sem-acc{ font-size:var(--fs-xs); color:var(--texto); font-weight:600; margin-top:3px; }
-  .lq-sem-nota{ font-size:var(--fs-xs); color:var(--rojo); font-weight:400; margin-top:2px; line-height:1.3; }
+  .lq-sem-nota{ font-size:var(--fs-xs); color:var(--neutro); font-weight:400; margin-top:2px; line-height:1.3; }
+  .lq-sem-nota.rojo{ color:var(--rojo); }
+  .lq-que-hacer{ margin-top:3px; font-family:var(--sans); font-size:var(--fs-xs); font-weight:600; color:var(--olivo); background:none; border:none; padding:0; cursor:pointer; }
+  .lq-que-hacer:hover{ text-decoration:underline; }
+  tr.lq-pasos-fila > td{ background:#fbf7ec; white-space:normal; padding:8px 12px 10px; }
+  .lq-pasos-panel{ border-left:3px solid #c99a1e; padding-left:10px; font-size:var(--fs-s); }
+  /* Conclusiones: la regla, los pasos y el detalle de la IA son texto largo: se parten */
+  table.lq-concl td{ white-space:normal; vertical-align:top; }
+  table.lq-concl td:nth-child(1){ min-width:170px; max-width:240px; overflow-wrap:anywhere; }
+  table.lq-concl td:nth-child(3){ min-width:130px; }
+  table.lq-concl td:nth-child(4){ min-width:260px; }
+  table.lq-concl td:nth-child(5){ min-width:200px; }
+  .lq-pasos{ margin:4px 0 0; padding-left:16px; font-size:var(--fs-xs); color:var(--texto); font-weight:400; line-height:1.4; white-space:normal; text-align:left; }
+  .lq-pasos li{ margin:1px 0; }
+  .lq-pasos li:last-child{ color:var(--neutro); font-style:italic; }
   .lq-cps.verde{ color:#3f7d4e; font-weight:700; } .lq-cps.amarillo{ color:#9a7414; font-weight:700; } .lq-cps.rojo{ color:var(--rojo); font-weight:700; }
   .lq-sqlp{ font-weight:700; color:var(--verde-prof); }
   th.lq-sec, td.lq-sec{ color:var(--neutro); font-weight:400; }
@@ -3005,6 +3019,12 @@ const LQ_SEMAFORO = {
   topeAmarillo: 6000,   // AMARILLO: costo por SQL entre la meta y esto → optimizar, no subir; arriba, ROJO
   umbralEval:   8000,   // inversión del rango: debajo y sin SQL+ = EN EVALUACIÓN; desde aquí con 0 SQL+ = ROJO
   minTrabajados: 50,    // % : un ROJO con menos leads TRABAJADOS que esto (siguen en "Nuevo lead") → revisar seguimiento antes de pausar
+  // VERDE: capacidad del telemarketer, para la nota de "subir presupuesto diario"
+  capacidadTelemarketer: 140,   // leads al mes
+  // AMARILLO: diagnóstico de la causa (Dirección, 9-oct-2026)
+  tasaSqlMin: 10,       // % : SQL+ ÷ leads por debajo de esto → "Optimizar calidad"
+  cplMax:     400,      // MXN : CPL (inversión ÷ leads) por encima de esto → "Optimizar costo"
+  gastoKeywordSinSql: 2000,     // MXN : en Google, keyword con más gasto que esto y 0 SQL → pausar
   // Alerta visual de CPL (no cambia el semáforo): el CPL de los últimos `dias` días va más
   // de `pct`% arriba del CPL promedio de los últimos `base` días de la misma campaña.
   alertaCpl: { dias:7, base:30, pct:30 },
@@ -3020,6 +3040,7 @@ const lqSqlPlus = (c)=> (c.sql||0) + (c.sqls||0);
 // mover). `seg` = { n, tr }: leads de la campaña y cuántos ya se trabajaron.
 function lqSemaforo(inv, sqlp, seg){
   const P = LQ_SEMAFORO;
+  seg = seg || {};
   if(!(inv > 0)) return null;
   const chica = inv < P.umbralEval;
   let r;
@@ -3031,11 +3052,13 @@ function lqSemaforo(inv, sqlp, seg){
   } else {
     const cps = inv / sqlp;
     if(cps <= P.metaCostoSql && sqlp >= P.minSqlVerde)
-      r = { c:"verde", txt:"VERDE", k:"subir", acc:`Subir presupuesto ${P.subirPct}%`, regla:`costo por SQL ${lqMXN(cps)} ≤ meta de ${lqMXN(P.metaCostoSql)}, con ${sqlp} SQL+` };
+      r = { c:"verde", txt:"VERDE", k:"subir", acc:`Subir presupuesto diario ${P.subirPct}%`, regla:`costo por SQL ${lqMXN(cps)} ≤ meta de ${lqMXN(P.metaCostoSql)}, con ${sqlp} SQL+`,
+            nota:`Máx. 1 vez por semana y solo si sigue en verde. Verificar que el volumen de leads no rebase la capacidad del telemarketer (~${P.capacidadTelemarketer}/mes).` };
     else if(cps <= P.metaCostoSql)
       r = { c:"amarillo", txt:"AMARILLO", k:"mantener", acc:"Mantener, no subir", regla:`costo por SQL ${lqMXN(cps)} dentro de la meta, pero con ${sqlp} SQL+ (se necesitan ${P.minSqlVerde} para subir)` };
     else if(cps <= P.topeAmarillo)
-      r = { c:"amarillo", txt:"AMARILLO", k:"optimizar", acc:"Optimizar, no subir", regla:`costo por SQL ${lqMXN(cps)} entre ${lqMXN(P.metaCostoSql)} y ${lqMXN(P.topeAmarillo)}` };
+      r = lqDiagAmarillo({ c:"amarillo", txt:"AMARILLO", k:"optimizar", acc:"Optimizar, no subir", regla:`costo por SQL ${lqMXN(cps)} entre ${lqMXN(P.metaCostoSql)} y ${lqMXN(P.topeAmarillo)}` },
+                         inv, sqlp, seg.n, seg.plat);
     else
       r = { c:"rojo", txt:"ROJO", k:"pausar", acc:"Pausar", regla:`costo por SQL ${lqMXN(cps)} > ${lqMXN(P.topeAmarillo)}` };
     r.cps = cps;
@@ -3055,11 +3078,49 @@ function lqSemaforo(inv, sqlp, seg){
   // calcula igual —dice cómo va la campaña— pero la acción SIEMPRE es mantener: con tan
   // poca inversión no se sube presupuesto (ni se pausa) por un resultado que puede ser suerte.
   if(chica){
-    r.k = "mantener"; r.acc = "Mantener (muestra chica)";
+    r.k = "mantener"; r.acc = "Mantener (muestra chica)"; delete r.nota; delete r.pasos; delete r.diag;
     r.regla = `inversión ${lqMXN(inv)} < ${lqMXN(P.umbralEval)}: muestra chica, se mantiene sin importar el color (${r.regla})`;
   }
   return r;
 }
+/* AMARILLO = costo por SQL entre la meta y el tope. En vez de un "optimizar" genérico se
+   diagnostica la causa con los datos de la campaña en el rango (Dirección, 9-oct-2026):
+   · tasa SQL = SQL+ ÷ leads < tasaSqlMin  → el problema es la CALIDAD del lead
+   · CPL = inversión ÷ leads > cplMax      → el problema es el COSTO del lead
+   Si pasan las dos se muestran las dos. Como costo por SQL = CPL ÷ tasa SQL, con los
+   umbrales por defecto (4,000 = 400 ÷ 10%) un amarillo siempre cae en al menos una. Las
+   instrucciones de calidad dependen de la plataforma; las de costo son las mismas. */
+function lqDiagAmarillo(r, inv, sqlp, n, plat){
+  const P = LQ_SEMAFORO;
+  if(!(n > 0)) return r;
+  const tasa = sqlp / n * 100, cpl = inv / n;
+  const calidad = tasa < P.tasaSqlMin, costo = cpl > P.cplMax;
+  if(!calidad && !costo) return r;
+  const pasos = [];
+  if(calidad){
+    if(plat === "Google") pasos.push(
+      "Agregar palabras negativas desde el informe de términos de búsqueda.",
+      `Pausar las keywords con más de ${lqMXN(P.gastoKeywordSinSql)} de gasto y 0 SQL.`);
+    else if(plat === "Meta") pasos.push(
+      "Formulario más filtrante: preguntas de presupuesto y de plazo.",
+      "Quitar Audience Network y las ubicaciones de baja calidad.");
+    else pasos.push("Filtrar mejor el tráfico: el lead que llega no califica.");
+  }
+  if(costo) pasos.push(
+    "Pausar los 2 anuncios con peor CPL.",
+    "Probar 2 creativos nuevos.",
+    "Revisar que la landing coincida con el anuncio.");
+  pasos.push("No tocar presupuesto ni puja. Un cambio a la vez; reevaluar en 7 días.");
+  const causas = [];
+  if(calidad) causas.push(`tasa SQL ${Math.round(tasa*10)/10}% (< ${P.tasaSqlMin}%): calidad`);
+  if(costo) causas.push(`CPL ${lqMXN(cpl)} (> ${lqMXN(P.cplMax)}): costo`);
+  r.acc = calidad && costo ? "Optimizar calidad y costo" : calidad ? "Optimizar calidad" : "Optimizar costo";
+  r.diag = { tasa, cpl, calidad, costo, txt: causas.join(" · ") };
+  r.regla += ` · ${causas.join(" · ")}`;
+  r.pasos = pasos;
+  return r;
+}
+
 // Color del costo por SQL contra la meta, para totales y celdas.
 const lqColorCps = (cps)=> cps==null ? "" : cps <= LQ_SEMAFORO.metaCostoSql ? "verde" : cps <= LQ_SEMAFORO.topeAmarillo ? "amarillo" : "rojo";
 
@@ -4013,7 +4074,7 @@ function lqLeyenda(){
       <span><b>WON</b> leads del cohorte con venta cerrada, sin importar cuándo se cerró. Todo el dinero en MXN</span>
       <span><b>SQL+</b> SQL + SQL Selvadentro: la única definición de lead bueno. CQL y MQL son volumen</span>
       <span><b>Costo por SQL</b> inversión de la campaña en el rango ÷ sus SQL+ · meta ${lqMXN(LQ_SEMAFORO.metaCostoSql)}</span>
-      <span><b>Semáforo</b> verde subir ${LQ_SEMAFORO.subirPct}% · amarillo optimizar · rojo pausar (o revisar seguimiento si menos del ${LQ_SEMAFORO.minTrabajados}% está trabajado) · gris en evaluación · inversión < ${lqMXN(LQ_SEMAFORO.umbralEval)}: mantener (muestra chica) (reglas completas arriba de cada tabla)</span>
+      <span><b>Semáforo</b> verde subir presupuesto diario ${LQ_SEMAFORO.subirPct}% · amarillo optimizar calidad o costo · rojo pausar (o revisar seguimiento si menos del ${LQ_SEMAFORO.minTrabajados}% está trabajado) · gris en evaluación · inversión < ${lqMXN(LQ_SEMAFORO.umbralEval)}: mantener (muestra chica) (reglas completas arriba de cada tabla)</span>
       <span><b>Zoom realizado</b> etapa "Zoom realizado" o posterior. Cita o visita de sitio no cuenta</span>
       <span><b>% trabajados</b> ya salieron de "Nuevo lead (no contactado)" (Sin respuesta y toques incluidos). Si es bajo, el problema es de seguimiento, no de la campaña</span>
       <span><b>% contactados</b> hubo conversación: Contacto establecido, Interés identificado, Nurturing, Zoom, Largo plazo, OPP, WON o posterior. Sin respuesta y toques no cuentan; trabajados altos con contactados bajos = los leads no contestan</span>
@@ -4273,7 +4334,7 @@ function lqCampModel(agg, leads, rangoSet, rango, plat){
     const m = lqMetricas(C.leads, C.spend, C.res);
     m.key = C.key; m.plat = C.plat; m.camp = C.camp; m.C = C;
     m.sinCamp = C.camp === LQ_SIN_CAMP;
-    m.sem = m.sinCamp ? null : lqSemaforo(m.inv, m.sqlp, { n:m.n, tr:m.tr });
+    m.sem = m.sinCamp ? null : lqSemaforo(m.inv, m.sqlp, { n:m.n, tr:m.tr, plat:m.plat });
     m.alerta = m.sinCamp ? null : (alertas[lqNormCamp(C.camp)] || null);
     return m;
   });
@@ -4344,10 +4405,23 @@ const LQ_KEYS_CALIDAD = ["inv","n","cpl","tr","ct","cql","mql","sqlp","zoom","op
 const LQ_KEYS_COMBO   = LQ_KEYS_CALIDAD;     // "Leads plataforma" vive en Datos de campañas
 const lqThs = (keys)=> keys.map(k=>`<th${LQ_CCOLS[k].sec?' class="lq-sec"':""} title="${escAttr(LQ_CCOLS[k].t)}">${LQ_CCOLS[k].th}</th>`).join("");
 const lqPct = (n,d)=> d ? Math.round(n/d*100)+"%" : "—";
-function lqSemCell(sem, vacio, sinAcc){
+// Pasos de una acción (amarillo): lista para Conclusiones y desplegable en la tabla.
+const lqPasosHtml = (sem)=> sem && sem.pasos && sem.pasos.length ? `<ul class="lq-pasos">${sem.pasos.map(x=>`<li>${escAttr(x)}</li>`).join("")}</ul>` : "";
+const lqNotaHtml = (sem)=> sem && sem.nota ? `<div class="lq-sem-nota ${sem.c}">${escAttr(sem.nota)}</div>` : "";
+// Los pasos del amarillo se abren en una fila completa DEBAJO de la campaña: dentro de la
+// celda ensanchaban la columna del semáforo y tapaban el costo por SQL.
+const lqPasosAbierto = (pk)=> !!(lqState.pasos && lqState.pasos[pk]);
+function lqFilaPasos(m, ncols){
+  if(!m || !m.sem || !m.sem.pasos || !m.sem.pasos.length || !m.key) return "";
+  const pk = lqExpKey("pasos|"+m.key);
+  return `<tr class="lq-pasos-fila" data-pasos="${pk}"${lqPasosAbierto(pk)?"":" hidden"}><td colspan="${ncols}" class="lft">
+    <div class="lq-pasos-panel"><b>${escAttr(m.camp)} · ${escAttr(m.sem.acc)}</b>${m.sem.diag?` <span class="lq-sub">— ${escAttr(m.sem.diag.txt)}</span>`:""}${lqPasosHtml(m.sem)}</div></td></tr>`;
+}
+function lqSemCell(sem, vacio, sinAcc, clave){
   if(vacio) return `<td></td>`;
   if(!sem) return `<td class="lq-semcell"><span class="lq-sub" title="Sin inversión en el rango: no hay presupuesto que mover">—</span></td>`;
-  return `<td class="lq-semcell" title="${escAttr(sem.regla)}"><span class="lq-sem ${sem.c}">${sem.txt}</span>${sinAcc?"":`<div class="lq-sem-acc">${escAttr(sem.acc)}</div>${sem.nota?`<div class="lq-sem-nota">${escAttr(sem.nota)}</div>`:""}`}</td>`;
+  const pk = clave && sem.pasos && sem.pasos.length ? lqExpKey("pasos|"+clave) : "";
+  return `<td class="lq-semcell" title="${escAttr(sem.regla)}"><span class="lq-sem ${sem.c}">${sem.txt}</span>${sinAcc?"":`<div class="lq-sem-acc">${escAttr(sem.acc)}</div>${lqNotaHtml(sem)}${pk?`<button type="button" class="lq-que-hacer" data-pasos-btn="${pk}" aria-expanded="${lqPasosAbierto(pk)?"true":"false"}">Qué hacer ${lqPasosAbierto(pk)?"▾":"▸"}</button>`:""}`}</td>`;
 }
 function lqAlertaIcono(al){
   if(!al) return "";
@@ -4381,7 +4455,7 @@ function lqCeldas(m, keys, o){
         const col = (o.total || m.sem) ? lqColorCps(m.cps) : "";
         return `<td class="lq-cps${col?" "+col:""}">${m.cps!=null ? lqMXN(m.cps) : (m.inv>0 && !o.sinMeta ? "sin SQL+" : "—")}</td>`;
       }
-      case "sem":  return o.total ? (o.sinMeta ? `<td></td>` : `<td class="lq-sub">meta ${lqMXN(LQ_SEMAFORO.metaCostoSql)}</td>`) : lqSemCell(m.sem, o.sinSem);
+      case "sem":  return o.total ? (o.sinMeta ? `<td></td>` : `<td class="lq-sub">meta ${lqMXN(LQ_SEMAFORO.metaCostoSql)}</td>`) : lqSemCell(m.sem, o.sinSem, false, o.sinSem ? "" : m.key);
     }
     return "<td></td>";
   }).join("");
@@ -4437,7 +4511,8 @@ function lqQualityTree(agg, leads, rangoSet, rango){
     const sub = (!C.leads.length && C.spend) ? "Con inversión en el rango · sin leads atribuidos"
               : (C.camp===LQ_SIN_CAMP) ? "Leads que llegaron sin campaña en la atribución" : "";
     body += lqQRow(C.key, sub, m, 0, ek, C.grps.length>0,
-      { dot: lqStatusOf(C.key,"camp",stIdx,adIdx), count: `${C.grps.length} conjunto${C.grps.length===1?"":"s"}` }, keys);
+      { dot: lqStatusOf(C.key,"camp",stIdx,adIdx), count: `${C.grps.length} conjunto${C.grps.length===1?"":"s"}` }, keys)
+      + lqFilaPasos(m, keys.length+1);
     if(!lqIsExp(ek)) continue;
     for(const G of C.grps){
       const gek = lqExpKey(C.key+"|"+G.name);
@@ -4595,8 +4670,8 @@ function lqReglasSemaforo(){
   const P = LQ_SEMAFORO, A = P.alertaCpl;
   return `<details class="lq-leyenda lq-reglas-sem"><summary>Reglas del semáforo · meta ${lqMXN(P.metaCostoSql)} por SQL</summary>
     <div class="lq-leyenda-cuerpo">
-      <span><span class="lq-sem verde">VERDE</span> costo por SQL ≤ ${lqMXN(P.metaCostoSql)} y al menos ${P.minSqlVerde} SQL+ → <b>Subir presupuesto ${P.subirPct}%</b></span>
-      <span><span class="lq-sem amarillo">AMARILLO</span> costo por SQL entre ${lqMXN(P.metaCostoSql)} y ${lqMXN(P.topeAmarillo)} → <b>Optimizar, no subir</b></span>
+      <span><span class="lq-sem verde">VERDE</span> costo por SQL ≤ ${lqMXN(P.metaCostoSql)} y al menos ${P.minSqlVerde} SQL+ → <b>Subir presupuesto diario ${P.subirPct}%</b>: máx. 1 vez por semana y solo si sigue en verde; que el volumen de leads no rebase la capacidad del telemarketer (~${P.capacidadTelemarketer}/mes)</span>
+      <span><span class="lq-sem amarillo">AMARILLO</span> costo por SQL entre ${lqMXN(P.metaCostoSql)} y ${lqMXN(P.topeAmarillo)} → se diagnostica la causa: tasa SQL (SQL+ ÷ leads) < ${P.tasaSqlMin}% → <b>Optimizar calidad</b>; CPL > ${lqMXN(P.cplMax)} → <b>Optimizar costo</b> (o las dos). Nunca tocar presupuesto ni puja; un cambio a la vez y reevaluar en 7 días</span>
       <span><span class="lq-sem rojo">ROJO</span> costo por SQL > ${lqMXN(P.topeAmarillo)}, o inversión ≥ ${lqMXN(P.umbralEval)} con 0 SQL+ → <b>Pausar</b>; pero si menos del ${P.minTrabajados}% de sus leads está trabajado (la mayoría sigue en "Nuevo lead") → <b>Revisar seguimiento antes de pausar</b>. Si están trabajados y no contestan, se pausa: el problema es la calidad del lead</span>
       <span><span class="lq-sem gris">EN EVALUACIÓN</span> inversión < ${lqMXN(P.umbralEval)} y sin SQL+ todavía</span>
       <span><b>Muestra chica</b>: con inversión < ${lqMXN(P.umbralEval)} el color se calcula igual, pero la acción siempre es <b>Mantener (muestra chica)</b>: nunca subir presupuesto ni pausar</span>
@@ -4644,8 +4719,8 @@ function lqComboSection(agg, leadsAll, rango, rangoSet){
     <h4>Lectura automática — en corto</h4>
     <p>Se invirtieron <b>${lqMXN(todo.inv)}</b> y llegaron <b>${leads.length} leads</b> al CRM; <b>${todo.sqlp} son SQL+</b> (SQL + SQL Selvadentro).
       Las campañas con inversión trajeron <b>${pag.sqlp} SQL+</b>${pag.cps!=null?`: <b>${lqMXN(pag.cps)} por SQL</b> contra una meta de ${lqMXN(P.metaCostoSql)}`:", así que todavía no hay costo por SQL"}.</p>
-    ${subir.length?`<p class="ok"><span class="lq-sem verde">VERDE</span> <b>Subir presupuesto ${P.subirPct}%:</b> ${subir.map(m=>`${nom(m)} — ${cps(m)}, ${m.sqlp} SQL+`).join(" · ")}.</p>`:""}
-    ${optimizar.length?`<p><span class="lq-sem amarillo">AMARILLO</span> <b>Optimizar, no subir:</b> ${optimizar.map(m=>`${nom(m)} — ${cps(m)}, ${m.sqlp} SQL+`).join(" · ")}.</p>`:""}
+    ${subir.length?`<p class="ok"><span class="lq-sem verde">VERDE</span> <b>Subir presupuesto diario ${P.subirPct}%:</b> ${subir.map(m=>`${nom(m)} — ${cps(m)}, ${m.sqlp} SQL+`).join(" · ")}. Máx. 1 vez por semana y solo si sigue en verde; que el volumen de leads no rebase la capacidad del telemarketer (~${P.capacidadTelemarketer}/mes).</p>`:""}
+    ${optimizar.length?`<p><span class="lq-sem amarillo">AMARILLO</span> ${optimizar.map(m=>`${nom(m)} — <b>${escAttr(m.sem.acc)}</b>: ${cps(m)}${m.sem.diag?`; ${escAttr(m.sem.diag.txt)}`:""}`).join(" · ")}. No tocar presupuesto ni puja; un cambio a la vez y reevaluar en 7 días. Los pasos de cada campaña están en <b>Qué hacer</b>, bajo su semáforo.</p>`:""}
     ${mantener.length?`<p><span class="lq-sem amarillo">AMARILLO</span> <b>Mantener, no subir:</b> ${mantener.map(m=>`${nom(m)} — ${escAttr(m.sem.regla)}`).join(" · ")}.</p>`:""}
     ${pausar.length?`<p class="warn"><span class="lq-sem rojo">ROJO</span> <b>Pausar:</b> ${pausar.map(m=>`${nom(m)} — ${escAttr(m.sem.regla)}${ojoAtrib(m)}`).join(" · ")}.</p>`:""}
     ${revisar.length?`<p class="warn"><span class="lq-sem rojo">ROJO</span> <b>Revisar seguimiento antes de pausar:</b> ${revisar.map(m=>`${nom(m)} — ${cps(m)}; ${escAttr(m.sem.nota)}`).join(" · ")} El problema puede ser de seguimiento, no de la campaña.</p>`:""}
@@ -4662,7 +4737,7 @@ function lqComboSection(agg, leadsAll, rango, rangoSet){
 
   const keys = LQ_KEYS_COMBO;
   const origen = (p)=> p==="Meta"||p==="Google" ? `<span class="lq-orig ${p==="Meta"?"meta":"google"}">${p==="Meta"?"META":"GOOGLE"}</span> ` : "";
-  const filas = rows.map(m=>`<tr><td class="name">${origen(m.plat)}${escAttr(m.sinCamp && m.plat!=="Meta" && m.plat!=="Google" ? (m.plat||"Otra fuente")+" · "+LQ_SIN_CAMP : m.camp)}${lqInfBadge(m.inf)}</td>${lqCeldas(m, keys)}</tr>`).join("");
+  const filas = rows.map(m=>`<tr><td class="name">${origen(m.plat)}${escAttr(m.sinCamp && m.plat!=="Meta" && m.plat!=="Google" ? (m.plat||"Otra fuente")+" · "+LQ_SIN_CAMP : m.camp)}${lqInfBadge(m.inf)}</td>${lqCeldas(m, keys)}</tr>${lqFilaPasos(m, keys.length+1)}`).join("");
   html += lqReglasSemaforo() + lqAvisoIdsSinCruce(M) + `<div class="table-scroll" style="margin-bottom:8px"><table class="cons lq-combo">
     <tr><th class="lft">Campaña</th>${lqThs(keys)}</tr>
     ${filas || `<tr><td colspan="${keys.length+1}" class="lft txt-nota">Sin datos en el rango.</td></tr>`}
@@ -4720,7 +4795,7 @@ function lqDrawCharts(){
 // La acción por campaña la decide el semáforo, no la IA: la tabla de acciones se arma con
 // LQ_SEMAFORO y siempre está, haya o no análisis. La IA aporta el detalle de cada campaña
 // y la lectura; si alguna vez propone otra acción, manda el semáforo y se avisa.
-const LQ_ACC_TXT = { subir:`subir ${LQ_SEMAFORO.subirPct}%`, mantener:"mantener", optimizar:"optimizar", pausar:"pausar", revisar:"revisar seguimiento" };
+const LQ_ACC_TXT = { subir:`subir presupuesto diario ${LQ_SEMAFORO.subirPct}%`, mantener:"mantener", optimizar:"optimizar", pausar:"pausar", revisar:"revisar seguimiento" };
 function lqConclusionesSection(){
   const a = lqState.ia;
   let html = `<h3 style="font-family:var(--serif);color:var(--verde-prof);font-size:var(--fs-xl);margin:6px 0">Conclusiones y acciones</h3>
@@ -4740,11 +4815,11 @@ function lqConclusionesSection(){
       return `<tr><td class="name">${escAttr(m.camp)}${lqInfBadge(m.inf)}</td>
         ${lqSemCell(m.sem, false, true)}
         <td class="lft"><b>${escAttr(m.sem.acc)}</b></td>
-        <td class="lft lq-sub">${escAttr(m.sem.regla)}${m.alerta?` · ⚠ CPL de 7 días al alza`:""}${m.sem.nota?`<div class="lq-sem-nota">${escAttr(m.sem.nota)}</div>`:""}</td>
+        <td class="lft lq-sub">${escAttr(m.sem.regla)}${m.alerta?` · ⚠ CPL de 7 días al alza`:""}${lqNotaHtml(m.sem)}${lqPasosHtml(m.sem)}</td>
         <td class="lft">${x ? escAttr(x.detalle||x.regla||"") : (a ? `<span class="lq-sub">sin detalle de la IA</span>` : `<span class="lq-sub">—</span>`)}${choca?`<div class="lq-sub" style="color:var(--rojo)">La IA sugirió "${escAttr(x.accion)}"; manda el semáforo.</div>`:""}</td></tr>`;
     }).join("");
-    html += `<div class="table-scroll mb-sec"><table class="cons">
-      <tr><th class="lft">Campaña</th><th>Semáforo</th><th class="lft">Acción</th><th class="lft">Regla que la justifica</th><th class="lft">Detalle (IA)</th></tr>
+    html += `<div class="table-scroll mb-sec"><table class="cons lq-concl">
+      <tr><th class="lft">Campaña</th><th>Semáforo</th><th class="lft">Acción</th><th class="lft">Regla y qué hacer</th><th class="lft">Detalle (IA)</th></tr>
       ${filas}</table></div>`;
   }
   if(!a) return html + `<div class="empty-rep">Pulsa <b>Analizar con IA</b> para la lectura del periodo y el detalle de cada acción.</div>`;
@@ -4769,6 +4844,7 @@ function lqConclusionesSection(){
 }
 
 // v7 (2026-10-09): fuera los leads de brokers; un análisis anterior los contaba como SQL+ y WON.
+// v9 (2026-10-09): verde = subir presupuesto diario 20% con su nota; amarillo con diagnóstico.
 // v8 (2026-10-09): la regla de seguimiento mira los TRABAJADOS, no los contactados.
 // v6 (2026-10-09): ROJO con menos de 50% contactados = revisar seguimiento antes de pausar.
 // v5 (2026-10-08): muestra chica (< 8,000 MXN) = mantener, nunca subir; un análisis de la
@@ -4779,7 +4855,7 @@ function lqConclusionesSection(){
 // v2 (2026-09-11): la calificación cambió —OPP eleva a SQL, Budget Range en pesos, fuera
 // pruebas y sin contacto—, así que un análisis guardado con la v1 cita cifras que ya no
 // son las de la pantalla. Se paga una vez más por rango y se comparte otra vez.
-const LQ_IA_KEY = "lq:ia:v8:";
+const LQ_IA_KEY = "lq:ia:v9:";
 const LQ_IA_TTL = 12*3600e3;          // 12 h: el rango no cambia tanto como para pagar de nuevo
 
 // Devuelve el análisis guardado de este rango si sigue vigente. La clave incluye la
@@ -4821,7 +4897,7 @@ async function lqAnalizar(forzar){
       costoSql:r0(m.cps), cpl:r0(m.cpl), zoom:m.zoom, opp:m.opp, won:m.won,
       trabajadosPct: m.n ? Math.round(m.tr/m.n*100) : null,
       contactadosPct: m.n ? Math.round(m.ct/m.n*100) : null,
-      semaforo:m.sem.txt, accion:LQ_ACC_TXT[m.sem.k], regla:m.sem.regla, nota:m.sem.nota||"", muestraChica:!!m.sem.chica,
+      semaforo:m.sem.txt, accion:LQ_ACC_TXT[m.sem.k], accionTexto:m.sem.acc, regla:m.sem.regla, nota:m.sem.nota||"", pasos:m.sem.pasos||[], muestraChica:!!m.sem.chica,
       alertaCpl: m.alerta ? (m.alerta.cpl7!=null ? `CPL 7 días ${r0(m.alerta.cpl7)} MXN vs. promedio 30 días ${r0(m.alerta.prom)} MXN (+${m.alerta.pct}%)` : `${r0(m.alerta.sp7)} MXN en 7 días sin leads`) : "",
       inferidos:m.inf||0,
     }));
@@ -4843,7 +4919,7 @@ async function lqAnalizar(forzar){
     const payload = {
       rango: rango.length ? `${rango[0]} → ${rango[rango.length-1]}` : "—",
       moneda: "MXN",
-      parametros: { metaCostoSql:P.metaCostoSql, minSqlVerde:P.minSqlVerde, subirPct:P.subirPct, topeAmarillo:P.topeAmarillo, umbralEval:P.umbralEval, minTrabajados:P.minTrabajados, alertaCpl:P.alertaCpl },
+      parametros: { metaCostoSql:P.metaCostoSql, minSqlVerde:P.minSqlVerde, subirPct:P.subirPct, topeAmarillo:P.topeAmarillo, umbralEval:P.umbralEval, minTrabajados:P.minTrabajados, capacidadTelemarketer:P.capacidadTelemarketer, tasaSqlMin:P.tasaSqlMin, cplMax:P.cplMax, alertaCpl:P.alertaCpl },
       totales: { inv:r0(d.todo&&d.todo.inv), leads:L.length, sqlPlus:d.todo?d.todo.sqlp:0,
                  invPagada:r0(d.pagado&&d.pagado.inv), sqlPlusPagado:d.pagado?d.pagado.sqlp:0, costoSql:r0(d.pagado&&d.pagado.cps),
                  won:L.filter(l=>(l.w||0)>0).length,
@@ -5194,6 +5270,16 @@ function lqRender(){
   if(diagR) diagR.onclick=()=>{ lqState.diagReglas = !lqState.diagReglas; lqRender(); };
   // Desplegar / plegar filas del árbol
   lqState.exp = lqState.exp || {};
+  // "Qué hacer" del semáforo abre/cierra su fila de pasos sin desplegar la campaña (el clic
+  // no sube a la fila) y sin volver a pintar todo el reporte.
+  document.querySelectorAll("[data-pasos-btn]").forEach(b=>b.onclick=(e)=>{
+    e.stopPropagation();
+    const pk = b.dataset.pasosBtn, abre = !lqPasosAbierto(pk);
+    lqState.pasos = lqState.pasos || {};
+    if(abre) lqState.pasos[pk] = true; else delete lqState.pasos[pk];
+    document.querySelectorAll(`tr[data-pasos="${pk}"]`).forEach(tr=>{ tr.hidden = !abre; });
+    document.querySelectorAll(`[data-pasos-btn="${pk}"]`).forEach(x=>{ x.textContent = "Qué hacer " + (abre ? "▾" : "▸"); x.setAttribute("aria-expanded", abre ? "true" : "false"); });
+  });
   document.querySelectorAll("[data-lq-exp]").forEach(tr=>tr.onclick=()=>{
     const k = tr.dataset.lqExp;
     if(lqState.exp[k]) delete lqState.exp[k]; else lqState.exp[k]=true;

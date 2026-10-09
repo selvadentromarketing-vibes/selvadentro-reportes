@@ -5,15 +5,16 @@
 //
 // Resultado esperado del semáforo (meta 4,000 MXN por SQL, umbral 8,000 MXN; con menos de
 // 8,000 invertidos el color se calcula igual pero la acción es "Mantener (muestra chica)"):
-//   MX_DYNAMIC_090926   9,200 · 2 SQL+ (8 leads con atribución inferida) → AMARILLO optimizar
+//   MX_DYNAMIC_090926   9,200 · 2 SQL+ de 10 leads (8 con atribución inferida) → AMARILLO, optimizar costo
+//                       (tasa SQL 20% ≥ 10%, CPL 920 MXN > 400)
 //   US/CA_ESCAPE_090926 11,200 · 0 SQL+ · 43% trabajados, 14% contactados → ROJO, revisar seguimiento antes de pausar
-//   US/CA_ESCAPE_100626 10,000 · 0 SQL+ · 100% trabajados, 75% contactados → ROJO pausar
+//   US/CA_ESCAPE_100626 10,000 · 2 SQL+ de 22 leads → AMARILLO, optimizar calidad y costo (tasa 9.1%, CPL 455)
 //   EN_FORMULARIOMETA   7,000 · 2 SQL+ (cruce por ID)  · alerta de CPL   → VERDE, mantener (muestra chica)
 //   GOOGLE SEARCH MX    3,600 · 3 leads (2 con utm = ID 23710551755, 1 con
 //                       el alias INVESTORS-GOOGLE-SEARCH-MX) · 1 SQL+    → AMARILLO, mantener (muestra chica)
 //   GOOGLE US+CAN      13,600 · 0 SQL+ (utm numérico) · 100% trabajados, 60% contactados → ROJO pausar
-//   MX_DYNAMIC_150726  10,400 · 3 SQL+                                  → VERDE subir 20%
-//   Total pagado       65,000 · 8 SQL+ → 8,125 MXN por SQL · 4 leads sin campaña
+//   MX_DYNAMIC_150726  10,400 · 3 SQL+                                  → VERDE, subir presupuesto diario 20%
+//   Total pagado       65,000 · 10 SQL+ → 6,500 MXN por SQL · 4 leads sin campaña
 //   3 leads de brokers (uno es "Jennifer Guillaume", WON) excluidos de todo: no mueven ninguna
 //   cifra; un contacto del pipeline de reclutamiento de brokers sí cuenta (orgánico).
 function fixture() {
@@ -85,8 +86,9 @@ function fixture() {
   lead(weeks[0], 4, { src: "google", cf: { f_camp: "23710551755" }, attr: { src: "google" }, etapa: "Interés identificado" });
   lead(weeks[1], 4, { src: "google", cf: { f_camp: "23710551755" }, attr: { src: "google" }, etapa: "1er toque" });
   lead(weeks[2], 4, { src: "google", cf: { f_camp: "INVESTORS-GOOGLE-SEARCH-MX" }, attr: { src: "google" }, etapa: "Contacto establecido" });
-  // US/CA_ESCAPE_100626: 4 leads, 3 con contacto establecido (75%) y ningún SQL+ → ROJO, pausar
-  ["Contacto establecido", "Contacto establecido", "Contacto establecido", "1er toque"]
+  // US/CA_ESCAPE_100626: 22 leads y 2 SQL+ → costo por SQL 5,000 (AMARILLO). Tasa SQL 9.1% (< 10%)
+  // y CPL 455 MXN (> 400): "Optimizar calidad y costo", con los pasos de Meta.
+  [...Array(2).fill("Interés identificado"), ...Array(8).fill("Contacto establecido"), ...Array(6).fill("Sin respuesta"), ...Array(6).fill("1er toque")]
     .forEach((e, i) => lead(weeks[(i + 3) % 4], 6, { src: "Meta ads", cf: { f_camp: C.esc2.camp }, attr: { src: "facebook" }, etapa: e }));
   // Google US+CAN: utm_campaign = id numérico de la campaña. 5 leads, todos trabajados, 3 con
   // conversación (60%) y 0 SQL+: no contestan bien, el problema es el lead → ROJO, pausar

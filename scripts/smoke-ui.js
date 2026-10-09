@@ -347,6 +347,8 @@ const PORT = process.env.PORT || 8765;
     r.alertas = Object.keys(lqAlertasCpl(agg, ['2026-W37', '2026-W38', '2026-W39', '2026-W40'])).join('|');
     // ROJO con menos de 50% contactados → revisar seguimiento antes de pausar (no con muestra chica)
     const S2 = (inv, n, c) => { const x = lqSemaforo(inv, n, c); return x.c + ':' + x.k; };
+    const D = (inv, n, nl, plat) => { const x = lqSemaforo(inv, n, { n: nl, tr: nl, plat }); return x.acc + ' [' + (x.pasos || []).length + '] ' + (x.pasos || []).slice(0, 2).join(' / '); };
+    r.diagUnit = [D(10000, 2, 30, 'Google'), D(10000, 2, 15, 'Meta'), D(10000, 2, 22, 'Meta'), D(7000, 1, 30, 'Google')].join(' || ');
     r.semSeg = [S2(12000, 0, { n: 10, tr: 4 }), S2(12000, 0, { n: 10, tr: 5 }), S2(30000, 3, { n: 10, tr: 1 }), S2(7000, 1, { n: 10, tr: 1 }), S2(12000, 0, { n: 0, tr: 0 })].join(' ');
     const txt = () => document.getElementById('lq-content').textContent;
     const filas = (sel) => [...document.querySelectorAll(sel + ' tr')].filter(tr => tr.querySelector('td.name'));
@@ -382,10 +384,24 @@ const PORT = process.env.PORT || 8765;
     r.sinJenniferCombo = !/Jennifer/.test(t);
     // Muestra chica: la lectura nunca pone en "subir" una campaña con menos de 8,000 MXN
     const lect = [...document.querySelectorAll('#lq-content .lq-lectura p')].map(p => p.textContent);
-    const lSubir = lect.find(x => /Subir presupuesto 20%:/.test(x)) || '', lChica = lect.find(x => /Mantener \(muestra chica\)/.test(x)) || '';
+    const lSubir = lect.find(x => /Subir presupuesto diario 20%:/.test(x)) || '', lChica = lect.find(x => /Mantener \(muestra chica\)/.test(x)) || '';
     r.lecturaChica = /MX_DYNAMIC-TOPLPS_150726/.test(lSubir) && !/FORMULARIOMETA/.test(lSubir) && /FORMULARIOMETA/.test(lChica) && /GOOGLE SEARCH -- MX/.test(lChica) && !/US\+CAN/.test(lChica);
     const lPausa = lect.find(x => /Pausar:/.test(x)) || '', lRev = lect.find(x => /Revisar seguimiento antes de pausar:/.test(x)) || '';
-    r.lecturaSeg = /ESCAPE_100626/.test(lPausa) && /GOOGLE SEARCH - US\+CAN/.test(lPausa) && !/ESCAPE_090926/.test(lPausa) && /ESCAPE_090926/.test(lRev) && /no se han trabajado/.test(lRev);
+    r.lecturaSeg = /GOOGLE SEARCH - US\+CAN/.test(lPausa) && !/ESCAPE_090926/.test(lPausa) && !/ESCAPE_100626/.test(lPausa) && /ESCAPE_090926/.test(lRev) && /no se han trabajado/.test(lRev);
+    // Verde con su nota y amarillo con diagnóstico (Dirección, 9-oct-2026)
+    const lAm = lect.find(x => /AMARILLO/.test(x) && /Optimizar/.test(x)) || '';
+    r.lecturaAmarillo = /ESCAPE_100626 — Optimizar calidad y costo: 5,000 MXN por SQL; tasa SQL 9.1% \(< 10%\): calidad · CPL 455 MXN \(> 400 MXN\): costo/.test(lAm)
+      && /MX_DYNAMIC-TOPLPS_090926 — Optimizar costo/.test(lAm) && /No tocar presupuesto ni puja/.test(lAm) && /capacidad del telemarketer \(~140\/mes\)/.test(lSubir);
+    const celdaSem = (nombre) => { const tr = [...document.querySelectorAll('table.lq-combo tr')].find(x => x.querySelector('td.name') && x.querySelector('td.name').textContent.replace(/^(META|GOOGLE)\s*/, '').replace(/\s*\d+ con atribución inferida$/, '').trim() === nombre); return tr ? tr.querySelector('td.lq-semcell') : null; };
+    const cEsc = celdaSem('INVESTORS_US/CA_ESCAPE_100626'), c090 = celdaSem('INVESTORS_MX_DYNAMIC-TOPLPS_090926'), c150 = celdaSem('INVESTORS_MX_DYNAMIC-TOPLPS_150726');
+    const filaPasos = (c) => { const b = c && c.querySelector('[data-pasos-btn]'); return b ? document.querySelector(`tr[data-pasos="${b.dataset.pasosBtn}"]`) : null; };
+    const pasos = (c) => { const f = filaPasos(c); return f ? [...f.querySelectorAll('.lq-pasos li')].map(li => li.textContent).join(' / ') : ''; };
+    { const b = cEsc && cEsc.querySelector('[data-pasos-btn]'), f = filaPasos(cEsc);
+      const a = f && f.hidden; if (b) b.click(); const d = f && f.hidden; if (b) b.click();
+      r.togglePasos = [a, d, f && f.hidden, !!(cEsc && filaPasos(c150))].join('>'); }
+    r.diagEscape = pasos(cEsc);
+    r.diag090 = pasos(c090);
+    r.notaVerde = c150 ? (c150.querySelector('.lq-sem-nota') || {}).textContent || '' : '';
     const fUS = celda['INVESTORS - GOOGLE SEARCH - US+CAN'] || {};
     r.filaUS = [fUS['Leads CRM'], fUS['% trabajados'], fUS['% contactados'], fUS['SQL+'], (sem['INVESTORS - GOOGLE SEARCH - US+CAN'] || '')].join(' ');
     const nota = [...document.querySelectorAll('table.lq-combo tr')].find(tr => /ESCAPE_090926/.test(tr.textContent));
@@ -442,9 +458,9 @@ const PORT = process.env.PORT || 8765;
   }, fixture());
   const semEsp = {
     'INVESTORS_US/CA_ESCAPE_090926': 'ROJO|Revisar seguimiento antes de pausar',
-    'INVESTORS_US/CA_ESCAPE_100626': 'ROJO|Pausar',
-    'INVESTORS_MX_DYNAMIC-TOPLPS_150726': 'VERDE|Subir presupuesto 20%',
-    'INVESTORS_MX_DYNAMIC-TOPLPS_090926': 'AMARILLO|Optimizar, no subir',
+    'INVESTORS_US/CA_ESCAPE_100626': 'AMARILLO|Optimizar calidad y costo',
+    'INVESTORS_MX_DYNAMIC-TOPLPS_150726': 'VERDE|Subir presupuesto diario 20%',
+    'INVESTORS_MX_DYNAMIC-TOPLPS_090926': 'AMARILLO|Optimizar costo',
     'INVESTORS_EN_FORMULARIOMETA_TULUM_100626': 'VERDE|Mantener (muestra chica)',
     'INVESTORS - GOOGLE SEARCH - US+CAN': 'ROJO|Pausar',
     'INVESTORS - GOOGLE SEARCH -- MX': 'AMARILLO|Mantener (muestra chica)',
@@ -460,13 +476,19 @@ const PORT = process.env.PORT || 8765;
     && lqx.alertas === 'INVESTORSENFORMULARIOMETATULUM100626' && lqx.alertaFila === 'INVESTORS_EN_FORMULARIOMETA_TULUM_100626'
     && lqx.tarjetas && lqx.columnas === 'Campaña|Inversión|Leads CRM|CPL|% trabajados|% contactados|CQL|MQL|SQL+|Zoom realizado|OPP|WON|Costo por SQL|Semáforo'
     && Object.entries(semEsp).every(([k, v]) => lqx.semaforos[k] === v)
-    && lqx.embudo090 === '2 2 1 · 40% 4,600 MXN' && /Total pagado.*65,000 MXN.*8,125 MXN/.test(lqx.totalPagado)
-    && lqx.inferidaBadge && lqx.sinPesos && lqx.sinCampania === '4 de 51 · filas 4'
+    && lqx.embudo090 === '2 2 1 · 40% 4,600 MXN' && /Total pagado.*65,000 MXN.*6,500 MXN/.test(lqx.totalPagado)
+    && lqx.inferidaBadge && lqx.sinPesos && lqx.sinCampania === '4 de 69 · filas 4'
     && lqx.grafica === 'true 7 INVESTORS - GOOGLE SEARCH - US+CAN | 13,600 MXN · 0 SQL+ | ROJO'
-    && lqx.tarjetasBk === '51 9 1' && lqx.notaBkCombo && lqx.sinJenniferCombo && lqx.notaBkCalidad && lqx.sinJenniferCalidad
+    && lqx.tarjetasBk === '69 11 1' && lqx.notaBkCombo && lqx.sinJenniferCombo && lqx.notaBkCalidad && lqx.sinJenniferCalidad
     && /^Jennifer Guillaume\|Lead \d+\|Lead \d+ · vista 0 · canal 2$/.test(lqx.brokers) && lqx.sumarOppBk === '101' && lqx.semEnCalidad && lqx.sinMetricasViejas
     && lqx.matrizOculta && lqx.matrizConBoton && lqx.datosFila === 'Campaña|Inversión|Leads plataforma|Leads CRM|CPL' && lqx.datosPliegue
-    && lqx.conclusiones === 'Pausar|Revisar seguimiento antes de pausar|Subir presupuesto 20%|Pausar|Optimizar, no subir|Mantener (muestra chica)|Mantener (muestra chica)';
+    && lqx.conclusiones === 'Pausar|Revisar seguimiento antes de pausar|Subir presupuesto diario 20%|Optimizar calidad y costo|Optimizar costo|Mantener (muestra chica)|Mantener (muestra chica)'
+    && lqx.lecturaAmarillo
+    && lqx.togglePasos === 'true>false>true>false'
+    && lqx.diagEscape === 'Formulario más filtrante: preguntas de presupuesto y de plazo. / Quitar Audience Network y las ubicaciones de baja calidad. / Pausar los 2 anuncios con peor CPL. / Probar 2 creativos nuevos. / Revisar que la landing coincida con el anuncio. / No tocar presupuesto ni puja. Un cambio a la vez; reevaluar en 7 días.'
+    && lqx.diag090 === 'Pausar los 2 anuncios con peor CPL. / Probar 2 creativos nuevos. / Revisar que la landing coincida con el anuncio. / No tocar presupuesto ni puja. Un cambio a la vez; reevaluar en 7 días.'
+    && lqx.notaVerde === 'Máx. 1 vez por semana y solo si sigue en verde. Verificar que el volumen de leads no rebase la capacidad del telemarketer (~140/mes).'
+    && lqx.diagUnit === 'Optimizar calidad [3] Agregar palabras negativas desde el informe de términos de búsqueda. / Pausar las keywords con más de 2,000 MXN de gasto y 0 SQL. || Optimizar costo [4] Pausar los 2 anuncios con peor CPL. / Probar 2 creativos nuevos. || Optimizar calidad y costo [6] Formulario más filtrante: preguntas de presupuesto y de plazo. / Quitar Audience Network y las ubicaciones de baja calidad. || Mantener (muestra chica) [0] ';
   console.log('\n[calidad de leads] rediseño', JSON.stringify(lqx));
   for (const sub of ['combinado', 'calidad', 'datos', 'conclusiones']) {
     await page.evaluate((sub) => { lqState.sub = sub; lqRender(); }, sub);

@@ -97,12 +97,26 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
 
   | Estado | Regla (valores por defecto) | Acción |
   |---|---|---|
-  | VERDE | costo por SQL ≤ 4,000 MXN y al menos 2 SQL+ | Subir presupuesto 20% |
-  | AMARILLO | costo por SQL entre 4,000 y 6,000 MXN | Optimizar, no subir |
+  | VERDE | costo por SQL ≤ 4,000 MXN y al menos 2 SQL+ | Subir presupuesto diario 20%, con la nota: máx. 1 vez por semana y solo si sigue en verde; que el volumen de leads no rebase la capacidad del telemarketer (~140/mes, `capacidadTelemarketer`) |
+  | AMARILLO | costo por SQL entre 4,000 y 6,000 MXN | Diagnóstico con los datos de la campaña en el rango (ver abajo) |
   | AMARILLO | costo por SQL ≤ 4,000 MXN pero 1 solo SQL+ (con los valores actuales siempre cae en muestra chica) | Mantener, no subir |
   | ROJO | costo por SQL > 6,000 MXN, o inversión ≥ 8,000 MXN con 0 SQL+ | Pausar |
   | ROJO con < 50% de leads **trabajados** (`minTrabajados`) | igual que ROJO, pero la mayoría de sus leads siguen en "Nuevo lead" | Revisar seguimiento antes de pausar (con la nota en la celda). Si están trabajados y no contestan, sigue siendo Pausar: el problema es la calidad del lead |
   | EN EVALUACIÓN (gris) | inversión < 8,000 MXN y sin SQL+ | Mantener (muestra chica) |
+
+  **Diagnóstico del AMARILLO** (Dirección, 9-oct-2026; `lqDiagAmarillo`): tasa SQL = SQL+ ÷
+  leads y CPL = inversión ÷ leads de la campaña en el rango.
+  · tasa SQL < 10% (`tasaSqlMin`) → **Optimizar calidad**. Google: agregar negativas desde
+    los términos de búsqueda y pausar keywords con más de 2,000 MXN de gasto y 0 SQL
+    (`gastoKeywordSinSql`). Meta: formulario más filtrante (preguntas de presupuesto y
+    plazo) y quitar Audience Network y ubicaciones de baja calidad.
+  · CPL > 400 MXN (`cplMax`) → **Optimizar costo**: pausar los 2 anuncios con peor CPL,
+    probar 2 creativos nuevos, revisar que la landing coincida con el anuncio.
+  · Si pasan las dos, "Optimizar calidad y costo" con los dos juegos de pasos. Siempre: "No
+    tocar presupuesto ni puja. Un cambio a la vez; reevaluar en 7 días."
+  Como costo por SQL = CPL ÷ tasa SQL, con 4,000 = 400 ÷ 10% todo amarillo cae en al menos
+  una causa. Los pasos se abren con **Qué hacer** bajo el semáforo (fila completa debajo de
+  la campaña) y salen completos en Conclusiones. Todos los umbrales viven en `LQ_SEMAFORO`.
 
   **Muestra chica** (inversión < 8,000 MXN): el color se calcula igual, pero la acción es
   siempre **"Mantener (muestra chica)"**: nunca "Subir presupuesto 20%" ni "Pausar"
@@ -165,7 +179,7 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
 - **Conclusiones IA**: el prompt recibe el semáforo ya calculado y devuelve una acción por
   campaña (subir 20% / mantener / optimizar / pausar) con la regla que la justifica; la
   tabla de acciones se arma con el semáforo aunque no se haya corrido la IA, y si la IA
-  propone otra acción manda el semáforo. Cache `lq:ia:v8:`.
+  propone otra acción manda el semáforo. Cache `lq:ia:v9:`.
 - Pruebas: `node scripts/test-lq.js` (backend con GHL y Anthropic simulados) y el bloque
   `lq:rediseño` de `scripts/smoke-ui.js` con los datos sintéticos de
   `scripts/lq-fixture.js` (W37–W40, los cinco estados del semáforo).

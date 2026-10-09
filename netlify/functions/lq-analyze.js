@@ -8,7 +8,7 @@
 //   { rango, moneda:"MXN", parametros:{metaCostoSql,minSqlVerde,subirPct,topeAmarillo,umbralEval,alertaCpl},
 //     totales:{inv,leads,sqlPlus,invPagada,sqlPlusPagado,costoSql,won,sinCampania:{leads,sqlPlus}},
 //     campanias:[{nombre,plataforma,inv,leadsPlataforma,leads,sqlPlus,costoSql,cpl,zoom,opp,won,
-//       trabajadosPct,contactadosPct,semaforo,accion,regla,nota,muestraChica,alertaCpl,inferidos}],
+//       trabajadosPct,contactadosPct,semaforo,accion,accionTexto,regla,nota,pasos,muestraChica,alertaCpl,inferidos}],
 //     anuncios:[{nombre,estado,inv,leads,sqlPlus}], integridad:{fuente,asesor,calificacion,duplicados} }
 //
 // El semáforo (y por lo tanto la acción de cada campaña) lo calcula la app con sus
@@ -43,14 +43,16 @@ exports.handler = async (event) => {
   catch { return json(400, { error: "JSON inválido" }); }
 
   const T = d.totales || {};
-  const P = Object.assign({ metaCostoSql: 4000, minSqlVerde: 2, subirPct: 20, topeAmarillo: 6000, umbralEval: 8000, minTrabajados: 50 }, d.parametros || {});
+  const P = Object.assign({ metaCostoSql: 4000, minSqlVerde: 2, subirPct: 20, topeAmarillo: 6000, umbralEval: 8000, minTrabajados: 50, capacidadTelemarketer: 140, tasaSqlMin: 10, cplMax: 400 }, d.parametros || {});
   // Tope de tamaño: sin él, un body arbitrario infla el prompt (y la cuenta de la API).
   const camps = (d.campanias || []).slice(0, 20).map((c) =>
     `- ${c.nombre} [${c.plataforma || "?"}]: inversión ${money(c.inv)} · ${c.leadsPlataforma ?? "—"} leads en plataforma · ${c.leads} leads en CRM · ` +
     `${c.sqlPlus} SQL+ · costo por SQL ${c.costoSql != null ? money(c.costoSql) : "sin SQL+"} · CPL ${money(c.cpl)} · ` +
     `${c.zoom} Zoom realizado · ${c.opp} OPP · ${c.won} WON · ${c.trabajadosPct ?? "—"}% trabajados · ${c.contactadosPct ?? "—"}% contactados · ` +
     `SEMÁFORO ${c.semaforo}${c.muestraChica ? " (muestra chica)" : ""} → acción "${c.accion}" porque ${c.regla}` +
+    (c.accionTexto && c.accionTexto.toLowerCase() !== String(c.accion || "").toLowerCase() ? ` (${c.accionTexto})` : "") +
     (c.nota ? ` · NOTA: ${c.nota}` : "") +
+    (Array.isArray(c.pasos) && c.pasos.length ? ` · PASOS: ${c.pasos.slice(0, 8).join(" / ")}` : "") +
     (c.alertaCpl ? ` · ALERTA CPL: ${c.alertaCpl}` : "") +
     (c.inferidos ? ` · ${c.inferidos} leads con atribución inferida (landing de seguridad sin UTM)` : "")
   ).join("\n");
@@ -66,7 +68,7 @@ exports.handler = async (event) => {
 
 Definiciones que NO se reinterpretan: SQL+ = SQL + SQL Selvadentro, la métrica principal (la única definición de lead "bueno") · Costo por SQL = inversión de la campaña en el rango ÷ SQL+ de esa campaña · CQL y MQL son solo volumen · Embudo: Lead → CQL → MQL → SQL → Zoom realizado → OPP → WON (una cita o visita de sitio no es Zoom realizado) · % trabajados = leads que ya salieron de "Nuevo lead (no contactado)" (Sin respuesta y toques incluidos); si es bajo, el problema es de seguimiento, no de la campaña · % contactados = leads con conversación (Contacto establecido, Interés identificado, Nurturing, Zoom, Largo plazo, OPP, WON o posterior; Sin respuesta y toques no cuentan); trabajados altos con contactados bajos = los leads no contestan, problema de calidad del lead.
 
-SEMÁFORO (ya calculado por la app, no lo recalcules ni lo cambies): meta de costo por SQL ${money(P.metaCostoSql)}. VERDE = costo por SQL ≤ ${money(P.metaCostoSql)} con al menos ${P.minSqlVerde} SQL+ → subir ${P.subirPct}% · AMARILLO = costo por SQL entre ${money(P.metaCostoSql)} y ${money(P.topeAmarillo)} → optimizar, no subir · ROJO = costo por SQL > ${money(P.topeAmarillo)}, o inversión ≥ ${money(P.umbralEval)} con 0 SQL+ → pausar; PERO si menos del ${P.minTrabajados}% de sus leads está trabajado (la mayoría sigue en "Nuevo lead") → revisar seguimiento antes de pausar (el problema puede ser de ventas, no de la campaña); si ya están trabajados y no contestan, se pausa (el problema es la calidad del lead) · EN EVALUACIÓN = inversión < ${money(P.umbralEval)} sin SQL+. MUESTRA CHICA = inversión < ${money(P.umbralEval)}: el color se calcula igual, pero la acción SIEMPRE es mantener; nunca recomiendes subir presupuesto (ni pausar) una campaña con muestra chica, aunque vaya en verde. La alerta de CPL es solo una alerta: no cambia la acción.
+SEMÁFORO (ya calculado por la app, no lo recalcules ni lo cambies): meta de costo por SQL ${money(P.metaCostoSql)}. VERDE = costo por SQL ≤ ${money(P.metaCostoSql)} con al menos ${P.minSqlVerde} SQL+ → subir presupuesto diario ${P.subirPct}% (máx. 1 vez por semana, solo si sigue en verde y sin rebasar la capacidad del telemarketer de ~${P.capacidadTelemarketer} leads/mes) · AMARILLO = costo por SQL entre ${money(P.metaCostoSql)} y ${money(P.topeAmarillo)} → optimizar sin tocar presupuesto ni puja, según la causa que ya diagnosticó la app: tasa SQL (SQL+ ÷ leads) < ${P.tasaSqlMin}% = optimizar calidad, CPL > ${money(P.cplMax)} = optimizar costo; un cambio a la vez y reevaluar en 7 días · ROJO = costo por SQL > ${money(P.topeAmarillo)}, o inversión ≥ ${money(P.umbralEval)} con 0 SQL+ → pausar; PERO si menos del ${P.minTrabajados}% de sus leads está trabajado (la mayoría sigue en "Nuevo lead") → revisar seguimiento antes de pausar (el problema puede ser de ventas, no de la campaña); si ya están trabajados y no contestan, se pausa (el problema es la calidad del lead) · EN EVALUACIÓN = inversión < ${money(P.umbralEval)} sin SQL+. MUESTRA CHICA = inversión < ${money(P.umbralEval)}: el color se calcula igual, pero la acción SIEMPRE es mantener; nunca recomiendes subir presupuesto (ni pausar) una campaña con muestra chica, aunque vaya en verde. La alerta de CPL es solo una alerta: no cambia la acción.
 
 PERIODO: ${d.rango || "—"}
 
@@ -83,7 +85,7 @@ INTEGRIDAD DEL CRM: ${integ.fuente || "—"} de los leads con fuente identificad
 Devuelve SOLO un objeto JSON válido, sin texto alrededor y sin bloques de código, con esta forma exacta:
 {
   "lectura": "2 a 3 oraciones: qué pasó con el dinero y los SQL+ este periodo, con el costo por SQL total contra la meta y las campañas concretas.",
-  "campanias": [{"nombre":"nombre exacto de la campaña","accion":"subir ${P.subirPct}%|mantener|optimizar|pausar|revisar seguimiento","regla":"la regla del semáforo que la justifica, con su cifra","detalle":"1 oración, máximo 25 palabras: qué hacer exactamente en esa campaña"}],
+  "campanias": [{"nombre":"nombre exacto de la campaña","accion":"subir presupuesto diario ${P.subirPct}%|mantener|optimizar|pausar|revisar seguimiento","regla":"la regla del semáforo que la justifica, con su cifra","detalle":"1 oración, máximo 25 palabras: qué hacer exactamente en esa campaña"}],
   "acciones": [{"prioridad":"alta|media|baja","titulo":"acción transversal en 6-10 palabras","detalle":"1-2 oraciones con la cifra que la justifica","responsable":"Ads|CRM|Ventas|Dirección"}],
   "riesgos": ["dato que no cuadra o riesgo, 1 oración cada uno"],
   "preguntas": ["pregunta concreta que el reporte no puede responder y hay que verificar en la fuente"]
