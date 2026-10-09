@@ -541,6 +541,15 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .lq-card{ background:#fff; border:1px solid var(--linea); border-radius:var(--r-l); padding:16px 18px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
   .lq-card h4{ margin:0 0 12px; font-family:var(--serif); font-size:var(--fs-lg); color:var(--verde-prof); }
   .lq-card canvas{ max-height:190px; }
+  .lq-hbars{ display:flex; flex-direction:column; gap:10px; }
+  .lq-hbar-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:3px; }
+  .lq-hbar-nom{ font-size:var(--fs-s); font-weight:600; color:var(--texto); overflow-wrap:anywhere; line-height:1.3; }
+  .lq-hbar-fila{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .lq-hbar-track{ flex:1 1 140px; height:12px; background:var(--crema-2); border-radius:0 4px 4px 0; overflow:hidden; }
+  .lq-hbar-fill{ display:block; height:100%; border-radius:0 4px 4px 0; }
+  .lq-hbar-fill.verde{ background:#3f7d4e; } .lq-hbar-fill.amarillo{ background:#c99a1e; } .lq-hbar-fill.rojo{ background:var(--rojo); } .lq-hbar-fill.gris{ background:#9aa39d; }
+  .lq-hbar-val{ font-size:var(--fs-xs); color:var(--neutro); white-space:nowrap; }
+  .lq-hbar-val b{ color:var(--texto); }
   .lq-qbar{ display:flex; height:11px; border-radius:var(--r-pill); overflow:hidden; background:#e8e4da; }
   .lq-qbar span{ min-width:2px; }
   /* ---- Semáforo de inversión y columnas por campaña ---- */
@@ -4647,7 +4656,7 @@ function lqComboSection(agg, leadsAll, rango, rangoSet){
   </div>`;
 
   html += `<div class="lq-charts">
-    <div class="lq-card"><h4>Inversión vs. SQL+ por campaña</h4><canvas id="lq-ch-fam" height="150"></canvas></div>
+    <div class="lq-card"><h4>Inversión y SQL+ por campaña</h4>${lqBarrasCampanias(rows)}</div>
     <div class="lq-card"><h4>Distribución de calificación</h4><canvas id="lq-ch-mix" height="150"></canvas></div>
   </div>`;
 
@@ -4668,28 +4677,33 @@ function lqComboSection(agg, leadsAll, rango, rangoSet){
   return html;
 }
 
-// Dibuja las dos gráficas del reporte combinado (Chart.js ya está cargado en la página)
+// Inversión y SQL+ por campaña, en barras horizontales de HTML. Antes era una gráfica de
+// Chart.js con DOS ejes —barras de inversión y una línea de SQL+ que unía campañas como si
+// fueran una serie de tiempo— y con seis nombres largos ("INVESTORS…") las etiquetas del eje
+// se encimaban hasta no leerse. Ahora: un solo eje (MXN), el nombre completo arriba de su
+// barra, y el SQL+, el costo por SQL y el semáforo escritos al lado. La barra lleva el color
+// del semáforo, pero el color nunca va solo: la etiqueta dice VERDE / AMARILLO / ROJO.
+function lqBarrasCampanias(rows){
+  const top = rows.filter(m=>m.inv>0 && !m.sinCamp && m.sem).sort((a,b)=>b.inv-a.inv).slice(0,8);
+  if(!top.length) return `<p class="hint pegada">Sin inversión en el rango.</p>`;
+  const max = Math.max(...top.map(m=>m.inv));
+  const cps = (m)=> m.cps!=null ? lqMXN(m.cps)+" por SQL" : "sin SQL+";
+  return `<div class="lq-hbars" role="list">${top.map(m=>{
+    const det = `${m.camp}: ${lqMXN(m.inv)} invertidos · ${m.sqlp} SQL+ · ${cps(m)} · ${m.sem.txt}: ${m.sem.acc}`;
+    return `<div class="lq-hbar" role="listitem" title="${escAttr(det)}">
+      <div class="lq-hbar-top"><span class="lq-hbar-nom">${escAttr(m.camp)}</span><span class="lq-sem ${m.sem.c}">${m.sem.txt}</span></div>
+      <div class="lq-hbar-fila"><span class="lq-hbar-track"><span class="lq-hbar-fill ${m.sem.c}" style="width:${Math.max(1.5, m.inv/max*100).toFixed(1)}%"></span></span>
+        <span class="lq-hbar-val"><b>${lqMXN(m.inv)}</b> · ${m.sqlp} SQL+${m.cps!=null?` · ${lqMXN(m.cps)} por SQL`:""}</span></div>
+    </div>`; }).join("")}</div>
+    <p class="hint pegada" style="margin-top:8px">Largo de la barra = inversión en el rango (un solo eje, MXN). Color = semáforo de la campaña.</p>`;
+}
+
+// Dibuja la dona del reporte combinado (Chart.js ya está cargado en la página)
 function lqDrawCharts(){
   const d = lqState._combo; if(!d || !window.Chart) return;
   lqState._charts = lqState._charts || {};
   Object.values(lqState._charts).forEach(c=>{ try{ c.destroy(); }catch(e){} });
   lqState._charts = {};
-  const el1 = document.getElementById("lq-ch-fam");
-  if(el1){
-    const top = d.rows.filter(m=>m.inv>0 && !m.sinCamp).slice(0,6);
-    const labels = top.map(m=>m.camp);
-    lqState._charts.fam = new Chart(el1.getContext("2d"), {
-      data:{ labels, datasets:[
-        { type:"bar", label:"Inversión (MXN)", data:top.map(m=>Math.round(m.inv)), backgroundColor:"#C6893F", yAxisID:"y", borderRadius:4 },
-        { type:"line", label:"SQL+", data:top.map(m=>m.sqlp), borderColor:"#2E3B2A", backgroundColor:"#2E3B2A", yAxisID:"y1", tension:.25, pointRadius:4, borderWidth:2 },
-      ]},
-      options:{ responsive:true, maintainAspectRatio:false,
-        scales:{ y:{ position:"left", title:{display:true,text:"Inversión (MXN)"}, ticks:{ callback:(v)=>Number(v).toLocaleString("en-US")+" MXN" } },
-                 y1:{ position:"right", title:{display:true,text:"SQL+"}, grid:{drawOnChartArea:false}, ticks:{precision:0} },
-                 x:{ ticks:{ maxRotation:0, autoSkip:false, callback:function(v){ const s=String(this.getLabelForValue(v)); return s.length>16?s.slice(0,15)+"…":s; } } } },
-        plugins:{ legend:{ position:"bottom", labels:{boxWidth:12} } } }
-    });
-  }
   const el2 = document.getElementById("lq-ch-mix");
   if(el2){
     const c = lqCount(d.leads);

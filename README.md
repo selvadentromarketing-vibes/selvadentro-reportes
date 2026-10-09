@@ -280,7 +280,9 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
   anuncios quedan plegados dentro de cada campaña; (2) **Calidad de Lead** — tabla por
   campaña desplegable a conjunto → anuncio con el semáforo; (3) **Reporte Combinado** —
   tarjetas Inversión total · Leads CRM · SQL+ · Costo por SQL · WON, lectura automática
-  del semáforo, gráfica de inversión vs. SQL+ por campaña, dona de distribución y la
+  del semáforo, barras horizontales de inversión por campaña (un solo eje en MXN, nombre
+  completo, SQL+ y costo por SQL escritos y la barra del color del semáforo; antes era una
+  gráfica de dos ejes cuyas etiquetas se encimaban), dona de distribución y la
   tabla por **campaña** (antes por familia: el semáforo mueve presupuesto y el
   presupuesto vive en la campaña); (4) **Conclusiones** — una acción por campaña según el
   semáforo, con su regla, y el detalle y la lectura de la IA (`lq-analyze`, requiere

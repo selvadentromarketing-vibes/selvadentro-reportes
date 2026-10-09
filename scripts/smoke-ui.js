@@ -372,6 +372,9 @@ const PORT = process.env.PORT || 8765;
     const tot = [...document.querySelectorAll('table.lq-combo tr.total')][0];
     r.totalPagado = tot ? tot.textContent.replace(/\s+/g, ' ') : '';
     r.inferidaBadge = /8 con atribución inferida/.test(t);
+    // Gráfica de inversión: barras horizontales con el nombre completo, sin canvas de dos ejes
+    const gb = [...document.querySelectorAll('#lq-content .lq-hbar')];
+    r.grafica = !document.getElementById('lq-ch-fam') + ' ' + gb.length + ' ' + (gb[0] ? gb[0].querySelector('.lq-hbar-nom').textContent + ' | ' + gb[0].querySelector('.lq-hbar-val').textContent.replace(/\s+/g, ' ').trim() + ' | ' + gb[0].querySelector('.lq-sem').textContent : '');
     // Leads de brokers fuera de todo (Dirección, 9-oct-2026): ni en tablas ni en tarjetas
     const card = (k) => { const c = [...document.querySelectorAll('#lq-content .crm-kpi')].find(e => e.querySelector('.k-lbl').textContent.trim() === k); return c ? c.querySelector('.k-val').textContent.trim() : ''; };
     r.tarjetasBk = [card('Leads CRM'), card('SQL+'), card('WON')].join(' ');
@@ -459,6 +462,7 @@ const PORT = process.env.PORT || 8765;
     && Object.entries(semEsp).every(([k, v]) => lqx.semaforos[k] === v)
     && lqx.embudo090 === '2 2 1 · 40% 4,600 MXN' && /Total pagado.*65,000 MXN.*8,125 MXN/.test(lqx.totalPagado)
     && lqx.inferidaBadge && lqx.sinPesos && lqx.sinCampania === '4 de 51 · filas 4'
+    && lqx.grafica === 'true 7 INVESTORS - GOOGLE SEARCH - US+CAN | 13,600 MXN · 0 SQL+ | ROJO'
     && lqx.tarjetasBk === '51 9 1' && lqx.notaBkCombo && lqx.sinJenniferCombo && lqx.notaBkCalidad && lqx.sinJenniferCalidad
     && /^Jennifer Guillaume\|Lead \d+\|Lead \d+ · vista 0 · canal 2$/.test(lqx.brokers) && lqx.sumarOppBk === '101' && lqx.semEnCalidad && lqx.sinMetricasViejas
     && lqx.matrizOculta && lqx.matrizConBoton && lqx.datosFila === 'Campaña|Inversión|Leads plataforma|Leads CRM|CPL' && lqx.datosPliegue
