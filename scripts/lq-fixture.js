@@ -17,6 +17,18 @@
 //   Total pagado       65,000 · 10 SQL+ → 6,500 MXN por SQL · 4 leads sin campaña
 //   3 leads de brokers (uno es "Jennifer Guillaume", WON) excluidos de todo: no mueven ninguna
 //   cifra; un contacto del pipeline de reclutamiento de brokers sí cuenta (orgánico).
+//
+// Recomendaciones concretas (lqRecomendar). La inversión de cada campaña se reparte entre sus
+// conjuntos y anuncios reales (mismos totales); URL de destino, presupuesto diario y gasto por
+// keyword como los de la cuenta:
+//   MX_DYNAMIC_150726  → subir el presupuesto diario de 360 a 432 MXN + capacidad del telemarketer
+//   ESCAPE_100626      → pausar el conjunto EN_LLAMADA_ESCAPE (4,000 MXN, 8 leads, 0 SQL+, CBO),
+//                        creativos nuevos junto a EN_LLAMADA_PREMIUMLOTS-5MIN (…/en/premium), landing
+//   MX_DYNAMIC_090926  → pausar ES_LLAMADA_NUEVO6-SEGURIDAD_DYNAMIC del conjunto del mismo nombre
+//                        (2,300 MXN, 0 leads; único anuncio de su conjunto), reemplazarlo, landing
+//   ESCAPE_090926      → trabajar los leads sin trabajar, por asesor; reevaluar en 7 días
+//   Google US+CAN      → pausar la campaña (keywords con leads por utm_term)
+//   EN_FORMULARIOMETA  → ⚠ CPL al alza: conjunto EN_LLAMADA_PREMIUMLOTS, frecuencia en Meta Ads
 function fixture() {
   const ETAPAS = ["Nuevo lead (no contactado)", "1er toque", "2ndo toque", "3er toque", "Ultimátum", "Break up", "Sin respuesta",
     "Contacto establecido", "Interés identificado", "Zoom agendado", "Zoom no show / re agendar", "Zoom realizado", "Tour agendado",
@@ -30,7 +42,7 @@ function fixture() {
   const sid = (nombre) => "st" + ETAPAS.indexOf(nombre);
   const boot = {
     users: { u1: "Asesora Uno", u2: "Asesor Dos" },
-    fields: [{ id: "f_camp", name: "utm_campaign" }, { id: "f_cont", name: "utm_content" }, { id: "f_cal", name: "Calificación del lead" }],
+    fields: [{ id: "f_camp", name: "utm_campaign" }, { id: "f_cont", name: "utm_content" }, { id: "f_term", name: "utm_term" }, { id: "f_cal", name: "Calificación del lead" }],
     oppFields: [], stages, windsor: true,
   };
   const LUNES = { "2026-W37": "2026-09-07", "2026-W38": "2026-09-14", "2026-W39": "2026-09-21", "2026-W40": "2026-09-28" };
@@ -44,16 +56,52 @@ function fixture() {
     gus:   { plat: "Google", camp: "INVESTORS - GOOGLE SEARCH - US+CAN", cid: "23715389989", grp: "Tulum land US",                              sem: [3400, 3400, 3400, 3400], res: [2, 1, 1, 2] },
     dyn2:  { plat: "Meta",   camp: "INVESTORS_MX_DYNAMIC-TOPLPS_150726", cid: "120250010904330275", grp: "ES_LLAMADA_NUEVO6-ESCAPE_CENOTES",      sem: [2600, 2600, 2600, 2600], res: [3, 2, 2, 2] },
   };
+  // Anuncios de cada campaña: parte de la inversión semanal (frac), si se lleva los resultados
+  // de plataforma, URL de destino y ubicación (pp). Sin `ads` = un solo anuncio con todo.
+  const L = "https://lotes.selvadentrotulum.com", SG = "https://seguridad.selvadentrotulum.com";
+  // (en la cuenta real el creativo dinámico se llama igual en todos los conjuntos; aquí se
+  // usan nombres que no chocan con los de MX_DYNAMIC_150726 para no mezclar sus leads)
+  C.dyn.ads = [
+    { grp: "ES_LLAMADA_NUEVO6-SEGURIDAD_PATRIMONIO", name: "ES_LLAMADA_NUEVO6-PATRIMONIO_DYNAMIC", frac: 0.75, res: true, url: SG + "/seguridadpatrimonio/" },
+    { grp: "ES_LLAMADA_NUEVO6-SEGURIDAD_DYNAMIC", name: "ES_LLAMADA_NUEVO6-SEGURIDAD_DYNAMIC", frac: 0.25, url: L + "/seguridad" }];
+  C.esc.ads = [
+    { grp: "EN_LLAMADA_ESCAPE", name: "EN_LLAMADA_ESCAPE-TY-COLD", frac: 0.6, res: true, url: L + "/en/escape" },
+    { grp: "EN_LLAMADA_PREMIUMLOTS", name: "EN_LLAMADA_PREMIUMLOTS-5MIN", frac: 0.4, url: L + "/en/premium" }];
+  C.esc2.ads = [
+    { grp: "EN_LLAMADA_PREMIUMLOTS", name: "EN_LLAMADA_PREMIUMLOTS-5MIN", frac: 0.5, res: true, url: L + "/en/premium" },
+    { grp: "EN_LLAMADA_PREMIUMLOTS", name: "EN_LLAMADA_PREMIUMLOTS-5MIN", frac: 0.1, url: L + "/en/premium", pp: "audience_network" },
+    { grp: "EN_LLAMADA_ESCAPE", name: "EN_LLAMADA_ESCAPE-TY-COLD", frac: 0.24, url: L + "/en/escape" },
+    { grp: "EN_LLAMADA_ESCAPE", name: "EN_LLAMADA_ESCAPE-DIANA", frac: 0.16, url: L + "/en/escape" }];
+  C.form.ads = [{ grp: "EN_LLAMADA_PREMIUMLOTS", name: "EN_LLAMADA_ESCAPE-CENOTES", frac: 1, res: true, url: "http://fb.me/" }];
+  C.dyn2.ads = [{ grp: "ES_LLAMADA_NUEVO6-ESCAPE_CENOTES", name: "ES_LLAMADA_NUEVO6-ESCAPE_CENOTES", frac: 1, res: true, url: L + "/escape" }];
   const weeks = Object.keys(LUNES);
   const adRows = [], spendRows = [];
   Object.entries(C).forEach(([k, c], ci) => {
     weeks.forEach((w, wi) => {
-      adRows.push({ d: dia(w, 2), plat: c.plat, camp: c.camp, grp: c.grp, id: "ad_" + k, cid: c.cid, gid: "g_" + k, name: "Anuncio " + k.toUpperCase(),
-        pp: c.plat === "Meta" ? (wi % 2 ? "instagram" : "facebook") : "Google Ads", status: k === "esc" ? "PAUSED" : "ACTIVE", link: "",
-        tags: "utm_campaign={{campaign.name}}", spend: c.sem[wi], impr: c.sem[wi] * 9, clicks: Math.round(c.sem[wi] / 25), results: c.res[wi] });
+      (c.ads || [{ grp: c.grp, name: "Anuncio " + k.toUpperCase(), frac: 1, res: true, url: "" }]).forEach((a, ai) => {
+        const sp = c.sem[wi] * a.frac;
+        adRows.push({ d: dia(w, 2), plat: c.plat, camp: c.camp, grp: a.grp, id: "ad_" + k + "_" + ai, cid: c.cid, gid: "g_" + k + "_" + lqSlug(a.grp), name: a.name,
+          pp: a.pp || (c.plat === "Meta" ? (wi % 2 ? "instagram" : "facebook") : "Google Ads"), status: k === "esc" ? "PAUSED" : "ACTIVE", link: "", url: a.url,
+          tags: "utm_campaign={{campaign.name}}&utm_content={{adset.name}}", spend: sp, impr: sp * 9, clicks: Math.round(sp / 25), results: a.res ? c.res[wi] : 0 });
+      });
       for (let k2 = 0; k2 < 7; k2++) spendRows.push({ d: dia(w, k2), src: c.plat === "Meta" ? "facebook" : "google", camp: c.camp, cid: c.cid, spend: c.sem[wi] / 7, clicks: 1, impr: 10, cur: "MXN" });
     });
   });
+  // Gasto por keyword de Google (reparte la inversión semanal de cada campaña) y presupuesto
+  // diario vigente por ID de campaña, como los devuelve la function `ads`.
+  const KW = {
+    gus: [["buying property in tulum mexico", 0.35], ["buying a home in tulum mexico", 0.3], ["tulum real estate", 0.2], ["land for sale tulum mexico", 0.15]],
+    gmx: [["terrenos en tulum", 0.6], ["venta de lotes en tulum", 0.4]],
+  };
+  const kw = [];
+  Object.entries(KW).forEach(([k, lista]) => weeks.forEach((w, wi) => lista.forEach(([t, f]) =>
+    kw.push({ d: dia(w, 2), cid: C[k].cid, camp: C[k].camp, grp: C[k].grp, gid: "g_" + k + "_" + lqSlug(C[k].grp), kw: t, spend: C[k].sem[wi] * f, clicks: Math.round(C[k].sem[wi] * f / 40), conv: wi === 1 ? 1 : 0 }))));
+  const presu = {
+    [C.dyn2.cid]: { plat: "Meta", cb: 360, grps: {} }, [C.dyn.cid]: { plat: "Meta", cb: 360, grps: {} }, [C.esc.cid]: { plat: "Meta", cb: 400, grps: {} },
+    [C.esc2.cid]: { plat: "Meta", cb: 400, grps: {} }, [C.form.cid]: { plat: "Meta", cb: 100, grps: {} },
+    [C.gus.cid]: { plat: "Google", cb: 480, grps: {} }, [C.gmx.cid]: { plat: "Google", cb: 150, grps: {} },
+  };
+  const adExtra = { kw, presu };
   const rawLeads = [], opps = {};
   let n = 0;
   const lead = (w, k, o) => {
@@ -87,13 +135,16 @@ function fixture() {
   lead(weeks[1], 4, { src: "google", cf: { f_camp: "23710551755" }, attr: { src: "google" }, etapa: "1er toque" });
   lead(weeks[2], 4, { src: "google", cf: { f_camp: "INVESTORS-GOOGLE-SEARCH-MX" }, attr: { src: "google" }, etapa: "Contacto establecido" });
   // US/CA_ESCAPE_100626: 22 leads y 2 SQL+ → costo por SQL 5,000 (AMARILLO). Tasa SQL 9.1% (< 10%)
-  // y CPL 455 MXN (> 400): "Optimizar calidad y costo", con los pasos de Meta.
+  // y CPL 455 MXN (> 400): "Optimizar calidad y costo". utm_content = nombre del conjunto:
+  // EN_LLAMADA_PREMIUMLOTS 14 leads y los 2 SQL+; EN_LLAMADA_ESCAPE 8 leads y 0 SQL+.
   [...Array(2).fill("Interés identificado"), ...Array(8).fill("Contacto establecido"), ...Array(6).fill("Sin respuesta"), ...Array(6).fill("1er toque")]
-    .forEach((e, i) => lead(weeks[(i + 3) % 4], 6, { src: "Meta ads", cf: { f_camp: C.esc2.camp }, attr: { src: "facebook" }, etapa: e }));
+    .forEach((e, i) => lead(weeks[(i + 3) % 4], 6, { src: "Meta ads", attr: { src: "facebook" }, etapa: e,
+      cf: { f_camp: C.esc2.camp, f_cont: [2, 3, 12, 13, 18, 19, 20, 21].includes(i) ? "EN_LLAMADA_ESCAPE" : "EN_LLAMADA_PREMIUMLOTS" } }));
   // Google US+CAN: utm_campaign = id numérico de la campaña. 5 leads, todos trabajados, 3 con
   // conversación (60%) y 0 SQL+: no contestan bien, el problema es el lead → ROJO, pausar
+  // utm_term = la keyword ({keyword} en el sufijo de la cuenta)
   ["Contacto establecido", "Nurturing", "Largo Plazo", "Sin respuesta", "1er toque"]
-    .forEach((e, i) => lead(weeks[i % 4], 0, { src: "google", cf: { f_camp: "23715389989" }, attr: { src: "google" }, etapa: e }));
+    .forEach((e, i) => lead(weeks[i % 4], 0, { src: "google", cf: { f_camp: "23715389989", f_term: KW.gus[i % 4][0] }, attr: { src: "google" }, etapa: e }));
   // MX_DYNAMIC_150726: 6 leads, 3 SQL+ (dos sin utm_campaign pero con el conjunto en utm_content)
   ["Carta Oferta", "Interés identificado", "Zoom agendado", "Zoom realizado", "1er toque", "Sin respuesta"]
     .forEach((e, i) => lead(weeks[(i + 3) % 4], 5, i < 2 ? { src: "fb", cf: { f_cont: C.dyn2.grp }, attr: { src: "facebook" }, etapa: e }
@@ -121,6 +172,7 @@ function fixture() {
   //   pipeline de RECLUTAMIENTO de brokers: este sí cuenta (no es un lead de broker)
   const rx = lead("2026-W40", 2, { src: "", attr: {} });
   opps[rx.id] = { o: 0, pr: 1, w: 0, v: 0, ov: 0, s: "bx0", sc: 1, st: "open", ap: { tot: 0, sh: 0, ns: 0 } };
-  return { boot, rawLeads, spendRows, weeks, opps, adRows };
+  return { boot, rawLeads, spendRows, weeks, opps, adRows, adExtra };
 }
+function lqSlug(s) { return String(s || "").replace(/[^A-Za-z0-9]+/g, "").slice(0, 24); }
 module.exports = { fixture };

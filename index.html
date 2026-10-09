@@ -572,6 +572,18 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .lq-pasos{ margin:4px 0 0; padding-left:16px; font-size:var(--fs-xs); color:var(--texto); font-weight:400; line-height:1.4; white-space:normal; text-align:left; }
   .lq-pasos li{ margin:1px 0; }
   .lq-pasos li:last-child{ color:var(--neutro); font-style:italic; }
+  /* Qué hacer concreto: objeto + evidencia en la misma línea, la ruta y dónde revisar debajo */
+  ol.lq-recs{ padding-left:20px; }
+  ol.lq-recs > li{ margin:0 0 6px; }
+  ol.lq-recs > li:last-child{ color:var(--texto); font-style:normal; }
+  ol.lq-recs ul{ margin:2px 0 0; padding-left:16px; }
+  .lq-rec-ev{ color:var(--neutro); overflow-wrap:anywhere; }
+  .lq-rec-ruta{ color:var(--neutro); font-size:11px; overflow-wrap:anywhere; }
+  .lq-rec-donde{ color:#6b5a1c; margin-top:1px; }
+  .lq-rec-nota{ color:var(--neutro); font-style:italic; margin-top:1px; }
+  li.lq-rec-alerta > b{ color:#9a5a14; }
+  .lq-rec-esperar{ margin:4px 0 0; font-size:var(--fs-xs); font-weight:600; color:#6b5a1c; }
+  .lq-rec-pie{ margin:4px 0 0; font-size:var(--fs-xs); color:var(--neutro); font-style:italic; }
   .lq-cps.verde{ color:#3f7d4e; font-weight:700; } .lq-cps.amarillo{ color:#9a7414; font-weight:700; } .lq-cps.rojo{ color:var(--rojo); font-weight:700; }
   .lq-sqlp{ font-weight:700; color:var(--verde-prof); }
   th.lq-sec, td.lq-sec{ color:var(--neutro); font-weight:400; }
@@ -2981,7 +2993,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v19";  // v19: trabajado (tr) y contactado (ct) por etapa, separados  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
+const LQ_AGG_KEY = "lq:agg:v20";  // v20: URL de destino por anuncio, gasto por keyword de Google y presupuesto diario (recomendaciones concretas)  // v19: trabajado (tr) y contactado (ct) por etapa, separados  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 // (LQ_TZ y LQ_TZ_MS ahora viven junto al resto de helpers de fecha, arriba)
@@ -3025,6 +3037,11 @@ const LQ_SEMAFORO = {
   tasaSqlMin: 10,       // % : SQL+ ÷ leads por debajo de esto → "Optimizar calidad"
   cplMax:     400,      // MXN : CPL (inversión ÷ leads) por encima de esto → "Optimizar costo"
   gastoKeywordSinSql: 2000,     // MXN : en Google, keyword con más gasto que esto y 0 SQL → pausar
+  // RECOMENDACIONES (Dirección, 9-oct-2026): nada se recomienda pausar (conjunto, anuncio,
+  // keyword) con un gasto menor a muestraPausa × cplMax (2 × 400 = 800 MXN) en el rango.
+  muestraPausa: 2,
+  maxAcciones:  3,      // acciones por campaña, de mayor a menor impacto
+  reevaluarDias: 7,     // "Un cambio a la vez; reevaluar en 7 días."
   // Alerta visual de CPL (no cambia el semáforo): el CPL de los últimos `dias` días va más
   // de `pct`% arriba del CPL promedio de los últimos `base` días de la misma campaña.
   alertaCpl: { dias:7, base:30, pct:30 },
@@ -3078,7 +3095,7 @@ function lqSemaforo(inv, sqlp, seg){
   // calcula igual —dice cómo va la campaña— pero la acción SIEMPRE es mantener: con tan
   // poca inversión no se sube presupuesto (ni se pausa) por un resultado que puede ser suerte.
   if(chica){
-    r.k = "mantener"; r.acc = "Mantener (muestra chica)"; delete r.nota; delete r.pasos; delete r.diag;
+    r.k = "mantener"; r.acc = "Mantener (muestra chica)"; delete r.nota; delete r.diag;
     r.regla = `inversión ${lqMXN(inv)} < ${lqMXN(P.umbralEval)}: muestra chica, se mantiene sin importar el color (${r.regla})`;
   }
   return r;
@@ -3088,36 +3105,21 @@ function lqSemaforo(inv, sqlp, seg){
    · tasa SQL = SQL+ ÷ leads < tasaSqlMin  → el problema es la CALIDAD del lead
    · CPL = inversión ÷ leads > cplMax      → el problema es el COSTO del lead
    Si pasan las dos se muestran las dos. Como costo por SQL = CPL ÷ tasa SQL, con los
-   umbrales por defecto (4,000 = 400 ÷ 10%) un amarillo siempre cae en al menos una. Las
-   instrucciones de calidad dependen de la plataforma; las de costo son las mismas. */
+   umbrales por defecto (4,000 = 400 ÷ 10%) un amarillo siempre cae en al menos una. Qué
+   hacer —con el conjunto, anuncio o keyword exactos— lo arma lqRecomendar con el árbol de
+   la campaña: aquí solo se diagnostica. */
 function lqDiagAmarillo(r, inv, sqlp, n, plat){
   const P = LQ_SEMAFORO;
   if(!(n > 0)) return r;
   const tasa = sqlp / n * 100, cpl = inv / n;
   const calidad = tasa < P.tasaSqlMin, costo = cpl > P.cplMax;
   if(!calidad && !costo) return r;
-  const pasos = [];
-  if(calidad){
-    if(plat === "Google") pasos.push(
-      "Agregar palabras negativas desde el informe de términos de búsqueda.",
-      `Pausar las keywords con más de ${lqMXN(P.gastoKeywordSinSql)} de gasto y 0 SQL.`);
-    else if(plat === "Meta") pasos.push(
-      "Formulario más filtrante: preguntas de presupuesto y de plazo.",
-      "Quitar Audience Network y las ubicaciones de baja calidad.");
-    else pasos.push("Filtrar mejor el tráfico: el lead que llega no califica.");
-  }
-  if(costo) pasos.push(
-    "Pausar los 2 anuncios con peor CPL.",
-    "Probar 2 creativos nuevos.",
-    "Revisar que la landing coincida con el anuncio.");
-  pasos.push("No tocar presupuesto ni puja. Un cambio a la vez; reevaluar en 7 días.");
   const causas = [];
   if(calidad) causas.push(`tasa SQL ${Math.round(tasa*10)/10}% (< ${P.tasaSqlMin}%): calidad`);
   if(costo) causas.push(`CPL ${lqMXN(cpl)} (> ${lqMXN(P.cplMax)}): costo`);
   r.acc = calidad && costo ? "Optimizar calidad y costo" : calidad ? "Optimizar calidad" : "Optimizar costo";
-  r.diag = { tasa, cpl, calidad, costo, txt: causas.join(" · ") };
+  r.diag = { tasa, cpl, calidad, costo, plat: plat||"", txt: causas.join(" · ") };
   r.regla += ` · ${causas.join(" · ")}`;
-  r.pasos = pasos;
   return r;
 }
 
@@ -3549,6 +3551,19 @@ function lqBucketAds(adRows){
   return Object.values(by);
 }
 
+// Gasto diario por palabra clave de Google (Windsor) → una fila por keyword y semana ISO,
+// con claves cortas: con 12 semanas el agregado compartido tiene que seguir cabiendo en el kv.
+function lqBucketKw(kwRows){
+  const by = {};
+  for(const r of (kwRows||[])){
+    const wk = r.d ? lqWeekOf(r.d+"T12:00:00"+LQ_TZ) : null; if(!wk || !r.kw) continue;
+    const k = r.cid+"|"+r.gid+"|"+r.kw+"|"+wk;
+    const b = by[k] = by[k] || { wk, cid:r.cid||"", gid:r.gid||"", grp:r.grp||"", kw:r.kw, sp:0, cl:0, cv:0 };
+    b.sp += r.spend||0; b.cl += r.clicks||0; b.cv += r.conv||0;
+  }
+  return Object.values(by).map(b=>({ ...b, sp:Math.round(b.sp*100)/100, cv:Math.round(b.cv*100)/100 }));
+}
+
 // Cuántos leads traen lleno CADA campo personalizado. Se calcula aquí porque el
 // agregado solo conserva dos campos y el resto se descarta: sin esto no había forma
 // de responder "¿existe el campo de presupuesto y lo está llenando alguien?".
@@ -3829,7 +3844,10 @@ function lqTrabajado(l, contactado){
   return /(^|,\s*)d\d+-no-a?n?swer/i.test(String(l.tags||""));   // sin etapa: toques registrados por tag
 }
 
-function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
+// `adExtra` = lo que el detalle por anuncio trae además de las filas: gasto por keyword de
+// Google (kw) y presupuesto diario vigente por campaña/conjunto (presu). Sirve para que las
+// recomendaciones nombren la keyword, el anuncio y su URL, y el presupuesto de → a.
+function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adExtra){
   // Paso 0 del manual de limpieza (jul-2026), aplicado ANTES de cualquier cálculo:
   // fuera los registros de prueba y los leads sin email NI teléfono (no hay a quién
   // contactar ni forma de detectar duplicados). Se cuentan y se muestran; no desaparecen.
@@ -3980,6 +3998,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
       ...(lqEsBroker(l.tags, op) ? { bk:1 } : {}),  // lead de brokers: fuera de Calidad de Leads
       ...(l.attr && l.attr.inf ? { inf:1 } : {}),   // atribución inferida (LQ_INFERIDA)
       ...(l.attr && l.attr.pid ? { pid:1, cid:l.attr.cidOk } : {}),   // campaña resuelta por su ID (y cuál), no por nombre
+      ...(l.attr && l.attr.kw ? { kw:String(l.attr.kw).slice(0,80) } : {}),   // palabra clave de Google (utm_term={keyword})
       _si: stg ? (stg.i ?? 0) : null,    // posición de la etapa, solo para el cálculo de abajo
     };
   }).filter(l=>l.wk);
@@ -4005,7 +4024,19 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
            campos: lqCamposLlenos(boot, rawLeads),
            atrib: lqCoberturaAtrib(rawLeads, lqAdIndex({adw:adw0})),
            utm: lqAuditUtm(adw0, rawLeads),
-           weeks:weeks||[], spend:spendRows||[], adw:adw0, leads };
+           weeks:weeks||[], spend:spendRows||[], adw:adw0, leads,
+           // Para las recomendaciones: URL de destino por anuncio, gasto por keyword por semana
+           // y presupuesto diario vigente (MXN/día) por ID de campaña.
+           adUrl: lqAdUrls(adRows), kww: lqBucketKw(adExtra && adExtra.kw), presu: (adExtra && adExtra.presu) || {} };
+}
+// A dónde lleva hoy cada anuncio (la URL del día más reciente), por ID de anuncio.
+function lqAdUrls(adRows){
+  const m = {}, d = {};
+  for(const r of (adRows||[])){
+    if(!r.id || !r.url) continue;
+    if(!m[r.id] || (r.d||"") >= d[r.id]){ m[r.id] = String(r.url).slice(0,200); d[r.id] = r.d||""; }
+  }
+  return m;
 }
 
 // Lo que ve Calidad de Leads: el agregado SIN los leads de brokers. Todas las pestañas, la
@@ -4229,9 +4260,10 @@ const lqCaret  = (k, has)=> has ? `<span class="lq-caret">${lqIsExp(k)?"▾":"�
 function lqUnionTree(agg, leads, rangoSet, plat){
   const camps = {};
   const base = ()=> ({ spend:0, res:0, impr:0, clicks:0, pps:new Set(), leads:[] });
-  const newCamp = (key, p, name)=> camps[key] = camps[key] || { key, plat:p, camp:name, ...base(), grps:{}, nAds:new Set() };
-  const newGrp  = (C, name)=> C.grps[name] = C.grps[name] || { name, ...base(), ads:{} };
-  const newAd   = (G, name)=> G.ads[name] = G.ads[name] || { name, id:"", status:"", _wk:"", ...base() };
+  const newCamp = (key, p, name)=> camps[key] = camps[key] || { key, plat:p, camp:name, ...base(), grps:{}, nAds:new Set(), cids:new Set() };
+  const newGrp  = (C, name)=> C.grps[name] = C.grps[name] || { name, gid:"", ...base(), ads:{} };
+  const newAd   = (G, name)=> G.ads[name] = G.ads[name] || { name, id:"", status:"", url:"", _wk:"", ...base() };
+  const adUrl = agg.adUrl || {};
   const platOk  = (p)=> plat==="all" ? true : plat==="otras" ? false : p===plat;
   const suma = (X, a)=>{ X.spend += a.spend||0; X.res += a.results||0; X.impr += a.impr||0; X.clicks += a.clicks||0; if(a.pp) X.pps.add(a.pp); };
 
@@ -4246,10 +4278,11 @@ function lqUnionTree(agg, leads, rangoSet, plat){
     if(!rangoSet.has(a.wk) || !platOk(a.plat)) continue;
     const cname = nomId(a.cid, a.camp) || LQ_SIN_CAMP;
     const C = newCamp(a.plat+" · "+cname, a.plat, cname); suma(C, a); C.nAds.add(a.id||a.name);
-    if(a.cid) byCid[a.cid] = C;
+    if(a.cid){ byCid[a.cid] = C; C.cids.add(a.cid); }
     const G = newGrp(C, a.grp || LQ_SIN_GRP); suma(G, a);
+    if(a.gid) G.gid = a.gid;
     const A = newAd(G, a.name || a.id || LQ_SIN_AD); suma(A, a);
-    if(a.id) A.id = a.id;
+    if(a.id){ A.id = a.id; if(adUrl[a.id]) A.url = adUrl[a.id]; }
     if(a.status && a.wk >= A._wk){ A.status = a.status; A._wk = a.wk; }
   }
   // 2. Campañas que solo aparecen en el gasto diario (/all) y no en el detalle por anuncio
@@ -4264,12 +4297,12 @@ function lqUnionTree(agg, leads, rangoSet, plat){
     const yaNombre = lqMatchCamp(r.camp, adCampNames);   // o por nombre (detalle sin ID)
     if(yaNombre){
       const C0 = Object.values(camps).find(x=>x.camp===yaNombre && x.plat===p);
-      if(r.cid && C0 && !byCid[r.cid]) byCid[r.cid] = C0;
+      if(r.cid && C0 && !byCid[r.cid]){ byCid[r.cid] = C0; C0.cids.add(r.cid); }
       continue;
     }
     const cname = nomId(r.cid, r.camp) || LQ_SIN_CAMP;
     const C = newCamp(p+" · "+cname, p, cname); C.spend += r.spend;
-    if(r.cid) byCid[r.cid] = C;
+    if(r.cid){ byCid[r.cid] = C; C.cids.add(r.cid); }
   }
 
   // 3. Colgar los leads del CRM en la campaña real; si no empatan, en su propio nodo
@@ -4338,6 +4371,11 @@ function lqCampModel(agg, leads, rangoSet, rango, plat){
     m.alerta = m.sinCamp ? null : (alertas[lqNormCamp(C.camp)] || null);
     return m;
   });
+  // Qué hacer, con objetos concretos (lqRecomendar). Se cuelga también del semáforo para que
+  // la celda, la fila "Qué hacer" y Conclusiones lean lo mismo.
+  const ctx = { agg, rangoSet, rango, adIdx: lqAdIndex(agg), dias: lqDiasRango(rango),
+                leadsRango: (agg.leads||[]).filter(l=>rangoSet.has(l.wk)).length };
+  rows.forEach(m=>{ m.recs = lqRecomendar(m, ctx); if(m.sem && m.recs) m.sem.recs = m.recs; });
   const pagadas = rows.filter(m=>m.inv>0 && !m.sinCamp);
   const pagado = lqMetricas(pagadas.flatMap(m=>m.C.leads), pagadas.reduce((a,m)=>a+m.inv,0), pagadas.reduce((a,m)=>a+m.res,0));
   const todo = lqMetricas(leads, rows.reduce((a,m)=>a+m.inv,0), rows.reduce((a,m)=>a+m.res,0));
@@ -4376,10 +4414,339 @@ function lqAlertasCpl(agg, rango){
     const prom = b.sp30/b.n30, tope = prom*(1+P.pct/100);
     const cpl7 = b.n7 ? b.sp7/b.n7 : null;
     if(cpl7!=null ? cpl7 > tope : b.sp7 > tope)
-      out[k] = { cpl7, prom, sp7:b.sp7, n7:b.n7, pct: cpl7!=null ? Math.round((cpl7/prom-1)*100) : null, ini7, fin };
+      out[k] = { cpl7, prom, sp7:b.sp7, n7:b.n7, pct: cpl7!=null ? Math.round((cpl7/prom-1)*100) : null, ini7, ini30, fin };
   }
   return out;
 }
+
+/* ---- Recomendaciones concretas (Dirección, 9-oct-2026) ---------------------------------
+   Regla general para TODO lo que el reporte recomienda (semáforo, optimizar, alerta de CPL):
+   nunca una instrucción genérica.
+   1. Nombra el objeto exacto: plataforma › campaña › conjunto › anuncio (o keyword en Google).
+   2. Trae la evidencia en la misma línea: gasto, leads, SQL+ y CPL / costo por SQL del rango.
+   3. No recomienda pausar nada (conjunto, anuncio, keyword) con gasto < muestraPausa × cplMax
+      (2 × 400 = 800 MXN). Si nada llega, lo dice: "Sin muestra suficiente para pausar; esperar."
+   4. Lo que el reporte no tiene (frecuencia, términos de búsqueda, calidad del creativo) lo dice
+      y señala dónde revisarlo.
+   5. "Probar creativos" / "revisar landing" nombran el anuncio y la URL a la que lleva hoy.
+   6. Pausar en una campaña con presupuesto de campaña (CBO) lleva la nota de que Meta reasigna.
+   7. Máximo maxAcciones (3) por campaña, de mayor a menor impacto (MXN en juego), y el pie
+      "Un cambio a la vez; reevaluar en 7 días."
+   Cada acción: { txt, objs:[{ txt, ev, ruta }], donde, nota, imp }. Los leads del CRM se cuelgan
+   del conjunto (los anuncios mandan utm_content={{adset.name}}): el SQL+ se mide por conjunto y,
+   por anuncio, solo cuando el lead trae el anuncio; si no, se usan los leads que reporta la
+   plataforma y se dice. */
+const lqEsForm = (u)=> /^https?:\/\/fb\.me\/?$/i.test(String(u||"").trim());   // formulario instantáneo de Meta
+const lqPl = (n, s, p)=> `${n} ${n===1 ? s : (p || s+"s")}`;
+const lqNormKw = (s)=> String(s||"").toLowerCase().replace(/[+"\[\]]/g," ").replace(/\s+/g," ").trim();
+const lqDdMm = (ymd)=> ymd ? ymd.slice(8,10)+"/"+ymd.slice(5,7) : "";
+// "gasto 1,771 MXN, 2 leads, 0 SQL+, CPL 886 MXN"
+function lqEvid(o){
+  const p = [`gasto ${lqMXN(o.sp)}`];
+  if(o.n != null) p.push(o.unidad ? `${Math.round(o.n*10)/10} ${o.unidad}` : lqPl(Math.round(o.n), "lead") + (o.fte ? ` (${o.fte})` : ""));
+  p.push(o.sqlTxt || `${o.sqlp||0} SQL+`);
+  if(o.n) p.push(`CPL ${lqMXN(o.sp/o.n)}`);
+  else if(o.n === 0) p.push("CPL —");
+  if(o.sqlp > 0 && !o.sqlTxt) p.push(`costo por SQL ${lqMXN(o.sp/o.sqlp)}`);
+  return p.join(", ");
+}
+// Una acción en texto plano (lectura automática y prompt de la IA). `corto` = sin dónde ni nota.
+function lqRecTexto(r, corto){
+  if(!r) return "";
+  const objs = (r.objs||[]).map(o=>`${o.txt}${o.ev ? ` — ${o.ev}` : ""}`);
+  let t = objs.length === 1 ? `${r.txt} ${objs[0]}` : `${r.txt.replace(/:$/, "")}: ${objs.join("; ")}`;
+  const sigue = (x)=>{ t += (/[.!?]$/.test(t) ? " " : ". ") + x; };
+  if(!corto && r.donde) sigue(r.donde);
+  if(!corto && r.nota) sigue(r.nota);
+  return t;
+}
+function lqRecsHtml(R){
+  if(!R || (!(R.items||[]).length && !R.sinMuestra)) return "";
+  const obj = (o)=> `${escAttr(o.txt)}${o.ev ? ` <span class="lq-rec-ev">— ${escAttr(o.ev)}</span>` : ""}${o.ruta ? `\n<div class="lq-rec-ruta">${escAttr(o.ruta)}</div>` : ""}`;
+  const li = (r)=> `<li${r.alerta ? ' class="lq-rec-alerta"' : ""}><b>${r.alerta ? "⚠ " : ""}${escAttr(r.txt)}</b>${r.objs.length === 1 ? " "+obj(r.objs[0]) : `\n<ul>${r.objs.map(o=>`<li>${obj(o)}</li>`).join("\n")}</ul>`}`
+    + `${r.donde ? `\n<div class="lq-rec-donde">${escAttr(r.donde)}</div>` : ""}${r.nota ? `\n<div class="lq-rec-nota">${escAttr(r.nota)}</div>` : ""}</li>`;
+  return `${(R.items||[]).length ? `<ol class="lq-pasos lq-recs">${R.items.map(li).join("\n")}</ol>` : ""}`
+    + `${R.sinMuestra ? `\n<p class="lq-rec-esperar">${escAttr(R.sinMuestra)}</p>` : ""}${R.pie ? `\n<p class="lq-rec-pie">${escAttr(R.pie)}</p>` : ""}`;
+}
+// Días que cubre el rango (sin contar el futuro de la semana en curso), para llevar leads a /mes.
+function lqDiasRango(rango){
+  if(!rango || !rango.length) return 30;
+  const ini = Date.parse(lqWeekBounds(rango[0]).startISO), fin = Math.min(Date.parse(lqWeekBounds(rango[rango.length-1]).endISO), Date.now());
+  return isNaN(ini) || isNaN(fin) ? rango.length*7 : Math.max(1, Math.round((fin - ini)/86400e3));
+}
+
+function lqRecomendar(m, ctx){
+  const P = LQ_SEMAFORO, sem = m.sem, C = m.C;
+  if(!C || m.sinCamp || !(m.inv > 0) || !sem) return null;
+  const agg = ctx.agg || {}, rangoSet = ctx.rangoSet;
+  const minPausa = P.muestraPausa * P.cplMax;
+  const plat = m.plat, camp = m.camp, meta = plat === "Meta", google = plat === "Google";
+  const fte = meta ? "Meta" : google ? "Google" : "";
+  const ruta = (...xs)=> [plat, camp, ...xs].filter(Boolean).join(" › ");
+  const rutaCamp = meta ? `Meta Ads › Campañas › ${camp}` : google ? `Google Ads › Campañas › ${camp}` : ruta();
+  const k = sem.chica ? "chica" : sem.k;
+  const campEv = lqEvid({ sp:m.inv, n:m.n, sqlp:m.sqlp });
+  const on = (s)=> !s || lqIsOn(s);
+  const nivel = google ? "grupo" : "conjunto";
+  const nomAd = (s)=> /^\d+$/.test(String(s||"")) ? `anuncio ${s}` : s;     // Google suele dar solo el ID
+  const esSql = (l)=>{ const v = (lqState.qual||"auto") === "auto" ? (l.alv||"cql") : l.lv; return v === "sql" || v === "sqls"; };
+  const recs = [], esperar = [];
+  const add = (r)=>{ if(r && r.objs && r.objs.length) recs.push(r); };
+
+  // Presupuesto diario vigente de la campaña (Windsor), por cualquiera de sus IDs.
+  const presu = [...(C.cids||[])].map(c=>(agg.presu||{})[c]).find(Boolean) || null;
+  const cbo = meta && presu && presu.cb > 0;
+  const notaCbo = meta ? (cbo
+      ? `La campaña reparte su presupuesto (CBO, ${lqMXN(presu.cb)}/día): al pausar, Meta mueve ese dinero a lo que queda activo; el gasto total no baja.`
+      : `Si la campaña usa presupuesto de campaña (CBO), Meta mueve ese dinero a lo que queda activo; el gasto total no baja.`) : "";
+
+  // Conjuntos y anuncios del rango, con su evidencia.
+  const urlDe = (ads)=>{ const a = ads.filter(A=>A.url).sort((x,y)=>y.spend-x.spend)[0]; return a ? a.url : ""; };
+  const grps = C.grps.filter(G=>G.name !== LQ_SIN_GRP && (G.spend || G.leads.length)).map(G=>{
+    const ads = G.ads.filter(A=>A.name !== LQ_SIN_AD && (A.spend || A.res));
+    return { G, name:G.name, sp:G.spend, n:G.leads.length, sqlp:lqSqlPlus(lqCount(G.leads)), res:G.res, ads, url:urlDe(ads),
+             activo: !ads.length || ads.some(A=>on(A.status)) };
+  });
+  const gEv = (g, extra)=> lqEvid({ sp:g.sp, n:g.n, sqlp:g.sqlp }) + (extra||"");
+  const sinGrp = (C.grps.find(G=>G.name === LQ_SIN_GRP) || { leads:[] }).leads.length;
+  const notaCobertura = C.leads.length && sinGrp/C.leads.length > 0.3
+    ? `${sinGrp} de ${C.leads.length} leads de la campaña llegaron sin conjunto: confirmar en el CRM que de verdad no trae SQL+ antes de pausar.` : "";
+  const ads = grps.flatMap(g=>g.ads.map(A=>{
+    const nCrm = A.leads.length, n = nCrm || A.res || 0;
+    return { A, g, name:nomAd(A.name), sp:A.spend, n, url:A.url || g.url, on:on(A.status), cpl: n ? A.spend/n : Infinity,
+             ev: lqEvid({ sp:A.spend, n, fte: nCrm ? "" : fte, sqlp: nCrm ? lqSqlPlus(lqCount(A.leads)) : 0,
+                          sqlTxt: nCrm ? "" : (g.sqlp === 0 ? "0 SQL+ (todo su conjunto)" : "SQL+ sin dato por anuncio") }) };
+  }));
+  const urlTxt = (u)=> !u ? "(URL no disponible)" : lqEsForm(u) ? "un formulario instantáneo de Meta" : u;
+
+  // Keywords de Google del rango, con los leads del CRM que traen esa keyword (utm_term).
+  const hayKwCrm = C.leads.some(l=>l.kw);
+  const kws = (()=>{
+    if(!google) return [];
+    const by = {};
+    (agg.kww||[]).forEach(r=>{
+      if(!rangoSet.has(r.wk) || !(C.cids||new Set()).has(r.cid)) return;
+      const key = r.gid+"|"+lqNormKw(r.kw);
+      const b = by[key] = by[key] || { kw:r.kw, grp:r.grp || "", sp:0, cl:0, cv:0, leads:[] };
+      b.sp += r.sp||0; b.cl += r.cl||0; b.cv += r.cv||0;
+    });
+    const L = Object.values(by);
+    C.leads.filter(l=>l.kw).forEach(l=>{ const b = L.find(x=>lqNormKw(x.kw) === lqNormKw(l.kw)); if(b) b.leads.push(l); });
+    return L.map(b=>({ ...b, n:b.leads.length, sqlp:lqSqlPlus(lqCount(b.leads)) })).sort((a,b)=>b.sp-a.sp);
+  })();
+  const kwEv = (x)=> hayKwCrm ? lqEvid({ sp:x.sp, n:x.n, sqlp:x.sqlp })
+                              : lqEvid({ sp:x.sp, n:x.cv, unidad:"conversiones de Google", sqlTxt:"SQL+ sin dato por keyword" });
+  const kwObj = (x)=> ({ txt:`"${x.kw}"${x.grp ? ` (grupo ${x.grp})` : ""}`, ev:kwEv(x), ruta:ruta(x.grp, `keyword "${x.kw}"`) });
+
+  /* --- VERDE: subir presupuesto diario, de cuánto a cuánto, y si el telemarketer lo absorbe */
+  if(k === "subir"){
+    const f = 1 + P.subirPct/100;
+    const grpsP = presu ? Object.values(presu.grps||{}).filter(x=>x.gb > 0) : [];
+    if(presu && presu.cb > 0) add({ txt:`Subir el presupuesto diario ${P.subirPct}%:`, imp:m.inv, presu:{ de:presu.cb, a:presu.cb*f },
+      objs:[{ txt:`${camp}, de ${lqMXN(presu.cb)} a ${lqMXN(presu.cb*f)} al día`, ev:campEv,
+              ruta: meta ? `${rutaCamp} › Editar › Presupuesto de la campaña (CBO)` : `${rutaCamp} › Configuración › Presupuesto` }] });
+    else if(grpsP.length) add({ txt:`Subir el presupuesto diario ${P.subirPct}% de sus conjuntos:`, imp:m.inv,
+      objs: grpsP.map(x=>{ const g = grps.find(y=>y.name === x.name);
+        return { txt:`${x.name}, de ${lqMXN(x.gb)} a ${lqMXN(x.gb*f)} al día`, ev: g ? gEv(g) : "", ruta:ruta(x.name)+" › Presupuesto del conjunto" }; }) });
+    else add({ txt:`Subir el presupuesto diario ${P.subirPct}%:`, imp:m.inv,
+      objs:[{ txt:`${camp}, ${P.subirPct}% sobre su presupuesto diario actual`, ev:campEv, ruta:rutaCamp }],
+      donde:`El presupuesto diario no vino en la sincronización: verlo en ${meta ? "Meta Ads › Campañas › columna Presupuesto" : "Google Ads › Campañas › columna Presupuesto"}.` });
+    const dias = ctx.dias || 28, totMes = Math.round((ctx.leadsRango||0)/dias*30), campMes = m.n/dias*30;
+    const despues = Math.round(totMes + campMes*(f-1)), cap = P.capacidadTelemarketer;
+    add({ txt: despues > cap ? "Antes de subir, resolver la capacidad del telemarketer:" : "Confirmar que el telemarketer absorbe el volumen:",
+      imp: despues > cap ? m.inv + 1 : 0,
+      objs:[{ txt:`hoy entran ~${totMes} leads/mes en total; con +${P.subirPct}% en ${camp} serían ~${despues} (capacidad ~${cap}/mes)`,
+              ev:`${camp}: ${lqPl(m.n, "lead")} en ${dias} días` }],
+      nota: despues > cap ? "Rebasaría la capacidad: repartir la carga o no subir esta semana." : "" });
+  }
+
+  /* --- AMARILLO: optimizar según la causa diagnosticada */
+  const pausarAds = []; let unico = null, grpPausa = null;
+  if(k === "optimizar" && sem.diag){
+    if(sem.diag.calidad && meta){
+      // Conjunto sin SQL+ con muestra suficiente (si la campaña tiene más de uno activo).
+      const act = grps.filter(g=>g.activo && g.sp > 0);
+      const cands = act.length > 1 ? act.filter(g=>g.sqlp === 0 && g.sp >= minPausa).sort((a,b)=>b.sp-a.sp) : [];
+      if(cands.length){
+        const g = grpPausa = cands[0];
+        add({ txt:"Pausar el conjunto", imp:g.sp, objs:[{ txt:g.name, ev:gEv(g), ruta:ruta(g.name) }],
+              nota:[notaCbo, notaCobertura, cands.length > 1 ? `Después, si sigue igual: ${cands.slice(1,3).map(x=>`${x.name} (${lqMXN(x.sp)}, 0 SQL+)`).join(", ")}.` : ""].filter(Boolean).join(" ") });
+      } else if(act.length > 1){
+        const chico = act.filter(g=>g.sqlp === 0).sort((a,b)=>b.sp-a.sp)[0];
+        if(chico) esperar.push(`ningún conjunto sin SQL+ llega a ${lqMXN(minPausa)} de gasto (el de más gasto: ${chico.name}, ${lqMXN(chico.sp)})`);
+      }
+      // Formulario más filtrante: el conjunto con más leads y peor tasa SQL, y a dónde lleva.
+      // (el que se pausa no: no tiene caso arreglarle el formulario)
+      const malos = grps.filter(g=>g !== grpPausa && g.n > 0 && g.sqlp/g.n*100 < P.tasaSqlMin).sort((a,b)=>(b.n-a.n) || (b.sp-a.sp));
+      const g = malos[0];
+      if(g){
+        const dest = !g.url ? `el formulario de la landing del conjunto ${g.name}` : lqEsForm(g.url) ? `el formulario instantáneo del conjunto ${g.name}` : `${g.url} (landing del conjunto ${g.name})`;
+        add({ txt:"Agregar preguntas de presupuesto y de plazo en", imp:g.sp*0.8,
+              objs:[{ txt:dest, ev:gEv(g, `, tasa SQL ${Math.round(g.sqlp/g.n*1000)/10}%`), ruta:ruta(g.name) }],
+              donde: !g.url ? "La URL de destino no vino en la sincronización: verla en Meta Ads › Anuncios › Vista previa."
+                   : lqEsForm(g.url) ? "Se edita en Meta Ads › conjunto › anuncio › Formulario instantáneo (duplicarlo con las preguntas nuevas)."
+                   : "El reporte no ve qué preguntas tiene hoy el formulario: abrir la URL y revisarlo." });
+      }
+      // Audience Network: lo que gastó ahí, por conjunto (solo si llega a la muestra mínima).
+      const an = {};
+      (agg.adw||[]).forEach(a=>{
+        if(!rangoSet.has(a.wk) || String(a.pp).toLowerCase() !== "audience_network") return;
+        if(!((C.cids||new Set()).has(a.cid) || lqNormCamp(a.camp) === lqNormCamp(camp))) return;
+        const b = an[a.grp||LQ_SIN_GRP] = an[a.grp||LQ_SIN_GRP] || { grp:a.grp||LQ_SIN_GRP, sp:0, res:0 };
+        b.sp += a.spend||0; b.res += a.results||0;
+      });
+      const anL = Object.values(an).sort((a,b)=>b.sp-a.sp), anSp = anL.reduce((s,x)=>s+x.sp, 0);
+      if(anSp >= minPausa) add({ txt:"Quitar Audience Network de las ubicaciones del conjunto", imp:anSp,
+        objs: anL.slice(0,3).map(x=>({ txt:x.grp, ev:lqEvid({ sp:x.sp, n:x.res, fte:"Meta", sqlTxt:"SQL+ sin dato por ubicación" })+" en Audience Network", ruta:ruta(x.grp)+" › Ubicaciones" })),
+        donde:"Meta Ads › conjunto › Ubicaciones › Ubicaciones manuales: desmarcar Audience Network." });
+    }
+    if(sem.diag.calidad && google){
+      const top = kws.filter(x=>x.sqlp === 0);
+      const cands = kws.filter(x=>x.sp > P.gastoKeywordSinSql && x.sp >= minPausa && (!hayKwCrm || x.sqlp === 0));
+      if(!kws.length) add({ txt:"Revisar el gasto por palabra clave de", imp:m.inv*0.5, objs:[{ txt:camp, ev:campEv, ruta:rutaCamp }],
+        donde:`El gasto por keyword no vino en la sincronización: verlo en ${rutaCamp} › Palabras clave y pausar las que pasen de ${lqMXN(P.gastoKeywordSinSql)} sin SQL+.` });
+      else if(cands.length && hayKwCrm) add({ txt: cands.length > 1 ? "Pausar las keywords" : "Pausar la keyword", imp:cands.slice(0,2).reduce((s,x)=>s+x.sp,0),
+        objs:cands.slice(0,2).map(kwObj), donde:`${rutaCamp} › Palabras clave › Palabras clave de la búsqueda.` });
+      else if(cands.length) add({ txt:"Revisar antes de pausar la keyword", imp:cands[0].sp, objs:[kwObj(cands[0])],
+        donde:`El CRM no trae la keyword de cada lead (utm_term vacío): el SQL+ por keyword no se puede medir aquí. Ver sus conversiones en ${rutaCamp} › Palabras clave antes de pausarla.` });
+      else if(top.length) esperar.push(`ninguna keyword sin SQL+ pasa de ${lqMXN(P.gastoKeywordSinSql)} de gasto (la de más gasto: "${top[0].kw}", ${lqMXN(top[0].sp)})`);
+      // Negativas: desde los términos de búsqueda de la keyword con más gasto que no se pausa.
+      const pausadas = new Set(hayKwCrm ? cands.slice(0,2) : []);
+      const neg = kws.find(x=>!pausadas.has(x));
+      if(neg) add({ txt:"Agregar palabras negativas desde los términos de búsqueda de", imp:neg.sp*0.5, objs:[kwObj(neg)],
+        donde:`El reporte no trae los términos de búsqueda: verlos en ${rutaCamp} › Palabras clave › Términos de búsqueda y marcar como negativas las búsquedas que no sean de compra de terreno o inversión.` });
+    }
+    if(sem.diag.costo){
+      // Los 2 anuncios activos con peor CPL (y CPL arriba del objetivo), con muestra suficiente,
+      // fuera del conjunto que ya se recomendó pausar. Nunca todos: al menos un anuncio activo
+      // tiene que quedar en la campaña.
+      const vivos = ads.filter(a=>a.on && a.g !== grpPausa);
+      const conMuestra = vivos.filter(a=>a.sp >= minPausa && a.cpl > P.cplMax).sort((a,b)=>(b.cpl-a.cpl) || (b.sp-a.sp));
+      const activos = vivos.length;
+      pausarAds.push(...conMuestra.slice(0, Math.min(2, Math.max(0, activos-1))));
+      if(pausarAds.length){
+        const solos = pausarAds.filter(a=>a.g.ads.filter(A=>on(A.status)).length === 1);
+        add({ txt: pausarAds.length > 1 ? `Pausar los ${pausarAds.length} anuncios con peor CPL:` : "Pausar el anuncio con peor CPL:", imp:pausarAds.reduce((s,a)=>s+a.sp,0),
+              objs: pausarAds.map(a=>({ txt:`${a.name} en ${nivel} ${a.g.name}`, ev:a.ev, ruta:ruta(a.g.name, a.name) })),
+              nota:[solos.length ? `${solos.map(a=>a.name).join(" y ")} ${solos.length > 1 ? "son los únicos anuncios activos de sus conjuntos" : "es el único anuncio activo de su conjunto"}: pausarlo apaga el conjunto.` : "",
+                    solos.length ? notaCbo : ""].filter(Boolean).join(" ") });
+      } else if(conMuestra.length){
+        unico = conMuestra[0];      // único anuncio activo de la campaña: no se pausa, se le suman creativos
+      } else {
+        const mayor = vivos.slice().sort((a,b)=>b.sp-a.sp)[0];
+        if(mayor) esperar.push(`ningún anuncio con CPL arriba de ${lqMXN(P.cplMax)} llega a ${lqMXN(minPausa)} de gasto (el de más gasto: ${mayor.name}, ${lqMXN(mayor.sp)})`);
+      }
+      // Creativos nuevos: en lugar del peor anuncio (el que se pausa) o junto al de peor CPL.
+      const peor = pausarAds[0] || vivos.filter(a=>a.sp > 0).sort((a,b)=>(b.cpl-a.cpl) || (b.sp-a.sp))[0];
+      if(peor) add({ txt: pausarAds[0] ? "Probar 2 creativos nuevos para reemplazar" : "Probar 2 creativos nuevos junto a", imp:peor.sp*0.5,
+        objs:[{ txt:`${peor.name} (${nivel} ${peor.g.name}), que hoy lleva a ${urlTxt(peor.url)}`, ev:peor.ev, ruta:ruta(peor.g.name, peor.name) }],
+        donde:(meta ? "La calidad del creativo no está en el reporte: antes de elegir qué cambiar, compararlo en Meta Ads › Anuncios › columnas CTR (todos) y Frecuencia."
+                    : "La calidad del anuncio no está en el reporte: compararla en Google Ads › Anuncios › columnas CTR y Calidad del anuncio.")
+              + (peor.url ? "" : " La URL de destino no vino en la sincronización: verla en la vista previa del anuncio."),
+        nota: unico ? `${unico.name} es el único anuncio activo que le queda a la campaña: no se pausa (sería pausar la campaña); los creativos nuevos van junto a él.` : "" });
+      // Landing: la URL con muestra suficiente que peor convierte clics en leads (de lo que sigue activo).
+      const porUrl = {};
+      vivos.filter(a=>a.url && !lqEsForm(a.url) && !pausarAds.includes(a)).forEach(a=>{
+        const b = porUrl[a.url] = porUrl[a.url] || { url:a.url, sp:0, cl:0, res:0, ads:new Set(), grps:new Set() };
+        b.sp += a.sp; b.cl += a.A.clicks||0; b.res += a.A.res||0; b.ads.add(a.name); b.grps.add(a.g.name);
+      });
+      // Solo si el CPL de esa URL (leads del CRM de sus conjuntos o, si no hay, los de la
+      // plataforma) pasa del objetivo: una landing que trae leads baratos no es el problema.
+      Object.values(porUrl).forEach(u=>{ const gs = grps.filter(g=>g.url === u.url);
+        u.n = gs.reduce((s,g)=>s+g.n,0); u.sqlp = gs.reduce((s,g)=>s+g.sqlp,0); const n = u.n || u.res; u.cpl = n ? u.sp/n : Infinity; });
+      const urls = Object.values(porUrl).filter(u=>u.sp >= minPausa && u.cl > 0 && u.cpl > P.cplMax).sort((a,b)=>(a.res/a.cl - b.res/b.cl) || (b.sp-a.sp));
+      const u = urls[0];
+      if(u){
+        const n = u.n, sqlp = u.sqlp;
+        const nombres = [...u.ads];
+        add({ txt:"Revisar que la landing coincida con el anuncio:", imp:u.sp*0.3,
+          objs:[{ txt:`${u.url} (anuncio${nombres.length > 1 ? "s" : ""} ${nombres.slice(0,3).join(", ")}${nombres.length > 3 ? ` y ${nombres.length-3} más` : ""})`,
+                  ev:(n ? lqEvid({ sp:u.sp, n, sqlp }) : lqEvid({ sp:u.sp, n:u.res, fte, sqlTxt:"SQL+ sin dato por URL" }))
+                     + `; ${u.cl.toLocaleString()} clics → ${lqPl(u.res, "lead")} de ${fte || "plataforma"} (${(u.res/u.cl*100).toFixed(1)}%)`,
+                  ruta:ruta([...u.grps].slice(0,2).join(" / ")) }],
+          donde:"Abrir el anuncio y la landing lado a lado: misma oferta, idioma y precio. La velocidad y el formulario de la página no están en el reporte: revisarlos abriendo la URL en el celular." });
+      } else if(ads.length && !ads.some(a=>a.url)) add({ txt:"Revisar que la landing coincida con el anuncio:", imp:0,
+        objs:[{ txt:`${ads[0].name} (${nivel} ${ads[0].g.name})`, ev:ads[0].ev, ruta:ruta(ads[0].g.name, ads[0].name) }],
+        donde:`La URL de destino no vino en la sincronización: verla en ${meta ? "Meta Ads › Anuncios › Vista previa" : "Google Ads › Anuncios › URL final"}.` });
+    }
+  }
+
+  /* --- ROJO: pausar la campaña (y si algo adentro está en la meta, decirlo) */
+  if(k === "pausar"){
+    add({ txt:"Pausar la campaña", imp:m.inv, objs:[{ txt:camp, ev:campEv, ruta:`${rutaCamp} › ${google ? "Estado › Pausar" : "Desactivar"}` }],
+          nota: m.res > 0 && m.n === 0 ? `${fte || "La plataforma"} reporta ${lqPl(m.res, "lead")} que no se cruzaron con el CRM: revisar la atribución antes de pausar.` : "" });
+    const buenos = (google && hayKwCrm ? kws.map(x=>({ ...x, name:`keyword "${x.kw}"`, r:ruta(x.grp, `keyword "${x.kw}"`) }))
+                                       : grps.map(g=>({ ...g, name:`${nivel} ${g.name}`, r:ruta(g.name) })))
+      .filter(x=>x.sqlp > 0 && x.sp/x.sqlp <= P.metaCostoSql).sort((a,b)=>b.sqlp-a.sqlp);
+    if(buenos[0]) add({ txt:"Si se quiere conservar algo, lo único dentro de la meta es", imp:buenos[0].sp*0.5,
+      objs:[{ txt:buenos[0].name, ev:lqEvid({ sp:buenos[0].sp, n:buenos[0].n, sqlp:buenos[0].sqlp }), ruta:buenos[0].r }],
+      donde:"En ese caso pausar todo lo demás de la campaña y dejar solo esto una semana más." });
+  }
+
+  /* --- ROJO sin seguimiento: qué leads trabajar, de quién, y cuándo reevaluar */
+  if(k === "revisar"){
+    const pend = C.leads.filter(l=>!l.tr), by = {};
+    pend.forEach(l=>{ const u = (agg.users||{})[l.u] || (l.u ? "Asesor "+l.u : "Sin asesor asignado");
+      const b = by[u] = by[u] || { u, n:0, c:"" }; b.n++; if(l.c && (!b.c || l.c < b.c)) b.c = l.c; });
+    const etapas = {}; pend.forEach(l=>{ const e = l.pstage ? `${l.pipe ? l.pipe+" › " : ""}${l.pstage}` : "sin oportunidad en el pipeline"; etapas[e] = (etapas[e]||0) + 1; });
+    const etapa = Object.entries(etapas).sort((a,b)=>b[1]-a[1])[0];
+    if(pend.length) add({ txt:`Trabajar los ${pend.length} leads de la campaña que siguen sin trabajar:`, imp:m.inv,
+      objs: Object.values(by).sort((a,b)=>b.n-a.n).map(b=>({ txt:`${b.u}, ${lqPl(b.n, "lead")}`, ev: b.c ? `el más antiguo entró el ${lqDdMm(new Date(Date.parse(b.c)-LQ_TZ_MS).toISOString().slice(0,10))}` : "" })),
+      donde: etapa ? `Están en GoHighLevel › Oportunidades › ${etapa[0]}.` : "" });
+    add({ txt:`En ${P.reevaluarDias} días, ya con al menos ${P.minTrabajados}% de leads trabajados: si sigue en rojo, pausar`, imp:m.inv*0.5,
+          objs:[{ txt:camp, ev:campEv, ruta:`${rutaCamp} › ${google ? "Estado › Pausar" : "Desactivar"}` }] });
+  }
+
+  /* --- ⚠ Alerta de CPL: qué conjunto (o keyword) lo subió y dónde revisar la causa */
+  let alertaRec = null;
+  if(m.alerta){
+    const al = m.alerta, finWk = lqWeekOf(al.fin+"T12:00:00"+LQ_TZ);
+    const wb = finWk ? lqWeekBounds(finWk) : null;
+    const baseWks = new Set((agg.weeks||[]).filter(w=>{ if(w >= finWk) return false; const b = lqWeekBounds(w); return b.endYMD >= (al.ini30||""); }));
+    const enCamp = (cid, nom)=> (C.cids||new Set()).has(cid) || lqNormCamp(nom) === lqNormCamp(camp);
+    const by = {};
+    const slot = (key, txt, r)=> by[key] = by[key] || { txt, r, sp7:0, n7:0, s7:0, spB:0, nB:0 };
+    if(google){
+      (agg.kww||[]).forEach(r=>{ if(!enCamp(r.cid, "")) return; const b = slot(lqNormKw(r.kw), `"${r.kw}"${r.grp ? ` (grupo ${r.grp})` : ""}`, ruta(r.grp, `keyword "${r.kw}"`));
+        if(r.wk === finWk){ b.sp7 += r.sp; if(!hayKwCrm) b.n7 += r.cv; } else if(baseWks.has(r.wk)){ b.spB += r.sp; if(!hayKwCrm) b.nB += r.cv; } });
+      if(hayKwCrm) (agg.leads||[]).forEach(l=>{ if(!l.kw || lqNormCamp(l.camp) !== lqNormCamp(camp)) return; const b = by[lqNormKw(l.kw)]; if(!b) return;
+        if(l.wk === finWk){ b.n7++; if(esSql(l)) b.s7++; } else if(baseWks.has(l.wk)) b.nB++; });
+    } else {
+      (agg.adw||[]).forEach(a=>{ if(!enCamp(a.cid, a.camp)) return; const g = a.grp || LQ_SIN_GRP; const b = slot(g, g, ruta(g));
+        if(a.wk === finWk) b.sp7 += a.spend||0; else if(baseWks.has(a.wk)) b.spB += a.spend||0; });
+      // Un lead sin conjunto, en una campaña de un solo conjunto, es de ese conjunto.
+      const unoSolo = Object.keys(by).length === 1 ? Object.values(by)[0] : null;
+      (agg.leads||[]).forEach(l=>{ if(lqNormCamp(l.camp) !== lqNormCamp(camp)) return;
+        const h = ctx.adIdx && ctx.adIdx[lqNormCamp(l.ad)]; const b = by[l.grp || (h && h.grp) || LQ_SIN_GRP] || unoSolo; if(!b) return;
+        if(l.wk === finWk){ b.n7++; if(esSql(l)) b.s7++; } else if(baseWks.has(l.wk)) b.nB++; });
+    }
+    const L = Object.values(by).filter(b=>b.sp7 > 0 && b.txt !== LQ_SIN_GRP);
+    const sube = (b)=> !b.n7 || !b.nB || (b.sp7/b.n7) > (b.spB/b.nB)*(1 + P.alertaCpl.pct/100);
+    const d = L.filter(sube).sort((a,b)=>b.sp7-a.sp7)[0] || L.sort((a,b)=>b.sp7-a.sp7)[0];
+    const sem7 = wb ? `semana ${lqDdMm(wb.startYMD)}–${lqDdMm(wb.endYMD)}` : `últimos ${P.alertaCpl.dias} días`;
+    const ev = d ? `${sem7}: ${lqEvid({ sp:d.sp7, n:d.n7, sqlp:d.s7, unidad: google && !hayKwCrm ? "conversiones de Google" : "" })}; semanas previas: ${d.nB ? `CPL ${lqMXN(d.spB/d.nB)}` : d.spB ? `${lqMXN(d.spB)} sin leads` : "sin gasto"}`
+                 : `${sem7}: CPL ${al.cpl7 != null ? lqMXN(al.cpl7) : "— (sin leads)"} vs. ${lqMXN(al.prom)} de promedio en ${P.alertaCpl.base} días`;
+    alertaRec = { alerta:true, imp:al.sp7,
+      txt: d ? (google ? "CPL al alza: revisar la keyword que más lo subió," : "CPL al alza: revisar el conjunto que más lo subió,") : "CPL al alza: revisar",
+      objs:[d ? { txt:d.txt, ev, ruta:d.r } : { txt:camp, ev, ruta:rutaCamp }],
+      donde: google ? `Los términos de búsqueda no están en el reporte: revisar en ${rutaCamp} › Palabras clave › Términos de búsqueda qué búsquedas nuevas entraron esa semana.`
+                    : "La frecuencia no está en el reporte: revisar en Meta Ads › Anuncios › columna Frecuencia (filtrando este conjunto); si pasa de 3, el público ya vio demasiado los anuncios: rotar creativos.",
+      nota:"Solo alerta: no cambia el semáforo." };
+  }
+
+  // Máximo maxAcciones, de mayor a menor impacto; la alerta de CPL, si la hay, siempre entra.
+  recs.sort((a,b)=>b.imp-a.imp);
+  let items = recs.slice(0, alertaRec ? P.maxAcciones-1 : P.maxAcciones);
+  if(alertaRec) items = items.concat(alertaRec).sort((a,b)=>b.imp-a.imp);
+  const hayPausa = items.some(r=>/^Pausar/.test(r.txt));
+  const sinMuestra = esperar.length
+    ? (hayPausa ? `Sin muestra suficiente para pausar lo demás; esperar: ${esperar.join("; ")}.` : `Sin muestra suficiente para pausar; esperar. ${esperar.map(x=>x[0].toUpperCase()+x.slice(1)).join(". ")}.`)
+    : "";
+  if(!items.length && !sinMuestra) return null;
+  const pie = (k === "optimizar" ? "No tocar presupuesto ni puja. " : "") + `Un cambio a la vez; reevaluar en ${P.reevaluarDias} días.`;
+  return { items, sinMuestra, pie };
+}
+
 
 
 /* ---- Columnas de las tablas por campaña ----------------------------------------------
@@ -4405,22 +4772,22 @@ const LQ_KEYS_CALIDAD = ["inv","n","cpl","tr","ct","cql","mql","sqlp","zoom","op
 const LQ_KEYS_COMBO   = LQ_KEYS_CALIDAD;     // "Leads plataforma" vive en Datos de campañas
 const lqThs = (keys)=> keys.map(k=>`<th${LQ_CCOLS[k].sec?' class="lq-sec"':""} title="${escAttr(LQ_CCOLS[k].t)}">${LQ_CCOLS[k].th}</th>`).join("");
 const lqPct = (n,d)=> d ? Math.round(n/d*100)+"%" : "—";
-// Pasos de una acción (amarillo): lista para Conclusiones y desplegable en la tabla.
-const lqPasosHtml = (sem)=> sem && sem.pasos && sem.pasos.length ? `<ul class="lq-pasos">${sem.pasos.map(x=>`<li>${escAttr(x)}</li>`).join("")}</ul>` : "";
+// Qué hacer (lqRecomendar): lista para Conclusiones y desplegable en la tabla.
+const lqPasosHtml = (sem)=> sem && sem.recs ? lqRecsHtml(sem.recs) : "";
 const lqNotaHtml = (sem)=> sem && sem.nota ? `<div class="lq-sem-nota ${sem.c}">${escAttr(sem.nota)}</div>` : "";
-// Los pasos del amarillo se abren en una fila completa DEBAJO de la campaña: dentro de la
-// celda ensanchaban la columna del semáforo y tapaban el costo por SQL.
+// Qué hacer se abre en una fila completa DEBAJO de la campaña: dentro de la celda
+// ensanchaba la columna del semáforo y tapaba el costo por SQL.
 const lqPasosAbierto = (pk)=> !!(lqState.pasos && lqState.pasos[pk]);
 function lqFilaPasos(m, ncols){
-  if(!m || !m.sem || !m.sem.pasos || !m.sem.pasos.length || !m.key) return "";
+  if(!m || !m.sem || !m.sem.recs || !m.key) return "";
   const pk = lqExpKey("pasos|"+m.key);
   return `<tr class="lq-pasos-fila" data-pasos="${pk}"${lqPasosAbierto(pk)?"":" hidden"}><td colspan="${ncols}" class="lft">
-    <div class="lq-pasos-panel"><b>${escAttr(m.camp)} · ${escAttr(m.sem.acc)}</b>${m.sem.diag?` <span class="lq-sub">— ${escAttr(m.sem.diag.txt)}</span>`:""}${lqPasosHtml(m.sem)}</div></td></tr>`;
+    <div class="lq-pasos-panel"><b>${escAttr(m.camp)} · ${escAttr(m.sem.acc)}</b>${m.sem.diag?` <span class="lq-sub">— ${escAttr(m.sem.diag.txt)}</span>`:""}\n${lqPasosHtml(m.sem)}</div></td></tr>`;
 }
 function lqSemCell(sem, vacio, sinAcc, clave){
   if(vacio) return `<td></td>`;
   if(!sem) return `<td class="lq-semcell"><span class="lq-sub" title="Sin inversión en el rango: no hay presupuesto que mover">—</span></td>`;
-  const pk = clave && sem.pasos && sem.pasos.length ? lqExpKey("pasos|"+clave) : "";
+  const pk = clave && sem.recs ? lqExpKey("pasos|"+clave) : "";
   return `<td class="lq-semcell" title="${escAttr(sem.regla)}"><span class="lq-sem ${sem.c}">${sem.txt}</span>${sinAcc?"":`<div class="lq-sem-acc">${escAttr(sem.acc)}</div>${lqNotaHtml(sem)}${pk?`<button type="button" class="lq-que-hacer" data-pasos-btn="${pk}" aria-expanded="${lqPasosAbierto(pk)?"true":"false"}">Qué hacer ${lqPasosAbierto(pk)?"▾":"▸"}</button>`:""}`}</td>`;
 }
 function lqAlertaIcono(al){
@@ -4715,18 +5082,25 @@ function lqComboSection(agg, leadsAll, rango, rangoSet){
   const sinAttrN = sinAttr.reduce((a,m)=>a+m.n,0), sinAttrS = sinAttr.reduce((a,m)=>a+m.sqlp,0);
   const alertas = rows.filter(m=>m.alerta);
   const ojoAtrib = (m)=> (m.res>0 && m.n===0) ? ` — <i>ojo: la plataforma reporta ${m.res} lead${m.res===1?"":"s"} que no se cruzaron con el CRM; revisa la atribución antes de pausar</i>` : "";
+  // La primera acción concreta de la campaña (objeto + evidencia), o por qué se espera.
+  const primera = (m)=>{ const R = m.recs; if(!R) return "";
+    const r = (R.items||[]).find(x=>!x.alerta);
+    return r ? ` → 1º: ${escAttr(lqRecTexto(r, true))}` : R.sinMuestra ? ` → ${escAttr(R.sinMuestra)}` : ""; };
+  const alertaTxt = (m)=>{ const r = m.recs && (m.recs.items||[]).find(x=>x.alerta); return r ? ` → ${escAttr(lqRecTexto(r, true))}` : ""; };
+  const evid = (m)=> escAttr(lqEvid({ sp:m.inv, n:m.n, sqlp:m.sqlp }));
+  const deA = (m)=>{ const r = m.recs && (m.recs.items||[]).find(x=>x.presu); return r ? ` → de ${lqMXN(r.presu.de)} a ${lqMXN(r.presu.a)} al día` : ""; };
   html += `<div class="lq-lectura">
     <h4>Lectura automática — en corto</h4>
     <p>Se invirtieron <b>${lqMXN(todo.inv)}</b> y llegaron <b>${leads.length} leads</b> al CRM; <b>${todo.sqlp} son SQL+</b> (SQL + SQL Selvadentro).
       Las campañas con inversión trajeron <b>${pag.sqlp} SQL+</b>${pag.cps!=null?`: <b>${lqMXN(pag.cps)} por SQL</b> contra una meta de ${lqMXN(P.metaCostoSql)}`:", así que todavía no hay costo por SQL"}.</p>
-    ${subir.length?`<p class="ok"><span class="lq-sem verde">VERDE</span> <b>Subir presupuesto diario ${P.subirPct}%:</b> ${subir.map(m=>`${nom(m)} — ${cps(m)}, ${m.sqlp} SQL+`).join(" · ")}. Máx. 1 vez por semana y solo si sigue en verde; que el volumen de leads no rebase la capacidad del telemarketer (~${P.capacidadTelemarketer}/mes).</p>`:""}
-    ${optimizar.length?`<p><span class="lq-sem amarillo">AMARILLO</span> ${optimizar.map(m=>`${nom(m)} — <b>${escAttr(m.sem.acc)}</b>: ${cps(m)}${m.sem.diag?`; ${escAttr(m.sem.diag.txt)}`:""}`).join(" · ")}. No tocar presupuesto ni puja; un cambio a la vez y reevaluar en 7 días. Los pasos de cada campaña están en <b>Qué hacer</b>, bajo su semáforo.</p>`:""}
+    ${subir.length?`<p class="ok"><span class="lq-sem verde">VERDE</span> <b>Subir presupuesto diario ${P.subirPct}%:</b> ${subir.map(m=>`${nom(m)} — ${evid(m)}${deA(m)}`).join(" · ")}. Máx. 1 vez por semana y solo si sigue en verde; que el volumen de leads no rebase la capacidad del telemarketer (~${P.capacidadTelemarketer}/mes).</p>`:""}
+    ${optimizar.length?`<p><span class="lq-sem amarillo">AMARILLO</span> ${optimizar.map(m=>`${nom(m)} — <b>${escAttr(m.sem.acc)}</b>: ${cps(m)}${m.sem.diag?`; ${escAttr(m.sem.diag.txt)}`:""}${primera(m)}`).join(" · ")}. No tocar presupuesto ni puja; un cambio a la vez y reevaluar en ${P.reevaluarDias} días. Hasta ${P.maxAcciones} acciones por campaña, con su conjunto, anuncio o keyword, en <b>Qué hacer</b>, bajo su semáforo.</p>`:""}
     ${mantener.length?`<p><span class="lq-sem amarillo">AMARILLO</span> <b>Mantener, no subir:</b> ${mantener.map(m=>`${nom(m)} — ${escAttr(m.sem.regla)}`).join(" · ")}.</p>`:""}
-    ${pausar.length?`<p class="warn"><span class="lq-sem rojo">ROJO</span> <b>Pausar:</b> ${pausar.map(m=>`${nom(m)} — ${escAttr(m.sem.regla)}${ojoAtrib(m)}`).join(" · ")}.</p>`:""}
-    ${revisar.length?`<p class="warn"><span class="lq-sem rojo">ROJO</span> <b>Revisar seguimiento antes de pausar:</b> ${revisar.map(m=>`${nom(m)} — ${cps(m)}; ${escAttr(m.sem.nota)}`).join(" · ")} El problema puede ser de seguimiento, no de la campaña.</p>`:""}
+    ${pausar.length?`<p class="warn"><span class="lq-sem rojo">ROJO</span> <b>Pausar la campaña:</b> ${pausar.map(m=>`${nom(m)} — ${evid(m)}${ojoAtrib(m)}`).join(" · ")}.</p>`:""}
+    ${revisar.length?`<p class="warn"><span class="lq-sem rojo">ROJO</span> <b>Revisar seguimiento antes de pausar:</b> ${revisar.map(m=>`${nom(m)} — ${evid(m)}. ${escAttr(m.sem.nota)}${primera(m)}`).join(" · ")}. El problema puede ser de seguimiento, no de la campaña.</p>`:""}
     ${chicas.length?`<p><b>Mantener (muestra chica)</b>, todavía no llegan a ${lqMXN(P.umbralEval)} de inversión: ${chicas.map(m=>`${nom(m)} ${pill(m)} ${lqMXN(m.inv)}, ${cps(m)}`).join(" · ")}. El color dice cómo van; con tan poca inversión no se sube ni se pausa.</p>`:""}
     ${sinAttrN?`<p><b>${sinAttrN} leads llegaron sin campaña</b>${sinAttrS?` (${sinAttrS} SQL+)`:""}: no entran en el costo por SQL de ninguna campaña hasta que los anuncios pasen su utm_campaign o su ID de campaña.</p>`:""}
-    ${alertas.length?`<p class="warn">⚠ <b>CPL al alza</b> (últimos ${P.alertaCpl.dias} días más de ${P.alertaCpl.pct}% arriba de su promedio de ${P.alertaCpl.base}): ${alertas.map(m=>`${nom(m)}${m.alerta.cpl7!=null?` ${lqMXN(m.alerta.cpl7)} vs. ${lqMXN(m.alerta.prom)}`:` ${lqMXN(m.alerta.sp7)} sin leads`}`).join(" · ")}. Solo alerta: no cambia el semáforo.</p>`:""}
+    ${alertas.length?`<p class="warn">⚠ <b>CPL al alza</b> (últimos ${P.alertaCpl.dias} días más de ${P.alertaCpl.pct}% arriba de su promedio de ${P.alertaCpl.base}): ${alertas.map(m=>`${nom(m)}${m.alerta.cpl7!=null?` ${lqMXN(m.alerta.cpl7)} vs. ${lqMXN(m.alerta.prom)}`:` ${lqMXN(m.alerta.sp7)} sin leads`}${alertaTxt(m)}`).join(" · ")}. Solo alerta: no cambia el semáforo.</p>`:""}
     ${leads.length<20?`<p class="warn">⚠ Volumen bajo (${leads.length} leads): las proporciones de este periodo son indicativas, no concluyentes.</p>`:""}
   </div>`;
 
@@ -4799,7 +5173,7 @@ const LQ_ACC_TXT = { subir:`subir presupuesto diario ${LQ_SEMAFORO.subirPct}%`, 
 function lqConclusionesSection(){
   const a = lqState.ia;
   let html = `<h3 style="font-family:var(--serif);color:var(--verde-prof);font-size:var(--fs-xl);margin:6px 0">Conclusiones y acciones</h3>
-    <p class="hint" style="margin-top:0">Una acción concreta por campaña según el semáforo (costo por SQL contra la meta de ${lqMXN(LQ_SEMAFORO.metaCostoSql)}), con la regla que la justifica. La IA agrega el detalle; los datos van agregados: no se envía información personal de ningún lead.</p>
+    <p class="hint" style="margin-top:0">Una acción por campaña según el semáforo (costo por SQL contra la meta de ${lqMXN(LQ_SEMAFORO.metaCostoSql)}), con la regla que la justifica y hasta ${LQ_SEMAFORO.maxAcciones} pasos concretos: qué conjunto, anuncio, keyword o URL tocar, con su gasto, leads, SQL+ y CPL del rango. La IA agrega el detalle; los datos van agregados: no se envía información personal de ningún lead.</p>
     <div style="margin-bottom:16px"><button class="btn btn-olive" id="lq-ia-btn">${a?"Volver a analizar":"Analizar con IA"}</button>
       ${a&&a.ts?`<span class="hint" style="margin-left:12px">Generado ${crmAgo(a.ts)}</span>`:""}</div>`;
   const d = lqState._combo || {};
@@ -4843,6 +5217,8 @@ function lqConclusionesSection(){
   return html;
 }
 
+// v10 (2026-10-09): cada campaña llega con sus acciones concretas (conjunto, anuncio, keyword,
+// URL, presupuesto de → a, con evidencia); el análisis v9 recomendaba en genérico.
 // v7 (2026-10-09): fuera los leads de brokers; un análisis anterior los contaba como SQL+ y WON.
 // v9 (2026-10-09): verde = subir presupuesto diario 20% con su nota; amarillo con diagnóstico.
 // v8 (2026-10-09): la regla de seguimiento mira los TRABAJADOS, no los contactados.
@@ -4855,7 +5231,7 @@ function lqConclusionesSection(){
 // v2 (2026-09-11): la calificación cambió —OPP eleva a SQL, Budget Range en pesos, fuera
 // pruebas y sin contacto—, así que un análisis guardado con la v1 cita cifras que ya no
 // son las de la pantalla. Se paga una vez más por rango y se comparte otra vez.
-const LQ_IA_KEY = "lq:ia:v9:";
+const LQ_IA_KEY = "lq:ia:v10:";
 const LQ_IA_TTL = 12*3600e3;          // 12 h: el rango no cambia tanto como para pagar de nuevo
 
 // Devuelve el análisis guardado de este rango si sigue vigente. La clave incluye la
@@ -4897,7 +5273,9 @@ async function lqAnalizar(forzar){
       costoSql:r0(m.cps), cpl:r0(m.cpl), zoom:m.zoom, opp:m.opp, won:m.won,
       trabajadosPct: m.n ? Math.round(m.tr/m.n*100) : null,
       contactadosPct: m.n ? Math.round(m.ct/m.n*100) : null,
-      semaforo:m.sem.txt, accion:LQ_ACC_TXT[m.sem.k], accionTexto:m.sem.acc, regla:m.sem.regla, nota:m.sem.nota||"", pasos:m.sem.pasos||[], muestraChica:!!m.sem.chica,
+      semaforo:m.sem.txt, accion:LQ_ACC_TXT[m.sem.k], accionTexto:m.sem.acc, regla:m.sem.regla, nota:m.sem.nota||"", muestraChica:!!m.sem.chica,
+      // Qué hacer, ya con el objeto exacto y su evidencia (lqRecomendar): la IA lo explica, no lo inventa.
+      recomendaciones: m.recs ? m.recs.items.map(r=>(r.alerta ? "⚠ " : "")+lqRecTexto(r)) : [], esperar: (m.recs && m.recs.sinMuestra) || "",
       alertaCpl: m.alerta ? (m.alerta.cpl7!=null ? `CPL 7 días ${r0(m.alerta.cpl7)} MXN vs. promedio 30 días ${r0(m.alerta.prom)} MXN (+${m.alerta.pct}%)` : `${r0(m.alerta.sp7)} MXN en 7 días sin leads`) : "",
       inferidos:m.inf||0,
     }));
@@ -4919,7 +5297,7 @@ async function lqAnalizar(forzar){
     const payload = {
       rango: rango.length ? `${rango[0]} → ${rango[rango.length-1]}` : "—",
       moneda: "MXN",
-      parametros: { metaCostoSql:P.metaCostoSql, minSqlVerde:P.minSqlVerde, subirPct:P.subirPct, topeAmarillo:P.topeAmarillo, umbralEval:P.umbralEval, minTrabajados:P.minTrabajados, capacidadTelemarketer:P.capacidadTelemarketer, tasaSqlMin:P.tasaSqlMin, cplMax:P.cplMax, alertaCpl:P.alertaCpl },
+      parametros: { metaCostoSql:P.metaCostoSql, minSqlVerde:P.minSqlVerde, subirPct:P.subirPct, topeAmarillo:P.topeAmarillo, umbralEval:P.umbralEval, minTrabajados:P.minTrabajados, capacidadTelemarketer:P.capacidadTelemarketer, tasaSqlMin:P.tasaSqlMin, cplMax:P.cplMax, muestraPausa:P.muestraPausa, maxAcciones:P.maxAcciones, reevaluarDias:P.reevaluarDias, alertaCpl:P.alertaCpl },
       totales: { inv:r0(d.todo&&d.todo.inv), leads:L.length, sqlPlus:d.todo?d.todo.sqlp:0,
                  invPagada:r0(d.pagado&&d.pagado.inv), sqlPlusPagado:d.pagado?d.pagado.sqlp:0, costoSql:r0(d.pagado&&d.pagado.cps),
                  won:L.filter(l=>(l.w||0)>0).length,
@@ -5328,6 +5706,12 @@ async function lqPersist(agg){
       toast("Cache guardado sin el detalle de tags (volumen alto)");
       return;
     }
+    const slim2 = { ...slim, kww:[] };
+    if(JSON.stringify(slim2).length <= MAX){
+      await sSet(LQ_AGG_KEY, slim2);
+      toast("Cache guardado sin tags ni gasto por keyword (volumen alto)");
+      return;
+    }
     toast("Agregado demasiado grande para el cache compartido; cada usuario sincronizará por su cuenta");
   }catch(e){ toast("No se pudo guardar el cache compartido: "+(e.message||e)); }
 }
@@ -5393,12 +5777,12 @@ async function lqSync(){
       }while(oc);
     }catch(e){ fallos.push("oportunidades del CRM (OPPs y WONs salen en 0)"); toast("Oportunidades no disponibles: "+(e.message||e)); }
     bar.style.width="92%"; lbl.textContent="Consultando inversión y anuncios (Windsor)…";
-    let spendRows=[], adRows=[];
+    let spendRows=[], adRows=[], adExtra={};
     if(boot.windsor){
       let spendOk = false, adsOk = false;
       try{ const sp = await lqFn({action:"spend", start:b0.startYMD, end:b1.endYMD}); spendRows = sp.rows||[]; monedas = sp.monedas||[]; spendOk = true; }
       catch(e){ fallos.push("inversión de Windsor (la columna Inversión sale vacía)"); toast("Windsor no respondió: "+(e.message||e)); }
-      try{ const ad = await lqFn({action:"ads", start:b0.startYMD, end:b1.endYMD}); adRows = ad.ads||[]; adsOk = true; }
+      try{ const ad = await lqFn({action:"ads", start:b0.startYMD, end:b1.endYMD}); adRows = ad.ads||[]; adExtra = { kw:ad.kw||[], presu:ad.presu||{} }; adsOk = true; }
       catch(e){ fallos.push("detalle por anuncio de Windsor (no hay conjuntos ni anuncios)"); toast("Detalle por anuncio no disponible: "+(e.message||e)); }
       // Windsor apaga Meta EN SILENCIO: si la cuenta de Meta Ads se desconecta de Windsor, el
       // super-conector solo devuelve Google y el detalle por anuncio de Meta vuelve vacío sin
@@ -5412,7 +5796,7 @@ async function lqSync(){
       fallos.push("Windsor no está configurado (sin WINDSOR_API_KEY)");
     }
     bar.style.width="100%"; lbl.textContent="Procesando…";
-    lqState.agg = buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows);
+    lqState.agg = buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adExtra);
     // Sincronización incompleta: se marca EN el agregado para que quien lo lea del
     // cache lo vea en pantalla. Antes el error era solo un toast pasajero que veía
     // quien pulsó Sincronizar, y el resto del equipo leía los ceros como si fueran datos.

@@ -7,6 +7,12 @@
 //     la landing (seguridad.selvadentrotulum.com) para la atribución inferida.
 //   · El prompt de Conclusiones usa el semáforo: cada campaña llega con su acción y su
 //     regla, todo en MXN, y pide una acción por campaña.
+// Y las recomendaciones concretas del 9-oct-2026:
+//   · El detalle por anuncio trae la URL de destino, el presupuesto diario vigente (Meta en
+//     centavos → MXN; Google ya en MXN) y el gasto por keyword de Google.
+//   · Si la cuenta rechaza los campos nuevos, se cae a la consulta de antes sin perder leads.
+//   · El prompt manda las acciones ya calculadas y la regla general (objeto exacto, evidencia,
+//     muestra mínima, dónde revisar, CBO, máximo 3, un cambio a la vez).
 //
 // Correr: node scripts/test-lq.js   (sale con código 1 si algo falla)
 process.env.SUPABASE_URL = "https://prueba.invalid";
@@ -69,6 +75,44 @@ S.ghlFetch = async (path) => {
   ok(/fields=[^&]*campaign_id/.test(pedidas[0] || ""), "pide campaign_id a /all", pedidas[0]);
   ok(rs.statusCode === 200 && dsp.rows[0].cid === "23710551755" && dsp.rows[1].cid === "120251374772050275", "cada fila de inversión trae su ID de campaña", dsp.rows);
 
+  console.log("\n[lead-quality] detalle por anuncio: URL de destino, presupuesto diario y gasto por keyword");
+  const FB = { date: "2026-09-22", campaign: "INVESTORS_US/CA_ESCAPE_090926", campaign_id: "120251374799490275", adset_name: "EN_LLAMADA_ESCAPE", adset_id: "120251374799520275",
+    ad_id: "120251374799500275", ad_name: "EN_LLAMADA_ESCAPE-TY-COLD", publisher_platform: "facebook", effective_status: "ACTIVE", spend: 100, impressions: 50, clicks: 3, actions_lead: 1,
+    website_destination_url: "https://lotes.selvadentrotulum.com/en/escape", link: "https://lotes.selvadentrotulum.com/en/escape", campaign_daily_budget: 40000, adset_daily_budget: null };
+  const simularWindsor = (rechazaNuevos) => async (url) => {
+    const u = String(url), f = decodeURIComponent((u.match(/fields=([^&]*)/) || [])[1] || "");
+    pedidas.push(u);
+    if (rechazaNuevos && /website_destination_url|keyword_text|budget_amount/.test(f)) return { ok: false, status: 400, json: async () => ({}), text: async () => "campo no válido" };
+    let data = [];
+    // Windsor devuelve solo los campos pedidos
+    const solo = (o) => Object.fromEntries(Object.entries(o).filter(([k]) => f.split(",").includes(k)));
+    if (u.includes("/facebook")) data = [FB, { ...FB, date: "2026-09-23", campaign_daily_budget: 36000, website_destination_url: "http://fb.me/", link: "http://fb.me/" }].map(solo);
+    else if (f.includes("keyword_text")) data = [{ date: "2026-09-22", campaign: "INVESTORS - GOOGLE SEARCH - US+CAN", campaign_id: "23715389989", ad_group_name: "Investment Intent", ad_group_id: "193313814165",
+      keyword_text: "buying property in tulum mexico", spend: 300.5, clicks: 7, conversions: 1 }, { date: "2026-09-22", campaign_id: "23715389989", keyword_text: "", spend: 5 }];
+    else if (f.includes("budget_amount")) data = [{ date: "2026-09-21", campaign_id: "23715389989", budget_amount: 450 }, { date: "2026-09-22", campaign_id: "23715389989", budget_amount: 480 }];
+    else if (u.includes("/google_ads")) data = [{ date: "2026-09-22", campaign: "INVESTORS - GOOGLE SEARCH - US+CAN", campaign_id: "23715389989", ad_group_name: "Investment Intent", ad_group_id: "193313814165",
+      ad_id: "7771", ad_name: "", ad_group_ad_status: "ENABLED", ad_final_urls: '["https://seguridad.selvadentrotulum.com/en/seguridadselva"]', spend: 200, impressions: 100, clicks: 5, conversions: 1 }];
+    return { ok: true, status: 200, json: async () => ({ data }), text: async () => "" };
+  };
+  pedidas.length = 0; global.fetch = simularWindsor(false);
+  const rad = await LQ.handler(ev({ action: "ads", start: "2026-09-21", end: "2026-09-27" }));
+  const dad = JSON.parse(rad.body);
+  const fbRow = (dad.ads || []).find((a) => a.plat === "Meta"), ggRow = (dad.ads || []).find((a) => a.plat === "Google");
+  ok(rad.statusCode === 200 && fbRow && fbRow.url === "https://lotes.selvadentrotulum.com/en/escape" && ggRow && ggRow.url === "https://seguridad.selvadentrotulum.com/en/seguridadselva",
+    "cada anuncio trae su URL de destino (Meta: website_destination_url; Google: la URL final)", { fbRow, ggRow });
+  ok(dad.presu && dad.presu["120251374799490275"] && dad.presu["120251374799490275"].cb === 360 && dad.presu["120251374799490275"].plat === "Meta",
+    "presupuesto diario de Meta: centavos → MXN, el del día más reciente (36000 → 360 MXN)", dad.presu);
+  ok(dad.presu && dad.presu["23715389989"] && dad.presu["23715389989"].cb === 480, "presupuesto diario de Google: ya en MXN, el del día más reciente", dad.presu && dad.presu["23715389989"]);
+  ok(Array.isArray(dad.kw) && dad.kw.length === 1 && dad.kw[0].kw === "buying property in tulum mexico" && dad.kw[0].spend === 300.5 && dad.kw[0].cid === "23715389989" && dad.kw[0].grp === "Investment Intent",
+    "gasto por keyword de Google (sin filas vacías)", dad.kw);
+  ok(pedidas.some((u) => /facebook.*website_destination_url.*campaign_daily_budget/.test(decodeURIComponent(u))), "pide URL de destino y presupuesto de campaña a Meta");
+  pedidas.length = 0; global.fetch = simularWindsor(true);
+  const rad2 = await LQ.handler(ev({ action: "ads", start: "2026-09-21", end: "2026-09-27" }));
+  const dad2 = JSON.parse(rad2.body);
+  const fb2 = (dad2.ads || []).find((a) => a.plat === "Meta");
+  ok(rad2.statusCode === 200 && fb2 && fb2.results === 1 && fb2.tags === "" && !fb2.url && Array.isArray(dad2.kw) && !dad2.kw.length && !Object.keys(dad2.presu || {}).length,
+    "si la cuenta rechaza los campos nuevos, cae a la consulta de antes y conserva los leads de Meta", { fb2, kw: dad2.kw, presu: dad2.presu });
+
   console.log("\n[lq-analyze] el prompt usa el semáforo y pide una acción por campaña");
   let enviado = null;
   global.fetch = async (url, opt) => {
@@ -79,11 +123,16 @@ S.ghlFetch = async (path) => {
   const A = require("../netlify/functions/lq-analyze.js");
   const payload = {
     rango: "2026-W37 → 2026-W40", moneda: "MXN",
-    parametros: { metaCostoSql: 4000, minSqlVerde: 2, subirPct: 20, topeAmarillo: 6000, umbralEval: 8000, minTrabajados: 50 },
+    parametros: { metaCostoSql: 4000, minSqlVerde: 2, subirPct: 20, topeAmarillo: 6000, umbralEval: 8000, minTrabajados: 50, cplMax: 400, muestraPausa: 2, maxAcciones: 3, reevaluarDias: 7 },
     totales: { inv: 30000, leads: 40, sqlPlus: 6, invPagada: 30000, sqlPlusPagado: 5, costoSql: 6000, won: 1, sinCampania: { leads: 3, sqlPlus: 1 } },
     campanias: [
       { nombre: "INVESTORS_US/CA_ESCAPE_090926", plataforma: "Meta", inv: 11360, leadsPlataforma: 13, leads: 9, sqlPlus: 0, costoSql: null, cpl: 1262, zoom: 0, opp: 0, won: 0,
-        trabajadosPct: 100, contactadosPct: 30, semaforo: "ROJO", accion: "pausar", regla: "inversión 11,360 MXN ≥ 8,000 MXN con 0 SQL+", muestraChica: false, alertaCpl: "", inferidos: 0 },
+        trabajadosPct: 100, contactadosPct: 30, semaforo: "ROJO", accion: "pausar", regla: "inversión 11,360 MXN ≥ 8,000 MXN con 0 SQL+", muestraChica: false, alertaCpl: "", inferidos: 0,
+        recomendaciones: ["Pausar la campaña INVESTORS_US/CA_ESCAPE_090926 — gasto 11,360 MXN, 9 leads, 0 SQL+, CPL 1,262 MXN"], esperar: "" },
+      { nombre: "INVESTORS_MX_DYNAMIC-TOPLPS_090926", plataforma: "Meta", inv: 9230, leadsPlataforma: 51, leads: 10, sqlPlus: 2, costoSql: 4615, cpl: 923, zoom: 1, opp: 1, won: 0,
+        trabajadosPct: 90, contactadosPct: 40, semaforo: "AMARILLO", accion: "optimizar", accionTexto: "Optimizar costo", regla: "costo por SQL 4,615 MXN", muestraChica: false, alertaCpl: "", inferidos: 8,
+        recomendaciones: ["Probar 2 creativos nuevos junto a ES_LLAMADA_NUEVO6-ESCAPE_CENOTES (conjunto ES_LLAMADA_NUEVO6-SEGURIDAD_PATRIMONIO), que hoy lleva a https://seguridad.selvadentrotulum.com/seguridadpatrimonio/ — gasto 3,965 MXN"],
+        esperar: "Sin muestra suficiente para pausar; esperar. Ningún anuncio con CPL arriba de 400 MXN llega a 800 MXN de gasto." },
     ],
     anuncios: [], integridad: { fuente: "90%", asesor: "95%", calificacion: "20%", duplicados: 0 },
   };
@@ -101,6 +150,11 @@ S.ghlFetch = async (path) => {
   ok(/MUESTRA CHICA = inversión < 8,000 MXN: el color se calcula igual, pero la acción SIEMPRE es mantener/.test(prompt), "muestra chica: la acción siempre es mantener, nunca subir");
   ok(/subir presupuesto diario 20% \(máx\. 1 vez por semana/.test(prompt) && /tasa SQL \(SQL\+ ÷ leads\) < 10% = optimizar calidad, CPL > 400 MXN = optimizar costo/.test(prompt), "verde con su nota y amarillo con su diagnóstico en el prompt");
   ok(/SQL\+ = SQL \+ SQL Selvadentro/.test(prompt) && !/MQL \+ SQL \+ SQL Selvadentro/.test(prompt), "una sola definición de bueno: SQL+");
+  ok(/QUÉ HACER \(ya calculado, en orden de impacto\): 1\) Probar 2 creativos nuevos junto a ES_LLAMADA_NUEVO6-ESCAPE_CENOTES \(conjunto ES_LLAMADA_NUEVO6-SEGURIDAD_PATRIMONIO\), que hoy lleva a https:\/\/seguridad/.test(prompt)
+     && /Sin muestra suficiente para pausar; esperar\. Ningún anuncio/.test(prompt), "cada campaña llega con sus acciones concretas y la nota de muestra insuficiente");
+  ok(/nunca genérica/.test(prompt) && /no inventes ninguno/.test(prompt) && /gasto menor a 800 MXN \(2× el CPL objetivo de 400 MXN\)/.test(prompt)
+     && /Revisar en Meta Ads › Anuncios › columna Frecuencia/.test(prompt) && /CBO/.test(prompt) && /Máximo 3 acciones por campaña/.test(prompt) && /Un cambio a la vez; reevaluar en 7 días/.test(prompt),
+     "regla general de recomendaciones en el prompt (objeto exacto, muestra mínima 800 MXN, dónde revisar, CBO, máximo 3)");
 
   console.log(fallas.length ? `\n${fallas.length} prueba(s) fallaron` : "\nTodas las pruebas del backend de Calidad de Leads pasaron");
   process.exit(fallas.length ? 1 : 0);

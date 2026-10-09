@@ -311,8 +311,16 @@ async function ads({ start, end }) {
   // y pedir varios y sumarlos duplicaría.
   // También se pide url_tags: 9 de 11 anuncios escriben utm_content={{adset.name}}, así
   // que saber qué manda cada anuncio es lo que permite cruzar el lead con el anuncio.
-  const [fb, gg] = await Promise.all([
-    windsorGet("facebook", `${range}&fields=date,campaign,campaign_id,adset_name,adset_id,ad_id,ad_name,publisher_platform,effective_status,ad_preview_shareable_link,url_tags,spend,impressions,clicks,actions_lead`)
+  // RECOMENDACIONES CONCRETAS (Dirección, 9-oct-2026): para decir "reemplazar el anuncio X,
+  // que hoy lleva a <url>" y "subir el presupuesto diario de 400 a 480 MXN" se piden también
+  // la URL de destino del anuncio (website_destination_url sirve también para los creativos
+  // dinámicos, donde `link` llega vacío) y el presupuesto diario de campaña y de conjunto
+  // (Meta los da en centavos: 40000 = 400 MXN/día). Si la cuenta no los diera, se cae a la
+  // consulta de antes y el reporte dice dónde revisarlos.
+  const FB_BASE = "date,campaign,campaign_id,adset_name,adset_id,ad_id,ad_name,publisher_platform,effective_status,ad_preview_shareable_link,url_tags,spend,impressions,clicks,actions_lead";
+  const [fb, gg, kw, ggPresu] = await Promise.all([
+    windsorGet("facebook", `${range}&fields=${FB_BASE},website_destination_url,link,campaign_daily_budget,adset_daily_budget`)
+      .catch(() => windsorGet("facebook", `${range}&fields=${FB_BASE}`))
       // si el campo de leads no está disponible en la cuenta, degradar sin resultados
       .catch(() => windsorGet("facebook", `${range}&fields=date,campaign,adset_name,ad_id,ad_name,publisher_platform,effective_status,ad_preview_shareable_link,spend,impressions,clicks`).catch(() => [])),
     // GOOGLE MANDA IDs, NO NOMBRES. El sufijo de URL final de la cuenta es
@@ -325,6 +333,12 @@ async function ads({ start, end }) {
     // Se piden también los sufijos y plantillas de tracking para auditar el etiquetado.
     windsorGet("google_ads", `${range}&fields=date,campaign,campaign_id,ad_group_name,ad_group_id,ad_id,ad_name,ad_group_ad_status,ad_final_urls,ad_final_url_suffix,final_url_suffix,tracking_url_template,customer_final_url_suffix,customer_tracking_url_template,spend,impressions,clicks,conversions`)
       .catch(() => windsorGet("google_ads", `${range}&fields=date,campaign,campaign_id,ad_group_name,ad_group_id,ad_id,ad_name,ad_group_ad_status,ad_final_urls,spend,impressions,clicks,conversions`).catch(() => [])),
+    // Gasto por PALABRA CLAVE de Google: con esto la recomendación nombra la keyword que
+    // gasta sin SQL+ en vez de decir "pausar las keywords caras". Los términos de búsqueda
+    // no se piden: el reporte dice dónde verlos (Google Ads › Palabras clave › Términos).
+    windsorGet("google_ads", `${range}&fields=date,campaign,campaign_id,ad_group_name,ad_group_id,keyword_text,spend,clicks,conversions`).catch(() => []),
+    // Presupuesto diario de Google, por día: ya viene en pesos (no en micros).
+    windsorGet("google_ads", `${range}&fields=date,campaign_id,budget_amount`).catch(() => []),
   ]);
   // Filas por día × anuncio: el frontend las agrupa por semana/rango seleccionado
   const rows = [];
@@ -335,8 +349,23 @@ async function ads({ start, end }) {
     // Qué manda el anuncio en utm_content: si es {{adset.name}}, el lead del CRM trae el
     // nombre del CONJUNTO y hay que cruzar por ahí, no por el nombre del anuncio.
     tags: String(r.url_tags || ""),
+    // A dónde lleva el anuncio hoy. "http://fb.me/" = formulario instantáneo (no hay landing).
+    url: String(r.website_destination_url || r.link || "").trim(),
     spend: num(r.spend), impr: num(r.impressions), clicks: num(r.clicks), results: num(r.actions_lead),
   }));
+  // Presupuesto diario vigente por campaña (y por conjunto, si la campaña no es CBO), en
+  // MXN/día: el del día más reciente que trae cada uno. Se manda aparte y no en cada fila.
+  const presu = {};
+  const fija = (cid, plat, d, cb, grp) => {
+    if (!cid) return;
+    const P = presu[cid] = presu[cid] || { plat, d: "", cb: null, grps: {} };
+    if (cb > 0 && d >= P.d) { P.cb = Math.round(cb * 100) / 100; P.d = d; }
+    if (grp && grp.gb > 0 && (!P.grps[grp.id] || d >= P.grps[grp.id].d)) P.grps[grp.id] = { name: grp.name, gb: Math.round(grp.gb * 100) / 100, d };
+  };
+  fb.forEach((r) => fija(String(r.campaign_id || ""), "Meta", r.date || "", num(r.campaign_daily_budget) / 100,
+    r.adset_id ? { id: String(r.adset_id), name: r.adset_name || "", gb: num(r.adset_daily_budget) / 100 } : null));
+  ggPresu.forEach((r) => fija(String(r.campaign_id || ""), "Google", r.date || "", num(r.budget_amount), null));
+  Object.keys(presu).forEach((k) => { if (presu[k].cb == null && !Object.keys(presu[k].grps).length) delete presu[k]; });
   // ad_final_urls llega como el TEXTO de un array JSON: '["https://…"]'. El split(",")[0]
   // devolvía la cadena entera con corchetes y comillas, así que el link salía roto en el
   // 100% de las filas de Google.
@@ -354,9 +383,14 @@ async function ads({ start, end }) {
     // grupo, luego lo de la cuenta. Es el equivalente de url_tags en Meta.
     tags: String(r.ad_final_url_suffix || r.final_url_suffix || r.customer_final_url_suffix || "").trim(),
     plantilla: String(r.ad_tracking_url_template || r.tracking_url_template || r.customer_tracking_url_template || "").trim(),
+    url: primeraUrl(r.ad_final_urls),
     spend: num(r.spend), impr: num(r.impressions), clicks: num(r.clicks), results: num(r.conversions),
   }));
-  return { configured: true, ads: rows.filter((r) => r.spend || r.clicks || r.impr || r.results) };
+  const kws = kw.map((r) => ({
+    d: r.date || "", cid: String(r.campaign_id || ""), camp: r.campaign || "", grp: r.ad_group_name || "", gid: String(r.ad_group_id || ""),
+    kw: String(r.keyword_text || "").trim(), spend: num(r.spend), clicks: num(r.clicks), conv: num(r.conversions),
+  })).filter((r) => r.kw && (r.spend || r.clicks || r.conv));
+  return { configured: true, ads: rows.filter((r) => r.spend || r.clicks || r.impr || r.results), kw: kws, presu };
 }
 
 // --- Diagnóstico: la app se responde a sí misma ---

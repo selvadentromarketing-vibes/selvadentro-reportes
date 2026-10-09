@@ -106,17 +106,54 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
 
   **Diagnóstico del AMARILLO** (Dirección, 9-oct-2026; `lqDiagAmarillo`): tasa SQL = SQL+ ÷
   leads y CPL = inversión ÷ leads de la campaña en el rango.
-  · tasa SQL < 10% (`tasaSqlMin`) → **Optimizar calidad**. Google: agregar negativas desde
-    los términos de búsqueda y pausar keywords con más de 2,000 MXN de gasto y 0 SQL
-    (`gastoKeywordSinSql`). Meta: formulario más filtrante (preguntas de presupuesto y
-    plazo) y quitar Audience Network y ubicaciones de baja calidad.
-  · CPL > 400 MXN (`cplMax`) → **Optimizar costo**: pausar los 2 anuncios con peor CPL,
-    probar 2 creativos nuevos, revisar que la landing coincida con el anuncio.
-  · Si pasan las dos, "Optimizar calidad y costo" con los dos juegos de pasos. Siempre: "No
-    tocar presupuesto ni puja. Un cambio a la vez; reevaluar en 7 días."
+  · tasa SQL < 10% (`tasaSqlMin`) → **Optimizar calidad**.
+  · CPL > 400 MXN (`cplMax`) → **Optimizar costo**.
+  · Si pasan las dos, "Optimizar calidad y costo". Siempre: "No tocar presupuesto ni puja.
+    Un cambio a la vez; reevaluar en 7 días."
   Como costo por SQL = CPL ÷ tasa SQL, con 4,000 = 400 ÷ 10% todo amarillo cae en al menos
-  una causa. Los pasos se abren con **Qué hacer** bajo el semáforo (fila completa debajo de
-  la campaña) y salen completos en Conclusiones. Todos los umbrales viven en `LQ_SEMAFORO`.
+  una causa. Qué hacer en cada caso lo arma `lqRecomendar` (abajo). Todos los umbrales viven
+  en `LQ_SEMAFORO`.
+
+  **Recomendaciones concretas** (Dirección, 9-oct-2026; `lqRecomendar`). Regla general para
+  todo lo que el reporte recomienda: nunca una instrucción genérica.
+  1. **Objeto exacto**: plataforma › campaña › conjunto › anuncio, o la keyword en Google
+     (ej. "Pausar el conjunto EN_LLAMADA_ESCAPE", con su ruta debajo).
+  2. **Evidencia en la misma línea**: gasto, leads, SQL+ y CPL / costo por SQL del rango
+     ("— gasto 4,000 MXN, 8 leads, 0 SQL+, CPL 500 MXN"). Los leads del CRM se cuelgan del
+     conjunto (los anuncios mandan `utm_content={{adset.name}}`): por anuncio se usan los
+     leads que reporta la plataforma y se dice ("SQL+ sin dato por anuncio", o "0 SQL+ (todo
+     su conjunto)").
+  3. **Muestra mínima para pausar**: gasto ≥ `muestraPausa` × `cplMax` = 2 × 400 = **800 MXN**
+     en el rango. Si nada llega: "Sin muestra suficiente para pausar; esperar." + cuál es el
+     de más gasto.
+  4. **Datos que el reporte no tiene** (frecuencia, términos de búsqueda, calidad del
+     creativo, preguntas del formulario, velocidad de la landing): lo dice y dónde verlo
+     ("revisar en Meta Ads › Anuncios › columna Frecuencia").
+  5. **Creativos / landing**: nombra el anuncio a reemplazar y la URL a la que lleva hoy
+     (`website_destination_url`; "http://fb.me/" = formulario instantáneo).
+  6. **CBO**: al pausar un conjunto (o el único anuncio de un conjunto) en Meta, nota de que
+     con presupuesto de campaña Meta reasigna ese dinero y el gasto total no baja.
+  7. **Máximo 3 acciones** (`maxAcciones`) por campaña, de mayor a menor impacto (MXN en
+     juego), y el pie "Un cambio a la vez; reevaluar en 7 días."
+
+  | Acción | Qué recomienda, con objeto y evidencia |
+  |---|---|
+  | Subir presupuesto diario 20% | Presupuesto diario de la campaña **de X a Y MXN** (CBO de Meta o presupuesto de Google, de Windsor) y la ruta para cambiarlo; leads/mes de hoy vs. con +20% contra la capacidad del telemarketer (~140/mes) |
+  | Optimizar calidad · Meta | Pausar el conjunto activo con 0 SQL+ y más gasto (≥ 800 MXN, si la campaña tiene más de uno) + nota CBO; preguntas de presupuesto y plazo en la landing (URL) o el formulario instantáneo del conjunto con peor tasa SQL; quitar Audience Network de los conjuntos que gastaron ≥ 800 MXN ahí |
+  | Optimizar calidad · Google | Pausar las keywords con > 2,000 MXN y 0 SQL+ (leads por `utm_term`; si el CRM no trae la keyword, revisar sus conversiones antes de pausar); negativas desde los términos de búsqueda de la keyword con más gasto (ruta en Google Ads) |
+  | Optimizar costo | Pausar los 2 anuncios activos con peor CPL (> 400 MXN, gasto ≥ 800, nunca el último activo de la campaña); 2 creativos nuevos para reemplazar el peor, con su URL; revisar la landing con más gasto cuyo CPL pasa de 400 MXN (clics → leads) |
+  | Pausar (ROJO) | Pausar la campaña con su evidencia y ruta; si algo adentro está dentro de la meta, decirlo como alternativa |
+  | Revisar seguimiento | Cuántos leads sin trabajar tiene cada asesor (y desde cuándo) y en qué etapa; reevaluar en 7 días y, si sigue en rojo, pausar |
+  | ⚠ CPL al alza | El conjunto (Meta) o la keyword (Google) que más subió el CPL en la última semana contra las previas, y dónde ver la causa (Frecuencia en Meta, términos de búsqueda en Google). Siempre entra entre las 3 |
+
+  Se abren con **Qué hacer** bajo el semáforo (fila completa debajo de la campaña), salen en
+  Conclusiones ("Regla y qué hacer"), la lectura automática cita la primera de cada campaña
+  y la IA las recibe ya calculadas. Muestra chica sin alerta: sin acciones.
+  Datos nuevos de Windsor para esto (`ads()`): URL de destino por anuncio
+  (`website_destination_url`), presupuesto diario vigente por campaña/conjunto (Meta
+  `campaign_daily_budget` / `adset_daily_budget` en centavos → MXN; Google `budget_amount`
+  ya en MXN) y gasto por keyword de Google (`keyword_text`); si la cuenta rechaza los campos
+  nuevos se cae a la consulta anterior.
 
   **Muestra chica** (inversión < 8,000 MXN): el color se calcula igual, pero la acción es
   siempre **"Mantener (muestra chica)"**: nunca "Subir presupuesto 20%" ni "Pausar"
@@ -179,7 +216,9 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
 - **Conclusiones IA**: el prompt recibe el semáforo ya calculado y devuelve una acción por
   campaña (subir 20% / mantener / optimizar / pausar) con la regla que la justifica; la
   tabla de acciones se arma con el semáforo aunque no se haya corrido la IA, y si la IA
-  propone otra acción manda el semáforo. Cache `lq:ia:v9:`.
+  propone otra acción manda el semáforo. Cada campaña llega con sus acciones concretas
+  (`recomendaciones`, `esperar`) y el prompt exige el objeto exacto, no inventar objetos,
+  la muestra mínima, dónde revisar lo que falta y la nota CBO. Cache `lq:ia:v10:`.
 - Pruebas: `node scripts/test-lq.js` (backend con GHL y Anthropic simulados) y el bloque
   `lq:rediseño` de `scripts/smoke-ui.js` con los datos sintéticos de
   `scripts/lq-fixture.js` (W37–W40, los cinco estados del semáforo).
@@ -252,7 +291,7 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
   (Meta + Google) y se muestra inversión, CPL y **costo por SQL** por campaña (cruce por
   ID de campaña y, de respaldo, por nombre) y por plataforma (siempre calculable). Todo
   en **MXN** ("12,345 MXN", nunca "$").
-- **Cache compartido**: agregado en el kv (`lq:agg:v19`), staleness de 30 min, igual
+- **Cache compartido**: agregado en el kv (`lq:agg:v20`), staleness de 30 min, igual
   que CRM en vivo.
 - **Permisos**: canal `mkt_lq` (o `marketing`, o admin). El módulo manual de
   Calidad de Leads dentro de Marketing **se retiró el 2026-08-26** junto con PPC Ads

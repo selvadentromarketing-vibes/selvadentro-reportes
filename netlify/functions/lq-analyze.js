@@ -8,11 +8,13 @@
 //   { rango, moneda:"MXN", parametros:{metaCostoSql,minSqlVerde,subirPct,topeAmarillo,umbralEval,alertaCpl},
 //     totales:{inv,leads,sqlPlus,invPagada,sqlPlusPagado,costoSql,won,sinCampania:{leads,sqlPlus}},
 //     campanias:[{nombre,plataforma,inv,leadsPlataforma,leads,sqlPlus,costoSql,cpl,zoom,opp,won,
-//       trabajadosPct,contactadosPct,semaforo,accion,accionTexto,regla,nota,pasos,muestraChica,alertaCpl,inferidos}],
+//       trabajadosPct,contactadosPct,semaforo,accion,accionTexto,regla,nota,recomendaciones,esperar,muestraChica,alertaCpl,inferidos}],
 //     anuncios:[{nombre,estado,inv,leads,sqlPlus}], integridad:{fuente,asesor,calificacion,duplicados} }
 //
 // El semáforo (y por lo tanto la acción de cada campaña) lo calcula la app con sus
-// parámetros; la IA no lo reinterpreta, lo explica y agrega el detalle.
+// parámetros; la IA no lo reinterpreta, lo explica y agrega el detalle. Lo mismo las
+// recomendaciones (Dirección, 9-oct-2026): llegan ya con el conjunto, anuncio, keyword o URL
+// exactos y su evidencia; la IA no inventa objetos ni da instrucciones genéricas.
 
 const S = require("./lib/shared.js");
 const API_KEY = process.env.ANTHROPIC_API_KEY;
@@ -43,7 +45,9 @@ exports.handler = async (event) => {
   catch { return json(400, { error: "JSON inválido" }); }
 
   const T = d.totales || {};
-  const P = Object.assign({ metaCostoSql: 4000, minSqlVerde: 2, subirPct: 20, topeAmarillo: 6000, umbralEval: 8000, minTrabajados: 50, capacidadTelemarketer: 140, tasaSqlMin: 10, cplMax: 400 }, d.parametros || {});
+  const P = Object.assign({ metaCostoSql: 4000, minSqlVerde: 2, subirPct: 20, topeAmarillo: 6000, umbralEval: 8000, minTrabajados: 50, capacidadTelemarketer: 140, tasaSqlMin: 10, cplMax: 400, muestraPausa: 2, maxAcciones: 3, reevaluarDias: 7 }, d.parametros || {});
+  const minPausa = (Number(P.muestraPausa) || 2) * (Number(P.cplMax) || 400);
+  const corta = (x) => String(x || "").slice(0, 700);
   // Tope de tamaño: sin él, un body arbitrario infla el prompt (y la cuenta de la API).
   const camps = (d.campanias || []).slice(0, 20).map((c) =>
     `- ${c.nombre} [${c.plataforma || "?"}]: inversión ${money(c.inv)} · ${c.leadsPlataforma ?? "—"} leads en plataforma · ${c.leads} leads en CRM · ` +
@@ -52,7 +56,9 @@ exports.handler = async (event) => {
     `SEMÁFORO ${c.semaforo}${c.muestraChica ? " (muestra chica)" : ""} → acción "${c.accion}" porque ${c.regla}` +
     (c.accionTexto && c.accionTexto.toLowerCase() !== String(c.accion || "").toLowerCase() ? ` (${c.accionTexto})` : "") +
     (c.nota ? ` · NOTA: ${c.nota}` : "") +
-    (Array.isArray(c.pasos) && c.pasos.length ? ` · PASOS: ${c.pasos.slice(0, 8).join(" / ")}` : "") +
+    (Array.isArray(c.recomendaciones) && c.recomendaciones.length
+      ? `\n    QUÉ HACER (ya calculado, en orden de impacto): ${c.recomendaciones.slice(0, P.maxAcciones).map((x, i) => `${i + 1}) ${corta(x)}`).join(" ")}` : "") +
+    (c.esperar ? `\n    ${corta(c.esperar)}` : "") +
     (c.alertaCpl ? ` · ALERTA CPL: ${c.alertaCpl}` : "") +
     (c.inferidos ? ` · ${c.inferidos} leads con atribución inferida (landing de seguridad sin UTM)` : "")
   ).join("\n");
@@ -85,13 +91,17 @@ INTEGRIDAD DEL CRM: ${integ.fuente || "—"} de los leads con fuente identificad
 Devuelve SOLO un objeto JSON válido, sin texto alrededor y sin bloques de código, con esta forma exacta:
 {
   "lectura": "2 a 3 oraciones: qué pasó con el dinero y los SQL+ este periodo, con el costo por SQL total contra la meta y las campañas concretas.",
-  "campanias": [{"nombre":"nombre exacto de la campaña","accion":"subir presupuesto diario ${P.subirPct}%|mantener|optimizar|pausar|revisar seguimiento","regla":"la regla del semáforo que la justifica, con su cifra","detalle":"1 oración, máximo 25 palabras: qué hacer exactamente en esa campaña"}],
+  "campanias": [{"nombre":"nombre exacto de la campaña","accion":"subir presupuesto diario ${P.subirPct}%|mantener|optimizar|pausar|revisar seguimiento","regla":"la regla del semáforo que la justifica, con su cifra","detalle":"1 a 2 oraciones, máximo 40 palabras: la acción 1 de su QUÉ HACER con el objeto exacto y su evidencia"}],
   "acciones": [{"prioridad":"alta|media|baja","titulo":"acción transversal en 6-10 palabras","detalle":"1-2 oraciones con la cifra que la justifica","responsable":"Ads|CRM|Ventas|Dirección"}],
   "riesgos": ["dato que no cuadra o riesgo, 1 oración cada uno"],
   "preguntas": ["pregunta concreta que el reporte no puede responder y hay que verificar en la fuente"]
 }
 
-Reglas: "campanias" lleva TODAS las campañas de la lista, en el mismo orden, y su "accion" es exactamente la del semáforo. En "detalle" sé concreto (qué conjunto o anuncio tocar, cuánto subir, qué revisar) y menciona si aplica: muestra chica, alerta de CPL, % trabajados bajo (seguimiento, no campaña), leads de plataforma que no llegaron al CRM (atribución antes de pausar) o atribución inferida. "acciones" son 2 a 4 acciones que no son de una sola campaña (atribución, seguimiento, CRM). Si el volumen es demasiado bajo para concluir, dilo en riesgos. Todo en español de México, tono directo y ejecutivo.`;
+Reglas: "campanias" lleva TODAS las campañas de la lista, en el mismo orden, y su "accion" es exactamente la del semáforo. En "detalle" explica la acción 1 de su QUÉ HACER con los MISMOS nombres (plataforma › campaña › conjunto › anuncio, o keyword en Google, o la URL) y su evidencia (gasto, leads, SQL+ y CPL o costo por SQL) y menciona si aplica: muestra chica, alerta de CPL, % trabajados bajo (seguimiento, no campaña), leads de plataforma que no llegaron al CRM (atribución antes de pausar) o atribución inferida.
+
+REGLA GENERAL DE TODA RECOMENDACIÓN (campanias y acciones): específica y accionable, nunca genérica. Nombra el objeto exacto; si dices pausar, revisar, cambiar o probar algo, di cuál. Usa solo los conjuntos, anuncios, keywords y URLs que aparecen arriba: no inventes ninguno. Nunca recomiendes pausar algo con gasto menor a ${money(minPausa)} (${P.muestraPausa || 2}× el CPL objetivo de ${money(P.cplMax)}); si la campaña dice "Sin muestra suficiente para pausar; esperar", no recomiendes pausar nada de ella. Si la acción depende de un dato que el reporte no tiene (frecuencia, términos de búsqueda, calidad del creativo), dilo y di dónde revisarlo (p. ej. "Revisar en Meta Ads › Anuncios › columna Frecuencia"). Si pausas un conjunto en Meta, recuerda que con presupuesto de campaña (CBO) Meta reasigna ese dinero. Máximo ${P.maxAcciones || 3} acciones por campaña y recuerda: "Un cambio a la vez; reevaluar en ${P.reevaluarDias || 7} días."
+
+"acciones" son 2 a 4 acciones que no son de una sola campaña (atribución, seguimiento, CRM), cada una con el objeto exacto (campo del CRM, asesor, etapa, campaña). Si el volumen es demasiado bajo para concluir, dilo en riesgos. Todo en español de México, tono directo y ejecutivo.`;
 
   try {
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
@@ -99,7 +109,7 @@ Reglas: "campanias" lleva TODAS las campañas de la lista, en el mismo orden, y 
       headers: { "x-api-key": API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
       body: JSON.stringify({
         model: "claude-opus-5",
-        max_tokens: 2500,
+        max_tokens: 3000,
         // Netlify corta las funciones sincrónicas a los ~10 s: esfuerzo bajo para responder a tiempo
         output_config: { effort: "low" },
         messages: [{ role: "user", content: prompt }],
