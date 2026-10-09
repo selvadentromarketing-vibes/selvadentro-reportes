@@ -137,6 +137,16 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
   (seguridad.selvadentrotulum.com) **sin utm_campaign y creados antes del 08-oct-2026**
   se asignan a `INVESTORS_MX_DYNAMIC-TOPLPS_090926`, conjunto SEGURIDAD_PATRIMONIO, con la
   marca "N con atribución inferida". Desde el 08-oct llegan con UTMs reales y manda el UTM.
+- **Leads de brokers fuera de Calidad de Leads** (Dirección, 9-oct-2026): el contacto con
+  una oportunidad en el pipeline **"Brokers - Producción (B2B2C)"** (cualquiera de sus
+  oportunidades) o con el tag **`broker-client`** lo sube el equipo comercial y no viene de
+  marketing, así que sale de TODOS los cálculos de la sección: leads, SQL+, Zoom, OPP, WON,
+  CPL, costo por SQL, semáforo, totales, lectura automática, alertas y la IA (`LQ_BROKER`,
+  `lqVista`). El pipeline "Brokers - Expansión y activación" (reclutamiento) no cuenta como
+  broker. Siguen en el agregado marcados `bk`, así que **Ventas, Dirección y Diagnóstico los
+  siguen contando**. La nota "Excluidos de todos los cálculos en este rango" (Calidad de Lead
+  y Reporte Combinado) dice cuántos hay, junto a los registros de prueba y los sin email ni
+  teléfono, ahora contados en el rango que se lee y no en las 12 semanas sincronizadas.
 - **Aviso de leads sin campaña**: cuenta exactamente los leads de las filas
   "(sin campaña atribuida)" de la tabla (antes contaba aparte los de Meta/Google con
   utm_campaign vacío y no cuadraba: decía 1 de 60 con 10 en la tabla).
@@ -147,7 +157,7 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
 - **Conclusiones IA**: el prompt recibe el semáforo ya calculado y devuelve una acción por
   campaña (subir 20% / mantener / optimizar / pausar) con la regla que la justifica; la
   tabla de acciones se arma con el semáforo aunque no se haya corrido la IA, y si la IA
-  propone otra acción manda el semáforo. Cache `lq:ia:v6:`.
+  propone otra acción manda el semáforo. Cache `lq:ia:v7:`.
 - Pruebas: `node scripts/test-lq.js` (backend con GHL y Anthropic simulados) y el bloque
   `lq:rediseño` de `scripts/smoke-ui.js` con los datos sintéticos de
   `scripts/lq-fixture.js` (W37–W40, los cinco estados del semáforo).
@@ -220,7 +230,7 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
   (Meta + Google) y se muestra inversión, CPL y **costo por SQL** por campaña (cruce por
   ID de campaña y, de respaldo, por nombre) y por plataforma (siempre calculable). Todo
   en **MXN** ("12,345 MXN", nunca "$").
-- **Cache compartido**: agregado en el kv (`lq:agg:v17`), staleness de 30 min, igual
+- **Cache compartido**: agregado en el kv (`lq:agg:v18`), staleness de 30 min, igual
   que CRM en vivo.
 - **Permisos**: canal `mkt_lq` (o `marketing`, o admin). El módulo manual de
   Calidad de Leads dentro de Marketing **se retiró el 2026-08-26** junto con PPC Ads

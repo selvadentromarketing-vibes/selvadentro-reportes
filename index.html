@@ -2958,7 +2958,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v17";  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
+const LQ_AGG_KEY = "lq:agg:v18";  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 // (LQ_TZ y LQ_TZ_MS ahora viven junto al resto de helpers de fecha, arriba)
@@ -3325,6 +3325,15 @@ function lqStage(level, tagsLower){
   if(tagsLower.includes("webinar-registered")) return "Nuevo lead (no contactado)";
   return "1er toque";
 }
+
+// LEADS DE BROKERS (Dirección, 9-oct-2026): el equipo comercial los sube a mano y no vienen
+// de marketing, así que salen de TODOS los cálculos de Calidad de Leads. Es broker el
+// contacto con una oportunidad en el pipeline "Brokers - Producción (B2B2C)" (cualquiera de
+// sus oportunidades, no solo la más reciente) o con el tag "broker-client". No es el pipeline
+// "Brokers - Expansión y activación", que es el de reclutamiento de los brokers mismos.
+// Siguen en el agregado marcados `bk`: Ventas, Dirección y Diagnóstico los siguen contando.
+const LQ_BROKER = { pipeline: /brokers?\s*[-–—:]?\s*producci[oó]n/i, tag: "broker-client" };
+const lqEsBroker = (tags, op)=> !!(op && op.bk) || (tags||[]).some(t=>String(t).trim().toLowerCase()===LQ_BROKER.tag);
 
 const LQ_SIN_CAMP = "(sin campaña atribuida)";
 const LQ_SIN_GRP  = "(sin conjunto atribuido)";
@@ -3734,10 +3743,12 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
   // Paso 0 del manual de limpieza (jul-2026), aplicado ANTES de cualquier cálculo:
   // fuera los registros de prueba y los leads sin email NI teléfono (no hay a quién
   // contactar ni forma de detectar duplicados). Se cuentan y se muestran; no desaparecen.
-  const excl = { prueba:0, sinContacto:0 };
+  // Por semana, para que la nota de excluidos diga cuántos hay en el rango que se lee.
+  const excl = { prueba:0, sinContacto:0 }, exclWk = { prueba:{}, sinContacto:{} };
+  const fuera = (k, l)=>{ excl[k]++; const w = lqWeekOf(l.c); if(w) exclWk[k][w] = (exclWk[k][w]||0) + 1; return false; };
   rawLeads = (rawLeads||[]).filter(l=>{
-    if(esRegistroPrueba(l)){ excl.prueba++; return false; }
-    if(!l.em && !l.ph){ excl.sinContacto++; return false; }
+    if(esRegistroPrueba(l)) return fuera("prueba", l);
+    if(!l.em && !l.ph) return fuera("sinContacto", l);
     return true;
   });
   const llenos = lqCamposLlenos(boot, rawLeads);
@@ -3876,6 +3887,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
       hor:  F.hor  ? (l.cf[F.hor.id] ||"") : "",
       ch: cn.ch, chVia: cn.via,          // canal de negocio deducido del CRM (o null)
       inv: lqInvalido(op, l.tags),       // causa del grupo inválido (spec v1.1 R-01), o ""
+      ...(lqEsBroker(l.tags, op) ? { bk:1 } : {}),  // lead de brokers: fuera de Calidad de Leads
       ...(l.attr && l.attr.inf ? { inf:1 } : {}),   // atribución inferida (LQ_INFERIDA)
       ...(l.attr && l.attr.pid ? { pid:1, cid:l.attr.cidOk } : {}),   // campaña resuelta por su ID (y cuál), no por nombre
       _si: stg ? (stg.i ?? 0) : null,    // posición de la etapa, solo para el cálculo de abajo
@@ -3894,7 +3906,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
     delete l._si;
     l.tags = l.tags.slice(0,140);
   });
-  return { ts:Date.now(), users:boot.users||{}, califField:F.calif, fuenteField:F.fuente, presField:F.pres, horField:F.hor, windsor:!!boot.windsor, excl,
+  return { ts:Date.now(), users:boot.users||{}, califField:F.calif, fuenteField:F.fuente, presField:F.pres, horField:F.hor, windsor:!!boot.windsor, excl, exclWk,
            oppStages: lqOppStageNames(boot.stages, lqOppThresholds(boot.stages)),
            zoomStages: [...new Set(Object.values(boot.stages||{}).filter(st=>LQ_RX_ZOOM_OK.test(st.s||"")).map(st=>(st.p?st.p+" › ":"")+st.s))].sort(),
            stages: boot.stages||{},
@@ -3902,6 +3914,29 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
            atrib: lqCoberturaAtrib(rawLeads, lqAdIndex({adw:adw0})),
            utm: lqAuditUtm(adw0, rawLeads),
            weeks:weeks||[], spend:spendRows||[], adw:adw0, leads };
+}
+
+// Lo que ve Calidad de Leads: el agregado SIN los leads de brokers. Todas las pestañas, la
+// IA y las alertas leen esta vista; Diagnóstico y el resto de la app, el agregado completo.
+function lqVista(agg){
+  if(!agg) return agg;
+  if(lqState._vistaDe !== agg){ lqState._vista = { ...agg, leads:(agg.leads||[]).filter(l=>!l.bk) }; lqState._vistaDe = agg; }
+  return lqState._vista;
+}
+// Excluidos de todos los cálculos, contados en el rango que se está leyendo.
+function lqExcluidosRango(agg, rangoSet){
+  const r = { broker:0, prueba:0, sinContacto:0 };
+  (agg && agg.leads || []).forEach(l=>{ if(l.bk && rangoSet.has(l.wk)) r.broker++; });
+  const w = (agg && agg.exclWk) || {};
+  ["prueba","sinContacto"].forEach(k=>Object.entries(w[k]||{}).forEach(([wk,n])=>{ if(rangoSet.has(wk)) r[k] += n; }));
+  return r;
+}
+function lqNotaExcluidos(agg, rangoSet){
+  const e = lqExcluidosRango(agg, rangoSet), partes = [];
+  if(e.broker) partes.push(`<b>${e.broker}</b> lead${e.broker!==1?"s":""} de brokers <span class="lq-sub">(pipeline Brokers - Producción (B2B2C) o tag broker-client: los sube el equipo comercial, no vienen de marketing)</span>`);
+  if(e.prueba) partes.push(`<b>${e.prueba}</b> registro${e.prueba!==1?"s":""} de prueba`);
+  if(e.sinContacto) partes.push(`<b>${e.sinContacto}</b> sin email ni teléfono`);
+  return partes.length ? `<p class="hint pegada lq-excluidos">Excluidos de todos los cálculos en este rango: ${partes.join(" · ")}.</p>` : "";
 }
 
 function lqWeeks(){
@@ -4555,7 +4590,7 @@ function lqComboSection(agg, leadsAll, rango, rangoSet){
     ${kpi(todo.sqlp.toLocaleString(),"SQL+", `${pag.sqlp} de campañas con inversión`)}
     ${kpi(pag.cps!=null?lqMXN(pag.cps):"—","Costo por SQL", `inversión ÷ SQL+ de campañas con inversión · meta ${lqMXN(P.metaCostoSql)}`, pag.cps!=null?"lq-kpi-"+lqColorCps(pag.cps):"")}
     ${kpi(wonT.toLocaleString(),"WON", "leads del rango con venta cerrada")}
-  </div>`;
+  </div>` + lqNotaExcluidos(lqState.agg || agg, rangoSet);
 
   // Lectura automática (determinista, sin IA): el semáforo dicho en prosa.
   const conInv = rows.filter(m=>m.sem);
@@ -4694,6 +4729,7 @@ function lqConclusionesSection(){
   return html;
 }
 
+// v7 (2026-10-09): fuera los leads de brokers; un análisis anterior los contaba como SQL+ y WON.
 // v6 (2026-10-09): ROJO con menos de 50% contactados = revisar seguimiento antes de pausar.
 // v5 (2026-10-08): muestra chica (< 8,000 MXN) = mantener, nunca subir; un análisis de la
 // v4 pudo recomendar subir una campaña con muestra chica.
@@ -4703,7 +4739,7 @@ function lqConclusionesSection(){
 // v2 (2026-09-11): la calificación cambió —OPP eleva a SQL, Budget Range en pesos, fuera
 // pruebas y sin contacto—, así que un análisis guardado con la v1 cita cifras que ya no
 // son las de la pantalla. Se paga una vez más por rango y se comparte otra vez.
-const LQ_IA_KEY = "lq:ia:v6:";
+const LQ_IA_KEY = "lq:ia:v7:";
 const LQ_IA_TTL = 12*3600e3;          // 12 h: el rango no cambia tanto como para pagar de nuevo
 
 // Devuelve el análisis guardado de este rango si sigue vigente. La clave incluye la
@@ -4720,7 +4756,7 @@ async function lqIaCache(rango){
 
 // El cruce del rango vigente, recalculado (no el de otra pestaña o de otro rango).
 function lqComboActual(rango){
-  const agg = lqState.agg;
+  const agg = lqVista(lqState.agg);
   const rangoSet = new Set(rango);
   const qual = lqState.qual || "auto";
   const swap = (l)=> qual==="auto" ? { ...l, lv: l.alv || "cql", crmLv: l.lv } : { ...l, crmLv: l.lv };
@@ -4775,7 +4811,7 @@ async function lqAnalizar(forzar){
       integridad: { fuente:pc(L.filter(l=>l.hs).length,L.length),
                     asesor:pc(L.filter(l=>l.u).length,L.length),
                     calificacion:pc(L.filter(l=>l.crmLv&&l.crmLv!=="nc").length,L.length),
-                    duplicados: (()=>{ const g={}; (lqState.agg.leads||[]).forEach(l=>{ if(l.ph&&l.ph.length>=10)(g["p:"+l.ph]=g["p:"+l.ph]||[]).push(l); if(l.em)(g["e:"+l.em]=g["e:"+l.em]||[]).push(l); });
+                    duplicados: (()=>{ const g={}; (lqVista(lqState.agg).leads||[]).forEach(l=>{ if(l.ph&&l.ph.length>=10)(g["p:"+l.ph]=g["p:"+l.ph]||[]).push(l); if(l.em)(g["e:"+l.em]=g["e:"+l.em]||[]).push(l); });
                       const seen=new Set(); let n=0; Object.values(g).filter(x=>x.length>1).forEach(x=>{ const k=x.map(y=>y.n).sort().join("|"); if(!seen.has(k)){ seen.add(k); n++; } }); return n; })() },
     };
     const res = await lqFn2("/.netlify/functions/lq-analyze", payload);
@@ -4815,7 +4851,8 @@ function lqBloqueInvalidos(leads){
 }
 
 function lqRender(){
-  const agg = lqState.agg; if(!agg) return;
+  if(!lqState.agg) return;
+  const agg = lqVista(lqState.agg);       // sin leads de brokers
   document.getElementById("lq-last-sync").textContent = crmAgo(agg.ts);
   const rango = lqRangeWeeks(); const rangoSet = new Set(rango);
   document.getElementById("lq-semanas-eval").textContent = rango.length || "—";
@@ -4846,12 +4883,7 @@ function lqRender(){
     ${kpi(fm.opp.toLocaleString(),"OPP · oportunidad real de cierre")}
     ${kpi(fm.won.toLocaleString(),"WON")}
   </div>`;
-  if(agg.excl && (agg.excl.prueba || agg.excl.sinContacto)){
-    const e = agg.excl, partes = [];
-    if(e.prueba) partes.push(`<b>${e.prueba}</b> registro${e.prueba!==1?"s":""} de prueba`);
-    if(e.sinContacto) partes.push(`<b>${e.sinContacto}</b> sin email ni teléfono`);
-    html += `<p class="hint pegada">Excluidos de todos los cálculos (paso 0 del manual de limpieza del CRM): ${partes.join(" · ")}.</p>`;
-  }
+  html += lqNotaExcluidos(lqState.agg, rangoSet);
   if(!agg.califField){
     html += `<div class="lq-meth">⚠ No se encontró el campo <b>"Calificación del lead"</b> en GoHighLevel; todos los leads aparecen como "Sin calificar". Verifica que el campo exista y que el token tenga el scope de campos personalizados.</div>`;
   }
@@ -5173,6 +5205,26 @@ async function lqPersist(agg){
   }catch(e){ toast("No se pudo guardar el cache compartido: "+(e.message||e)); }
 }
 
+// Una oportunidad del CRM sumada a su contacto: OPP, WON, valor, citas, etapa real (la de
+// la oportunidad movida más recientemente), descalificación y si vive en el pipeline de
+// brokers (LQ_BROKER), que saca al lead de Calidad de Leads.
+function lqSumarOpp(oppsByContact, o, stages, oppTh, C11){
+  if(!o || !o.ct) return;
+  const b = oppsByContact[o.ct] = oppsByContact[o.ct] || {o:0,pr:0,w:0,v:0,ov:0,s:"",sc:0,st:"",ap:{tot:0,sh:0,ns:0}};
+  b.pr++;                                            // registro del pipeline (no es un OPP)
+  if(lqIsOppStage(o.s, stages, oppTh)) b.o++;        // OPP = seguimiento de OPP o posterior
+  if(o.st==="won"){ b.w++; b.v+=(o.v||0); }
+  b.ov = Math.max(b.ov, o.v||0);
+  if(o.ap){ b.ap.tot+=o.ap.tot; b.ap.sh+=o.ap.sh; b.ap.ns+=o.ap.ns; }
+  const t = new Date(o.sc||o.c||0).getTime()||0;
+  if(o.s && t >= b.sc){ b.sc=t; b.s=o.s; b.st=o.st; }
+  const stN = (stages||{})[o.s];
+  if(stN && LQ_BROKER.pipeline.test(stN.p||"")) b.bk = 1;
+  if(stN && /^descalificad/.test(slaNorm(stN.s)) && (!b.dq || t >= b.dq.t)){
+    b.dq = { t, causa: C11 && C11.causa && o.cf ? String(o.cf[C11.causa.id]||"").trim() : "", evid: C11 && C11.evid && o.cf ? String(o.cf[C11.evid.id]||"").trim() : "" };
+  }
+}
+
 async function lqSync(){
   if(lqState.syncing) return;
   lqState.syncing = true;
@@ -5208,22 +5260,7 @@ async function lqSync(){
       let oc=null, seen=0;
       do{
         const res = await lqFn({action:"opps", since: String(Date.parse(b0.startISO)||""), ...(oc||{})});
-        for(const o of res.opps){
-          if(!o.ct) continue;
-          const b = oppsByContact[o.ct] = oppsByContact[o.ct] || {o:0,pr:0,w:0,v:0,ov:0,s:"",sc:0,st:"",ap:{tot:0,sh:0,ns:0}};
-          b.pr++;                                            // registro del pipeline (no es un OPP)
-          if(lqIsOppStage(o.s, boot.stages, oppTh)) b.o++;    // OPP = seguimiento de OPP o posterior
-          if(o.st==="won"){ b.w++; b.v+=(o.v||0); }
-          b.ov = Math.max(b.ov, o.v||0);
-          if(o.ap){ b.ap.tot+=o.ap.tot; b.ap.sh+=o.ap.sh; b.ap.ns+=o.ap.ns; }
-          // Etapa real: la de la oportunidad movida más recientemente
-          const t = new Date(o.sc||o.c||0).getTime()||0;
-          if(o.s && t >= b.sc){ b.sc=t; b.s=o.s; b.st=o.st; }
-          const stN = (boot.stages||{})[o.s];
-          if(stN && /^descalificad/.test(slaNorm(stN.s)) && (!b.dq || t >= b.dq.t)){
-            b.dq = { t, causa: C11.causa && o.cf ? String(o.cf[C11.causa.id]||"").trim() : "", evid: C11.evid && o.cf ? String(o.cf[C11.evid.id]||"").trim() : "" };
-          }
-        }
+        for(const o of res.opps) lqSumarOpp(oppsByContact, o, boot.stages, oppTh, C11);
         seen += res.fetched; oc = res.cursor;
         lbl.textContent=`Sincronizando oportunidades… ${seen.toLocaleString()}`;
       }while(oc);

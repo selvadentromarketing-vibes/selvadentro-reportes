@@ -14,6 +14,8 @@
 //   GOOGLE US+CAN       6,000 · 0 SQL+ (utm numérico)                    → EN EVALUACIÓN, mantener (muestra chica)
 //   MX_DYNAMIC_150726  10,400 · 3 SQL+                                  → VERDE subir 20%
 //   Total pagado       57,400 · 8 SQL+ → 7,175 MXN por SQL · 4 leads sin campaña
+//   3 leads de brokers (uno es "Jennifer Guillaume", WON) excluidos de todo: no mueven ninguna
+//   cifra; un contacto del pipeline de reclutamiento de brokers sí cuenta (orgánico).
 function fixture() {
   const ETAPAS = ["Nuevo lead (no contactado)", "1er toque", "2ndo toque", "3er toque", "Ultimátum", "Break up", "Sin respuesta",
     "Contacto establecido", "Interés identificado", "Zoom agendado", "Zoom no show / re agendar", "Zoom realizado", "Tour agendado",
@@ -21,6 +23,9 @@ function fixture() {
     "Largo Plazo", "Rescate", "Corretaje", "Nurturing", "Descalificado", "Redes Sociales"];
   const stages = {};
   ETAPAS.forEach((s, i) => { stages["st" + i] = { p: "Seguimiento de ventas", s, i }; });
+  // Pipeline de brokers: sus leads salen de Calidad de Leads (y el de reclutamiento no).
+  ["Registro", "Seguimiento", "Apartado", "WON"].forEach((s, i) => { stages["bk" + i] = { p: "Brokers - Producción (B2B2C)", s, i }; });
+  ["Prospecto broker", "Activo"].forEach((s, i) => { stages["bx" + i] = { p: "Brokers - Expansión y activación", s, i }; });
   const sid = (nombre) => "st" + ETAPAS.indexOf(nombre);
   const boot = {
     users: { u1: "Asesora Uno", u2: "Asesor Dos" },
@@ -99,6 +104,19 @@ function fixture() {
   lead("2026-W40", 3, { src: "", attr: {} });
   // Landing de seguridad el 08-oct (ya con UTMs reales en la vida real): SIN utm NO se infiere
   lead("2026-W40", 0, { src: "landing-seguridad", attr: {} }).c = "2026-10-08T17:00:00.000Z";
+  // Leads de brokers (los sube el equipo comercial): NO deben cambiar ninguna cifra de arriba.
+  //   Jennifer Guillaume: WON en el pipeline de brokers + tag broker-client, sin campaña ("Otra fuente")
+  const jg = lead("2026-W38", 0, { src: "", attr: { src: "CRM UI" }, tags: ["stop auto", "broker-client", "sv_apartado", "cliente"] });
+  jg.n = "Jennifer Guillaume";
+  opps[jg.id] = { o: 1, pr: 1, w: 1, v: 1820471.7, ov: 1820471.7, s: "bk3", sc: 1, st: "won", ap: { tot: 0, sh: 0, ns: 0 }, bk: 1 };
+  //   solo el tag, con oportunidad en el embudo normal
+  lead("2026-W39", 1, { src: "fb", attr: { src: "facebook" }, tags: ["Broker-Client"], etapa: "Interés identificado" });
+  //   solo el pipeline de brokers, sin tag
+  const p2 = lead("2026-W40", 1, { src: "", attr: { src: "CRM UI" } });
+  opps[p2.id] = { o: 0, pr: 1, w: 0, v: 0, ov: 0, s: "bk1", sc: 1, st: "open", ap: { tot: 0, sh: 0, ns: 0 }, bk: 1 };
+  //   pipeline de RECLUTAMIENTO de brokers: este sí cuenta (no es un lead de broker)
+  const rx = lead("2026-W40", 2, { src: "", attr: {} });
+  opps[rx.id] = { o: 0, pr: 1, w: 0, v: 0, ov: 0, s: "bx0", sc: 1, st: "open", ap: { tot: 0, sh: 0, ns: 0 } };
   return { boot, rawLeads, spendRows, weeks, opps, adRows };
 }
 module.exports = { fixture };

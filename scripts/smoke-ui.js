@@ -372,6 +372,11 @@ const PORT = process.env.PORT || 8765;
     const tot = [...document.querySelectorAll('table.lq-combo tr.total')][0];
     r.totalPagado = tot ? tot.textContent.replace(/\s+/g, ' ') : '';
     r.inferidaBadge = /8 con atribución inferida/.test(t);
+    // Leads de brokers fuera de todo (Dirección, 9-oct-2026): ni en tablas ni en tarjetas
+    const card = (k) => { const c = [...document.querySelectorAll('#lq-content .crm-kpi')].find(e => e.querySelector('.k-lbl').textContent.trim() === k); return c ? c.querySelector('.k-val').textContent.trim() : ''; };
+    r.tarjetasBk = [card('Leads CRM'), card('SQL+'), card('WON')].join(' ');
+    r.notaBkCombo = /Excluidos de todos los cálculos en este rango: 3 leads de brokers/.test(t);
+    r.sinJenniferCombo = !/Jennifer/.test(t);
     // Muestra chica: la lectura nunca pone en "subir" una campaña con menos de 8,000 MXN
     const lect = [...document.querySelectorAll('#lq-content .lq-lectura p')].map(p => p.textContent);
     const lSubir = lect.find(x => /Subir presupuesto 20%:/.test(x)) || '', lChica = lect.find(x => /Mantener \(muestra chica\)/.test(x)) || '';
@@ -393,6 +398,13 @@ const PORT = process.env.PORT || 8765;
     r.sinCampania = (av ? av[1] + ' de ' + av[2] : 'sin aviso') + ' · filas ' + sinFilas.reduce((a, tr) => a + Number(tr.querySelectorAll('td')[iN].textContent.replace(/\D/g, '') || 0), 0);
     r.semEnCalidad = hT.includes('SQL+') && hT.includes('Costo por SQL') && hT.includes('Semáforo') && hT.includes('Zoom realizado') && hT.includes('% contactados');
     r.sinMetricasViejas = !/Alto valor|alto valor|Costo\/alto valor|% calificados|Calif\.(?!\w)/.test(t) && !/\$\d/.test(t);
+    r.notaBkCalidad = /Excluidos de todos los cálculos en este rango: 3 leads de brokers/.test(t);
+    r.sinJenniferCalidad = !/Jennifer/.test(t);
+    r.brokers = agg.leads.filter(l => l.bk).map(l => l.n).join('|') + ' · vista ' + lqVista(agg).leads.filter(l => l.bk).length + ' · canal ' + agg.leads.filter(l => l.bk && l.ch === 'brokers').length;
+    const acc0 = {}, st = { a: { p: 'Brokers - Producción (B2B2C)', s: 'WON', i: 3 }, b: { p: 'Brokers - Expansión y activación', s: 'Activo', i: 1 }, c: { p: 'Seguimiento de ventas', s: 'Contacto establecido', i: 7 } };
+    lqSumarOpp(acc0, { ct: 'x1', s: 'a', st: 'won' }, st, {}, null); lqSumarOpp(acc0, { ct: 'x2', s: 'b', st: 'open' }, st, {}, null);
+    lqSumarOpp(acc0, { ct: 'x3', s: 'c', st: 'open' }, st, {}, null); lqSumarOpp(acc0, { ct: 'x3', s: 'a', st: 'open', sc: '2020-01-01' }, st, {}, null);
+    r.sumarOppBk = ['x1', 'x2', 'x3'].map(k => acc0[k].bk ? 1 : 0).join('');
     r.matrizOculta = !!document.getElementById('lq-diag-reglas') && !/Reglas automáticas vs\. captura del equipo/.test([...document.querySelectorAll('#lq-content h3')].map(h => h.textContent).join('|'));
     document.getElementById('lq-diag-reglas').click();
     r.matrizConBoton = /Reglas automáticas vs\. captura del equipo/.test([...document.querySelectorAll('#lq-content h3')].map(h => h.textContent).join('|'));
@@ -444,7 +456,9 @@ const PORT = process.env.PORT || 8765;
     && lqx.tarjetas && lqx.columnas === 'Campaña|Inversión|Leads CRM|CPL|% contactados|CQL|MQL|SQL+|Zoom realizado|OPP|WON|Costo por SQL|Semáforo'
     && Object.entries(semEsp).every(([k, v]) => lqx.semaforos[k] === v)
     && lqx.embudo090 === '2 2 1 · 40% 4,600 MXN' && /Total pagado.*57,400 MXN.*7,175 MXN/.test(lqx.totalPagado)
-    && lqx.inferidaBadge && lqx.sinPesos && lqx.sinCampania === '4 de 48 · filas 4' && lqx.semEnCalidad && lqx.sinMetricasViejas
+    && lqx.inferidaBadge && lqx.sinPesos && lqx.sinCampania === '4 de 49 · filas 4'
+    && lqx.tarjetasBk === '49 9 1' && lqx.notaBkCombo && lqx.sinJenniferCombo && lqx.notaBkCalidad && lqx.sinJenniferCalidad
+    && lqx.brokers === 'Jennifer Guillaume|Lead 51|Lead 52 · vista 0 · canal 2' && lqx.sumarOppBk === '101' && lqx.semEnCalidad && lqx.sinMetricasViejas
     && lqx.matrizOculta && lqx.matrizConBoton && lqx.datosFila === 'Campaña|Inversión|Leads plataforma|Leads CRM|CPL' && lqx.datosPliegue
     && lqx.conclusiones === 'Revisar seguimiento antes de pausar|Subir presupuesto 20%|Pausar|Optimizar, no subir|Mantener (muestra chica)|Mantener (muestra chica)|Mantener (muestra chica)';
   console.log('\n[calidad de leads] rediseño', JSON.stringify(lqx));
