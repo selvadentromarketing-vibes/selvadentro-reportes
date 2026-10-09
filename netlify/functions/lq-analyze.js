@@ -8,7 +8,7 @@
 //   { rango, moneda:"MXN", parametros:{metaCostoSql,minSqlVerde,subirPct,topeAmarillo,umbralEval,alertaCpl},
 //     totales:{inv,leads,sqlPlus,invPagada,sqlPlusPagado,costoSql,won,sinCampania:{leads,sqlPlus}},
 //     campanias:[{nombre,plataforma,inv,leadsPlataforma,leads,sqlPlus,costoSql,cpl,zoom,opp,won,
-//       contactadosPct,semaforo,accion,regla,muestraChica,alertaCpl,inferidos}],
+//       trabajadosPct,contactadosPct,semaforo,accion,regla,nota,muestraChica,alertaCpl,inferidos}],
 //     anuncios:[{nombre,estado,inv,leads,sqlPlus}], integridad:{fuente,asesor,calificacion,duplicados} }
 //
 // El semáforo (y por lo tanto la acción de cada campaña) lo calcula la app con sus
@@ -43,12 +43,12 @@ exports.handler = async (event) => {
   catch { return json(400, { error: "JSON inválido" }); }
 
   const T = d.totales || {};
-  const P = Object.assign({ metaCostoSql: 4000, minSqlVerde: 2, subirPct: 20, topeAmarillo: 6000, umbralEval: 8000, minContactados: 50 }, d.parametros || {});
+  const P = Object.assign({ metaCostoSql: 4000, minSqlVerde: 2, subirPct: 20, topeAmarillo: 6000, umbralEval: 8000, minTrabajados: 50 }, d.parametros || {});
   // Tope de tamaño: sin él, un body arbitrario infla el prompt (y la cuenta de la API).
   const camps = (d.campanias || []).slice(0, 20).map((c) =>
     `- ${c.nombre} [${c.plataforma || "?"}]: inversión ${money(c.inv)} · ${c.leadsPlataforma ?? "—"} leads en plataforma · ${c.leads} leads en CRM · ` +
     `${c.sqlPlus} SQL+ · costo por SQL ${c.costoSql != null ? money(c.costoSql) : "sin SQL+"} · CPL ${money(c.cpl)} · ` +
-    `${c.zoom} Zoom realizado · ${c.opp} OPP · ${c.won} WON · ${c.contactadosPct ?? "—"}% contactados · ` +
+    `${c.zoom} Zoom realizado · ${c.opp} OPP · ${c.won} WON · ${c.trabajadosPct ?? "—"}% trabajados · ${c.contactadosPct ?? "—"}% contactados · ` +
     `SEMÁFORO ${c.semaforo}${c.muestraChica ? " (muestra chica)" : ""} → acción "${c.accion}" porque ${c.regla}` +
     (c.nota ? ` · NOTA: ${c.nota}` : "") +
     (c.alertaCpl ? ` · ALERTA CPL: ${c.alertaCpl}` : "") +
@@ -64,9 +64,9 @@ exports.handler = async (event) => {
 
   const prompt = `Eres el analista de paid media y CRM de Selvadentro, un desarrollo inmobiliario boutique en Tulum que vende lotes premium para inversión (ticket mínimo 100,000 USD). Analizas el cruce entre la inversión publicitaria (Meta y Google) y la calidad real de los leads que llegaron al CRM. Todo el dinero está en MXN: escribe las cifras como "12,345 MXN", nunca con "$".
 
-Definiciones que NO se reinterpretan: SQL+ = SQL + SQL Selvadentro, la métrica principal (la única definición de lead "bueno") · Costo por SQL = inversión de la campaña en el rango ÷ SQL+ de esa campaña · CQL y MQL son solo volumen · Embudo: Lead → CQL → MQL → SQL → Zoom realizado → OPP → WON (una cita o visita de sitio no es Zoom realizado) · % contactados = leads que salieron de Nuevo / Sin respuesta; si es bajo, el problema puede ser de seguimiento, no de la campaña.
+Definiciones que NO se reinterpretan: SQL+ = SQL + SQL Selvadentro, la métrica principal (la única definición de lead "bueno") · Costo por SQL = inversión de la campaña en el rango ÷ SQL+ de esa campaña · CQL y MQL son solo volumen · Embudo: Lead → CQL → MQL → SQL → Zoom realizado → OPP → WON (una cita o visita de sitio no es Zoom realizado) · % trabajados = leads que ya salieron de "Nuevo lead (no contactado)" (Sin respuesta y toques incluidos); si es bajo, el problema es de seguimiento, no de la campaña · % contactados = leads con conversación (Contacto establecido, Interés identificado, Nurturing, Zoom, Largo plazo, OPP, WON o posterior; Sin respuesta y toques no cuentan); trabajados altos con contactados bajos = los leads no contestan, problema de calidad del lead.
 
-SEMÁFORO (ya calculado por la app, no lo recalcules ni lo cambies): meta de costo por SQL ${money(P.metaCostoSql)}. VERDE = costo por SQL ≤ ${money(P.metaCostoSql)} con al menos ${P.minSqlVerde} SQL+ → subir ${P.subirPct}% · AMARILLO = costo por SQL entre ${money(P.metaCostoSql)} y ${money(P.topeAmarillo)} → optimizar, no subir · ROJO = costo por SQL > ${money(P.topeAmarillo)}, o inversión ≥ ${money(P.umbralEval)} con 0 SQL+ → pausar; PERO si menos del ${P.minContactados}% de sus leads tiene contacto establecido → revisar seguimiento antes de pausar (la mayoría de sus leads no se han trabajado: el problema puede ser de ventas, no de la campaña) · EN EVALUACIÓN = inversión < ${money(P.umbralEval)} sin SQL+. MUESTRA CHICA = inversión < ${money(P.umbralEval)}: el color se calcula igual, pero la acción SIEMPRE es mantener; nunca recomiendes subir presupuesto (ni pausar) una campaña con muestra chica, aunque vaya en verde. La alerta de CPL es solo una alerta: no cambia la acción.
+SEMÁFORO (ya calculado por la app, no lo recalcules ni lo cambies): meta de costo por SQL ${money(P.metaCostoSql)}. VERDE = costo por SQL ≤ ${money(P.metaCostoSql)} con al menos ${P.minSqlVerde} SQL+ → subir ${P.subirPct}% · AMARILLO = costo por SQL entre ${money(P.metaCostoSql)} y ${money(P.topeAmarillo)} → optimizar, no subir · ROJO = costo por SQL > ${money(P.topeAmarillo)}, o inversión ≥ ${money(P.umbralEval)} con 0 SQL+ → pausar; PERO si menos del ${P.minTrabajados}% de sus leads está trabajado (la mayoría sigue en "Nuevo lead") → revisar seguimiento antes de pausar (el problema puede ser de ventas, no de la campaña); si ya están trabajados y no contestan, se pausa (el problema es la calidad del lead) · EN EVALUACIÓN = inversión < ${money(P.umbralEval)} sin SQL+. MUESTRA CHICA = inversión < ${money(P.umbralEval)}: el color se calcula igual, pero la acción SIEMPRE es mantener; nunca recomiendes subir presupuesto (ni pausar) una campaña con muestra chica, aunque vaya en verde. La alerta de CPL es solo una alerta: no cambia la acción.
 
 PERIODO: ${d.rango || "—"}
 
@@ -89,7 +89,7 @@ Devuelve SOLO un objeto JSON válido, sin texto alrededor y sin bloques de códi
   "preguntas": ["pregunta concreta que el reporte no puede responder y hay que verificar en la fuente"]
 }
 
-Reglas: "campanias" lleva TODAS las campañas de la lista, en el mismo orden, y su "accion" es exactamente la del semáforo. En "detalle" sé concreto (qué conjunto o anuncio tocar, cuánto subir, qué revisar) y menciona si aplica: muestra chica, alerta de CPL, % contactados bajo (seguimiento, no campaña), leads de plataforma que no llegaron al CRM (atribución antes de pausar) o atribución inferida. "acciones" son 2 a 4 acciones que no son de una sola campaña (atribución, seguimiento, CRM). Si el volumen es demasiado bajo para concluir, dilo en riesgos. Todo en español de México, tono directo y ejecutivo.`;
+Reglas: "campanias" lleva TODAS las campañas de la lista, en el mismo orden, y su "accion" es exactamente la del semáforo. En "detalle" sé concreto (qué conjunto o anuncio tocar, cuánto subir, qué revisar) y menciona si aplica: muestra chica, alerta de CPL, % trabajados bajo (seguimiento, no campaña), leads de plataforma que no llegaron al CRM (atribución antes de pausar) o atribución inferida. "acciones" son 2 a 4 acciones que no son de una sola campaña (atribución, seguimiento, CRM). Si el volumen es demasiado bajo para concluir, dilo en riesgos. Todo en español de México, tono directo y ejecutivo.`;
 
   try {
     const resp = await fetch("https://api.anthropic.com/v1/messages", {

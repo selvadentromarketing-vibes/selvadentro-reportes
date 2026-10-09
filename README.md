@@ -101,7 +101,7 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
   | AMARILLO | costo por SQL entre 4,000 y 6,000 MXN | Optimizar, no subir |
   | AMARILLO | costo por SQL ≤ 4,000 MXN pero 1 solo SQL+ (con los valores actuales siempre cae en muestra chica) | Mantener, no subir |
   | ROJO | costo por SQL > 6,000 MXN, o inversión ≥ 8,000 MXN con 0 SQL+ | Pausar |
-  | ROJO con < 50% de leads contactados (`minContactados`) | igual que ROJO, pero la mayoría de sus leads no se han trabajado | Revisar seguimiento antes de pausar (con la nota en la celda) |
+  | ROJO con < 50% de leads **trabajados** (`minTrabajados`) | igual que ROJO, pero la mayoría de sus leads siguen en "Nuevo lead" | Revisar seguimiento antes de pausar (con la nota en la celda). Si están trabajados y no contestan, sigue siendo Pausar: el problema es la calidad del lead |
   | EN EVALUACIÓN (gris) | inversión < 8,000 MXN y sin SQL+ | Mantener (muestra chica) |
 
   **Muestra chica** (inversión < 8,000 MXN): el color se calcula igual, pero la acción es
@@ -109,16 +109,24 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
   (Dirección, 8-oct-2026). La lectura automática agrupa por acción, no por color.
   Filas sin inversión (orgánico, "sin campaña") no tienen semáforo.
 - **Columnas por campaña** (Calidad de Lead y Reporte Combinado): Inversión · Leads CRM ·
-  CPL · % contactados · CQL · MQL · **SQL+ · Zoom realizado · OPP · WON** · Costo por SQL ·
+  CPL · % trabajados · % contactados · CQL · MQL · **SQL+ · Zoom realizado · OPP · WON** · Costo por SQL ·
   Semáforo, y dos totales: **Total pagado** (solo campañas con inversión, con su costo por
   SQL) y todos los leads del rango.
 - **Embudo canónico** Lead → CQL → MQL → SQL → Zoom realizado → OPP → WON, del cohorte de
   leads del rango y por lead (no por oportunidad). **Zoom realizado** = etapa "Zoom
   realizado" o una posterior del embudo (OPP y WON incluidos); las etapas de tour/visita y
   las cubetas que no son embudo no cuentan. Es la etapa actual: el CRM no da historial.
-- **% contactados** = leads que salieron de Nuevo / Sin respuesta (etapa de "Contacto
-  establecido" o posterior, respuesta por tag, cita, OPP o WON). Tooltip: *si es bajo, el
-  problema puede ser de seguimiento, no de la campaña*.
+- **% trabajados** = leads que ya salieron de "Nuevo lead (no contactado)": cualquier etapa
+  posterior, también "Sin respuesta", toques, Ultimátum, Rescate o Descalificado. Si es
+  bajo, el problema es de seguimiento, no de la campaña.
+- **% contactados** = hubo conversación: Contacto establecido, Interés identificado,
+  Nurturing, Zoom agendado / no show / realizado, Largo plazo, OPP, Carta oferta, WON o
+  cualquier etapa posterior al contacto. "Sin respuesta" y los toques sin respuesta NO
+  cuentan. Trabajados altos con contactados bajos = los leads no contestan (calidad del
+  lead). Las dos salen de la etapa del pipeline (9-oct-2026; antes era una sola columna que
+  mezclaba las dos y contaba citas y tags de respuesta aunque el lead siguiera en "Sin
+  respuesta"). Un lead sin oportunidad usa los tags: toque sin respuesta = trabajado,
+  respuesta = contactado.
 - **Alerta de CPL** ⚠ (solo visual, no cambia el semáforo): CPL de los últimos 7 días más
   de 30% arriba del promedio de 30 días de la misma campaña, anclado al final del rango.
 - **Cruce por ID de campaña**: `lead-quality` ahora devuelve `attr.cid` (el `campaignId`
@@ -157,7 +165,7 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
 - **Conclusiones IA**: el prompt recibe el semáforo ya calculado y devuelve una acción por
   campaña (subir 20% / mantener / optimizar / pausar) con la regla que la justifica; la
   tabla de acciones se arma con el semáforo aunque no se haya corrido la IA, y si la IA
-  propone otra acción manda el semáforo. Cache `lq:ia:v7:`.
+  propone otra acción manda el semáforo. Cache `lq:ia:v8:`.
 - Pruebas: `node scripts/test-lq.js` (backend con GHL y Anthropic simulados) y el bloque
   `lq:rediseño` de `scripts/smoke-ui.js` con los datos sintéticos de
   `scripts/lq-fixture.js` (W37–W40, los cinco estados del semáforo).
@@ -230,7 +238,7 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
   (Meta + Google) y se muestra inversión, CPL y **costo por SQL** por campaña (cruce por
   ID de campaña y, de respaldo, por nombre) y por plataforma (siempre calculable). Todo
   en **MXN** ("12,345 MXN", nunca "$").
-- **Cache compartido**: agregado en el kv (`lq:agg:v18`), staleness de 30 min, igual
+- **Cache compartido**: agregado en el kv (`lq:agg:v19`), staleness de 30 min, igual
   que CRM en vivo.
 - **Permisos**: canal `mkt_lq` (o `marketing`, o admin). El módulo manual de
   Calidad de Leads dentro de Marketing **se retiró el 2026-08-26** junto con PPC Ads

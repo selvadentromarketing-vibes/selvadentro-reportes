@@ -79,11 +79,11 @@ S.ghlFetch = async (path) => {
   const A = require("../netlify/functions/lq-analyze.js");
   const payload = {
     rango: "2026-W37 → 2026-W40", moneda: "MXN",
-    parametros: { metaCostoSql: 4000, minSqlVerde: 2, subirPct: 20, topeAmarillo: 6000, umbralEval: 8000, minContactados: 50 },
+    parametros: { metaCostoSql: 4000, minSqlVerde: 2, subirPct: 20, topeAmarillo: 6000, umbralEval: 8000, minTrabajados: 50 },
     totales: { inv: 30000, leads: 40, sqlPlus: 6, invPagada: 30000, sqlPlusPagado: 5, costoSql: 6000, won: 1, sinCampania: { leads: 3, sqlPlus: 1 } },
     campanias: [
       { nombre: "INVESTORS_US/CA_ESCAPE_090926", plataforma: "Meta", inv: 11360, leadsPlataforma: 13, leads: 9, sqlPlus: 0, costoSql: null, cpl: 1262, zoom: 0, opp: 0, won: 0,
-        contactadosPct: 30, semaforo: "ROJO", accion: "pausar", regla: "inversión 11,360 MXN ≥ 8,000 MXN con 0 SQL+", muestraChica: false, alertaCpl: "", inferidos: 0 },
+        trabajadosPct: 100, contactadosPct: 30, semaforo: "ROJO", accion: "pausar", regla: "inversión 11,360 MXN ≥ 8,000 MXN con 0 SQL+", muestraChica: false, alertaCpl: "", inferidos: 0 },
     ],
     anuncios: [], integridad: { fuente: "90%", asesor: "95%", calificacion: "20%", duplicados: 0 },
   };
@@ -93,7 +93,9 @@ S.ghlFetch = async (path) => {
   ok(ra.statusCode === 200 && da.analisis && Array.isArray(da.analisis.campanias), "devuelve el análisis con campanias", ra.statusCode);
   ok(/SEMÁFORO ROJO → acción "pausar" porque inversión 11,360 MXN ≥ 8,000 MXN con 0 SQL\+/.test(prompt), "cada campaña llega con su semáforo, acción y regla");
   ok(/"campanias": \[\{"nombre"/.test(prompt) && /subir 20%\|mantener\|optimizar\|pausar\|revisar seguimiento/.test(prompt), "pide una acción por campaña con el vocabulario fijo");
-  ok(/si menos del 50% de sus leads tiene contacto establecido → revisar seguimiento antes de pausar/.test(prompt), "ROJO con pocos contactados: revisar seguimiento antes de pausar");
+  ok(/si menos del 50% de sus leads está trabajado \(la mayoría sigue en "Nuevo lead"\) → revisar seguimiento antes de pausar/.test(prompt)
+     && /si ya están trabajados y no contestan, se pausa/.test(prompt), "ROJO: revisar seguimiento solo si menos del 50% está trabajado; trabajados que no contestan, pausar");
+  ok(/% trabajados = leads que ya salieron de "Nuevo lead/.test(prompt) && /Sin respuesta y toques no cuentan/.test(prompt), "define trabajados y contactados por separado");
   ok(/meta de costo por SQL 4,000 MXN/.test(prompt) && /costo por SQL 6,000 MXN/.test(prompt), "cifras en MXN");
   ok(!/\$\d/.test(prompt), "ningún monto con $ en el prompt");
   ok(/MUESTRA CHICA = inversión < 8,000 MXN: el color se calcula igual, pero la acción SIEMPRE es mantener/.test(prompt), "muestra chica: la acción siempre es mantener, nunca subir");

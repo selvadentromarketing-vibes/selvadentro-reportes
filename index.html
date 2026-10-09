@@ -2958,7 +2958,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v18";  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
+const LQ_AGG_KEY = "lq:agg:v19";  // v19: trabajado (tr) y contactado (ct) por etapa, separados  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 // (LQ_TZ y LQ_TZ_MS ahora viven junto al resto de helpers de fecha, arriba)
@@ -2995,7 +2995,7 @@ const LQ_SEMAFORO = {
   subirPct:     20,     // % de aumento recomendado en verde
   topeAmarillo: 6000,   // AMARILLO: costo por SQL entre la meta y esto → optimizar, no subir; arriba, ROJO
   umbralEval:   8000,   // inversión del rango: debajo y sin SQL+ = EN EVALUACIÓN; desde aquí con 0 SQL+ = ROJO
-  minContactados: 50,   // % : un ROJO con menos leads contactados que esto → revisar seguimiento antes de pausar
+  minTrabajados: 50,    // % : un ROJO con menos leads TRABAJADOS que esto (siguen en "Nuevo lead") → revisar seguimiento antes de pausar
   // Alerta visual de CPL (no cambia el semáforo): el CPL de los últimos `dias` días va más
   // de `pct`% arriba del CPL promedio de los últimos `base` días de la misma campaña.
   alertaCpl: { dias:7, base:30, pct:30 },
@@ -3008,8 +3008,8 @@ const lqSqlPlus = (c)=> (c.sql||0) + (c.sqls||0);
 
 // Veredicto del semáforo para una campaña: { c, txt, k, acc, regla, nota, chica, cps } o
 // null si no tuvo inversión en el rango (orgánico, sin campaña: no hay presupuesto que
-// mover). `ct` = { n, ct }: leads de la campaña y cuántos tienen contacto establecido.
-function lqSemaforo(inv, sqlp, ct){
+// mover). `seg` = { n, tr }: leads de la campaña y cuántos ya se trabajaron.
+function lqSemaforo(inv, sqlp, seg){
   const P = LQ_SEMAFORO;
   if(!(inv > 0)) return null;
   const chica = inv < P.umbralEval;
@@ -3033,13 +3033,14 @@ function lqSemaforo(inv, sqlp, ct){
   }
   r.chica = chica;
   // ROJO SIN SEGUIMIENTO (Dirección, 9-oct-2026): si la mayoría de los leads de la campaña
-  // ni siquiera tienen contacto establecido, el costo por SQL alto puede ser de ventas y no
-  // de la campaña. Antes de pausarla hay que trabajar sus leads. Solo cambia la acción.
-  if(r.k==="pausar" && !chica && ct && ct.n > 0 && ct.ct/ct.n*100 < P.minContactados){
-    const pc = Math.round(ct.ct/ct.n*100);
+  // siguen en "Nuevo lead" —nadie los ha trabajado—, el costo por SQL alto puede ser de
+  // ventas y no de la campaña: antes de pausarla hay que trabajar sus leads. Si ya se
+  // trabajaron y no contestan, se pausa: el problema es la calidad del lead.
+  if(r.k==="pausar" && !chica && seg && seg.n > 0 && seg.tr/seg.n*100 < P.minTrabajados){
+    const pc = Math.round(seg.tr/seg.n*100);
     r.k = "revisar"; r.acc = "Revisar seguimiento antes de pausar";
-    r.nota = `La mayoría de sus leads no se han trabajado: solo ${ct.ct} de ${ct.n} (${pc}%) tienen contacto establecido.`;
-    r.regla += ` · solo ${pc}% de sus leads contactados (< ${P.minContactados}%): revisar seguimiento antes de pausar`;
+    r.nota = `La mayoría de sus leads no se han trabajado: solo ${seg.tr} de ${seg.n} (${pc}%) salieron de Nuevo lead.`;
+    r.regla += ` · solo ${pc}% de sus leads trabajados (< ${P.minTrabajados}%): revisar seguimiento antes de pausar`;
   }
   // MUESTRA CHICA (Dirección, 8-oct-2026): con menos de `umbralEval` invertido el color se
   // calcula igual —dice cómo va la campaña— pero la acción SIEMPRE es mantener: con tan
@@ -3724,19 +3725,38 @@ function lqZoomRealizado(l, zIdx){
   const t = zIdx[l.pipe||""];
   return t != null && l._si != null && l._si > t && !LQ_RX_NO_ZOOM.test(n);
 }
-// % contactados: el lead salió de "Nuevo" / "Sin respuesta" — hubo al menos un contacto
-// establecido. Los toques sin respuesta (1er toque… Break up) no cuentan.
+/* ---- Trabajado vs. contactado (Dirección, 9-oct-2026) ---------------------------------
+   Son dos cosas distintas y antes se mezclaban en una sola columna:
+   · TRABAJADO = el lead ya salió de "Nuevo lead (no contactado)": cualquier etapa
+     posterior cuenta, también "Sin respuesta", los toques, Ultimátum, Rescate o
+     Descalificado. Si es bajo, el problema es de seguimiento, no de la campaña.
+   · CONTACTADO = hubo conversación: Contacto establecido, Interés identificado, Nurturing,
+     Zoom agendado / no show / realizado, Largo plazo, OPP, Carta oferta, WON o cualquier
+     etapa posterior al contacto. "Sin respuesta" y los toques sin respuesta NO cuentan.
+     Trabajados altos con contactados bajos = los leads no contestan: calidad del lead.
+   Las dos salen de la etapa del pipeline (la de la oportunidad movida más reciente). Un
+   lead sin oportunidad no tiene etapa: ahí los tags de toque sin respuesta dicen que se
+   trabajó, y un tag de respuesta, que hubo conversación. */
+const LQ_RX_NUEVO_LEAD  = /nuevo\s*lead|lead\s*nuevo|no\s*contactad|sin\s*contactar|^nuevo$/i;
+const LQ_RX_CONTACTO_NO = /sin\s*respuesta|toque|ultim[aá]tum|break\s*up|rescate|corretaje|descalific|redes\s*social|no\s*contest|perdid|\blost\b|spam|duplicad/i;
+const LQ_RX_CONTACTO_SI = /contacto\s*establecid|inter[eé]s\s*identificad|nurtur|zoom|tour|visita|recorrido|largo\s*plazo|cotizaci|seguimiento\s*de\s*opp|carta\s*oferta|apartad|\bwon\b|ganad/i;
 function lqContactado(l, cIdx){
-  if((l.o||0) > 0 || (l.w||0) > 0) return true;
-  if(l.ap && (l.ap.sh > 0 || l.ap.tot > 0)) return true;          // agendó o asistió: hubo contacto
-  const tags = String(l.tags||"").toLowerCase().split(/\s*,\s*/);
-  if(tags.some(t=>LQ_TAGS_RESP.test(t) && !/no-?contest|sin-?respuesta|no-?a?n?swer/.test(t))) return true;
+  if((l.o||0) > 0 || (l.w||0) > 0) return true;             // OPP o WON: ya hubo conversación
   const n = String(l.pstage||"");
-  if(!n || LQ_RX.frio.test(n) || LQ_RX.desc.test(n)) return false;
-  if(/rescate|nurtur|redes|corretaje|toque|ultim[aá]tum|break\s*up/i.test(n)) return false;
+  if(!n){
+    const tags = String(l.tags||"").toLowerCase().split(/\s*,\s*/);
+    return tags.some(t=>LQ_TAGS_RESP.test(t) && !/no-?contest|sin-?respuesta|no-?a?n?swer/.test(t));
+  }
+  if(LQ_RX_NUEVO_LEAD.test(n) || LQ_RX_CONTACTO_NO.test(n)) return false;
+  if(LQ_RX_CONTACTO_SI.test(n)) return true;
   const t = cIdx[l.pipe||""];
-  if(t != null && l._si != null && l._si >= t) return true;
-  return LQ_RX.contacto.test(n) || LQ_RX.fuerte.test(n);
+  return t != null && l._si != null && l._si >= t;          // cualquier etapa posterior al contacto
+}
+function lqTrabajado(l, contactado){
+  if(contactado || (l.o||0) > 0 || (l.w||0) > 0) return true;
+  const n = String(l.pstage||"");
+  if(n) return !LQ_RX_NUEVO_LEAD.test(n);
+  return /(^|,\s*)d\d+-no-a?n?swer/i.test(String(l.tags||""));   // sin etapa: toques registrados por tag
 }
 
 function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
@@ -3896,13 +3916,15 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
   // Calificación automática por reglas (independiente del campo que llena el equipo).
   // Los tags se truncan DESPUÉS de calificar: recortarlos antes podía comerse el tag de
   // descalificación o de respuesta de un lead con muchos tags y cambiarle el nivel.
-  // Con la calificación se marcan dos pasos del embudo que no son niveles: Zoom realizado
-  // (zm) y contacto establecido (ct).
+  // Con la calificación se marcan pasos que no son niveles: Zoom realizado (zm), trabajado
+  // (tr: salió de "Nuevo lead") y contactado (ct: hubo conversación).
   const zIdx = lqEtapaIdx(boot.stages, LQ_RX_ZOOM_OK), cIdx = lqEtapaIdx(boot.stages, /contacto\s*establecid/i);
   leads.forEach(l=>{
     const a = lqAutoQualify(l); l.alv = a.lv; l.awhy = a.why.join(" · ").slice(0,180);
     if(lqZoomRealizado(l, zIdx)) l.zm = 1;
-    if(lqContactado(l, cIdx)) l.ct = 1;
+    const ct = lqContactado(l, cIdx);
+    if(ct) l.ct = 1;
+    if(lqTrabajado(l, ct)) l.tr = 1;
     delete l._si;
     l.tags = l.tags.slice(0,140);
   });
@@ -3982,9 +4004,10 @@ function lqLeyenda(){
       <span><b>WON</b> leads del cohorte con venta cerrada, sin importar cuándo se cerró. Todo el dinero en MXN</span>
       <span><b>SQL+</b> SQL + SQL Selvadentro: la única definición de lead bueno. CQL y MQL son volumen</span>
       <span><b>Costo por SQL</b> inversión de la campaña en el rango ÷ sus SQL+ · meta ${lqMXN(LQ_SEMAFORO.metaCostoSql)}</span>
-      <span><b>Semáforo</b> verde subir ${LQ_SEMAFORO.subirPct}% · amarillo optimizar · rojo pausar (o revisar seguimiento si menos del ${LQ_SEMAFORO.minContactados}% está contactado) · gris en evaluación · inversión < ${lqMXN(LQ_SEMAFORO.umbralEval)}: mantener (muestra chica) (reglas completas arriba de cada tabla)</span>
+      <span><b>Semáforo</b> verde subir ${LQ_SEMAFORO.subirPct}% · amarillo optimizar · rojo pausar (o revisar seguimiento si menos del ${LQ_SEMAFORO.minTrabajados}% está trabajado) · gris en evaluación · inversión < ${lqMXN(LQ_SEMAFORO.umbralEval)}: mantener (muestra chica) (reglas completas arriba de cada tabla)</span>
       <span><b>Zoom realizado</b> etapa "Zoom realizado" o posterior. Cita o visita de sitio no cuenta</span>
-      <span><b>% contactados</b> salieron de Nuevo / Sin respuesta. Si es bajo, el problema puede ser de seguimiento, no de la campaña</span>
+      <span><b>% trabajados</b> ya salieron de "Nuevo lead (no contactado)" (Sin respuesta y toques incluidos). Si es bajo, el problema es de seguimiento, no de la campaña</span>
+      <span><b>% contactados</b> hubo conversación: Contacto establecido, Interés identificado, Nurturing, Zoom, Largo plazo, OPP, WON o posterior. Sin respuesta y toques no cuentan; trabajados altos con contactados bajos = los leads no contestan</span>
       <span><b>CPL</b> costo por lead = inversión ÷ leads CRM · <b>⚠</b> CPL de 7 días más de ${LQ_SEMAFORO.alertaCpl.pct}% arriba de su promedio de 30</span>
       <span><b>Atribución inferida</b> leads de la landing de seguridad sin UTM antes del 08-oct-2026, asignados a INVESTORS_MX_DYNAMIC-TOPLPS_090926</span>
     </div>
@@ -4229,7 +4252,7 @@ function lqMetricas(arr, inv, res){
   inv = inv || 0;
   return { n, inv, res: res||0, cql:c.cql||0, mql:c.mql||0, sqlp,
     zoom: arr.filter(l=>l.zm).length, opp: arr.filter(l=>(l.o||0)>0).length, won: arr.filter(l=>(l.w||0)>0).length,
-    ct: arr.filter(l=>l.ct).length, inf: arr.filter(l=>l.inf).length,
+    tr: arr.filter(l=>l.tr).length, ct: arr.filter(l=>l.ct).length, inf: arr.filter(l=>l.inf).length,
     cpl: inv>0 && n ? inv/n : null, cps: inv>0 && sqlp ? inv/sqlp : null };
 }
 // Filas por campaña con semáforo y alerta de CPL; `pagado` = total de las campañas con
@@ -4241,7 +4264,7 @@ function lqCampModel(agg, leads, rangoSet, rango, plat){
     const m = lqMetricas(C.leads, C.spend, C.res);
     m.key = C.key; m.plat = C.plat; m.camp = C.camp; m.C = C;
     m.sinCamp = C.camp === LQ_SIN_CAMP;
-    m.sem = m.sinCamp ? null : lqSemaforo(m.inv, m.sqlp, { n:m.n, ct:m.ct });
+    m.sem = m.sinCamp ? null : lqSemaforo(m.inv, m.sqlp, { n:m.n, tr:m.tr });
     m.alerta = m.sinCamp ? null : (alertas[lqNormCamp(C.camp)] || null);
     return m;
   });
@@ -4297,7 +4320,8 @@ const LQ_CCOLS = {
   res:  { th:"Leads plataforma", t:"Leads que reporta Meta / Google para la campaña" },
   n:    { th:"Leads CRM",        t:"Contactos que entraron a GoHighLevel en el rango" },
   cpl:  { th:"CPL",              t:"Costo por lead = inversión ÷ leads CRM. ⚠ = el CPL de los últimos 7 días va más de 30% arriba de su propio promedio de 30 días (solo alerta: no cambia el semáforo)" },
-  ct:   { th:"% contactados",    t:"Si es bajo, el problema puede ser de seguimiento, no de la campaña. Leads que salieron de Nuevo / Sin respuesta: al menos un contacto establecido" },
+  tr:   { th:"% trabajados",     t:"Leads que ya salieron de \"Nuevo lead (no contactado)\": cualquier etapa posterior, también Sin respuesta, toques, Rescate o Descalificado. Si es bajo, el problema es de seguimiento, no de la campaña" },
+  ct:   { th:"% contactados",    t:"Leads con conversación: Contacto establecido, Interés identificado, Nurturing, Zoom, Largo plazo, OPP, Carta oferta, WON o posterior. Sin respuesta y los toques sin respuesta no cuentan. Trabajados altos con contactados bajos = los leads no contestan (calidad del lead)" },
   cql:  { th:"CQL",              t:"Volumen: capturado, sin respuesta todavía", sec:true },
   mql:  { th:"MQL",              t:"Volumen: respondió o mostró interés", sec:true },
   sqlp: { th:"SQL+",             t:"SQL + SQL Selvadentro: la métrica principal" },
@@ -4307,7 +4331,7 @@ const LQ_CCOLS = {
   cps:  { th:"Costo por SQL",    t:"Inversión de la campaña en el rango ÷ SQL+ de esa campaña" },
   sem:  { th:"Semáforo",         t:"Verde: costo por SQL ≤ meta con al menos 2 SQL+ → subir 20% · Amarillo: entre la meta y el tope → optimizar · Rojo: arriba del tope, o inversión ≥ umbral con 0 SQL+ → pausar · Gris: inversión bajo el umbral y sin SQL+ → en evaluación" },
 };
-const LQ_KEYS_CALIDAD = ["inv","n","cpl","ct","cql","mql","sqlp","zoom","opp","won","cps","sem"];
+const LQ_KEYS_CALIDAD = ["inv","n","cpl","tr","ct","cql","mql","sqlp","zoom","opp","won","cps","sem"];
 const LQ_KEYS_COMBO   = LQ_KEYS_CALIDAD;     // "Leads plataforma" vive en Datos de campañas
 const lqThs = (keys)=> keys.map(k=>`<th${LQ_CCOLS[k].sec?' class="lq-sec"':""} title="${escAttr(LQ_CCOLS[k].t)}">${LQ_CCOLS[k].th}</th>`).join("");
 const lqPct = (n,d)=> d ? Math.round(n/d*100)+"%" : "—";
@@ -4336,6 +4360,7 @@ function lqCeldas(m, keys, o){
       case "res":  return `<td>${m.res ? m.res.toLocaleString() : "—"}</td>`;
       case "n":    return `<td><b>${m.n.toLocaleString()}</b></td>`;
       case "cpl":  return `<td>${m.cpl!=null ? lqMXN(m.cpl) : "—"}${lqAlertaIcono(m.alerta)}</td>`;
+      case "tr":   return `<td class="pct" title="${escAttr(LQ_CCOLS.tr.t)}">${m.n ? lqPct(m.tr, m.n) : "—"}</td>`;
       case "ct":   return `<td class="pct" title="${escAttr(LQ_CCOLS.ct.t)}">${m.n ? lqPct(m.ct, m.n) : "—"}</td>`;
       case "cql":  return `<td class="lq-sec">${cnt(m.cql)}</td>`;
       case "mql":  return `<td class="lq-sec">${cnt(m.mql)}</td>`;
@@ -4563,7 +4588,7 @@ function lqReglasSemaforo(){
     <div class="lq-leyenda-cuerpo">
       <span><span class="lq-sem verde">VERDE</span> costo por SQL ≤ ${lqMXN(P.metaCostoSql)} y al menos ${P.minSqlVerde} SQL+ → <b>Subir presupuesto ${P.subirPct}%</b></span>
       <span><span class="lq-sem amarillo">AMARILLO</span> costo por SQL entre ${lqMXN(P.metaCostoSql)} y ${lqMXN(P.topeAmarillo)} → <b>Optimizar, no subir</b></span>
-      <span><span class="lq-sem rojo">ROJO</span> costo por SQL > ${lqMXN(P.topeAmarillo)}, o inversión ≥ ${lqMXN(P.umbralEval)} con 0 SQL+ → <b>Pausar</b>; pero si menos del ${P.minContactados}% de sus leads tiene contacto establecido → <b>Revisar seguimiento antes de pausar</b> (la mayoría de sus leads no se han trabajado)</span>
+      <span><span class="lq-sem rojo">ROJO</span> costo por SQL > ${lqMXN(P.topeAmarillo)}, o inversión ≥ ${lqMXN(P.umbralEval)} con 0 SQL+ → <b>Pausar</b>; pero si menos del ${P.minTrabajados}% de sus leads está trabajado (la mayoría sigue en "Nuevo lead") → <b>Revisar seguimiento antes de pausar</b>. Si están trabajados y no contestan, se pausa: el problema es la calidad del lead</span>
       <span><span class="lq-sem gris">EN EVALUACIÓN</span> inversión < ${lqMXN(P.umbralEval)} y sin SQL+ todavía</span>
       <span><b>Muestra chica</b>: con inversión < ${lqMXN(P.umbralEval)} el color se calcula igual, pero la acción siempre es <b>Mantener (muestra chica)</b>: nunca subir presupuesto ni pausar</span>
       <span><b>⚠ junto al CPL</b>: el CPL de los últimos ${A.dias} días va más de ${A.pct}% arriba de su propio promedio de ${A.base} días. Solo alerta: no cambia el semáforo.</span>
@@ -4636,7 +4661,7 @@ function lqComboSection(agg, leadsAll, rango, rangoSet){
     <tr class="total lq-total2"><td class="lft">Todos los leads del rango</td>${lqCeldas({ ...todo, cpl:null, cps:null }, keys, { total:true, sinMeta:true })}</tr>
   </table></div>
   <p class="hint">Leads CRM = contactos en GoHighLevel (los leads que reporta la plataforma están en Datos de campañas) · CPL = inversión ÷ leads CRM · SQL+ = SQL + SQL Selvadentro · Costo por SQL = inversión ÷ SQL+ ·
-    Zoom realizado, OPP y WON = leads del cohorte del rango según su etapa en el CRM (una cita o visita de sitio no cuenta como Zoom) · % contactados = salieron de Nuevo / Sin respuesta.
+    Zoom realizado, OPP y WON = leads del cohorte del rango según su etapa en el CRM (una cita o visita de sitio no cuenta como Zoom) · % trabajados = salieron de "Nuevo lead" · % contactados = hubo conversación (Sin respuesta y toques no cuentan).
     La inversión se cruza con los leads por ID de campaña cuando el lead lo trae (hsa_cam de Google, campaignId de Meta) y, si no, por nombre.</p>`;
 
   lqState._combo = { rows, pagado:pag, todo, leads, semTot, gap:M.gap };
@@ -4730,6 +4755,7 @@ function lqConclusionesSection(){
 }
 
 // v7 (2026-10-09): fuera los leads de brokers; un análisis anterior los contaba como SQL+ y WON.
+// v8 (2026-10-09): la regla de seguimiento mira los TRABAJADOS, no los contactados.
 // v6 (2026-10-09): ROJO con menos de 50% contactados = revisar seguimiento antes de pausar.
 // v5 (2026-10-08): muestra chica (< 8,000 MXN) = mantener, nunca subir; un análisis de la
 // v4 pudo recomendar subir una campaña con muestra chica.
@@ -4739,7 +4765,7 @@ function lqConclusionesSection(){
 // v2 (2026-09-11): la calificación cambió —OPP eleva a SQL, Budget Range en pesos, fuera
 // pruebas y sin contacto—, así que un análisis guardado con la v1 cita cifras que ya no
 // son las de la pantalla. Se paga una vez más por rango y se comparte otra vez.
-const LQ_IA_KEY = "lq:ia:v7:";
+const LQ_IA_KEY = "lq:ia:v8:";
 const LQ_IA_TTL = 12*3600e3;          // 12 h: el rango no cambia tanto como para pagar de nuevo
 
 // Devuelve el análisis guardado de este rango si sigue vigente. La clave incluye la
@@ -4779,6 +4805,7 @@ async function lqAnalizar(forzar){
     const campanias = (d.rows||[]).filter(m=>m.sem).slice(0,20).map(m=>({
       nombre:m.camp, plataforma:m.plat, inv:r0(m.inv), leadsPlataforma:m.res||0, leads:m.n, sqlPlus:m.sqlp,
       costoSql:r0(m.cps), cpl:r0(m.cpl), zoom:m.zoom, opp:m.opp, won:m.won,
+      trabajadosPct: m.n ? Math.round(m.tr/m.n*100) : null,
       contactadosPct: m.n ? Math.round(m.ct/m.n*100) : null,
       semaforo:m.sem.txt, accion:LQ_ACC_TXT[m.sem.k], regla:m.sem.regla, nota:m.sem.nota||"", muestraChica:!!m.sem.chica,
       alertaCpl: m.alerta ? (m.alerta.cpl7!=null ? `CPL 7 días ${r0(m.alerta.cpl7)} MXN vs. promedio 30 días ${r0(m.alerta.prom)} MXN (+${m.alerta.pct}%)` : `${r0(m.alerta.sp7)} MXN en 7 días sin leads`) : "",
@@ -4802,7 +4829,7 @@ async function lqAnalizar(forzar){
     const payload = {
       rango: rango.length ? `${rango[0]} → ${rango[rango.length-1]}` : "—",
       moneda: "MXN",
-      parametros: { metaCostoSql:P.metaCostoSql, minSqlVerde:P.minSqlVerde, subirPct:P.subirPct, topeAmarillo:P.topeAmarillo, umbralEval:P.umbralEval, minContactados:P.minContactados, alertaCpl:P.alertaCpl },
+      parametros: { metaCostoSql:P.metaCostoSql, minSqlVerde:P.minSqlVerde, subirPct:P.subirPct, topeAmarillo:P.topeAmarillo, umbralEval:P.umbralEval, minTrabajados:P.minTrabajados, alertaCpl:P.alertaCpl },
       totales: { inv:r0(d.todo&&d.todo.inv), leads:L.length, sqlPlus:d.todo?d.todo.sqlp:0,
                  invPagada:r0(d.pagado&&d.pagado.inv), sqlPlusPagado:d.pagado?d.pagado.sqlp:0, costoSql:r0(d.pagado&&d.pagado.cps),
                  won:L.filter(l=>(l.w||0)>0).length,

@@ -6,14 +6,14 @@
 // Resultado esperado del semáforo (meta 4,000 MXN por SQL, umbral 8,000 MXN; con menos de
 // 8,000 invertidos el color se calcula igual pero la acción es "Mantener (muestra chica)"):
 //   MX_DYNAMIC_090926   9,200 · 2 SQL+ (8 leads con atribución inferida) → AMARILLO optimizar
-//   US/CA_ESCAPE_090926 11,200 · 0 SQL+ · 14% contactados              → ROJO, revisar seguimiento antes de pausar
-//   US/CA_ESCAPE_100626 10,000 · 0 SQL+ · 75% contactados              → ROJO pausar
+//   US/CA_ESCAPE_090926 11,200 · 0 SQL+ · 43% trabajados, 14% contactados → ROJO, revisar seguimiento antes de pausar
+//   US/CA_ESCAPE_100626 10,000 · 0 SQL+ · 100% trabajados, 75% contactados → ROJO pausar
 //   EN_FORMULARIOMETA   7,000 · 2 SQL+ (cruce por ID)  · alerta de CPL   → VERDE, mantener (muestra chica)
 //   GOOGLE SEARCH MX    3,600 · 3 leads (2 con utm = ID 23710551755, 1 con
 //                       el alias INVESTORS-GOOGLE-SEARCH-MX) · 1 SQL+    → AMARILLO, mantener (muestra chica)
-//   GOOGLE US+CAN       6,000 · 0 SQL+ (utm numérico)                    → EN EVALUACIÓN, mantener (muestra chica)
+//   GOOGLE US+CAN      13,600 · 0 SQL+ (utm numérico) · 100% trabajados, 60% contactados → ROJO pausar
 //   MX_DYNAMIC_150726  10,400 · 3 SQL+                                  → VERDE subir 20%
-//   Total pagado       57,400 · 8 SQL+ → 7,175 MXN por SQL · 4 leads sin campaña
+//   Total pagado       65,000 · 8 SQL+ → 8,125 MXN por SQL · 4 leads sin campaña
 //   3 leads de brokers (uno es "Jennifer Guillaume", WON) excluidos de todo: no mueven ninguna
 //   cifra; un contacto del pipeline de reclutamiento de brokers sí cuenta (orgánico).
 function fixture() {
@@ -40,7 +40,7 @@ function fixture() {
     esc2:  { plat: "Meta",   camp: "INVESTORS_US/CA_ESCAPE_100626",       cid: "120247999032690275", grp: "EN_LLAMADA_PREMIUMLOTS",              sem: [2500, 2500, 2500, 2500], res: [1, 1, 1, 1] },
     form:  { plat: "Meta",   camp: "INVESTORS_EN_FORMULARIOMETA_TULUM_100626", cid: "120248002284280275", grp: "EN_LLAMADA_PREMIUMLOTS",       sem: [1500, 1500, 1500, 2500], res: [3, 3, 2, 1] },
     gmx:   { plat: "Google", camp: "INVESTORS - GOOGLE SEARCH -- MX",    cid: "23710551755", grp: "Inversión Tulum MX",                         sem: [900, 900, 900, 900],     res: [1, 1, 1, 0] },
-    gus:   { plat: "Google", camp: "INVESTORS - GOOGLE SEARCH - US+CAN", cid: "23715389989", grp: "Tulum land US",                              sem: [1500, 1500, 1500, 1500], res: [1, 0, 1, 1] },
+    gus:   { plat: "Google", camp: "INVESTORS - GOOGLE SEARCH - US+CAN", cid: "23715389989", grp: "Tulum land US",                              sem: [3400, 3400, 3400, 3400], res: [2, 1, 1, 2] },
     dyn2:  { plat: "Meta",   camp: "INVESTORS_MX_DYNAMIC-TOPLPS_150726", cid: "120250010904330275", grp: "ES_LLAMADA_NUEVO6-ESCAPE_CENOTES",      sem: [2600, 2600, 2600, 2600], res: [3, 2, 2, 2] },
   };
   const weeks = Object.keys(LUNES);
@@ -74,7 +74,8 @@ function fixture() {
   lead("2026-W38", 3, { src: "fb", attr: { camp: "Formulario seguridad", cid: C.dyn.cid, src: "facebook" }, etapa: "3er toque" });
   lead("2026-W40", 1, { src: "fb", attr: { camp: "Formulario seguridad", cid: C.dyn.cid, src: "facebook" }, etapa: "Descalificado" });
   // US/CA ESCAPE: 7 leads por utm_campaign, ninguno SQL+
-  ["Sin respuesta", "1er toque", "Break up", "Contacto establecido", "Descalificado", "Ultimátum", "Nuevo lead (no contactado)"]
+  // …y la mayoría siguen en "Nuevo lead": nadie los ha trabajado (3 de 7 trabajados, 1 contactado)
+  ["Nuevo lead (no contactado)", "1er toque", "Nuevo lead (no contactado)", "Contacto establecido", "Nuevo lead (no contactado)", "Sin respuesta", "Nuevo lead (no contactado)"]
     .forEach((e, i) => lead(weeks[(i + 3) % 4], 2, { src: "Meta ads", cf: { f_camp: C.esc.camp }, attr: { src: "facebook" }, etapa: e }));
   // EN_FORMULARIOMETA: 9 leads con el nombre del FORMULARIO en la atribución y el campaignId real
   const etForm = ["WON", "Seguimiento de OPP", "1er toque", "Sin respuesta", "1er toque", "Contacto establecido", "2ndo toque", "Sin respuesta", "1er toque"];
@@ -87,9 +88,10 @@ function fixture() {
   // US/CA_ESCAPE_100626: 4 leads, 3 con contacto establecido (75%) y ningún SQL+ → ROJO, pausar
   ["Contacto establecido", "Contacto establecido", "Contacto establecido", "1er toque"]
     .forEach((e, i) => lead(weeks[(i + 3) % 4], 6, { src: "Meta ads", cf: { f_camp: C.esc2.camp }, attr: { src: "facebook" }, etapa: e }));
-  // Google US+CAN: utm_campaign = id numérico de la campaña → 0 SQL+
-  ["1er toque", "Sin respuesta", "Nuevo lead (no contactado)"]
-    .forEach((e, i) => lead(weeks[i + 1], 0, { src: "google", cf: { f_camp: "23715389989" }, attr: { src: "google" }, etapa: e }));
+  // Google US+CAN: utm_campaign = id numérico de la campaña. 5 leads, todos trabajados, 3 con
+  // conversación (60%) y 0 SQL+: no contestan bien, el problema es el lead → ROJO, pausar
+  ["Contacto establecido", "Nurturing", "Largo Plazo", "Sin respuesta", "1er toque"]
+    .forEach((e, i) => lead(weeks[i % 4], 0, { src: "google", cf: { f_camp: "23715389989" }, attr: { src: "google" }, etapa: e }));
   // MX_DYNAMIC_150726: 6 leads, 3 SQL+ (dos sin utm_campaign pero con el conjunto en utm_content)
   ["Carta Oferta", "Interés identificado", "Zoom agendado", "Zoom realizado", "1er toque", "Sin respuesta"]
     .forEach((e, i) => lead(weeks[(i + 3) % 4], 5, i < 2 ? { src: "fb", cf: { f_cont: C.dyn2.grp }, attr: { src: "facebook" }, etapa: e }
