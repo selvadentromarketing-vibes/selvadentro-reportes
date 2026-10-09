@@ -20,7 +20,7 @@
 //     Recorre todas las oportunidades (con contactId) para unirlas a los leads
 //     por campaña: OPPs y WONs que produjo cada campaña.
 //   { action:"spend", start, end }   (fechas YYYY-MM-DD)
-//     → { configured:bool, rows:[{d,src,camp,spend,clicks,impr}] }
+//     → { configured:bool, rows:[{d,src,camp,cid,spend,clicks,impr,cur}], monedas }
 //   { action:"ads", start, end }     (fechas YYYY-MM-DD)
 //     → { configured:bool, ads:[...] }  Detalle por anuncio (Meta + Google) vía
 //     Windsor: estado activo/pausado, link de preview, resultados.
@@ -241,8 +241,12 @@ async function spend({ start, end }) {
     }
     return r;
   };
-  let url = base + ",currency";
-  let resp = await pedir(url);
+  // campaign_id: la llave para cruzar los leads cuyo utm_campaign es el ID (Google manda
+  // {campaignid}) aunque el detalle por anuncio no llegue. Es una consulta chica (una fila
+  // por día y campaña) y no depende de la otra. Si el API rechaza un campo, se va quitando
+  // de a uno antes de perder la inversión.
+  let resp = await pedir(base + ",campaign_id,currency");
+  if (!resp.ok && resp.status === 400) resp = await pedir(base + ",campaign_id");
   if (!resp.ok && resp.status === 400) resp = await pedir(base);
   if (!resp.ok) {
     const detail = await resp.text();
@@ -256,6 +260,7 @@ async function spend({ start, end }) {
     d: r.date || "",
     src: String(r.source || "").toLowerCase(),
     camp: r.campaign || "(sin campaña)",
+    cid: r.campaign_id != null ? String(r.campaign_id) : "",
     spend: Number(r.spend) || 0,
     clicks: Number(r.clicks) || 0,
     impr: Number(r.impressions) || 0,

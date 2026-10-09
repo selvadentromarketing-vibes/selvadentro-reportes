@@ -101,6 +101,7 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
   | AMARILLO | costo por SQL entre 4,000 y 6,000 MXN | Optimizar, no subir |
   | AMARILLO | costo por SQL ≤ 4,000 MXN pero 1 solo SQL+ (con los valores actuales siempre cae en muestra chica) | Mantener, no subir |
   | ROJO | costo por SQL > 6,000 MXN, o inversión ≥ 8,000 MXN con 0 SQL+ | Pausar |
+  | ROJO con < 50% de leads contactados (`minContactados`) | igual que ROJO, pero la mayoría de sus leads no se han trabajado | Revisar seguimiento antes de pausar (con la nota en la celda) |
   | EN EVALUACIÓN (gris) | inversión < 8,000 MXN y sin SQL+ | Mantener (muestra chica) |
 
   **Muestra chica** (inversión < 8,000 MXN): el color se calcula igual, pero la acción es
@@ -124,7 +125,12 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
   de la atribución de GHL, o `hsa_cam` / `utm_id` de la URL de la landing) y `attr.host`
   (dominio de la landing). En Meta, GHL guarda el ID real aunque el nombre que lo acompaña
   sea el del formulario ("Intelligent Investors"); con el ID manda el nombre de la cuenta y
-  el nombre del UTM queda de respaldo. `LQ_CAMP_ALIAS` traduce
+  el nombre del UTM queda de respaldo. Los IDs de campaña salen del detalle por anuncio **y
+  de la inversión diaria** (`spend()` pide `campaign_id` a `/all`): así un lead de Google con
+  `utm_campaign=23710551755` se pega a "INVESTORS - GOOGLE SEARCH -- MX" aunque el detalle
+  por anuncio no llegue (regresión del 9-oct-2026: salían filas sueltas "GOOGLE 23710551755").
+  La tabla también cuelga los leads por ID y une una campaña renombrada en una sola fila. Si
+  un lead trae un ID que Windsor no conoce, un aviso lo dice en pantalla. `LQ_CAMP_ALIAS` traduce
   `INVESTORS-GOOGLE-SEARCH-MX` / `-USCAN` a "INVESTORS - GOOGLE SEARCH -- MX" /
   "INVESTORS - GOOGLE SEARCH - US+CAN".
 - **Atribución inferida** (`LQ_INFERIDA`): leads con origen `landing-seguridad`
@@ -141,7 +147,7 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
 - **Conclusiones IA**: el prompt recibe el semáforo ya calculado y devuelve una acción por
   campaña (subir 20% / mantener / optimizar / pausar) con la regla que la justifica; la
   tabla de acciones se arma con el semáforo aunque no se haya corrido la IA, y si la IA
-  propone otra acción manda el semáforo. Cache `lq:ia:v5:`.
+  propone otra acción manda el semáforo. Cache `lq:ia:v6:`.
 - Pruebas: `node scripts/test-lq.js` (backend con GHL y Anthropic simulados) y el bloque
   `lq:rediseño` de `scripts/smoke-ui.js` con los datos sintéticos de
   `scripts/lq-fixture.js` (W37–W40, los cinco estados del semáforo).
@@ -214,7 +220,7 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
   (Meta + Google) y se muestra inversión, CPL y **costo por SQL** por campaña (cruce por
   ID de campaña y, de respaldo, por nombre) y por plataforma (siempre calculable). Todo
   en **MXN** ("12,345 MXN", nunca "$").
-- **Cache compartido**: agregado en el kv (`lq:agg:v16`), staleness de 30 min, igual
+- **Cache compartido**: agregado en el kv (`lq:agg:v17`), staleness de 30 min, igual
   que CRM en vivo.
 - **Permisos**: canal `mkt_lq` (o `marketing`, o admin). El módulo manual de
   Calidad de Leads dentro de Marketing **se retiró el 2026-08-26** junto con PPC Ads

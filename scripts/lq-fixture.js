@@ -6,12 +6,14 @@
 // Resultado esperado del semáforo (meta 4,000 MXN por SQL, umbral 8,000 MXN; con menos de
 // 8,000 invertidos el color se calcula igual pero la acción es "Mantener (muestra chica)"):
 //   MX_DYNAMIC_090926   9,200 · 2 SQL+ (8 leads con atribución inferida) → AMARILLO optimizar
-//   US/CA_ESCAPE       11,200 · 0 SQL+                                  → ROJO pausar
+//   US/CA_ESCAPE_090926 11,200 · 0 SQL+ · 14% contactados              → ROJO, revisar seguimiento antes de pausar
+//   US/CA_ESCAPE_100626 10,000 · 0 SQL+ · 75% contactados              → ROJO pausar
 //   EN_FORMULARIOMETA   7,000 · 2 SQL+ (cruce por ID)  · alerta de CPL   → VERDE, mantener (muestra chica)
-//   GOOGLE SEARCH MX    3,600 · 1 SQL+ (alias de UTM)                    → AMARILLO, mantener (muestra chica)
+//   GOOGLE SEARCH MX    3,600 · 3 leads (2 con utm = ID 23710551755, 1 con
+//                       el alias INVESTORS-GOOGLE-SEARCH-MX) · 1 SQL+    → AMARILLO, mantener (muestra chica)
 //   GOOGLE US+CAN       6,000 · 0 SQL+ (utm numérico)                    → EN EVALUACIÓN, mantener (muestra chica)
 //   MX_DYNAMIC_150726  10,400 · 3 SQL+                                  → VERDE subir 20%
-//   Total pagado       47,400 · 8 SQL+ → 5,925 MXN por SQL · 4 leads sin campaña
+//   Total pagado       57,400 · 8 SQL+ → 7,175 MXN por SQL · 4 leads sin campaña
 function fixture() {
   const ETAPAS = ["Nuevo lead (no contactado)", "1er toque", "2ndo toque", "3er toque", "Ultimátum", "Break up", "Sin respuesta",
     "Contacto establecido", "Interés identificado", "Zoom agendado", "Zoom no show / re agendar", "Zoom realizado", "Tour agendado",
@@ -30,6 +32,7 @@ function fixture() {
   const C = {
     dyn:   { plat: "Meta",   camp: "INVESTORS_MX_DYNAMIC-TOPLPS_090926", cid: "120251374772050275", grp: "ES_LLAMADA_NUEVO6-SEGURIDAD_PATRIMONIO", sem: [2300, 2300, 2300, 2300], res: [6, 6, 5, 5] },
     esc:   { plat: "Meta",   camp: "INVESTORS_US/CA_ESCAPE_090926",       cid: "120251374799490275", grp: "EN_LLAMADA_ESCAPE",                   sem: [2800, 2800, 2800, 2800], res: [2, 2, 1, 2] },
+    esc2:  { plat: "Meta",   camp: "INVESTORS_US/CA_ESCAPE_100626",       cid: "120247999032690275", grp: "EN_LLAMADA_PREMIUMLOTS",              sem: [2500, 2500, 2500, 2500], res: [1, 1, 1, 1] },
     form:  { plat: "Meta",   camp: "INVESTORS_EN_FORMULARIOMETA_TULUM_100626", cid: "120248002284280275", grp: "EN_LLAMADA_PREMIUMLOTS",       sem: [1500, 1500, 1500, 2500], res: [3, 3, 2, 1] },
     gmx:   { plat: "Google", camp: "INVESTORS - GOOGLE SEARCH -- MX",    cid: "23710551755", grp: "Inversión Tulum MX",                         sem: [900, 900, 900, 900],     res: [1, 1, 1, 0] },
     gus:   { plat: "Google", camp: "INVESTORS - GOOGLE SEARCH - US+CAN", cid: "23715389989", grp: "Tulum land US",                              sem: [1500, 1500, 1500, 1500], res: [1, 0, 1, 1] },
@@ -42,7 +45,7 @@ function fixture() {
       adRows.push({ d: dia(w, 2), plat: c.plat, camp: c.camp, grp: c.grp, id: "ad_" + k, cid: c.cid, gid: "g_" + k, name: "Anuncio " + k.toUpperCase(),
         pp: c.plat === "Meta" ? (wi % 2 ? "instagram" : "facebook") : "Google Ads", status: k === "esc" ? "PAUSED" : "ACTIVE", link: "",
         tags: "utm_campaign={{campaign.name}}", spend: c.sem[wi], impr: c.sem[wi] * 9, clicks: Math.round(c.sem[wi] / 25), results: c.res[wi] });
-      for (let k2 = 0; k2 < 7; k2++) spendRows.push({ d: dia(w, k2), src: c.plat === "Meta" ? "facebook" : "google_ads", camp: c.camp, spend: c.sem[wi] / 7, clicks: 1, impr: 10, cur: "MXN" });
+      for (let k2 = 0; k2 < 7; k2++) spendRows.push({ d: dia(w, k2), src: c.plat === "Meta" ? "facebook" : "google", camp: c.camp, cid: c.cid, spend: c.sem[wi] / 7, clicks: 1, impr: 10, cur: "MXN" });
     });
   });
   const rawLeads = [], opps = {};
@@ -72,9 +75,13 @@ function fixture() {
   const etForm = ["WON", "Seguimiento de OPP", "1er toque", "Sin respuesta", "1er toque", "Contacto establecido", "2ndo toque", "Sin respuesta", "1er toque"];
   const semForm = ["2026-W37", "2026-W37", "2026-W37", "2026-W38", "2026-W38", "2026-W38", "2026-W39", "2026-W39", "2026-W40"];
   etForm.forEach((e, i) => lead(semForm[i], 1 + (i % 3), { src: "Meta ads", attr: { camp: "Intelligent Investors", cid: C.form.cid, src: "facebook" }, etapa: e }));
-  // Google MX: utm_campaign con guiones (alias) → 1 SQL+
-  ["Interés identificado", "1er toque", "Sin respuesta", "Contacto establecido"]
-    .forEach((e, i) => lead(weeks[i], 4, { src: "google", cf: { f_camp: "INVESTORS-GOOGLE-SEARCH-MX" }, attr: { src: "google" }, etapa: e }));
+  // Google MX: dos con utm_campaign = ID numérico de la campaña y uno con el alias nuevo → 1 SQL+
+  lead(weeks[0], 4, { src: "google", cf: { f_camp: "23710551755" }, attr: { src: "google" }, etapa: "Interés identificado" });
+  lead(weeks[1], 4, { src: "google", cf: { f_camp: "23710551755" }, attr: { src: "google" }, etapa: "1er toque" });
+  lead(weeks[2], 4, { src: "google", cf: { f_camp: "INVESTORS-GOOGLE-SEARCH-MX" }, attr: { src: "google" }, etapa: "Contacto establecido" });
+  // US/CA_ESCAPE_100626: 4 leads, 3 con contacto establecido (75%) y ningún SQL+ → ROJO, pausar
+  ["Contacto establecido", "Contacto establecido", "Contacto establecido", "1er toque"]
+    .forEach((e, i) => lead(weeks[(i + 3) % 4], 6, { src: "Meta ads", cf: { f_camp: C.esc2.camp }, attr: { src: "facebook" }, etapa: e }));
   // Google US+CAN: utm_campaign = id numérico de la campaña → 0 SQL+
   ["1er toque", "Sin respuesta", "Nuevo lead (no contactado)"]
     .forEach((e, i) => lead(weeks[i + 1], 0, { src: "google", cf: { f_camp: "23715389989" }, attr: { src: "google" }, etapa: e }));

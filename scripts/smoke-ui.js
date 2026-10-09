@@ -326,7 +326,9 @@ const PORT = process.env.PORT || 8765;
   VISTA = 'lq:rediseño';
   await page.evaluate(() => navIr('marketing', 'calidad'));
   await page.waitForTimeout(1500);
-  const lqx = await page.evaluate((fx) => {
+  const lqx = await page.evaluate((fx0) => {
+    const copia = () => JSON.parse(JSON.stringify(fx0));          // buildLqAgg modifica los leads
+    const fx = copia();
     const agg = buildLqAgg(fx.boot, fx.rawLeads, fx.spendRows, fx.weeks, fx.opps, fx.adRows);
     agg.fallos = []; agg.monedas = ['MXN'];
     Object.assign(lqState, { agg, exp: {}, q: '', plat: 'all', level: 'camp', qual: 'auto', diagReglas: false, ia: null });
@@ -338,11 +340,14 @@ const PORT = process.env.PORT || 8765;
     const tarde = agg.leads.find(l => String(l.c).startsWith('2026-10-08'));
     r.tardeNoInferido = !!tarde && !tarde.inf && tarde.camp !== 'INVESTORS_MX_DYNAMIC-TOPLPS_090926';
     r.porId = agg.leads.filter(l => l.pid && l.camp === 'INVESTORS_EN_FORMULARIOMETA_TULUM_100626').length;
-    r.alias = agg.leads.filter(l => l.camp === 'INVESTORS - GOOGLE SEARCH -- MX' && l.fuente === 'Google').length;
+    r.googleMX = agg.leads.filter(l => l.camp === 'INVESTORS - GOOGLE SEARCH -- MX' && l.fuente === 'Google' && l.wk >= '2026-W37' && l.wk <= '2026-W40').length;
     r.numerico = agg.leads.filter(l => l.camp === 'INVESTORS - GOOGLE SEARCH - US+CAN').length;
     const S = (inv, n) => { const x = lqSemaforo(inv, n); return x ? x.c + (x.chica ? '*' : '') + ':' + x.k : 'null'; };
     r.sem = [S(0, 0), S(7999, 0), S(8000, 0), S(8000, 2), S(12000, 3), S(12001, 3), S(18000, 3), S(18001, 3), S(3000, 1), S(7000, 2), S(7999, 2), S(7000, 1)].join(' ');
     r.alertas = Object.keys(lqAlertasCpl(agg, ['2026-W37', '2026-W38', '2026-W39', '2026-W40'])).join('|');
+    // ROJO con menos de 50% contactados → revisar seguimiento antes de pausar (no con muestra chica)
+    const S2 = (inv, n, c) => { const x = lqSemaforo(inv, n, c); return x.c + ':' + x.k; };
+    r.semSeg = [S2(12000, 0, { n: 10, ct: 4 }), S2(12000, 0, { n: 10, ct: 5 }), S2(30000, 3, { n: 10, ct: 1 }), S2(7000, 1, { n: 10, ct: 1 }), S2(12000, 0, { n: 0, ct: 0 })].join(' ');
     const txt = () => document.getElementById('lq-content').textContent;
     const filas = (sel) => [...document.querySelectorAll(sel + ' tr')].filter(tr => tr.querySelector('td.name'));
     const hdr = (sel) => [...document.querySelector(sel + ' tr').querySelectorAll('th')].map(th => th.textContent.trim());
@@ -371,6 +376,13 @@ const PORT = process.env.PORT || 8765;
     const lect = [...document.querySelectorAll('#lq-content .lq-lectura p')].map(p => p.textContent);
     const lSubir = lect.find(x => /Subir presupuesto 20%:/.test(x)) || '', lChica = lect.find(x => /Mantener \(muestra chica\)/.test(x)) || '';
     r.lecturaChica = /MX_DYNAMIC-TOPLPS_150726/.test(lSubir) && !/FORMULARIOMETA/.test(lSubir) && /FORMULARIOMETA/.test(lChica) && /GOOGLE SEARCH -- MX/.test(lChica) && /US\+CAN/.test(lChica);
+    const lPausa = lect.find(x => /Pausar:/.test(x)) || '', lRev = lect.find(x => /Revisar seguimiento antes de pausar:/.test(x)) || '';
+    r.lecturaSeg = /ESCAPE_100626/.test(lPausa) && !/ESCAPE_090926/.test(lPausa) && /ESCAPE_090926/.test(lRev) && /no se han trabajado/.test(lRev);
+    const nota = [...document.querySelectorAll('table.lq-combo tr')].find(tr => /ESCAPE_090926/.test(tr.textContent));
+    r.notaSeg = nota ? (nota.querySelector('.lq-sem-nota') || {}).textContent || '' : '';
+    const fMX = celda['INVESTORS - GOOGLE SEARCH -- MX'] || {};
+    r.filaMX = [fMX['Leads CRM'], fMX['SQL+']].join(' ');
+    r.sinFilasNumericas = !Object.keys(celda).some(k => /^\d{5,}$/.test(k)) && !/Windsor no reconoce/.test(t);
     r.sinPesos = !/\$/.test(t);
     // Calidad de Lead
     lqState.sub = 'calidad'; lqRender();
@@ -395,11 +407,25 @@ const PORT = process.env.PORT || 8765;
     lqState.sub = 'conclusiones'; lqRender();
     const acc = [...document.querySelectorAll('#lq-content table.cons tr')].filter(tr => tr.querySelector('td.name')).map(tr => tr.querySelectorAll('td')[2].textContent.trim());
     r.conclusiones = acc.join('|');
-    lqState.sub = 'combinado'; lqRender();
+    // Regresión del 9-oct-2026: si el detalle por anuncio de Google no llega, los leads con
+    // utm_campaign = ID siguen pegándose a su campaña con el ID de la inversión diaria.
+    const fila = (nombre) => { const tr = [...document.querySelectorAll('table.lq-combo tr')].find(x => x.querySelector('td.name') && x.querySelector('td.name').textContent.replace(/^(META|GOOGLE)\s*/, '').trim() === nombre);
+      if (!tr) return null; const td = [...tr.querySelectorAll('td')]; return [td[H.indexOf('Inversión')].textContent.trim(), td[H.indexOf('Leads CRM')].textContent.trim(), td[H.indexOf('SQL+')].textContent.trim()].join(' '); };
+    const fx2 = copia(); fx2.adRows = fx2.adRows.filter(a => a.plat !== 'Google');
+    const agg2 = buildLqAgg(fx2.boot, fx2.rawLeads, fx2.spendRows, fx2.weeks, fx2.opps, fx2.adRows); agg2.fallos = []; agg2.monedas = ['MXN'];
+    lqState.agg = agg2; lqState.sub = 'combinado'; lqRender();
+    r.sinDetalleGoogle = [fila('INVESTORS - GOOGLE SEARCH -- MX'), fila('INVESTORS - GOOGLE SEARCH - US+CAN'), fila('23710551755'), /Windsor no reconoce/.test(txt())].join(' | ');
+    // Y si Windsor no trae el ID en ningún lado, el reporte lo dice en vez de dejar la fila suelta.
+    const fx3 = copia(); fx3.adRows = fx3.adRows.filter(a => a.plat !== 'Google'); fx3.spendRows.forEach(x => { delete x.cid; });
+    const agg3 = buildLqAgg(fx3.boot, fx3.rawLeads, fx3.spendRows, fx3.weeks, fx3.opps, fx3.adRows); agg3.fallos = []; agg3.monedas = ['MXN'];
+    lqState.agg = agg3; lqRender();
+    r.sinIds = /5 leads<\/b> traen como campaña un ID que Windsor no reconoce/.test(document.getElementById('lq-content').innerHTML) && /Google 23710551755 \(2\)/.test(txt()) && /Google 23715389989 \(3\)/.test(txt());
+    lqState.agg = agg; lqState.sub = 'combinado'; lqRender();
     return r;
   }, fixture());
   const semEsp = {
-    'INVESTORS_US/CA_ESCAPE_090926': 'ROJO|Pausar',
+    'INVESTORS_US/CA_ESCAPE_090926': 'ROJO|Revisar seguimiento antes de pausar',
+    'INVESTORS_US/CA_ESCAPE_100626': 'ROJO|Pausar',
     'INVESTORS_MX_DYNAMIC-TOPLPS_150726': 'VERDE|Subir presupuesto 20%',
     'INVESTORS_MX_DYNAMIC-TOPLPS_090926': 'AMARILLO|Optimizar, no subir',
     'INVESTORS_EN_FORMULARIOMETA_TULUM_100626': 'VERDE|Mantener (muestra chica)',
@@ -408,16 +434,19 @@ const PORT = process.env.PORT || 8765;
     '(sin campaña atribuida)': '—', 'Social orgánico · IG / WhatsApp': '—',
   };
   lqx.ok = lqx.inferidos === '8 INVESTORS_MX_DYNAMIC-TOPLPS_090926 / ES_LLAMADA_NUEVO6-SEGURIDAD_PATRIMONIO' && lqx.tardeNoInferido
-    && lqx.porId === 9 && lqx.alias === 4 && lqx.numerico === 3
+    && lqx.porId === 9 && lqx.googleMX === 3 && lqx.numerico === 3 && lqx.filaMX === '3 1' && lqx.sinFilasNumericas
+    && lqx.sinDetalleGoogle === '3,600 MXN 3 1 | 6,000 MXN 3 0 |  | false' && lqx.sinIds
+    && lqx.semSeg === 'rojo:revisar rojo:pausar rojo:revisar rojo:mantener rojo:pausar'
+    && lqx.lecturaSeg && /La mayoría de sus leads no se han trabajado: solo 1 de 7 \(14%\)/.test(lqx.notaSeg)
     && lqx.sem === 'null gris*:mantener rojo:pausar verde:subir verde:subir amarillo:optimizar amarillo:optimizar rojo:pausar amarillo*:mantener verde*:mantener verde*:mantener rojo*:mantener'
     && lqx.lecturaChica
     && lqx.alertas === 'INVESTORSENFORMULARIOMETATULUM100626' && lqx.alertaFila === 'INVESTORS_EN_FORMULARIOMETA_TULUM_100626'
     && lqx.tarjetas && lqx.columnas === 'Campaña|Inversión|Leads CRM|CPL|% contactados|CQL|MQL|SQL+|Zoom realizado|OPP|WON|Costo por SQL|Semáforo'
     && Object.entries(semEsp).every(([k, v]) => lqx.semaforos[k] === v)
-    && lqx.embudo090 === '2 2 1 · 40% 4,600 MXN' && /Total pagado.*47,400 MXN.*5,925 MXN/.test(lqx.totalPagado)
-    && lqx.inferidaBadge && lqx.sinPesos && lqx.sinCampania === '4 de 45 · filas 4' && lqx.semEnCalidad && lqx.sinMetricasViejas
+    && lqx.embudo090 === '2 2 1 · 40% 4,600 MXN' && /Total pagado.*57,400 MXN.*7,175 MXN/.test(lqx.totalPagado)
+    && lqx.inferidaBadge && lqx.sinPesos && lqx.sinCampania === '4 de 48 · filas 4' && lqx.semEnCalidad && lqx.sinMetricasViejas
     && lqx.matrizOculta && lqx.matrizConBoton && lqx.datosFila === 'Campaña|Inversión|Leads plataforma|Leads CRM|CPL' && lqx.datosPliegue
-    && lqx.conclusiones === 'Pausar|Subir presupuesto 20%|Optimizar, no subir|Mantener (muestra chica)|Mantener (muestra chica)|Mantener (muestra chica)';
+    && lqx.conclusiones === 'Revisar seguimiento antes de pausar|Subir presupuesto 20%|Pausar|Optimizar, no subir|Mantener (muestra chica)|Mantener (muestra chica)|Mantener (muestra chica)';
   console.log('\n[calidad de leads] rediseño', JSON.stringify(lqx));
   for (const sub of ['combinado', 'calidad', 'datos', 'conclusiones']) {
     await page.evaluate((sub) => { lqState.sub = sub; lqRender(); }, sub);

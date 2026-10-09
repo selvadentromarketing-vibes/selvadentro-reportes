@@ -16,6 +16,7 @@ process.env.SESSION_SECRET = "secreto-de-prueba";
 process.env.GHL_API_KEY = "pit-prueba";
 process.env.GHL_LOCATION_ID = "loc1";
 process.env.ANTHROPIC_API_KEY = "sk-prueba";
+process.env.WINDSOR_API_KEY = "w-prueba";
 
 const S = require("../netlify/functions/lib/shared.js");
 const fallas = [];
@@ -54,6 +55,20 @@ S.ghlFetch = async (path) => {
   ok(by.g1 && by.g1.attr.cid === "23710551755", "Google: hsa_cam de la URL de la landing", by.g1 && by.g1.attr);
   ok(by.s1 && by.s1.attr.host === "seguridad.selvadentrotulum.com" && !by.s1.attr.camp, "Landing de seguridad: dominio sin utm_campaign", by.s1 && by.s1.attr);
 
+  console.log("\n[lead-quality] la inversión diaria de Windsor trae el ID de campaña");
+  const pedidas = [];
+  global.fetch = async (url) => {
+    pedidas.push(String(url));
+    return { ok: true, status: 200, json: async () => ({ data: [
+      { date: "2026-09-22", source: "google", campaign: "INVESTORS - GOOGLE SEARCH -- MX", campaign_id: "23710551755", spend: 120.5, clicks: 3, impressions: 90, currency: "MXN" },
+      { date: "2026-09-22", source: "facebook", campaign: "INVESTORS_MX_DYNAMIC-TOPLPS_090926", campaign_id: "120251374772050275", spend: 300, clicks: 9, impressions: 900 },
+    ] }), text: async () => "" };
+  };
+  const rs = await LQ.handler(ev({ action: "spend", start: "2026-09-21", end: "2026-09-27" }));
+  const dsp = JSON.parse(rs.body);
+  ok(/fields=[^&]*campaign_id/.test(pedidas[0] || ""), "pide campaign_id a /all", pedidas[0]);
+  ok(rs.statusCode === 200 && dsp.rows[0].cid === "23710551755" && dsp.rows[1].cid === "120251374772050275", "cada fila de inversión trae su ID de campaña", dsp.rows);
+
   console.log("\n[lq-analyze] el prompt usa el semáforo y pide una acción por campaña");
   let enviado = null;
   global.fetch = async (url, opt) => {
@@ -64,7 +79,7 @@ S.ghlFetch = async (path) => {
   const A = require("../netlify/functions/lq-analyze.js");
   const payload = {
     rango: "2026-W37 → 2026-W40", moneda: "MXN",
-    parametros: { metaCostoSql: 4000, minSqlVerde: 2, subirPct: 20, topeAmarillo: 6000, umbralEval: 8000 },
+    parametros: { metaCostoSql: 4000, minSqlVerde: 2, subirPct: 20, topeAmarillo: 6000, umbralEval: 8000, minContactados: 50 },
     totales: { inv: 30000, leads: 40, sqlPlus: 6, invPagada: 30000, sqlPlusPagado: 5, costoSql: 6000, won: 1, sinCampania: { leads: 3, sqlPlus: 1 } },
     campanias: [
       { nombre: "INVESTORS_US/CA_ESCAPE_090926", plataforma: "Meta", inv: 11360, leadsPlataforma: 13, leads: 9, sqlPlus: 0, costoSql: null, cpl: 1262, zoom: 0, opp: 0, won: 0,
@@ -77,7 +92,8 @@ S.ghlFetch = async (path) => {
   const prompt = enviado ? enviado.messages[0].content : "";
   ok(ra.statusCode === 200 && da.analisis && Array.isArray(da.analisis.campanias), "devuelve el análisis con campanias", ra.statusCode);
   ok(/SEMÁFORO ROJO → acción "pausar" porque inversión 11,360 MXN ≥ 8,000 MXN con 0 SQL\+/.test(prompt), "cada campaña llega con su semáforo, acción y regla");
-  ok(/"campanias": \[\{"nombre"/.test(prompt) && /subir 20%\|mantener\|optimizar\|pausar/.test(prompt), "pide una acción por campaña con el vocabulario fijo");
+  ok(/"campanias": \[\{"nombre"/.test(prompt) && /subir 20%\|mantener\|optimizar\|pausar\|revisar seguimiento/.test(prompt), "pide una acción por campaña con el vocabulario fijo");
+  ok(/si menos del 50% de sus leads tiene contacto establecido → revisar seguimiento antes de pausar/.test(prompt), "ROJO con pocos contactados: revisar seguimiento antes de pausar");
   ok(/meta de costo por SQL 4,000 MXN/.test(prompt) && /costo por SQL 6,000 MXN/.test(prompt), "cifras en MXN");
   ok(!/\$\d/.test(prompt), "ningún monto con $ en el prompt");
   ok(/MUESTRA CHICA = inversión < 8,000 MXN: el color se calcula igual, pero la acción SIEMPRE es mantener/.test(prompt), "muestra chica: la acción siempre es mantener, nunca subir");

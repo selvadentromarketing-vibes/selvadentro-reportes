@@ -548,6 +548,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .lq-sem.verde{ background:#3f7d4e; } .lq-sem.amarillo{ background:#c99a1e; color:#2b2410; } .lq-sem.rojo{ background:var(--rojo); } .lq-sem.gris{ background:#9aa39d; }
   .lq-semcell{ text-align:left; }
   .lq-sem-acc{ font-size:var(--fs-xs); color:var(--texto); font-weight:600; margin-top:3px; }
+  .lq-sem-nota{ font-size:var(--fs-xs); color:var(--rojo); font-weight:400; margin-top:2px; line-height:1.3; }
   .lq-cps.verde{ color:#3f7d4e; font-weight:700; } .lq-cps.amarillo{ color:#9a7414; font-weight:700; } .lq-cps.rojo{ color:var(--rojo); font-weight:700; }
   .lq-sqlp{ font-weight:700; color:var(--verde-prof); }
   th.lq-sec, td.lq-sec{ color:var(--neutro); font-weight:400; }
@@ -2957,7 +2958,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v16";  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
+const LQ_AGG_KEY = "lq:agg:v17";  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 // (LQ_TZ y LQ_TZ_MS ahora viven junto al resto de helpers de fecha, arriba)
@@ -2994,6 +2995,7 @@ const LQ_SEMAFORO = {
   subirPct:     20,     // % de aumento recomendado en verde
   topeAmarillo: 6000,   // AMARILLO: costo por SQL entre la meta y esto → optimizar, no subir; arriba, ROJO
   umbralEval:   8000,   // inversión del rango: debajo y sin SQL+ = EN EVALUACIÓN; desde aquí con 0 SQL+ = ROJO
+  minContactados: 50,   // % : un ROJO con menos leads contactados que esto → revisar seguimiento antes de pausar
   // Alerta visual de CPL (no cambia el semáforo): el CPL de los últimos `dias` días va más
   // de `pct`% arriba del CPL promedio de los últimos `base` días de la misma campaña.
   alertaCpl: { dias:7, base:30, pct:30 },
@@ -3004,9 +3006,10 @@ function lqMXN(n, dec){ const d = dec==null ? 0 : dec; return (Number(n)||0).toL
 function lqUSD(n){ return Math.round(Number(n)||0).toLocaleString("en-US")+" USD"; }
 const lqSqlPlus = (c)=> (c.sql||0) + (c.sqls||0);
 
-// Veredicto del semáforo para una campaña: { c, txt, k, acc, regla, chica, cps } o null si
-// no tuvo inversión en el rango (orgánico, sin campaña: no hay presupuesto que mover).
-function lqSemaforo(inv, sqlp){
+// Veredicto del semáforo para una campaña: { c, txt, k, acc, regla, nota, chica, cps } o
+// null si no tuvo inversión en el rango (orgánico, sin campaña: no hay presupuesto que
+// mover). `ct` = { n, ct }: leads de la campaña y cuántos tienen contacto establecido.
+function lqSemaforo(inv, sqlp, ct){
   const P = LQ_SEMAFORO;
   if(!(inv > 0)) return null;
   const chica = inv < P.umbralEval;
@@ -3029,6 +3032,15 @@ function lqSemaforo(inv, sqlp){
     r.cps = cps;
   }
   r.chica = chica;
+  // ROJO SIN SEGUIMIENTO (Dirección, 9-oct-2026): si la mayoría de los leads de la campaña
+  // ni siquiera tienen contacto establecido, el costo por SQL alto puede ser de ventas y no
+  // de la campaña. Antes de pausarla hay que trabajar sus leads. Solo cambia la acción.
+  if(r.k==="pausar" && !chica && ct && ct.n > 0 && ct.ct/ct.n*100 < P.minContactados){
+    const pc = Math.round(ct.ct/ct.n*100);
+    r.k = "revisar"; r.acc = "Revisar seguimiento antes de pausar";
+    r.nota = `La mayoría de sus leads no se han trabajado: solo ${ct.ct} de ${ct.n} (${pc}%) tienen contacto establecido.`;
+    r.regla += ` · solo ${pc}% de sus leads contactados (< ${P.minContactados}%): revisar seguimiento antes de pausar`;
+  }
   // MUESTRA CHICA (Dirección, 8-oct-2026): con menos de `umbralEval` invertido el color se
   // calcula igual —dice cómo va la campaña— pero la acción SIEMPRE es mantener: con tan
   // poca inversión no se sube presupuesto (ni se pausa) por un resultado que puede ser suerte.
@@ -3483,13 +3495,22 @@ function lqCamposLlenos(boot, rawLeads){
    Google —el token de nombre no existe— así que se traduce aquí con los ids que ahora
    trae cada fila de anuncio. Meta manda nombres y no necesita traducción, pero se indexa
    igual por si algún anuncio usa {{campaign.id}}.
-   Solo traduce cadenas que son PURO dígito: un nombre de campaña real nunca lo es. */
-function lqIdIndex(adw){
+   Solo traduce cadenas que son PURO dígito: un nombre de campaña real nunca lo es.
+   Los ids de CAMPAÑA salen también de la inversión diaria (/all trae campaign_id): es una
+   consulta chica que llega aunque el detalle por anuncio falle. Antes solo se leían del
+   detalle por anuncio y, sin él, los leads de Google con utm_campaign=23710551755 salían
+   como filas sueltas "GOOGLE 23710551755" en vez de "INVESTORS - GOOGLE SEARCH -- MX". */
+const lqPlatDeSrc = (x)=> /facebook|instagram|meta/.test(x||"") ? "Meta" : /google|adwords/.test(x||"") ? "Google" : "";
+function lqIdIndex(adw, spendRows){
   const m = {};
   for(const a of (adw||[])){
     if(a.cid && /^\d+$/.test(a.cid) && a.camp && !m[a.cid]) m[a.cid] = { tipo:"camp", name:a.camp, plat:a.plat||"" };
     if(a.gid && /^\d+$/.test(a.gid) && a.grp  && !m[a.gid]) m[a.gid] = { tipo:"grp",  name:a.grp,  plat:a.plat||"" };
     if(a.id  && /^\d+$/.test(a.id)  && a.name && !m[a.id])  m[a.id]  = { tipo:"ad",   name:a.name, plat:a.plat||"" };
+  }
+  for(const r of (spendRows||[])){
+    const cid = String(r.cid||"").trim();
+    if(cid && /^\d+$/.test(cid) && r.camp && r.camp!=="(sin campaña)" && !m[cid]) m[cid] = { tipo:"camp", name:r.camp, plat:lqPlatDeSrc(r.src) };
   }
   return m;
 }
@@ -3723,7 +3744,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
   const F = lqDetectFields(boot.fields, llenos);
   const A = lqDetectAtrib(boot.fields);
   const adw0 = lqBucketAds(adRows);
-  const idIdx = lqIdIndex(adw0);
+  const idIdx = lqIdIndex(adw0, spendRows);
   const adIdx0 = lqAdIndex({adw:adw0});
   // Nombres de conjunto / grupo de anuncios que existen de verdad en las cuentas.
   const grpSet = new Set(); adw0.forEach(a=>{ if(a.grp) grpSet.add(lqNormCamp(a.grp)); });
@@ -3771,9 +3792,10 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
     // de anuncios manda su nombre; el nombre del UTM queda solo de respaldo.
     const campRaw = String(l.attr.camp||"").trim();
     l.attr.campId = /^\d{5,}$/.test(campRaw) ? campRaw : "";
-    const hId = [l.attr.cid, cf(A.cid), l.attr.campId].map(x=>String(x||"").trim()).filter(x=>/^\d{5,}$/.test(x))
-      .map(x=>idIdx[x]).find(h=>h && h.tipo==="camp") || null;
-    if(hId){ l.attr.camp = hId.name; if(hId.plat) l.attr.plat = hId.plat; l.attr.pid = true; }
+    const idOk = [l.attr.cid, cf(A.cid), l.attr.campId].map(x=>String(x||"").trim()).filter(x=>/^\d{5,}$/.test(x))
+      .find(x=>idIdx[x] && idIdx[x].tipo==="camp") || "";
+    const hId = idOk ? idIdx[idOk] : null;
+    if(hId){ l.attr.camp = hId.name; if(hId.plat) l.attr.plat = hId.plat; l.attr.pid = true; l.attr.cidOk = idOk; }
     else {
       // Sin ID: el nombre, primero el de la atribución y luego el utm_campaign del formulario
       // (la atribución de GHL a veces trae el nombre del formulario y el campo, el real).
@@ -3855,7 +3877,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows){
       ch: cn.ch, chVia: cn.via,          // canal de negocio deducido del CRM (o null)
       inv: lqInvalido(op, l.tags),       // causa del grupo inválido (spec v1.1 R-01), o ""
       ...(l.attr && l.attr.inf ? { inf:1 } : {}),   // atribución inferida (LQ_INFERIDA)
-      ...(l.attr && l.attr.pid ? { pid:1 } : {}),   // campaña resuelta por su ID, no por nombre
+      ...(l.attr && l.attr.pid ? { pid:1, cid:l.attr.cidOk } : {}),   // campaña resuelta por su ID (y cuál), no por nombre
       _si: stg ? (stg.i ?? 0) : null,    // posición de la etapa, solo para el cálculo de abajo
     };
   }).filter(l=>l.wk);
@@ -3925,7 +3947,7 @@ function lqLeyenda(){
       <span><b>WON</b> leads del cohorte con venta cerrada, sin importar cuándo se cerró. Todo el dinero en MXN</span>
       <span><b>SQL+</b> SQL + SQL Selvadentro: la única definición de lead bueno. CQL y MQL son volumen</span>
       <span><b>Costo por SQL</b> inversión de la campaña en el rango ÷ sus SQL+ · meta ${lqMXN(LQ_SEMAFORO.metaCostoSql)}</span>
-      <span><b>Semáforo</b> verde subir ${LQ_SEMAFORO.subirPct}% · amarillo optimizar · rojo pausar · gris en evaluación · inversión < ${lqMXN(LQ_SEMAFORO.umbralEval)}: mantener (muestra chica) (reglas completas arriba de cada tabla)</span>
+      <span><b>Semáforo</b> verde subir ${LQ_SEMAFORO.subirPct}% · amarillo optimizar · rojo pausar (o revisar seguimiento si menos del ${LQ_SEMAFORO.minContactados}% está contactado) · gris en evaluación · inversión < ${lqMXN(LQ_SEMAFORO.umbralEval)}: mantener (muestra chica) (reglas completas arriba de cada tabla)</span>
       <span><b>Zoom realizado</b> etapa "Zoom realizado" o posterior. Cita o visita de sitio no cuenta</span>
       <span><b>% contactados</b> salieron de Nuevo / Sin respuesta. Si es bajo, el problema puede ser de seguimiento, no de la campaña</span>
       <span><b>CPL</b> costo por lead = inversión ÷ leads CRM · <b>⚠</b> CPL de 7 días más de ${LQ_SEMAFORO.alertaCpl.pct}% arriba de su promedio de 30</span>
@@ -4085,27 +4107,41 @@ function lqUnionTree(agg, leads, rangoSet, plat){
   const platOk  = (p)=> plat==="all" ? true : plat==="otras" ? false : p===plat;
   const suma = (X, a)=>{ X.spend += a.spend||0; X.res += a.results||0; X.impr += a.impr||0; X.clicks += a.clicks||0; if(a.pp) X.pps.add(a.pp); };
 
+  // El ID de campaña manda sobre el nombre: una campaña renombrada a media semana sigue
+  // siendo una sola fila, y un lead que trae el ID se cuelga de ella aunque el nombre difiera.
+  const idIdx = lqIdIndex(agg.adw, agg.spend);
+  const nomId = (cid, name)=>{ const h = cid && idIdx[cid]; return (h && h.tipo==="camp" && h.name) || name; };
+  const byCid = {};
   // 1. Esqueleto desde el detalle por anuncio de Windsor (inversión, resultados que
   // reporta la plataforma, impresiones, clics y ubicaciones)
   for(const a of (agg.adw||[])){
     if(!rangoSet.has(a.wk) || !platOk(a.plat)) continue;
-    const cname = a.camp || LQ_SIN_CAMP;
+    const cname = nomId(a.cid, a.camp) || LQ_SIN_CAMP;
     const C = newCamp(a.plat+" · "+cname, a.plat, cname); suma(C, a); C.nAds.add(a.id||a.name);
+    if(a.cid) byCid[a.cid] = C;
     const G = newGrp(C, a.grp || LQ_SIN_GRP); suma(G, a);
     const A = newAd(G, a.name || a.id || LQ_SIN_AD); suma(A, a);
     if(a.id) A.id = a.id;
     if(a.status && a.wk >= A._wk){ A.status = a.status; A._wk = a.wk; }
   }
   // 2. Campañas que solo aparecen en el gasto diario (/all) y no en el detalle por anuncio
-  const platOfSrc = (x)=> /facebook|instagram|meta/.test(x||"") ? "Meta" : /google|adwords/.test(x||"") ? "Google" : "";
+  // (o todas, si el detalle por anuncio no llegó en la sincronización)
   const adCampNames = [...new Set(Object.values(camps).map(C=>C.camp))];
+  const cubiertas = new Set(Object.keys(byCid));
   for(const r of (agg.spend||[])){
     const w = r.d ? lqWeekOf(r.d+"T12:00:00"+LQ_TZ) : null;
     if(!w || !rangoSet.has(w) || !r.spend) continue;
-    const p = platOfSrc(r.src); if(!p || !platOk(p)) continue;
-    if(lqMatchCamp(r.camp, adCampNames)) continue;      // ya cubierta arriba
-    const cname = r.camp || LQ_SIN_CAMP;
-    newCamp(p+" · "+cname, p, cname).spend += r.spend;
+    const p = lqPlatDeSrc(r.src); if(!p || !platOk(p)) continue;
+    if(r.cid && cubiertas.has(r.cid)) continue;          // ya cubierta arriba, por ID
+    const yaNombre = lqMatchCamp(r.camp, adCampNames);   // o por nombre (detalle sin ID)
+    if(yaNombre){
+      const C0 = Object.values(camps).find(x=>x.camp===yaNombre && x.plat===p);
+      if(r.cid && C0 && !byCid[r.cid]) byCid[r.cid] = C0;
+      continue;
+    }
+    const cname = nomId(r.cid, r.camp) || LQ_SIN_CAMP;
+    const C = newCamp(p+" · "+cname, p, cname); C.spend += r.spend;
+    if(r.cid) byCid[r.cid] = C;
   }
 
   // 3. Colgar los leads del CRM en la campaña real; si no empatan, en su propio nodo
@@ -4114,8 +4150,8 @@ function lqUnionTree(agg, leads, rangoSet, plat){
   const nombres = [...new Set(Object.values(camps).map(C=>C.camp))];
   const mismo = (obj, name)=> Object.keys(obj).find(k=>lqNormCamp(k)===lqNormCamp(name)) || name;
   for(const l of leads){
-    let C = null;
-    if(l.camp && l.camp !== LQ_SIN_CAMP){
+    let C = (l.cid && byCid[l.cid]) || null;           // por ID de campaña, si el lead lo trae
+    if(!C && l.camp && l.camp !== LQ_SIN_CAMP){
       C = byNorm[l.fuente+"|"+lqNormCamp(l.camp)] || null;
       if(!C){
         const m = lqMatchCamp(l.camp, nombres);
@@ -4170,7 +4206,7 @@ function lqCampModel(agg, leads, rangoSet, rango, plat){
     const m = lqMetricas(C.leads, C.spend, C.res);
     m.key = C.key; m.plat = C.plat; m.camp = C.camp; m.C = C;
     m.sinCamp = C.camp === LQ_SIN_CAMP;
-    m.sem = m.sinCamp ? null : lqSemaforo(m.inv, m.sqlp);
+    m.sem = m.sinCamp ? null : lqSemaforo(m.inv, m.sqlp, { n:m.n, ct:m.ct });
     m.alerta = m.sinCamp ? null : (alertas[lqNormCamp(C.camp)] || null);
     return m;
   });
@@ -4243,7 +4279,7 @@ const lqPct = (n,d)=> d ? Math.round(n/d*100)+"%" : "—";
 function lqSemCell(sem, vacio, sinAcc){
   if(vacio) return `<td></td>`;
   if(!sem) return `<td class="lq-semcell"><span class="lq-sub" title="Sin inversión en el rango: no hay presupuesto que mover">—</span></td>`;
-  return `<td class="lq-semcell" title="${escAttr(sem.regla)}"><span class="lq-sem ${sem.c}">${sem.txt}</span>${sinAcc?"":`<div class="lq-sem-acc">${escAttr(sem.acc)}</div>`}</td>`;
+  return `<td class="lq-semcell" title="${escAttr(sem.regla)}"><span class="lq-sem ${sem.c}">${sem.txt}</span>${sinAcc?"":`<div class="lq-sem-acc">${escAttr(sem.acc)}</div>${sem.nota?`<div class="lq-sem-nota">${escAttr(sem.nota)}</div>`:""}`}</td>`;
 }
 function lqAlertaIcono(al){
   if(!al) return "";
@@ -4302,6 +4338,17 @@ function lqAvisoSinCamp(M, total){
     Sus SQL+ no entran en el costo por SQL de ninguna campaña. Mientras los anuncios no pasen utm_campaign (o el ID de campaña) al formulario, no se puede saber qué campaña los generó.</div>`;
 }
 
+// Leads cuya campaña quedó como un número: traen un ID que no está en la inversión ni en
+// el detalle por anuncio de Windsor. Se dice en pantalla en vez de dejar la fila suelta
+// sin explicación (así se notó la regresión de "GOOGLE 23710551755").
+function lqAvisoIdsSinCruce(M){
+  const sueltas = M.rows.filter(m=>!m.sinCamp && /^\d{5,}$/.test(String(m.camp||"")) && m.n);
+  if(!sueltas.length) return "";
+  return `<div class="lq-meth" style="border-color:var(--cobre)">⚠ <b>${sueltas.reduce((a,m)=>a+m.n,0)} leads</b> traen como campaña un ID que Windsor no reconoce:
+    ${sueltas.map(m=>`${escAttr(m.plat)} ${escAttr(m.camp)} (${m.n})`).join(" · ")}. O es una campaña que no gastó en las 12 semanas sincronizadas, o la cuenta
+    de anuncios donde vive no está conectada en Windsor: por eso no se puede pegar a su inversión.</div>`;
+}
+
 // Tabla de calidad jerárquica: campaña → conjunto → anuncio, con clic para desplegar
 function lqQualityTree(agg, leads, rangoSet, rango){
   const adIdx = lqAdIndex(agg);
@@ -4346,7 +4393,7 @@ function lqQualityTree(agg, leads, rangoSet, rango){
     La inversión, el CPL y el costo por SQL están sumando monedas diferentes:
     tómalos como referencia, no como cifra exacta, hasta definir una moneda única o un tipo de cambio.</div>` : "";
   const incompleto = bannerIncompleto(agg.fallos, "Actualizar desde el CRM");
-  return parcial + incompleto + multiMoneda + lqAvisoSinCamp(M, leads.length) + `<div class="table-scroll" style="margin-bottom:8px"><table class="cons lq-tree">
+  return parcial + incompleto + multiMoneda + lqAvisoSinCamp(M, leads.length) + lqAvisoIdsSinCruce(M) + `<div class="table-scroll" style="margin-bottom:8px"><table class="cons lq-tree">
     <tr><th class="lft">Campaña / conjunto / anuncio</th>${lqThs(keys)}</tr>
     ${body || `<tr><td colspan="${keys.length+1}" class="lft txt-nota">Sin leads que coincidan.</td></tr>`}
     ${totRows}
@@ -4481,7 +4528,7 @@ function lqReglasSemaforo(){
     <div class="lq-leyenda-cuerpo">
       <span><span class="lq-sem verde">VERDE</span> costo por SQL ≤ ${lqMXN(P.metaCostoSql)} y al menos ${P.minSqlVerde} SQL+ → <b>Subir presupuesto ${P.subirPct}%</b></span>
       <span><span class="lq-sem amarillo">AMARILLO</span> costo por SQL entre ${lqMXN(P.metaCostoSql)} y ${lqMXN(P.topeAmarillo)} → <b>Optimizar, no subir</b></span>
-      <span><span class="lq-sem rojo">ROJO</span> costo por SQL > ${lqMXN(P.topeAmarillo)}, o inversión ≥ ${lqMXN(P.umbralEval)} con 0 SQL+ → <b>Pausar</b></span>
+      <span><span class="lq-sem rojo">ROJO</span> costo por SQL > ${lqMXN(P.topeAmarillo)}, o inversión ≥ ${lqMXN(P.umbralEval)} con 0 SQL+ → <b>Pausar</b>; pero si menos del ${P.minContactados}% de sus leads tiene contacto establecido → <b>Revisar seguimiento antes de pausar</b> (la mayoría de sus leads no se han trabajado)</span>
       <span><span class="lq-sem gris">EN EVALUACIÓN</span> inversión < ${lqMXN(P.umbralEval)} y sin SQL+ todavía</span>
       <span><b>Muestra chica</b>: con inversión < ${lqMXN(P.umbralEval)} el color se calcula igual, pero la acción siempre es <b>Mantener (muestra chica)</b>: nunca subir presupuesto ni pausar</span>
       <span><b>⚠ junto al CPL</b>: el CPL de los últimos ${A.dias} días va más de ${A.pct}% arriba de su propio promedio de ${A.base} días. Solo alerta: no cambia el semáforo.</span>
@@ -4518,7 +4565,7 @@ function lqComboSection(agg, leadsAll, rango, rangoSet){
   // Por ACCIÓN, no por color: con muestra chica una campaña puede ir en verde y aun así
   // mantenerse, y la lectura no puede ponerla en la línea de "subir presupuesto".
   const accion = (k, chica)=> conInv.filter(m=>m.sem.k===k && !!m.sem.chica===chica);
-  const subir = accion("subir", false), optimizar = accion("optimizar", false), pausar = accion("pausar", false);
+  const subir = accion("subir", false), optimizar = accion("optimizar", false), pausar = accion("pausar", false), revisar = accion("revisar", false);
   const mantener = accion("mantener", false), chicas = conInv.filter(m=>m.sem.chica);
   const sinAttr = rows.filter(m=>m.sinCamp);
   const sinAttrN = sinAttr.reduce((a,m)=>a+m.n,0), sinAttrS = sinAttr.reduce((a,m)=>a+m.sqlp,0);
@@ -4532,6 +4579,7 @@ function lqComboSection(agg, leadsAll, rango, rangoSet){
     ${optimizar.length?`<p><span class="lq-sem amarillo">AMARILLO</span> <b>Optimizar, no subir:</b> ${optimizar.map(m=>`${nom(m)} — ${cps(m)}, ${m.sqlp} SQL+`).join(" · ")}.</p>`:""}
     ${mantener.length?`<p><span class="lq-sem amarillo">AMARILLO</span> <b>Mantener, no subir:</b> ${mantener.map(m=>`${nom(m)} — ${escAttr(m.sem.regla)}`).join(" · ")}.</p>`:""}
     ${pausar.length?`<p class="warn"><span class="lq-sem rojo">ROJO</span> <b>Pausar:</b> ${pausar.map(m=>`${nom(m)} — ${escAttr(m.sem.regla)}${ojoAtrib(m)}`).join(" · ")}.</p>`:""}
+    ${revisar.length?`<p class="warn"><span class="lq-sem rojo">ROJO</span> <b>Revisar seguimiento antes de pausar:</b> ${revisar.map(m=>`${nom(m)} — ${cps(m)}; ${escAttr(m.sem.nota)}`).join(" · ")} El problema puede ser de seguimiento, no de la campaña.</p>`:""}
     ${chicas.length?`<p><b>Mantener (muestra chica)</b>, todavía no llegan a ${lqMXN(P.umbralEval)} de inversión: ${chicas.map(m=>`${nom(m)} ${pill(m)} ${lqMXN(m.inv)}, ${cps(m)}`).join(" · ")}. El color dice cómo van; con tan poca inversión no se sube ni se pausa.</p>`:""}
     ${sinAttrN?`<p><b>${sinAttrN} leads llegaron sin campaña</b>${sinAttrS?` (${sinAttrS} SQL+)`:""}: no entran en el costo por SQL de ninguna campaña hasta que los anuncios pasen su utm_campaign o su ID de campaña.</p>`:""}
     ${alertas.length?`<p class="warn">⚠ <b>CPL al alza</b> (últimos ${P.alertaCpl.dias} días más de ${P.alertaCpl.pct}% arriba de su promedio de ${P.alertaCpl.base}): ${alertas.map(m=>`${nom(m)}${m.alerta.cpl7!=null?` ${lqMXN(m.alerta.cpl7)} vs. ${lqMXN(m.alerta.prom)}`:` ${lqMXN(m.alerta.sp7)} sin leads`}`).join(" · ")}. Solo alerta: no cambia el semáforo.</p>`:""}
@@ -4546,7 +4594,7 @@ function lqComboSection(agg, leadsAll, rango, rangoSet){
   const keys = LQ_KEYS_COMBO;
   const origen = (p)=> p==="Meta"||p==="Google" ? `<span class="lq-orig ${p==="Meta"?"meta":"google"}">${p==="Meta"?"META":"GOOGLE"}</span> ` : "";
   const filas = rows.map(m=>`<tr><td class="name">${origen(m.plat)}${escAttr(m.sinCamp && m.plat!=="Meta" && m.plat!=="Google" ? (m.plat||"Otra fuente")+" · "+LQ_SIN_CAMP : m.camp)}${lqInfBadge(m.inf)}</td>${lqCeldas(m, keys)}</tr>`).join("");
-  html += lqReglasSemaforo() + `<div class="table-scroll" style="margin-bottom:8px"><table class="cons lq-combo">
+  html += lqReglasSemaforo() + lqAvisoIdsSinCruce(M) + `<div class="table-scroll" style="margin-bottom:8px"><table class="cons lq-combo">
     <tr><th class="lft">Campaña</th>${lqThs(keys)}</tr>
     ${filas || `<tr><td colspan="${keys.length+1}" class="lft txt-nota">Sin datos en el rango.</td></tr>`}
     <tr class="total"><td class="lft">Total pagado <span class="lq-sub">(solo campañas con inversión)</span></td>${lqCeldas(pag, keys, { total:true })}</tr>
@@ -4598,7 +4646,7 @@ function lqDrawCharts(){
 // La acción por campaña la decide el semáforo, no la IA: la tabla de acciones se arma con
 // LQ_SEMAFORO y siempre está, haya o no análisis. La IA aporta el detalle de cada campaña
 // y la lectura; si alguna vez propone otra acción, manda el semáforo y se avisa.
-const LQ_ACC_TXT = { subir:`subir ${LQ_SEMAFORO.subirPct}%`, mantener:"mantener", optimizar:"optimizar", pausar:"pausar" };
+const LQ_ACC_TXT = { subir:`subir ${LQ_SEMAFORO.subirPct}%`, mantener:"mantener", optimizar:"optimizar", pausar:"pausar", revisar:"revisar seguimiento" };
 function lqConclusionesSection(){
   const a = lqState.ia;
   let html = `<h3 style="font-family:var(--serif);color:var(--verde-prof);font-size:var(--fs-xl);margin:6px 0">Conclusiones y acciones</h3>
@@ -4618,7 +4666,7 @@ function lqConclusionesSection(){
       return `<tr><td class="name">${escAttr(m.camp)}${lqInfBadge(m.inf)}</td>
         ${lqSemCell(m.sem, false, true)}
         <td class="lft"><b>${escAttr(m.sem.acc)}</b></td>
-        <td class="lft lq-sub">${escAttr(m.sem.regla)}${m.alerta?` · ⚠ CPL de 7 días al alza`:""}</td>
+        <td class="lft lq-sub">${escAttr(m.sem.regla)}${m.alerta?` · ⚠ CPL de 7 días al alza`:""}${m.sem.nota?`<div class="lq-sem-nota">${escAttr(m.sem.nota)}</div>`:""}</td>
         <td class="lft">${x ? escAttr(x.detalle||x.regla||"") : (a ? `<span class="lq-sub">sin detalle de la IA</span>` : `<span class="lq-sub">—</span>`)}${choca?`<div class="lq-sub" style="color:var(--rojo)">La IA sugirió "${escAttr(x.accion)}"; manda el semáforo.</div>`:""}</td></tr>`;
     }).join("");
     html += `<div class="table-scroll mb-sec"><table class="cons">
@@ -4646,6 +4694,7 @@ function lqConclusionesSection(){
   return html;
 }
 
+// v6 (2026-10-09): ROJO con menos de 50% contactados = revisar seguimiento antes de pausar.
 // v5 (2026-10-08): muestra chica (< 8,000 MXN) = mantener, nunca subir; un análisis de la
 // v4 pudo recomendar subir una campaña con muestra chica.
 // v4 (2026-10-08): semáforo por costo por SQL y una acción por campaña; un análisis
@@ -4654,7 +4703,7 @@ function lqConclusionesSection(){
 // v2 (2026-09-11): la calificación cambió —OPP eleva a SQL, Budget Range en pesos, fuera
 // pruebas y sin contacto—, así que un análisis guardado con la v1 cita cifras que ya no
 // son las de la pantalla. Se paga una vez más por rango y se comparte otra vez.
-const LQ_IA_KEY = "lq:ia:v5:";
+const LQ_IA_KEY = "lq:ia:v6:";
 const LQ_IA_TTL = 12*3600e3;          // 12 h: el rango no cambia tanto como para pagar de nuevo
 
 // Devuelve el análisis guardado de este rango si sigue vigente. La clave incluye la
@@ -4695,7 +4744,7 @@ async function lqAnalizar(forzar){
       nombre:m.camp, plataforma:m.plat, inv:r0(m.inv), leadsPlataforma:m.res||0, leads:m.n, sqlPlus:m.sqlp,
       costoSql:r0(m.cps), cpl:r0(m.cpl), zoom:m.zoom, opp:m.opp, won:m.won,
       contactadosPct: m.n ? Math.round(m.ct/m.n*100) : null,
-      semaforo:m.sem.txt, accion:LQ_ACC_TXT[m.sem.k], regla:m.sem.regla, muestraChica:!!m.sem.chica,
+      semaforo:m.sem.txt, accion:LQ_ACC_TXT[m.sem.k], regla:m.sem.regla, nota:m.sem.nota||"", muestraChica:!!m.sem.chica,
       alertaCpl: m.alerta ? (m.alerta.cpl7!=null ? `CPL 7 días ${r0(m.alerta.cpl7)} MXN vs. promedio 30 días ${r0(m.alerta.prom)} MXN (+${m.alerta.pct}%)` : `${r0(m.alerta.sp7)} MXN en 7 días sin leads`) : "",
       inferidos:m.inf||0,
     }));
@@ -4717,7 +4766,7 @@ async function lqAnalizar(forzar){
     const payload = {
       rango: rango.length ? `${rango[0]} → ${rango[rango.length-1]}` : "—",
       moneda: "MXN",
-      parametros: { metaCostoSql:P.metaCostoSql, minSqlVerde:P.minSqlVerde, subirPct:P.subirPct, topeAmarillo:P.topeAmarillo, umbralEval:P.umbralEval, alertaCpl:P.alertaCpl },
+      parametros: { metaCostoSql:P.metaCostoSql, minSqlVerde:P.minSqlVerde, subirPct:P.subirPct, topeAmarillo:P.topeAmarillo, umbralEval:P.umbralEval, minContactados:P.minContactados, alertaCpl:P.alertaCpl },
       totales: { inv:r0(d.todo&&d.todo.inv), leads:L.length, sqlPlus:d.todo?d.todo.sqlp:0,
                  invPagada:r0(d.pagado&&d.pagado.inv), sqlPlusPagado:d.pagado?d.pagado.sqlp:0, costoSql:r0(d.pagado&&d.pagado.cps),
                  won:L.filter(l=>(l.w||0)>0).length,
