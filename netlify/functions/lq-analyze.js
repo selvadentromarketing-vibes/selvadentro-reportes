@@ -8,7 +8,7 @@
 //   { rango, moneda:"MXN", parametros:{metaCostoSql,minSqlVerde,subirPct,topeAmarillo,umbralEval,alertaCpl},
 //     totales:{inv,leads,sqlPlus,invPagada,sqlPlusPagado,costoSql,won,sinCampania:{leads,sqlPlus}},
 //     campanias:[{nombre,plataforma,inv,leadsPlataforma,leads,sqlPlus,costoSql,cpl,zoom,opp,won,
-//       trabajadosPct,contactadosPct,semaforo,accion,accionTexto,regla,nota,decision,atenderHoy,recomendaciones,esperar,muestraChica,alertaCpl,inferidos}],
+//       trabajadosPct,contactadosPct,semaforo,accion,accionTexto,regla,nota,decision,atenderHoy,recomendaciones,esperar,gastoNoDisponible,muestraChica,alertaCpl,inferidos}],
 //     pausadas:[{nombre,plataforma,inv,leads,sqlPlus,costoSql,pausada}],
 //     anuncios:[{nombre,conjunto,campania,estado,inv,leadsPlataforma,leads,sqlPlus,frecuencia}], integridad:{fuente,asesor,calificacion,duplicados} }
 // Desde el 9-oct-2026 el periodo es FIJO (últimos 30 días cerrados; tendencia 7 contra 7): es la
@@ -64,12 +64,13 @@ exports.handler = async (event) => {
     (Array.isArray(c.recomendaciones) && c.recomendaciones.length
       ? `\n    QUÉ HACER (ya calculado, en orden de impacto): ${c.recomendaciones.slice(0, P.maxAcciones).map((x, i) => `${i + 1}) ${corta(x)}`).join(" ")}` : "") +
     (c.esperar ? `\n    ${corta(c.esperar)}` : "") +
+    (c.gastoNoDisponible ? `\n    ${corta(c.gastoNoDisponible)}` : "") +
     (c.alertaCpl ? ` · ALERTA CPL: ${c.alertaCpl}` : "") +
     (c.inferidos ? ` · ${c.inferidos} leads con atribución inferida (landing de seguridad sin UTM)` : "")
   ).join("\n");
 
   const ads = (d.anuncios || []).slice(0, 12).map((a) =>
-    `- ${a.nombre}${a.conjunto ? ` (conjunto ${a.conjunto}${a.campania ? `, campaña ${a.campania}` : ""})` : ""} [${a.estado || "?"}]: ${money(a.inv)} · ` +
+    `- ${a.nombre}${a.conjunto ? ` (conjunto ${a.conjunto}${a.campania ? `, campaña ${a.campania}` : ""})` : ""} [${a.estado || "?"}]: ${a.inv == null ? "gasto no disponible" : money(a.inv)} · ` +
     `${a.leadsPlataforma != null ? `${a.leadsPlataforma} leads en plataforma · ` : ""}${a.leads} leads CRM · ${a.sqlPlus ?? 0} SQL+` +
     (a.frecuencia != null ? ` · frecuencia ${a.frecuencia}` : "")
   ).join("\n");
@@ -99,7 +100,7 @@ PAUSADAS RECIENTEMENTE (últimos 30 días; sin acción):
 ${pausadas || "(ninguna)"}
 
 ANUNCIOS (los de mayor inversión, cada uno dentro de su conjunto):
-${ads || "(sin detalle por anuncio)"}
+${ads || "(sin detalle por anuncio)"}${d.sinDetalleMeta ? "\nSIN DETALLE DE META: no llegó la consulta de 30 días por anuncio de Meta en esta sincronización." : ""}
 
 INTEGRIDAD DEL CRM: ${integ.fuente || "—"} de los leads con fuente identificada · ${integ.asesor || "—"} con asesor asignado · ${integ.calificacion || "—"} calificados en el campo del CRM · ${integ.duplicados ?? 0} posibles duplicados.
 
@@ -114,7 +115,7 @@ Devuelve SOLO un objeto JSON válido, sin texto alrededor y sin bloques de códi
 
 Reglas: "campanias" lleva TODAS las campañas ACTIVAS de la lista (no las pausadas), en el mismo orden, y su "accion" es exactamente la del semáforo. Si su DECISIÓN es preliminar, el "detalle" empieza diciendo la fecha de decisión. En "detalle" explica la acción 1 de su QUÉ HACER con los MISMOS nombres (plataforma › campaña › conjunto › anuncio, o keyword en Google, o la URL) y su evidencia (gasto, leads, SQL+ y CPL o costo por SQL) y menciona si aplica: muestra chica, alerta de CPL, % trabajados bajo (seguimiento, no campaña), leads de plataforma que no llegaron al CRM (atribución antes de pausar) o atribución inferida.
 
-REGLA GENERAL DE TODA RECOMENDACIÓN (campanias y acciones): específica y accionable, nunca genérica. Nombra el objeto exacto; si dices pausar, revisar, cambiar o probar algo, di cuál. Usa solo los conjuntos, anuncios, keywords y URLs que aparecen arriba: no inventes ninguno. Nunca recomiendes pausar algo con gasto menor a ${money(minPausa)} (${P.muestraPausa || 2}× el CPL objetivo de ${money(P.cplMax)}); si la campaña dice "Sin muestra suficiente para pausar; esperar", no recomiendes pausar nada de ella. Si la acción depende de un dato que el reporte no tiene (frecuencia, términos de búsqueda, calidad del creativo), dilo y di dónde revisarlo (p. ej. "Revisar en Meta Ads › Anuncios › columna Frecuencia"). Si pausas un conjunto en Meta y la campaña usa presupuesto de campaña (CBO), agrega: "Pausar conjuntos chicos tiene poco efecto: Meta ya reasigna el presupuesto". Si la frecuencia de un anuncio pasa de ${P.frecuenciaMax}, recomienda renovar ESE creativo, nombrando el anuncio y su conjunto. Calcula siempre por anuncio dentro de su conjunto: el mismo creativo se repite en varios conjuntos. Máximo ${P.maxAcciones || 3} acciones por campaña y recuerda: "Un cambio a la vez; reevaluar en ${P.reevaluarDias || 7} días."
+REGLA GENERAL DE TODA RECOMENDACIÓN (campanias y acciones): específica y accionable, nunca genérica. Nombra el objeto exacto; si dices pausar, revisar, cambiar o probar algo, di cuál. Usa solo los conjuntos, anuncios, keywords y URLs que aparecen arriba: no inventes ninguno. Nunca recomiendes pausar algo con gasto menor a ${money(minPausa)} (${P.muestraPausa || 2}× el CPL objetivo de ${money(P.cplMax)}); si la campaña dice "Sin muestra suficiente para pausar; esperar", no recomiendes pausar nada de ella. Si la acción depende de un dato que el reporte no tiene (frecuencia, términos de búsqueda, calidad del creativo), dilo y di dónde revisarlo (p. ej. "Revisar en Meta Ads › Anuncios › columna Frecuencia"). Si pausas un conjunto en Meta y la campaña usa presupuesto de campaña (CBO), agrega: "Pausar conjuntos chicos tiene poco efecto: Meta ya reasigna el presupuesto". Si la frecuencia de un anuncio pasa de ${P.frecuenciaMax}, recomienda renovar ESE creativo, nombrando el anuncio y su conjunto. Calcula siempre por anuncio dentro de su conjunto: el mismo creativo se repite en varios conjuntos. Si un anuncio dice "gasto no disponible" (tiene leads y Windsor no trajo su gasto), es un dato faltante, no gasto en cero: no calcules su CPL ni su costo por SQL y no lo uses para recomendar qué conservar o pausar. Si dice SIN DETALLE DE META, no sugieras ningún conjunto ni anuncio de Meta: escribe "Sin detalle de Meta en esta sincronización; revisar en Meta Ads" y di qué buscar ahí. Máximo ${P.maxAcciones || 3} acciones por campaña y recuerda: "Un cambio a la vez; reevaluar en ${P.reevaluarDias || 7} días."
 
 "acciones" son 2 a 4 acciones que no son de una sola campaña (atribución, seguimiento, CRM), cada una con el objeto exacto (campo del CRM, asesor, etapa, campaña). Si el volumen es demasiado bajo para concluir, dilo en riesgos. Todo en español de México, tono directo y ejecutivo.`;
 

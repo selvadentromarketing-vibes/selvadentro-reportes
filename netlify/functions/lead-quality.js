@@ -459,7 +459,9 @@ async function decision(p) {
     });
     const anL = (an || []).filter((r) => String(r.publisher_platform || "").toLowerCase() === "audience_network" && num(r.spend) > 0)
       .map((r) => ({ cid: String(r.campaign_id || ""), gid: String(r.adset_id || ""), grp: r.adset_name || "", sp: r2(r.spend), res: num(r.actions_lead) }));
-    return { configured: true, plat: "Meta", camps, grps, ads: Object.values(ads).filter((A) => A.sp || A.res || A.sp7 || A.spP || A.estado), an: anL, dias, faltan };
+    // detalle30 = llegó la consulta de 30 días por anuncio. Sin ella solo hay anuncios de ayer y hoy
+    // (sin gasto), y Conclusiones no debe sugerir ningún conjunto ni anuncio de Meta.
+    return { configured: true, plat: "Meta", detalle30: a30 !== null, camps, grps, ads: Object.values(ads).filter((A) => A.sp || A.res || A.sp7 || A.spP || A.estado), an: anL, dias, faltan };
   }
 
   // Google
@@ -505,7 +507,7 @@ async function decision(p) {
     if (enV(d, V.ini7, V.fin7)) { b.sp7 = r2(b.sp7 + num(r.spend)); b.cv7 = r2(b.cv7 + num(r.conversions)); }
     else if (enV(d, V.iniP, V.finP)) { b.spP = r2(b.spP + num(r.spend)); b.cvP = r2(b.cvP + num(r.conversions)); }
   });
-  return { configured: true, plat: "Google", camps, ads: Object.values(ads), kw: Object.values(kw).filter((k) => k.sp || k.cl || k.cv || k.sp7 || k.spP), dias, faltan };
+  return { configured: true, plat: "Google", detalle30: a30 !== null, camps, ads: Object.values(ads), kw: Object.values(kw).filter((k) => k.sp || k.cl || k.cv || k.sp7 || k.spP), dias, faltan };
 }
 
 // --- Diagnóstico: la app se responde a sí misma ---

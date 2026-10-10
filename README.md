@@ -197,7 +197,16 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
     7, diarios. Cada consulta con tope de 7.5 s; lo que no llegue se lista en `faltan` y la
     acción dice dónde verlo. **No pedir estos campos en `ads`**: el 9-oct-2026 se agregaron a
     la consulta del detalle por anuncio, se volvió lenta y la sincronización se quedó sin
-    anuncios ("Sin datos de anuncios en el rango"). Agregado `lq:agg:v22`, IA `lq:ia:v11:`.
+    anuncios ("Sin datos de anuncios en el rango"). Agregado `lq:agg:v22`, IA `lq:ia:v12:`.
+  - **Gasto no disponible** (Dirección, 10-oct-2026): un conjunto o anuncio con leads y gasto
+    0 o nulo en Windsor es un dato faltante, no gasto real. Sale como "gasto no disponible",
+    sin CPL ni costo por SQL, en una nota aparte de las acciones, y no entra en ninguna decisión
+    (qué conservar, qué pausar, qué sostiene el resultado, landing). Si no llegó la consulta de
+    30 días de Meta (`decision` devuelve `detalle30: false`; antes solo quedaban los anuncios de
+    ayer y hoy, con gasto 0, y se les colgaban todos los leads), las recomendaciones de conjunto
+    o anuncio dicen "Sin detalle de Meta en esta sincronización; revisar en Meta Ads" con qué
+    buscar ahí, y la IA no recibe anuncios de Meta. Una campaña de un solo conjunto solo le
+    cuelga sus leads a ese conjunto si tiene gasto.
 
   **Muestra chica** (inversión < 8,000 MXN): el color se calcula igual, pero la acción es
   siempre **"Mantener (muestra chica)"**: nunca "Subir presupuesto 20%" ni "Pausar"
@@ -265,7 +274,7 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
   (`recomendaciones`, `esperar`) y el prompt exige el objeto exacto, no inventar objetos,
   la muestra mínima, dónde revisar lo que falta y la nota CBO. Desde el 9-oct-2026 recibe la
   decisión de hoy (ventana fija, fecha de decisión, Atender hoy) y las pausadas aparte, sin
-  acción. Cache `lq:ia:v11:`.
+  acción. Gasto no disponible y "sin detalle de Meta" llegan marcados. Cache `lq:ia:v12:`.
 - Pruebas: `node scripts/test-lq.js` (backend con GHL y Anthropic simulados) y el bloque
   `lq:rediseño` de `scripts/smoke-ui.js` con los datos sintéticos de
   `scripts/lq-fixture.js` (W37–W40, los cinco estados del semáforo).

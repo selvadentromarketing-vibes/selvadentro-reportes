@@ -4402,10 +4402,14 @@ const lqPl = (n, s, p)=> `${n} ${n===1 ? s : (p || s+"s")}`;
 const lqNormKw = (s)=> String(s||"").toLowerCase().replace(/[+"\[\]]/g," ").replace(/\s+/g," ").trim();
 const lqDdMm = (ymd)=> ymd ? ymd.slice(8,10)+"/"+ymd.slice(5,7) : "";
 // "gasto 1,771 MXN, 2 leads, 0 SQL+, CPL 886 MXN"
+// `sp: null` = Windsor no trajo el gasto (conjunto o anuncio con leads y gasto 0 o nulo): se dice
+// "gasto no disponible" y no se calcula CPL ni costo por SQL (saldrían en 0 y parecerían gratis).
 function lqEvid(o){
-  const p = [`gasto ${lqMXN(o.sp)}`];
+  const na = o.sp == null;
+  const p = [na ? "gasto no disponible" : `gasto ${lqMXN(o.sp)}`];
   if(o.n != null) p.push(o.unidad ? `${Math.round(o.n*10)/10} ${o.unidad}` : lqPl(Math.round(o.n), "lead") + (o.fte ? ` (${o.fte})` : ""));
   p.push(o.sqlTxt || `${o.sqlp||0} SQL+`);
+  if(na) return p.join(", ");
   if(o.n) p.push(`CPL ${lqMXN(o.sp/o.n)}`);
   else if(o.n === 0) p.push("CPL —");
   if(o.sqlp > 0 && !o.sqlTxt) p.push(`costo por SQL ${lqMXN(o.sp/o.sqlp)}`);
@@ -4422,13 +4426,23 @@ function lqRecTexto(r, corto){
   return t;
 }
 function lqRecsHtml(R){
-  if(!R || (!(R.items||[]).length && !R.sinMuestra)) return "";
+  if(!R || (!(R.items||[]).length && !R.sinMuestra && !R.gastoNA)) return "";
   const obj = (o)=> `${escAttr(o.txt)}${o.ev ? ` <span class="lq-rec-ev">— ${escAttr(o.ev)}</span>` : ""}${o.ruta ? `\n<div class="lq-rec-ruta">${escAttr(o.ruta)}</div>` : ""}`;
   const li = (r)=> `<li${r.alerta ? ' class="lq-rec-alerta"' : ""}><b>${r.alerta ? "⚠ " : ""}${escAttr(r.txt)}</b>${r.objs.length === 1 ? " "+obj(r.objs[0]) : `\n<ul>${r.objs.map(o=>`<li>${obj(o)}</li>`).join("\n")}</ul>`}`
     + `${r.donde ? `\n<div class="lq-rec-donde">${escAttr(r.donde)}</div>` : ""}${r.nota ? `\n<div class="lq-rec-nota">${escAttr(r.nota)}</div>` : ""}</li>`;
   return `${(R.items||[]).length ? `<ol class="lq-pasos lq-recs">${R.items.map(li).join("\n")}</ol>` : ""}`
-    + `${R.sinMuestra ? `\n<p class="lq-rec-esperar">${escAttr(R.sinMuestra)}</p>` : ""}${R.pie ? `\n<p class="lq-rec-pie">${escAttr(R.pie)}</p>` : ""}`;
+    + `${R.sinMuestra ? `\n<p class="lq-rec-esperar">${escAttr(R.sinMuestra)}</p>` : ""}${R.gastoNA ? `\n<p class="lq-rec-esperar lq-rec-na">${escAttr(R.gastoNA)}</p>` : ""}${R.pie ? `\n<p class="lq-rec-pie">${escAttr(R.pie)}</p>` : ""}`;
 }
+
+// Sin la consulta de 30 días de Meta (anuncios, gasto por conjunto, URL, frecuencia) solo quedan
+// los anuncios de ayer y hoy, sin gasto: no se sugiere ningún conjunto ni anuncio.
+const LQ_SIN_DETALLE_META = "Sin detalle de Meta en esta sincronización; revisar en Meta Ads";
+function lqSinDetalleMeta(dec){
+  const P = dec && dec.meta;
+  return !P || P.configured === false || P.detalle30 === false || (P.faltan||[]).some(f=>/detalle de los 30 días de Meta/.test(f));
+}
+// Gasto faltante: tiene leads (CRM o plataforma) y gasto 0 o nulo → dato faltante de Windsor, no gasto real.
+const lqGastoNA = (spend, nCrm, res)=> !(spend > 0) && ((nCrm||0) > 0 || (res||0) > 0);
 
 function lqRecomendar(m, ctx){
   const P = LQ_SEMAFORO, sem = m.sem, C = m.C;
@@ -4456,6 +4470,16 @@ function lqRecomendar(m, ctx){
   const esSql = (l)=>{ const v = (lqState.qual||"auto") === "auto" ? (l.alv||"cql") : l.lv; return v === "sql" || v === "sqls"; };
   const recs = [], esperar = [];
   const add = (r)=>{ if(r && r.objs && r.objs.length) recs.push(r); };
+  const sinDet = meta && lqSinDetalleMeta(dec);
+  const rutaDet = `${rutaCamp} › Anuncios (últimos 30 días)`;
+  // Una sola acción "sin detalle" por campaña, con la evidencia de la campaña (que sí viene de la
+  // inversión diaria) y qué buscar en Meta Ads; nunca un conjunto o anuncio elegido con datos a medias.
+  let recSinDet = null;
+  const sinDetalle = (que, imp)=>{
+    if(recSinDet){ recSinDet.donde += " " + que; recSinDet.imp = Math.max(recSinDet.imp, imp); return; }
+    recSinDet = { txt:`${LQ_SIN_DETALLE_META}:`, imp, objs:[{ txt:camp, ev:campEv, ruta:rutaDet }], donde:que };
+    add(recSinDet);
+  };
 
   // Presupuesto vigente (Windsor). CBO = la campaña tiene presupuesto propio: diario
   // (campaign_daily_budget, en centavos → MXN) o total (campaign_lifetime_budget, en unidades).
@@ -4467,20 +4491,21 @@ function lqRecomendar(m, ctx){
 
   // Conjuntos y anuncios del rango, con su evidencia.
   const urlDe = (ads)=>{ const a = ads.filter(A=>A.url).sort((x,y)=>y.spend-x.spend)[0]; return a ? a.url : ""; };
-  const grps = C.grps.filter(G=>G.name !== LQ_SIN_GRP && (G.spend || G.leads.length)).map(G=>{
-    const ads = G.ads.filter(A=>A.name !== LQ_SIN_AD && (A.spend || A.res));
+  const grps = sinDet ? [] : C.grps.filter(G=>G.name !== LQ_SIN_GRP && (G.spend || G.leads.length)).map(G=>{
+    const ads = G.ads.filter(A=>A.name !== LQ_SIN_AD && (A.spend || A.res || A.leads.length));
     return { G, name:G.name, sp:G.spend, n:G.leads.length, sqlp:lqSqlPlus(lqCount(G.leads)), res:G.res, ads, url:urlDe(ads),
-             activo: !ads.length || ads.some(A=>on(A.status)) };
+             spNA: lqGastoNA(G.spend, G.leads.length, G.res), activo: !ads.length || ads.some(A=>on(A.status)) };
   });
-  const gEv = (g, extra)=> lqEvid({ sp:g.sp, n:g.n, sqlp:g.sqlp }) + (extra||"");
+  const gEv = (g, extra)=> lqEvid({ sp:g.spNA ? null : g.sp, n:g.n, sqlp:g.sqlp }) + (extra||"");
   const sinGrp = (C.grps.find(G=>G.name === LQ_SIN_GRP) || { leads:[] }).leads.length;
   const notaCobertura = C.leads.length && sinGrp/C.leads.length > 0.3
     ? `${sinGrp} de ${C.leads.length} leads de la campaña llegaron sin conjunto: confirmar en el CRM que de verdad no trae SQL+ antes de pausar.` : "";
   const ads = grps.flatMap(g=>g.ads.map(A=>{
     const nCrm = A.leads.length, n = nCrm || A.res || 0;
-    return { A, g, name:nomAd(A), sp:A.spend, n, url:A.url || g.url, on:on(A.status), cpl: n ? A.spend/n : Infinity,
+    const spNA = lqGastoNA(A.spend, nCrm, A.res);
+    return { A, g, name:nomAd(A), sp:A.spend, n, spNA, url:A.url || g.url, on:on(A.status), cpl: spNA ? null : n ? A.spend/n : Infinity,
              sql0: nCrm ? !lqSqlPlus(lqCount(A.leads)) : g.sqlp === 0,     // SQL+ conocido y en 0
-             ev: lqEvid({ sp:A.spend, n, fte: nCrm ? "" : fte, sqlp: nCrm ? lqSqlPlus(lqCount(A.leads)) : 0,
+             ev: lqEvid({ sp: spNA ? null : A.spend, n, fte: nCrm ? "" : fte, sqlp: nCrm ? lqSqlPlus(lqCount(A.leads)) : 0,
                           sqlTxt: nCrm ? "" : (g.sqlp === 0 ? "0 SQL+ (todo su conjunto)" : "SQL+ sin dato por anuncio") }) };
   }));
   const urlTxt = (u)=> !u ? "(URL no disponible)" : lqEsForm(u) ? "un formulario instantáneo de Meta" : u;
@@ -4500,8 +4525,9 @@ function lqRecomendar(m, ctx){
     C.leads.filter(l=>l.kw).forEach(l=>{ const b = L.find(x=>lqNormKw(x.kw) === lqNormKw(l.kw)); if(b) b.leads.push(l); });
     return L.map(b=>({ ...b, n:b.leads.length, sqlp:lqSqlPlus(lqCount(b.leads)) })).sort((a,b)=>b.sp-a.sp);
   })();
-  const kwEv = (x)=> hayKwCrm ? lqEvid({ sp:x.sp, n:x.n, sqlp:x.sqlp })
-                              : lqEvid({ sp:x.sp, n:x.cv, unidad:"conversiones de Google", sqlTxt:"SQL+ sin dato por keyword" });
+  const kwNA = (x)=> lqGastoNA(x.sp, hayKwCrm ? x.n : 0, x.cv);
+  const kwEv = (x)=> hayKwCrm ? lqEvid({ sp:kwNA(x) ? null : x.sp, n:x.n, sqlp:x.sqlp })
+                              : lqEvid({ sp:kwNA(x) ? null : x.sp, n:x.cv, unidad:"conversiones de Google", sqlTxt:"SQL+ sin dato por keyword" });
   const kwObj = (x)=> ({ txt:`"${x.kw}"${x.grp ? ` (grupo ${x.grp})` : ""}`, ev:kwEv(x), ruta:ruta(x.grp, `keyword "${x.kw}"`) });
 
   /* --- VERDE: subir presupuesto diario, de cuánto a cuánto, y si el telemarketer lo absorbe */
@@ -4509,10 +4535,12 @@ function lqRecomendar(m, ctx){
     const f = 1 + P.subirPct/100;
     const grpsP = presu ? presu.grps : [];
     // Qué sostiene el resultado (anuncio dentro de su conjunto), para no tocarlo al subir.
-    const topAd = ads.filter(x=>x.A.leads.length && lqSqlPlus(lqCount(x.A.leads)) > 0)
+    // (solo con gasto real: uno con gasto no disponible no se puede juzgar)
+    const topAd = ads.filter(x=>!x.spNA && x.sp > 0 && x.A.leads.length && lqSqlPlus(lqCount(x.A.leads)) > 0)
       .sort((a,b)=>(lqSqlPlus(lqCount(b.A.leads)) - lqSqlPlus(lqCount(a.A.leads))) || (a.sp - b.sp))[0];
-    const topGrp = topAd ? null : grps.filter(g=>g.sqlp > 0).sort((a,b)=>(b.sqlp-a.sqlp) || (a.sp-b.sp))[0];
-    const sostiene = topAd ? `Lo que sostiene el resultado (no tocarlo): anuncio ${topAd.name} en conjunto ${topAd.g.name} — ${topAd.ev}.`
+    const topGrp = topAd ? null : grps.filter(g=>!g.spNA && g.sp > 0 && g.sqlp > 0).sort((a,b)=>(b.sqlp-a.sqlp) || (a.sp-b.sp))[0];
+    const sostiene = sinDet ? `${LQ_SIN_DETALLE_META} qué conjunto y anuncio traen los SQL+ (${rutaDet}), para no tocarlos al subir.`
+      : topAd ? `Lo que sostiene el resultado (no tocarlo): anuncio ${topAd.name} en conjunto ${topAd.g.name} — ${topAd.ev}.`
       : topGrp ? `Lo que sostiene el resultado (no tocarlo): conjunto ${topGrp.name} — ${gEv(topGrp)}.` : "";
     if(presu && presu.cb > 0) add({ txt:`Subir el presupuesto diario ${P.subirPct}%:`, imp:m.inv, presu:{ de:presu.cb, a:presu.cb*f },
       objs:[{ txt:`${camp}, de ${lqMXN(presu.cb)} a ${lqMXN(presu.cb*f)} al día`, ev:campEv,
@@ -4538,6 +4566,7 @@ function lqRecomendar(m, ctx){
   const pausarAds = []; let unico = null, grpPausa = null;
   if(k === "optimizar" && sem.diag){
     if(sem.diag.calidad && meta){
+      if(sinDet) sinDetalle(`Buscar el conjunto con más gasto y 0 SQL+ (pausarlo solo si gastó al menos ${lqMXN(minPausa)}) y el formulario o la landing del conjunto con más leads y peor tasa SQL.`, m.inv);
       // Conjunto sin SQL+ con muestra suficiente (si la campaña tiene más de uno activo).
       const act = grps.filter(g=>g.activo && g.sp > 0);
       const cands = act.length > 1 ? act.filter(g=>g.sqlp === 0 && g.sp >= minPausa).sort((a,b)=>b.sp-a.sp) : [];
@@ -4590,7 +4619,8 @@ function lqRecomendar(m, ctx){
       if(neg) add({ txt:"Agregar palabras negativas desde los términos de búsqueda de", imp:neg.sp*0.5, objs:[kwObj(neg)], kwKey:lqNormKw(neg.kw),
         donde:`El reporte no trae los términos de búsqueda: verlos en ${rutaCamp} › Palabras clave › Términos de búsqueda y marcar como negativas las búsquedas que no sean de compra de terreno o inversión.` });
     }
-    if(sem.diag.costo){
+    if(sem.diag.costo && sinDet) sinDetalle(`Buscar los anuncios activos con CPL arriba de ${lqMXN(P.cplMax)} y al menos ${lqMXN(minPausa)} de gasto; pausar solo los de conjuntos sin SQL+ y nunca el último activo.`, m.inv*0.9);
+    if(sem.diag.costo && !sinDet){
       // Los 2 anuncios activos con peor CPL (y CPL arriba del objetivo), con muestra suficiente,
       // fuera del conjunto que ya se recomendó pausar. Solo si su SQL+ se sabe que es 0: si su
       // conjunto trae SQL+ y el CRM no dice de qué anuncio, pausarlo podría apagar justo el que
@@ -4608,7 +4638,7 @@ function lqRecomendar(m, ctx){
       } else if(conMuestra.length){
         unico = conMuestra[0];      // único anuncio activo de la campaña: no se pausa, se le suman creativos
       } else {
-        const mayor = vivos.filter(a=>a.sql0).sort((a,b)=>b.sp-a.sp)[0];
+        const mayor = vivos.filter(a=>a.sql0 && a.sp > 0).sort((a,b)=>b.sp-a.sp)[0];
         if(mayor) esperar.push(`ningún anuncio sin SQL+ y con CPL arriba de ${lqMXN(P.cplMax)} llega a ${lqMXN(minPausa)} de gasto (el de más gasto: ${mayor.name} en ${nivel} ${mayor.g.name}, ${lqMXN(mayor.sp)})`);
       }
       // Creativos nuevos: en lugar del peor anuncio (el que se pausa) o junto al de peor CPL.
@@ -4630,7 +4660,7 @@ function lqRecomendar(m, ctx){
       });
       // Solo si el CPL de esa URL (leads del CRM de sus conjuntos o, si no hay, los de la
       // plataforma) pasa del objetivo: una landing que trae leads baratos no es el problema.
-      Object.values(porUrl).forEach(u=>{ const gs = grps.filter(g=>g.url === u.url);
+      Object.values(porUrl).forEach(u=>{ const gs = grps.filter(g=>g.url === u.url && !g.spNA);
         u.n = gs.reduce((s,g)=>s+g.n,0); u.sqlp = gs.reduce((s,g)=>s+g.sqlp,0); const n = u.n || u.res; u.cpl = n ? u.sp/n : Infinity; });
       const urls = Object.values(porUrl).filter(u=>u.sp >= minPausa && u.cl > 0 && u.cpl > P.cplMax).sort((a,b)=>(a.res/a.cl - b.res/b.cl) || (b.sp-a.sp));
       const u = urls[0];
@@ -4643,9 +4673,9 @@ function lqRecomendar(m, ctx){
                      + `; ${u.cl.toLocaleString()} clics → ${lqPl(u.res, "lead")} de ${fte || "plataforma"} (${(u.res/u.cl*100).toFixed(1)}%)`,
                   ruta:ruta([...u.grps].slice(0,2).join(" / ")) }],
           donde:"Abrir el anuncio y la landing lado a lado: misma oferta, idioma y precio. La velocidad y el formulario de la página no están en el reporte: revisarlos abriendo la URL en el celular." });
-      } else if(ads.length && !ads.some(a=>a.url)) add({ txt:"Revisar que la landing coincida con el anuncio:", imp:0,
-        objs:[{ txt:`${ads[0].name} (${nivel} ${ads[0].g.name})`, ev:ads[0].ev, ruta:ruta(ads[0].g.name, ads[0].name) }],
-        donde:`La URL de destino no vino en la sincronización: verla en ${meta ? "Meta Ads › Anuncios › Vista previa" : "Google Ads › Anuncios › URL final"}.` });
+      } else if(ads.some(a=>a.sp > 0) && !ads.some(a=>a.url)) { const a0 = ads.find(a=>a.sp > 0); add({ txt:"Revisar que la landing coincida con el anuncio:", imp:0,
+        objs:[{ txt:`${a0.name} (${nivel} ${a0.g.name})`, ev:a0.ev, ruta:ruta(a0.g.name, a0.name) }],
+        donde:`La URL de destino no vino en la sincronización: verla en ${meta ? "Meta Ads › Anuncios › Vista previa" : "Google Ads › Anuncios › URL final"}.` }); }
     }
   }
 
@@ -4666,10 +4696,11 @@ function lqRecomendar(m, ctx){
           nota: m.res > 0 && m.n === 0 ? `${fte || "La plataforma"} reporta ${lqPl(m.res, "lead")} que no se cruzaron con el CRM: revisar la atribución antes de pausar.` : "" });
     const buenos = (google && hayKwCrm ? kws.map(x=>({ ...x, name:`keyword "${x.kw}"`, r:ruta(x.grp, `keyword "${x.kw}"`) }))
                                        : grps.map(g=>({ ...g, name:`${nivel} ${g.name}`, r:ruta(g.name) })))
-      .filter(x=>x.sqlp > 0 && x.sp/x.sqlp <= P.metaCostoSql).sort((a,b)=>b.sqlp-a.sqlp);
+      .filter(x=>x.sqlp > 0 && x.sp > 0 && !x.spNA && !(google && hayKwCrm && kwNA(x)) && x.sp/x.sqlp <= P.metaCostoSql).sort((a,b)=>b.sqlp-a.sqlp);
     if(buenos[0]) add({ txt:"Si se quiere conservar algo, lo único dentro de la meta es", imp:buenos[0].sp*0.5,
       objs:[{ txt:buenos[0].name, ev:lqEvid({ sp:buenos[0].sp, n:buenos[0].n, sqlp:buenos[0].sqlp }), ruta:buenos[0].r }],
       donde:"En ese caso pausar todo lo demás de la campaña y dejar solo esto una semana más." });
+    else if(sinDet) sinDetalle(`Antes de pausar, ver si algún conjunto tiene costo por SQL dentro de la meta (≤ ${lqMXN(P.metaCostoSql)}): si se quiere conservar algo, sería ese.`, m.inv*0.5);
   }
 
   /* --- ROJO sin seguimiento: qué leads trabajar, de quién, y cuándo reevaluar */
@@ -4718,7 +4749,8 @@ function lqRecomendar(m, ctx){
     alertaRec = { alerta:true, imp:al.sp7, kwKey: google && d ? d.key : "",
       txt: d ? (google ? "CPL al alza: revisar la keyword que más lo subió," : "CPL al alza: revisar el conjunto que más lo subió,") : "CPL al alza: revisar",
       objs:[d ? { txt:d.txt, ev, ruta:d.r } : { txt:camp, ev, ruta:rutaCamp }],
-      donde: google ? `Los términos de búsqueda no están en el reporte: revisar en ${rutaCamp} › Palabras clave › Términos de búsqueda qué búsquedas nuevas entraron esos 7 días.`
+      donde: sinDet ? `${LQ_SIN_DETALLE_META} qué conjunto subió el CPL: ${rutaCamp} › Conjuntos de anuncios, comparar ${v7} con los 7 anteriores, y su frecuencia.`
+           : google ? `Los términos de búsqueda no están en el reporte: revisar en ${rutaCamp} › Palabras clave › Términos de búsqueda qué búsquedas nuevas entraron esos 7 días.`
            : fqAlta ? `${fqAlta.name} en ${nivel} ${fqAlta.g.name} tiene frecuencia ${fqAlta.A.fq} en 30 días (> ${P.frecuenciaMax}): renovar ese creativo; hoy lleva a ${urlTxt(fqAlta.url)}.`
            : hayFq ? `Ningún anuncio de ${d ? "ese conjunto" : "la campaña"} pasa de frecuencia ${P.frecuenciaMax} en 30 días: revisar la puja y la audiencia en Meta Ads › conjunto › Entrega.`
            : "La frecuencia no vino de Windsor: revisar en Meta Ads › Anuncios › columna Frecuencia (filtrando este conjunto); si pasa de 3, renovar ese creativo.",
@@ -4739,9 +4771,15 @@ function lqRecomendar(m, ctx){
   const sinMuestra = esperar.length
     ? (hayPausa ? `Sin muestra suficiente para pausar lo demás; esperar: ${esperar.join("; ")}.` : `Sin muestra suficiente para pausar; esperar. ${esperar.map(x=>x[0].toUpperCase()+x.slice(1)).join(". ")}.`)
     : "";
-  if(!items.length && !sinMuestra) return null;
+  // Conjuntos / anuncios con leads y gasto 0 o nulo en Windsor: se dicen, pero no entran en ninguna
+  // decisión (ni conservar ni pausar) ni se les calcula CPL o costo por SQL.
+  const naG = grps.filter(g=>g.spNA), naA = ads.filter(a=>a.spNA && !a.g.spNA);
+  const gastoNA = (naG.length || naA.length)
+    ? `Gasto no disponible en Windsor (dato faltante, no gasto en cero; no se usa para conservar ni pausar): ${[...naG.slice(0,3).map(g=>`${nivel} ${g.name} — ${gEv(g)}`), ...naA.slice(0,3).map(a=>`${a.name} en ${nivel} ${a.g.name} — ${a.ev}`)].join("; ")}. Revisar su gasto en ${rutaCamp} › ${meta ? "Conjuntos de anuncios" : "Grupos de anuncios"}.`
+    : "";
+  if(!items.length && !sinMuestra && !gastoNA) return null;
   const pie = (k === "optimizar" ? "No tocar presupuesto ni puja. " : "") + `Un cambio a la vez; reevaluar en ${P.reevaluarDias} días.`;
-  return { items, sinMuestra, pie };
+  return { items, sinMuestra, gastoNA, pie };
 }
 
 
@@ -4952,7 +4990,9 @@ function lqModeloDecision(agg){
     if(!C) return;
     C.leads.push(l);
     const na = lqNormCamp(l.ad), ng = lqNormCamp(l.grp);
-    const unico = Object.keys(C.grps).length === 1 ? Object.keys(C.grps)[0] : null;   // campaña de un solo conjunto: el lead es de ese conjunto
+    // Campaña de un solo conjunto (con gasto en los 30 días): el lead es de ese conjunto. Sin el
+    // detalle de 30 días solo quedan los anuncios de ayer y hoy, y no se les cuelga nada.
+    const gs = Object.values(C.grps), unico = gs.length === 1 && gs[0].spend > 0 ? gs[0].name : null;
     const gname = (ng && C.idx["g:"+ng]) || (na && C.idx["g:"+na]) || (na && C.idx["a:"+na]) || unico;
     const G = gname && C.grps[gname]; if(!G) return;
     G.leads.push(l);
@@ -5488,7 +5528,7 @@ function lqBitacoraHtml(M){
 // v2 (2026-09-11): la calificación cambió —OPP eleva a SQL, Budget Range en pesos, fuera
 // pruebas y sin contacto—, así que un análisis guardado con la v1 cita cifras que ya no
 // son las de la pantalla. Se paga una vez más por rango y se comparte otra vez.
-const LQ_IA_KEY = "lq:ia:v11:";
+const LQ_IA_KEY = "lq:ia:v12:";
 const LQ_IA_TTL = 12*3600e3;          // 12 h
 
 // El análisis guardado de la decisión de hoy (ventana + fuente de calificación). No depende
@@ -5522,16 +5562,20 @@ async function lqAnalizar(forzar){
       decision: lqDecisionTexto(m),
       atenderHoy: m.atender.map(e=>e.txt),
       // Qué hacer, ya con el objeto exacto y su evidencia (lqRecomendar): la IA lo explica, no lo inventa.
-      recomendaciones: m.recs ? m.recs.items.map(r=>(r.alerta ? "⚠ " : "")+lqRecTexto(r)) : [], esperar: (m.recs && m.recs.sinMuestra) || "",
+      recomendaciones: m.recs ? m.recs.items.map(r=>(r.alerta ? "⚠ " : "")+lqRecTexto(r)) : [], esperar: (m.recs && m.recs.sinMuestra) || "", gastoNoDisponible: (m.recs && m.recs.gastoNA) || "",
       alertaCpl: m.alerta ? (m.alerta.cpl7!=null ? `CPL últimos 7 días ${r0(m.alerta.cpl7)} MXN vs. ${r0(m.alerta.cplP)} MXN los 7 anteriores (+${m.alerta.pct}%)` : `${r0(m.alerta.sp7)} MXN en 7 días sin leads (CPL de los 7 anteriores ${r0(m.alerta.cplP)} MXN)`) : "",
       inferidos:m.inf||0,
     }));
     const pausadas = M.pausadas.map(m=>({ nombre:m.camp, plataforma:m.plat, inv:r0(m.inv), leads:m.n, sqlPlus:m.sqlp, costoSql:r0(m.cps), pausada:m.ultimoGasto }));
     // Anuncios de mayor inversión en los 30 días, cada uno DENTRO de su conjunto (el mismo creativo
     // se repite en varios conjuntos: sumarlo por nombre mezclaba resultados distintos).
-    const anuncios = M.activas.flatMap(m=>m.C.grps.flatMap(G=>G.ads.map(Ad=>({ m, G, Ad })))).sort((x,y)=>y.Ad.spend-x.Ad.spend).slice(0,12).map(({ m, G, Ad })=>({
+    // Sin el detalle de 30 días de Meta no se manda ningún anuncio de Meta (solo habría los de ayer
+    // y hoy, sin gasto); un anuncio con leads y gasto 0 o nulo va con inv null = gasto no disponible.
+    const sinDetMeta = lqSinDetalleMeta(M.dec);
+    const anuncios = M.activas.filter(m=>!(sinDetMeta && m.plat === "Meta")).flatMap(m=>m.C.grps.flatMap(G=>G.ads.map(Ad=>({ m, G, Ad }))))
+      .sort((x,y)=>y.Ad.spend-x.Ad.spend).slice(0,12).map(({ m, G, Ad })=>({
       nombre:Ad.name, conjunto:G.name, campania:m.camp, estado: lqIsOn(Ad.status)?"activo":lqIsOff(Ad.status)?"pausado":"?",
-      inv:Math.round(Ad.spend), leadsPlataforma:Ad.res||0, leads:Ad.leads.length, sqlPlus:lqSqlPlus(lqCount(Ad.leads)), frecuencia:Ad.fq ?? null }));
+      inv: lqGastoNA(Ad.spend, Ad.leads.length, Ad.res) ? null : Math.round(Ad.spend), leadsPlataforma:Ad.res||0, leads:Ad.leads.length, sqlPlus:lqSqlPlus(lqCount(Ad.leads)), frecuencia:Ad.fq ?? null }));
     const L = M.leads;
     const conInv = [...M.activas, ...M.pausadas].filter(m=>m.inv>0);
     const invT = conInv.reduce((s,m)=>s+m.inv,0), sqlT = conInv.reduce((s,m)=>s+m.sqlp,0);
@@ -5545,6 +5589,7 @@ async function lqAnalizar(forzar){
                  won:L.filter(l=>(l.w||0)>0).length,
                  sinCampania:{ leads:L.length - conInv.reduce((s,m)=>s+m.n,0), sqlPlus:Math.max(0, lqSqlPlus(lqCount(L)) - sqlT) } },
       campanias, pausadas, anuncios,
+      sinDetalleMeta: sinDetMeta && M.activas.some(m=>m.plat === "Meta"),
       integridad: { fuente:pc(L.filter(l=>l.hs).length,L.length),
                     asesor:pc(L.filter(l=>l.u).length,L.length),
                     calificacion:pc(L.filter(l=>l.crmLv&&l.crmLv!=="nc").length,L.length),

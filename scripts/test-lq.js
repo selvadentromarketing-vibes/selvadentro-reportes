@@ -164,6 +164,7 @@ S.ghlFetch = async (path) => {
   ok(a1 && a1.sp7 === 150 && a1.res7 === 1 && a1.spP === 80 && a1.resP === 1 && a2.spP === 20, "gasto y leads de los últimos 7 días y de los 7 anteriores, por anuncio", a1);
   ok(dm.an && dm.an.length === 1 && dm.an[0].grp === "EN_LLAMADA_ESCAPE" && dm.an[0].sp === 900, "Audience Network por conjunto (solo esa ubicación)", dm.an);
   ok(dm.dias && dm.dias[E9] && dm.dias[E9]["2026-09-26"].sp === 100 && dm.dias[E9]["2026-10-08"].res === 1, "gasto y leads de plataforma por día y campaña (para gasto detenido y medición rota)", dm.dias && dm.dias[E9]);
+  ok(dm.detalle30 === true, "detalle30 = llegó la consulta de 30 días por anuncio", dm.detalle30);
   pedidas.length = 0;
   const rdg = await LQ.handler(ev({ action: "decision", plat: "google", ventana: V }));
   const dg = JSON.parse(rdg.body), cUS = dg.camps && dg.camps["23715389989"], kUS = (dg.kw || [])[0];
@@ -176,6 +177,12 @@ S.ghlFetch = async (path) => {
   const dt = JSON.parse(rdt.body);
   ok(rdt.statusCode === 200 && Date.now() - t0 < 2000 && dt.faltan.join("|") === "Audience Network de Meta" && dt.ads.length >= 2,
     "si Windsor no contesta a tiempo, decision responde con lo que llegó y dice qué faltó", { ms: Date.now() - t0, faltan: dt.faltan });
+  // Si la que no llega es la de 30 días por anuncio, solo quedan los anuncios de ayer/hoy sin gasto:
+  // detalle30 = false para que Conclusiones no sugiera conjuntos ni anuncios de Meta.
+  global.fetch = simDec(/website_destination_url/);
+  const dt30 = JSON.parse((await LQ.handler(ev({ action: "decision", plat: "meta", ventana: V }))).body);
+  ok(dt30.detalle30 === false && /detalle de los 30 días de Meta/.test(dt30.faltan.join("|")) && (dt30.ads || []).every((a) => a.sp === 0),
+    "sin la consulta de 30 días: detalle30 = false, lo dice en faltan y los anuncios que quedan no traen gasto", { detalle30: dt30.detalle30, faltan: dt30.faltan });
   delete process.env.LQ_TOPE_MS;
   const rbad = await LQ.handler(ev({ action: "decision", plat: "meta", ventana: { ini: "2026-09-09" } }));
   ok(rbad.statusCode === 400, "sin ventana completa responde 400", rbad.statusCode);
@@ -201,8 +208,11 @@ S.ghlFetch = async (path) => {
         recomendaciones: ["Probar 2 creativos nuevos junto a ES_LLAMADA_NUEVO6-ESCAPE_CENOTES (conjunto ES_LLAMADA_NUEVO6-SEGURIDAD_PATRIMONIO), que hoy lleva a https://seguridad.selvadentrotulum.com/seguridadpatrimonio/ — gasto 3,965 MXN"],
         esperar: "Sin muestra suficiente para pausar; esperar. Ningún anuncio con CPL arriba de 400 MXN llega a 800 MXN de gasto." },
     ],
-    anuncios: [], integridad: { fuente: "90%", asesor: "95%", calificacion: "20%", duplicados: 0 },
+    anuncios: [{ nombre: "EN_LLAMADA_PREMIUMLOTS-5MIN", conjunto: "EN_LLAMADA_PREMIUMLOTS", campania: "INVESTORS_US/CA_ESCAPE_090926", estado: "activo", inv: null, leadsPlataforma: 0, leads: 12, sqlPlus: 2, frecuencia: null }],
+    sinDetalleMeta: true,
+    integridad: { fuente: "90%", asesor: "95%", calificacion: "20%", duplicados: 0 },
   };
+  payload.campanias[0].gastoNoDisponible = "Gasto no disponible en Windsor (dato faltante, no gasto en cero; no se usa para conservar ni pausar): conjunto EN_LLAMADA_PREMIUMLOTS — gasto no disponible, 12 leads, 2 SQL+.";
   const ra = await A.handler(ev(payload));
   const da = JSON.parse(ra.body);
   const prompt = enviado ? enviado.messages[0].content : "";
@@ -222,6 +232,11 @@ S.ghlFetch = async (path) => {
   ok(/nunca genérica/.test(prompt) && /no inventes ninguno/.test(prompt) && /gasto menor a 800 MXN \(2× el CPL objetivo de 400 MXN\)/.test(prompt)
      && /Revisar en Meta Ads › Anuncios › columna Frecuencia/.test(prompt) && /CBO/.test(prompt) && /Máximo 3 acciones por campaña/.test(prompt) && /Un cambio a la vez; reevaluar en 7 días/.test(prompt),
      "regla general de recomendaciones en el prompt (objeto exacto, muestra mínima 800 MXN, dónde revisar, CBO, máximo 3)");
+  ok(/EN_LLAMADA_PREMIUMLOTS-5MIN \(conjunto EN_LLAMADA_PREMIUMLOTS, campaña INVESTORS_US\/CA_ESCAPE_090926\) \[activo\]: gasto no disponible · /.test(prompt)
+     && /conjunto EN_LLAMADA_PREMIUMLOTS — gasto no disponible, 12 leads, 2 SQL\+/.test(prompt)
+     && /no calcules su CPL ni su costo por SQL y no lo uses para recomendar qué conservar o pausar/.test(prompt)
+     && /SIN DETALLE DE META: no llegó la consulta de 30 días/.test(prompt) && /"Sin detalle de Meta en esta sincronización; revisar en Meta Ads"/.test(prompt),
+     "gasto no disponible y sin detalle de Meta llegan al prompt con su regla (no calcular CPL, no conservar ni pausar, no sugerir conjuntos)");
 
   console.log(fallas.length ? `\n${fallas.length} prueba(s) fallaron` : "\nTodas las pruebas del backend de Calidad de Leads pasaron");
   process.exit(fallas.length ? 1 : 0);

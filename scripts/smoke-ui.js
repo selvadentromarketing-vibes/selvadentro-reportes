@@ -483,6 +483,22 @@ const PORT = process.env.PORT || 8765;
     // Pausar la campaña (ROJO) con la decisión: lo mismo, desde los datos de 30 días
     const rp = us ? lqRecomendar({ ...us, alerta: null, sem: lqSemaforo(us.inv, us.sqlp, { n: us.n, tr: us.tr, plat: us.plat }) }, ctx) : null;
     r.recPausar = rp ? lqRecTexto(rp.items[0]) : '';
+    // Gasto no disponible (Dirección, 10-oct-2026): conjunto con leads y gasto 0 en Windsor = dato
+    // faltante. Se dice, sin CPL ni costo por SQL, y no se usa para conservar ni pausar.
+    r.evidNA = lqEvid({ sp: null, n: 3, sqlp: 1 });
+    const gN = Gx('CONJ_N', 0, [...Lx('sql', 1), ...Lx('cql', 4)], [Ax('AD_N1', 0, 0, '')]);
+    const gR = Gx('CONJ_R', 9000, Lx('cql', 5), [Ax('AD_R1', 9000, 5, 'https://lotes.selvadentrotulum.com/en/escape')]);
+    const Cy = { key: 'Meta · CAMP_Y', plat: 'Meta', camp: 'CAMP_Y', cids: new Set(['111']), spend: 9000, res: 5, leads: [...gN.leads, ...gR.leads], grps: [gR, gN] };
+    const ry = lqRecomendar({ plat: 'Meta', camp: 'CAMP_Y', C: Cy, inv: 9000, n: 10, sqlp: 1, res: 5, sem: { k: 'pausar', c: 'rojo' } }, ctxX);
+    r.naPausar = ry ? ry.items.map(x => lqRecTexto(x, true)).join(' / ') + ' || ' + ry.gastoNA : '';
+    const gS = Gx('CONJ_S', 4000, Lx('sql', 2), [Ax('AD_S1', 4000, 2, 'https://lotes.selvadentrotulum.com/en/premium')]);
+    const Cz = { ...Cy, camp: 'CAMP_Z', spend: 13000, leads: [...gN.leads, ...gR.leads, ...gS.leads], grps: [gR, gS, gN] };
+    const rz = lqRecomendar({ plat: 'Meta', camp: 'CAMP_Z', C: Cz, inv: 13000, n: 12, sqlp: 3, res: 7, sem: { k: 'subir', c: 'verde' } }, ctxX);
+    r.naSostiene = rz ? lqRecTexto(rz.items[0]) : '';
+    // Sin el detalle de 30 días de Meta: nada a nivel conjunto/anuncio, solo el aviso.
+    const ctxSin = { ...ctxX, dec: { meta: { ...ctxX.dec.meta, detalle30: false, faltan: ['detalle de los 30 días de Meta (anuncios, URL, presupuesto, frecuencia)'] } } };
+    const rs = lqRecomendar({ plat: 'Meta', camp: 'CAMP_X', C: Cx, inv: 5500, n: 20, sqlp: 4, res: 8, sem: { k: 'optimizar', c: 'amarillo', diag: { calidad: true, costo: true } } }, ctxSin);
+    r.sinDetalleMeta = rs ? rs.items.map(x => lqRecTexto(x)).join(' / ') + ' || ' + rs.sinMuestra : '';
     // Atender hoy: gasto detenido (sintético)
     const Cg = { cids: new Set(['9']), grps: [], leads: [], sp: { dias: { '2026-10-01': 300, '2026-10-02': 300, '2026-10-03': 300 } } };
     r.gastoDetenido = lqAtenderHoy({ plat: 'Meta', activa: true }, Cg, { dias: {} }, V).map(e => e.txt).join(' | ');
@@ -506,6 +522,22 @@ const PORT = process.env.PORT || 8765;
     const agg3 = buildLqAgg(fx3.boot, fx3.rawLeads, fx3.spendRows, fx3.weeks, fx3.opps, fx3.adRows, null); agg3.fallos = []; agg3.monedas = ['MXN'];
     lqState.agg = agg3; lqRender();
     r.sinIds = /7 leads<\/b> traen como campaña un ID que Windsor no reconoce/.test(document.getElementById('lq-content').innerHTML) && /Google 23710551755 \(2\)/.test(txt()) && /Google 23715389989 \(5\)/.test(txt());
+    // La consulta de 30 días de Meta no llegó (solo anuncios de ayer/hoy, sin gasto): Conclusiones
+    // no sugiere conjuntos ni anuncios de Meta y la IA no recibe anuncios de Meta.
+    const fx4 = copia();
+    fx4.adExtra.meta.ads = fx4.adExtra.meta.ads.map(a => ({ ...a, sp: 0, res: 0, cl: 0, im: 0, fq: null, sp7: 0, res7: 0, spP: 0, resP: 0, url: '' }));
+    fx4.adExtra.meta.detalle30 = false; fx4.adExtra.meta.faltan = ['detalle de los 30 días de Meta (anuncios, URL, presupuesto, frecuencia)'];
+    const agg4 = buildLqAgg(fx4.boot, fx4.rawLeads, fx4.spendRows, fx4.weeks, fx4.opps, fx4.adRows, fx4.adExtra); agg4.fallos = []; agg4.monedas = ['MXN'];
+    lqState.agg = agg4; lqState.sub = 'conclusiones'; lqRender();
+    const filasMeta = [...document.querySelectorAll('#lq-content table.lq-concl tr[data-dec-camp]')].filter(tr => /META/.test(tr.textContent));
+    const recsMeta = filasMeta.map(tr => tr.querySelectorAll('td')[4] ? tr.querySelectorAll('td')[4].textContent.replace(/\s+/g, ' ') : '').join(' ');
+    let pay4 = null; const orig4 = window.lqFn2; window.lqFn2 = async (u, b) => { pay4 = b; return { analisis: { lectura: 'x', campanias: [], acciones: [], riesgos: [], preguntas: [] } }; };
+    try { await lqAnalizar(true); } catch (e) {}
+    window.lqFn2 = orig4; lqState.ia = null;
+    r.sinA30 = [filasMeta.length, (recsMeta.match(/Sin detalle de Meta en esta sincronización; revisar en Meta Ads/g) || []).length > 0,
+      /gasto 0 MXN|CPL 0 MXN|costo por SQL 0 MXN/.test(recsMeta), /Pausar el conjunto|Pausar los? \d? ?anuncios?|Lo que sostiene|conservar algo, lo único/.test(recsMeta),
+      pay4 ? pay4.sinDetalleMeta : 'sin llamada', pay4 ? pay4.anuncios.filter(a => !/GOOGLE/.test(a.campania)).length : -1].join(' · ');
+    lqState.agg = agg3;
     // Sin datos de decisión (Windsor no respondió): Conclusiones sigue saliendo, con aviso
     lqState.sub = 'conclusiones'; lqRender();
     r.sinDec = /No llegó de Windsor el detalle de la ventana de decisión/.test(txt()) && !!document.getElementById('lq-decision-etq');
@@ -564,6 +596,14 @@ const PORT = process.env.PORT || 8765;
     && /^Agregar preguntas de presupuesto y de plazo en el formulario instantáneo del conjunto CONJ_A — gasto 3,000 MXN, 15 leads, 1 SQL\+, CPL 200 MXN, costo por SQL 3,000 MXN, tasa SQL 6\.7%\. Se edita en Meta Ads › conjunto › anuncio › Formulario instantáneo/.test(lqx.recMetaForm)
     && /\|\| Sin muestra suficiente para pausar; esperar\. Ningún conjunto sin SQL\+ llega a 800 MXN de gasto \(el de más gasto: CONJ_C, 500 MXN\)\. \|\| No tocar presupuesto ni puja\. Un cambio a la vez; reevaluar en 7 días\.$/.test(lqx.recMetaForm)
     && /^Pausar la campaña INVESTORS - GOOGLE SEARCH - US\+CAN — gasto 13,600 MXN, 5 leads, 0 SQL\+, CPL 2,720 MXN/.test(lqx.recPausar)
+    && lqx.evidNA === 'gasto no disponible, 3 leads, 1 SQL+'
+    && /^Pausar la campaña CAMP_Y — gasto 9,000 MXN/.test(lqx.naPausar) && !/conservar algo/.test(lqx.naPausar)
+    && /\|\| Gasto no disponible en Windsor \(dato faltante, no gasto en cero; no se usa para conservar ni pausar\): conjunto CONJ_N — gasto no disponible, 5 leads, 1 SQL\+\. Revisar su gasto en Meta Ads › Campañas › CAMP_Y › Conjuntos de anuncios\.$/.test(lqx.naPausar)
+    && /Lo que sostiene el resultado \(no tocarlo\): conjunto CONJ_S — gasto 4,000 MXN, 2 leads, 2 SQL\+, CPL 2,000 MXN, costo por SQL 2,000 MXN\./.test(lqx.naSostiene) && !/CONJ_N/.test(lqx.naSostiene)
+    && /^Sin detalle de Meta en esta sincronización; revisar en Meta Ads: CAMP_X — gasto 5,500 MXN, 20 leads, 4 SQL\+/.test(lqx.sinDetalleMeta)
+    && /Buscar el conjunto con más gasto y 0 SQL\+/.test(lqx.sinDetalleMeta) && /Buscar los anuncios activos con CPL arriba de 400 MXN/.test(lqx.sinDetalleMeta)
+    && !/CONJ_|AD_/.test(lqx.sinDetalleMeta) && /\|\| $/.test(lqx.sinDetalleMeta)
+    && /^[1-9]\d* · true · false · false · true · 0$/.test(lqx.sinA30)
     && /^Gasto detenido: 0 MXN ayer \(04 oct\) con la campaña activa; los 7 días previos gastó 900 MXN$/.test(lqx.gastoDetenido)
     && lqx.iaPayload === '2026-09-05 → 2026-10-04 · false · INVESTORS - GOOGLE SEARCH - US+CAN · true · ES_LLAMADA_NUEVO6-ESCAPE_CENOTES'
     && lqx.diagUnit === 'Optimizar calidad [tasa SQL 6.7% (< 10%): calidad] || Optimizar costo [CPL 667 MXN (> 400 MXN): costo] || Optimizar calidad y costo [tasa SQL 9.1% (< 10%): calidad · CPL 455 MXN (> 400 MXN): costo] || Mantener (muestra chica) []';
