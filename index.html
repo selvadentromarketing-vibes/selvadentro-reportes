@@ -614,9 +614,16 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   tr.total.lq-total2 > td{ font-weight:500; color:var(--neutro); }
   .crm-kpi .k-sub{ font-size:var(--fs-xs); color:var(--neutro); margin-top:4px; line-height:1.35; }
   .crm-kpi.lq-kpi-verde{ border-left:4px solid #3f7d4e; } .crm-kpi.lq-kpi-amarillo{ border-left:4px solid #c99a1e; } .crm-kpi.lq-kpi-rojo{ border-left:4px solid var(--rojo); }
-  .lq-pliegue{ font-weight:400; }
+  .lq-pliegue{ font-weight:400; white-space:normal; }
   .lq-pl-kpis{ display:flex; flex-wrap:wrap; gap:6px 18px; font-size:var(--fs-s); color:var(--neutro); margin-bottom:8px; }
   .lq-pl-kpis b{ color:var(--texto); }
+  table.lq-pl-tabla tr.lq-pl-grp td{ background:var(--crema-2); }
+  table.lq-pl-tabla tr.lq-pl-sin td{ color:#6b5a1c; }
+  table.lq-pl-tabla td.lq-nd{ color:var(--neutro); cursor:help; }
+  table.lq-pl-tabla{ width:100%; }
+  table.lq-pl-tabla th{ font-size:var(--fs-xs); letter-spacing:.02em; padding:6px 6px; white-space:normal; vertical-align:bottom; }
+  table.lq-pl-tabla td{ font-size:var(--fs-s); padding:6px 6px; white-space:nowrap; }
+  table.lq-pl-tabla td:first-child{ white-space:normal; min-width:170px; overflow-wrap:anywhere; }
   .lq-reglas-sem .lq-leyenda-cuerpo span .lq-sem{ margin-right:4px; }
   /* Tablas por campaña: 13-14 columnas. Los nombres de campaña (sin espacios) y los
      encabezados se parten para que el semáforo, a la derecha, quepa en pantalla, y la
@@ -3931,6 +3938,10 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
       const c = canonCamp(campRaw) || canonCamp(cf(A.camp)) || canonCamp(cf(A.campAlt));
       if(c){ l.attr.camp = c.name; if(c.plat && !l.attr.plat) l.attr.plat = c.plat; }
     }
+    // utm_content={{ad.id}} (Meta) o {creative} (Google): el ID identifica UN anuncio; el nombre
+    // se repite entre conjuntos, así que se guarda el ID antes de traducirlo a nombre.
+    const adRaw = String(l.attr.ad||"").trim();
+    l.attr.adId = /^\d{5,}$/.test(adRaw) && idIdx[adRaw] && idIdx[adRaw].tipo === "ad" ? adRaw : "";
     l.attr.ad   = lqNombreDeId(l.attr.ad,   idIdx);
     l.attr.grp  = lqNombreDeId(l.attr.grp,  idIdx);
     // utm_term no significa lo mismo en las dos plataformas: los anuncios de Meta no lo
@@ -3995,7 +4006,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
       // pst = etiqueta de tags, que solo se usa cuando no hay oportunidad.
       pipe: stg ? stg.p : "", pstage: stg ? stg.s : "", ost: op ? op.st : "",
       n:l.n, c:l.c, wk:lqWeekOf(l.c), mo:lqMonthOf(l.c), lv, st:lqStage(lv, tagsLower),
-      fuente:sc.fuente, camp:sc.camp, hint:sc.hint||"", ad:(l.attr && l.attr.ad) || "", grp:(l.attr && l.attr.grp) || "", u:l.u||"",
+      fuente:sc.fuente, camp:sc.camp, hint:sc.hint||"", ad:(l.attr && l.attr.ad) || "", adId:(l.attr && l.attr.adId) || "", grp:(l.attr && l.attr.grp) || "", u:l.u||"",
       em:l.em||"", ph:l.ph||"",
       hs: !!(l.src || (l.attr && (l.attr.camp||l.attr.src))),   // fuente identificada
       o: op ? op.o : 0, pr: op ? op.pr : 0, w: op ? op.w : 0, wv: op ? op.v : 0,   // OPP (cotización) / registros de pipeline / WONs / valor
@@ -4308,6 +4319,33 @@ function lqUnionTree(agg, leads, rangoSet, plat){
 
   // 3. Colgar los leads del CRM en la campaña real; si no empatan, en su propio nodo
   const adIdx = lqAdIndex(agg);
+  // Catálogo de cada campaña (lo que trae Windsor): conjuntos, anuncios por ID y por nombre.
+  // El utm_content se cruza SOLO contra su campaña (antes contra toda la cuenta: un valor que
+  // es nombre de conjunto y de anuncio a la vez —ES_LLAMADA_NUEVO6-ESCAPE_CENOTES— caía en el
+  // primer conjunto donde corría ese anuncio).
+  const cats = {};
+  Object.values(camps).forEach(C=>{
+    const g = {}, id = {}, nm = {};
+    Object.values(C.grps).forEach(G=>{ if(G.name !== LQ_SIN_GRP) g[lqNormCamp(G.name)] = G.name;
+      Object.values(G.ads).forEach(A=>{ if(A.id) id[A.id] = [G.name, A.name];
+        const k = lqNormCamp(A.name); if(!k) return; const x = nm[k] = nm[k] || { name:A.name, grps:new Set() }; x.grps.add(G.name); }); });
+    cats[C.key] = { g, id, nm, hay: Object.keys(g).length > 0 };
+  });
+  // Orden: ID del anuncio (único) → conjunto (utm_term o utm_content = nombre de conjunto; hoy
+  // los anuncios mandan {{adset.name}}) → nombre de anuncio que solo existe en un conjunto.
+  // Si no hay manera de saber el conjunto, el lead queda en "Sin anuncio identificado".
+  const lqCruceAnuncio = (C, l)=>{
+    const K = cats[C.key];
+    if(!K || !K.hay) return null;                       // campaña sin detalle por anuncio: lo de antes
+    if(l.adId && K.id[l.adId]) return { g:K.id[l.adId][0], a:K.id[l.adId][1], por:"id" };
+    const nv = lqNormCamp(l.ad), ng = lqNormCamp(l.grp);
+    if(ng && K.g[ng]){ const x = nv && nv !== ng ? K.nm[nv] : null;
+      return { g:K.g[ng], a: x && x.grps.has(K.g[ng]) ? x.name : null, por:"grp" }; }
+    if(nv && K.g[nv]) return { g:K.g[nv], a:null, por:"grp" };
+    const x = nv ? K.nm[nv] : null;
+    if(x && x.grps.size === 1) return { g:[...x.grps][0], a:x.name, por:"nombre" };
+    return { g:null, a:null, por: !nv ? "sinContent" : x ? "ambiguo" : "sinCruce" };
+  };
   const byNorm = {}; Object.values(camps).forEach(C=>{ byNorm[C.plat+"|"+lqNormCamp(C.camp)] = C; });
   const nombres = [...new Set(Object.values(camps).map(C=>C.camp))];
   const mismo = (obj, name)=> Object.keys(obj).find(k=>lqNormCamp(k)===lqNormCamp(name)) || name;
@@ -4322,6 +4360,16 @@ function lqUnionTree(agg, leads, rangoSet, plat){
     }
     if(!C) C = newCamp(l.fuente+" · "+(l.camp||LQ_SIN_CAMP), l.fuente, l.camp||LQ_SIN_CAMP);
     C.leads.push(l);
+    const cr = lqCruceAnuncio(C, l);
+    if(cr){
+      // Campaña con detalle por anuncio: conjunto y anuncio de SU catálogo; si no se sabe el
+      // conjunto, "(sin conjunto atribuido)" = fila "Sin anuncio identificado".
+      if(!cr.g) (C.sinAd = C.sinAd || {})[cr.por] = ((C.sinAd||{})[cr.por]||0) + 1;
+      const G = newGrp(C, cr.g || LQ_SIN_GRP); G.leads.push(l);
+      const A = newAd(G, cr.a || (cr.g ? LQ_SIN_AD : (l.ad || LQ_SIN_AD))); A.leads.push(l);
+      if(cr.a) A.crm = true;                               // lead con el anuncio identificado
+      continue;
+    }
     const hitAd = adIdx[lqNormCamp(l.ad)] || null;
     // El utm_content del CRM puede traer el nombre del anuncio O el del conjunto (en esta
     // cuenta casi siempre el del conjunto). Se resuelve contra el catálogo de la cuenta:
@@ -4989,6 +5037,9 @@ function lqModeloDecision(agg){
     if(!C && l.camp && l.camp !== LQ_SIN_CAMP) C = byNorm[l.fuente+"|"+lqNormCamp(l.camp)] || lista.find(x=>x.plat === l.fuente && lqMatchCamp(x.camp, [l.camp])) || null;
     if(!C) return;
     C.leads.push(l);
+    // utm_content = ID del anuncio: identifica anuncio y conjunto sin ambigüedad
+    if(l.adId){ const G0 = Object.values(C.grps).find(G=>G.ads[l.adId]);
+      if(G0){ G0.leads.push(l); G0.ads[l.adId].leads.push(l); return; } }
     const na = lqNormCamp(l.ad), ng = lqNormCamp(l.grp);
     // Campaña de un solo conjunto (con gasto en los 30 días): el lead es de ese conjunto. Sin el
     // detalle de 30 días solo quedan los anuncios de ayer y hoy, y no se les cuelga nada.
@@ -4996,7 +5047,9 @@ function lqModeloDecision(agg){
     const gname = (ng && C.idx["g:"+ng]) || (na && C.idx["g:"+na]) || (na && C.idx["a:"+na]) || unico;
     const G = gname && C.grps[gname]; if(!G) return;
     G.leads.push(l);
-    const A = Object.values(G.ads).find(x=>lqNormCamp(x.name) === na);
+    // (si el utm_content ES el nombre del conjunto, el lead no dice de qué anuncio es, aunque
+    // un anuncio del conjunto se llame igual)
+    const A = na && na !== lqNormCamp(G.name) ? Object.values(G.ads).find(x=>lqNormCamp(x.name) === na) : null;
     if(A) A.leads.push(l);
   });
   lista.forEach(C=>{ C.grps = Object.values(C.grps).map(G=>({ ...G, ads:Object.values(G.ads).sort((a,b)=>b.spend-a.spend) })).sort((a,b)=>b.spend-a.spend); });
@@ -5175,6 +5228,71 @@ function lqQualityTree(agg, leads, rangoSet, rango){
   </table></div>`;
 }
 
+/* Tabla de anuncios de una campaña (Datos de campañas) con el CRM al lado de la plataforma
+   (Dirección, 12-oct-2026): Leads CRM, SQL+ ("calificados" = SQL + SQL Selvadentro, la misma
+   definición del semáforo), Zoom realizado y CPL CRM = inversión ÷ leads CRM.
+   · Por conjunto siempre: es lo que hoy identifica el utm_content ({{adset.name}} en Meta,
+     {adgroupid} en Google).
+   · Por anuncio solo cuando el lead trae el anuncio (utm_content = ID del anuncio, o un nombre
+     que solo existe en un conjunto). Si ningún lead del conjunto lo trae, las celdas van en "—";
+     si unos sí y otros no, el resto queda en "Sin anuncio identificado" dentro del conjunto.
+   · Los leads de la campaña sin conjunto ni anuncio (sin utm_content, o con uno que no cruza)
+     van en "Sin anuncio identificado" de la campaña. Conjuntos + esa fila = Leads CRM de la
+     campaña. */
+function lqAdsCrmTabla(C, m, ctr, cpc){
+  const meta = C.plat === "Meta";
+  const nivel = meta ? "conjunto" : "grupo";
+  const crm = (leads)=>{ const x = lqMetricas(leads, 0, 0); return { n:x.n, sqlp:x.sqlp, zoom:x.zoom }; };
+  const cplCrm = (sp, n)=> n && sp > 0 ? lqMXN(sp/n) : "—";
+  const celdasCrm = (sp, x)=> `<td>${x.n}</td><td>${x.sqlp}</td><td>${x.zoom}</td><td>${cplCrm(sp, x.n)}</td>`;
+  const sinDato = (t)=> `<td class="lq-nd" title="${escAttr(t)}">—</td>`.repeat(3) + `<td class="lq-nd" title="${escAttr(t)}">—</td>`;
+  const plat = (x)=> escAttr(lqPlats([...x.pps]) || "");
+  const resTxt = (x)=> x ? (Math.round(x*10)/10).toLocaleString("en-US") : "—";   // Google da conversiones con decimales
+  const grps = C.grps.filter(G=>G.name !== LQ_SIN_GRP && (G.spend || G.impr || G.res || G.leads.length)).sort((a,b)=>b.spend-a.spend);
+  const sinG = C.grps.find(G=>G.name === LQ_SIN_GRP);
+  const porAnuncio = grps.some(G=>G.ads.some(A=>A.crm && A.leads.length));
+  const motivo = meta ? "El lead trae el conjunto en utm_content ({{adset.name}}), no el anuncio. Se llena cuando los anuncios manden utm_content={{ad.id}}."
+                      : "El lead trae el grupo en utm_content ({adgroupid}), no el anuncio. Se llena cuando el sufijo mande utm_content={creative}.";
+  let rows = "";
+  grps.forEach(G=>{
+    const x = crm(G.leads);
+    rows += `<tr class="lq-pl-grp"><td class="lft"><b>${escAttr(G.name)}</b><div class="lq-sub">${nivel}${plat(G) ? " · "+plat(G) : ""}</div></td>
+      <td>${lqMXN(G.spend)}</td><td>${resTxt(G.res)}</td>${celdasCrm(G.spend, x)}
+      <td>${G.impr.toLocaleString()}</td><td>${G.clicks.toLocaleString()}</td><td>${ctr(G.clicks,G.impr)}</td><td>${cpc(G.spend,G.clicks)}</td></tr>`;
+    const conCrm = G.ads.some(A=>A.crm && A.leads.length);
+    const ads = G.ads.filter(A=>A.name !== LQ_SIN_AD && (A.spend || A.impr || A.res || (A.crm && A.leads.length))).sort((a,b)=>b.spend-a.spend);
+    ads.forEach(A=>{
+      const xa = crm(A.crm ? A.leads : []);
+      rows += `<tr class="lq-pl-ad"><td class="lft" style="padding-left:22px">${lqDot(lqIsOn(A.status)?true:lqIsOff(A.status)?false:undefined)}${escAttr(A.name)}</td>
+        <td>${lqMXN(A.spend)}</td><td>${resTxt(A.res)}</td>${conCrm ? celdasCrm(A.spend, xa) : sinDato(motivo)}
+        <td>${A.impr.toLocaleString()}</td><td>${A.clicks.toLocaleString()}</td><td>${ctr(A.clicks,A.impr)}</td><td>${cpc(A.spend,A.clicks)}</td></tr>`;
+    });
+    const resto = (G.ads.find(A=>A.name === LQ_SIN_AD) || { leads:[] }).leads;
+    if(conCrm && resto.length) rows += `<tr class="lq-pl-ad lq-pl-sin"><td class="lft" style="padding-left:22px">Sin anuncio identificado<div class="lq-sub">leads del ${nivel} que no traen el anuncio</div></td>
+      <td>—</td><td>—</td>${celdasCrm(0, crm(resto))}<td>—</td><td>—</td><td>—</td><td>—</td></tr>`;
+  });
+  // Sin conjunto ni anuncio: por qué no cruzó
+  const sinLeads = sinG ? sinG.leads : [];
+  if(sinLeads.length){
+    const por = C.sinAd || {};
+    const det = [por.sinContent ? `${por.sinContent} sin utm_content` : "", por.ambiguo ? `${por.ambiguo} con un nombre de anuncio que está en varios ${nivel}s` : "",
+                 por.sinCruce ? `${por.sinCruce} con utm_content que no existe en la campaña` : ""].filter(Boolean).join(" · ");
+    rows += `<tr class="lq-pl-grp lq-pl-sin"><td class="lft"><b>Sin anuncio identificado</b><div class="lq-sub">${escAttr(det || "leads de la campaña sin conjunto ni anuncio")}</div></td>
+      <td>—</td><td>—</td>${celdasCrm(0, crm(sinLeads))}<td>—</td><td>—</td><td>—</td><td>—</td></tr>`;
+  }
+  const sumaG = grps.reduce((a,G)=>a+G.leads.length, 0);
+  const cuadre = `Leads CRM de la campaña: <b>${m.n}</b> = ${grps.length} ${nivel}${grps.length===1?"":"s"} (${sumaG})${sinLeads.length ? ` + sin anuncio identificado (${sinLeads.length})` : ""}.`
+    + (!porAnuncio && sumaG ? ` Por anuncio todavía no: ${escAttr(motivo)}` : "");
+  return `<div class="table-scroll" style="border:none;box-shadow:none"><table class="rep lq-pl-tabla">
+      <thead><tr><th class="lft">${meta ? "Conjunto / anuncio" : "Grupo / anuncio"}</th><th>Inversión</th><th title="Leads que reporta ${meta ? "Meta" : "Google"}">Leads plat.</th>
+        <th title="Contactos del CRM cuyo utm_content cruza con este ${nivel} o anuncio">Leads CRM</th>
+        <th title="Calificados = SQL+ (SQL + SQL Selvadentro), la misma definición del semáforo">SQL+</th>
+        <th title="Zoom realizado: leads con Zoom realizado o una etapa posterior (OPP, WON). Una cita agendada no cuenta">Zoom</th>
+        <th title="Inversión ÷ leads CRM">CPL CRM</th><th>Impres.</th><th>Clics</th><th>CTR</th><th>CPC</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="11" class="lft txt-nota">Sin anuncios con actividad en el rango.</td></tr>`}</tbody></table></div>
+    <p class="hint lq-pl-cuadre" style="margin:6px 0 0">${cuadre}</p>`;
+}
+
 // Datos de campañas: en la fila de cada campaña solo lo que decide (Inversión · Leads
 // plataforma · Leads CRM · CPL). Impresiones, clics, CTR, CPC, ubicaciones y anuncios
 // quedan plegados dentro de la campaña (Dirección, 8-oct-2026).
@@ -5207,12 +5325,7 @@ function lqAdsTree(agg, leads, rangoSet, rango){
           <span>CTR <b>${ctr(C.clicks,C.impr)}</b></span><span>CPC <b>${cpc(C.spend,C.clicks)}</b></span>
           <span>Costo por resultado de plataforma <b>${C.res?lqMXN(C.spend/C.res):"—"}</b></span>
           <span>Plataformas <b>${escAttr(lqPlats([...C.pps]) || C.plat)}</b></span></div>
-        <div class="table-scroll" style="border:none;box-shadow:none"><table class="rep">
-          <thead><tr><th class="lft">Anuncio</th><th class="lft">Plataformas</th><th>Inversión</th><th>Leads plataforma</th><th>Impres.</th><th>Clics</th><th>CTR</th><th>CPC</th></tr></thead>
-          <tbody>${ads.map(a=>`<tr><td class="lft">${lqDot(lqIsOn(a.status)?true:lqIsOff(a.status)?false:undefined)}${escAttr(a.name)}${a.grp&&a.grp!==LQ_SIN_GRP?`<div class="lq-sub">${escAttr(a.grp)}</div>`:""}</td>
-            <td class="lft">${escAttr(lqPlats([...a.pps]) || C.plat)}</td><td>${lqMXN(a.spend)}</td><td>${a.res||"—"}</td>
-            <td>${a.impr.toLocaleString()}</td><td>${a.clicks.toLocaleString()}</td><td>${ctr(a.clicks,a.impr)}</td><td>${cpc(a.spend,a.clicks)}</td></tr>`).join("")
-            || `<tr><td colspan="8" class="lft txt-nota">Sin anuncios con actividad en el rango.</td></tr>`}</tbody></table></div>
+        ${lqAdsCrmTabla(C, m, ctr, cpc)}
       </div>`;
     body += `<tr class="lq-row d1"><td colspan="${keys.length+1}" class="lft" style="padding:8px 10px 12px 34px">${det}</td></tr>`;
   }

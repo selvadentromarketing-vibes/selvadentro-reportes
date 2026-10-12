@@ -423,6 +423,26 @@ const PORT = process.env.PORT || 8765;
     const pl = document.querySelector('#lq-content .lq-pliegue');
     r.datosPliegue = !!pl && ['Impresiones', 'Clics', 'CTR', 'CPC', 'Plataformas'].every(k => pl.textContent.includes(k));
     r.avisoDatos = !!document.getElementById('lq-aviso-expl');
+    // Columnas del CRM por conjunto / anuncio (Dirección, 12-oct-2026). Hoy utm_content trae el
+    // conjunto: el CRM va por conjunto, por anuncio "—", y lo que no cruza va en "Sin anuncio identificado".
+    const pliegue = (camp) => { lqState.exp = { [lqExpKey('ads|Meta · ' + camp)]: true }; lqRender(); return document.querySelector('#lq-content .lq-pliegue'); };
+    const filasPl = (p) => p ? [...p.querySelectorAll('table.lq-pl-tabla tbody tr')].map(tr => [...tr.cells].slice(0, 7).map(td => td.textContent.replace(/\s+/g, ' ').trim()).join(' ¦ ')).join(' || ') : '';
+    const cuadrePl = (p) => p && p.querySelector('.lq-pl-cuadre') ? p.querySelector('.lq-pl-cuadre').textContent.replace(/\s+/g, ' ').trim() : '';
+    const pE2 = pliegue('INVESTORS_US/CA_ESCAPE_100626');
+    r.datosCrmCols = pE2 ? [...pE2.querySelectorAll('table.lq-pl-tabla thead th')].map(t => t.textContent.trim()).join('|') : '';
+    r.datosCrmE2 = filasPl(pE2); r.datosCuadreE2 = cuadrePl(pE2);
+    const pE9 = pliegue('INVESTORS_US/CA_ESCAPE_090926');
+    r.datosCrmE9 = filasPl(pE9); r.datosCuadreE9 = cuadrePl(pE9);
+    // Con utm_content={{ad.id}}: el anuncio se identifica por su ID y se llenan sus columnas
+    const fx5 = copia(), ids5 = {};
+    fx5.adRows.forEach(a => { ids5[a.id] = ids5[a.id] || String(9100000000 + Object.keys(ids5).length + 1); a.id = ids5[a.id]; });
+    const ad5 = fx5.adRows.find(a => a.camp === 'INVESTORS_US/CA_ESCAPE_100626' && a.grp === 'EN_LLAMADA_ESCAPE');
+    fx5.rawLeads.filter(l => l.cf && l.cf.f_camp === 'INVESTORS_US/CA_ESCAPE_100626' && l.cf.f_cont === 'EN_LLAMADA_ESCAPE').slice(0, 3).forEach(l => { l.cf.f_cont = ad5.id; });
+    const agg5 = buildLqAgg(fx5.boot, fx5.rawLeads, fx5.spendRows, fx5.weeks, fx5.opps, fx5.adRows, fx5.adExtra); agg5.fallos = []; agg5.monedas = ['MXN'];
+    lqState.agg = agg5;
+    const pId = pliegue('INVESTORS_US/CA_ESCAPE_100626');
+    r.datosCrmId = ad5.name + ' :: ' + filasPl(pId); r.datosCuadreId = cuadrePl(pId);
+    lqState.agg = agg;
     lqState.exp = {};
     // ---- Conclusiones: la decisión de hoy, idéntica con cualquier filtro de fechas
     const foto = () => { lqState.sub = 'conclusiones'; lqRender(); return document.getElementById('lq-content').innerHTML; };
@@ -564,6 +584,14 @@ const PORT = process.env.PORT || 8765;
     && lqx.tarjetasBk === '69 11 1' && lqx.notaBkCombo && lqx.sinJenniferCombo && lqx.notaBkCalidad && lqx.sinJenniferCalidad
     && /^Jennifer Guillaume\|Lead \d+\|Lead \d+ · vista 0 · canal 2$/.test(lqx.brokers) && lqx.sumarOppBk === '101' && lqx.semEnCalidad && lqx.sinMetricasViejas
     && lqx.matrizOculta && lqx.matrizConBoton && lqx.datosFila === 'Campaña|Inversión|Leads plataforma|Leads CRM|CPL' && lqx.datosPliegue
+    && lqx.datosCrmCols === 'Conjunto / anuncio|Inversión|Leads plat.|Leads CRM|SQL+|Zoom|CPL CRM|Impres.|Clics|CTR|CPC'
+    && lqx.datosCrmE2.includes('EN_LLAMADA_PREMIUMLOTSconjunto · Facebook, Audience Network, Instagram ¦ 6,000 MXN ¦ 4 ¦ 14 ¦ 2 ¦ 0 ¦ 429 MXN || EN_LLAMADA_PREMIUMLOTS-5MIN ¦ 6,000 MXN ¦ 4 ¦ — ¦ — ¦ — ¦ —')
+    && lqx.datosCrmE2.includes('EN_LLAMADA_ESCAPEconjunto · Facebook, Instagram ¦ 4,000 MXN ¦ — ¦ 8 ¦ 0 ¦ 0 ¦ 500 MXN') && !/Sin anuncio identificado/.test(lqx.datosCrmE2)
+    && /^Leads CRM de la campaña: 22 = 2 conjuntos \(22\)\. Por anuncio todavía no: El lead trae el conjunto en utm_content \(\{\{adset\.name\}\}\)/.test(lqx.datosCuadreE2)
+    && /\|\| Sin anuncio identificado7 sin utm_content ¦ — ¦ — ¦ 7 ¦ 0 ¦ 0 ¦ —$/.test(lqx.datosCrmE9)
+    && lqx.datosCuadreE9 === 'Leads CRM de la campaña: 7 = 2 conjuntos (0) + sin anuncio identificado (7).'
+    && lqx.datosCrmId.includes('EN_LLAMADA_ESCAPE-TY-COLD ¦ 2,400 MXN ¦ — ¦ 3 ¦ 0 ¦ 0 ¦ 800 MXN || EN_LLAMADA_ESCAPE-DIANA ¦ 1,600 MXN ¦ — ¦ 0 ¦ 0 ¦ 0 ¦ — || Sin anuncio identificadoleads del conjunto que no traen el anuncio ¦ — ¦ — ¦ 5 ¦ 0 ¦ 0 ¦ —')
+    && lqx.datosCrmId.includes('EN_LLAMADA_PREMIUMLOTS-5MIN ¦ 6,000 MXN ¦ 4 ¦ — ¦ — ¦ — ¦ —') && lqx.datosCuadreId === 'Leads CRM de la campaña: 22 = 2 conjuntos (22).'
     // Conclusiones: rango fijo, orden, fecha de decisión, Atender hoy, pausadas, bitácora
     && lqx.conclIdenticas
     && lqx.etiqueta.startsWith('Decisión de hoy — basada en 05 sep 2026 a 04 oct 2026 (últimos 30 días). No cambia con el filtro de fechas.')
@@ -586,7 +614,8 @@ const PORT = process.env.PORT || 8765;
     && /único anuncio activo de su conjunto: pausarlo apaga el conjunto/.test(lqx.rec090) && /para reemplazar ES_LLAMADA_NUEVO6-SEGURIDAD_DYNAMIC .*que hoy lleva a https:\/\/lotes\.selvadentrotulum\.com\/seguridad/.test(lqx.rec090)
     && /Subir el presupuesto diario 20%: INVESTORS_MX_DYNAMIC-TOPLPS_150726, de 360 MXN a 432 MXN al día — gasto 10,400 MXN, 6 leads, 3 SQL\+, CPL 1,733 MXN, costo por SQL 3,467 MXN/.test(lqx.recVerde)
     && /Editar › Presupuesto de la campaña \(CBO\)/.test(lqx.recVerde)
-    && /Lo que sostiene el resultado \(no tocarlo\): anuncio ES_LLAMADA_NUEVO6-ESCAPE_CENOTES en conjunto ES_LLAMADA_NUEVO6-ESCAPE_CENOTES — gasto 10,400 MXN, 2 leads, 2 SQL\+/.test(lqx.recVerde) && /capacidad ~140\/mes/.test(lqx.recVerde) && /Un cambio a la vez; reevaluar en 7 días\.$/.test(lqx.recVerde)
+    // (sus leads traen el CONJUNTO en utm_content, que se llama igual que el anuncio: no se le acreditan al anuncio)
+    && /Lo que sostiene el resultado \(no tocarlo\): conjunto ES_LLAMADA_NUEVO6-ESCAPE_CENOTES — gasto 10,400 MXN, 6 leads, 3 SQL\+/.test(lqx.recVerde) && /capacidad ~140\/mes/.test(lqx.recVerde) && /Un cambio a la vez; reevaluar en 7 días\.$/.test(lqx.recVerde)
     && /Trabajar los 4 leads de la campaña que siguen sin trabajar: Asesora Uno, 4 leads — el más antiguo entró el 16\/09/.test(lqx.recRevisar) && /Nuevo lead \(no contactado\)/.test(lqx.recRevisar)
     && /⚠ CPL al alza: revisar el conjunto que más lo subió, EN_LLAMADA_PREMIUMLOTS — últimos 7 días \(28\/09–04\/10\): gasto 2,500 MXN, 1 lead, 0 SQL\+, CPL 2,500 MXN; 7 anteriores: CPL 750 MXN/.test(lqx.recAlerta)
     && /^Sin muestra suficiente para pausar; esperar\. Ningún conjunto sin SQL\+ llega a 8,000 MXN de gasto \(el de más gasto: EN_LLAMADA_ESCAPE, 4,000 MXN\)\. /.test(lqx.recEsperar)

@@ -386,7 +386,22 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
   que hoy cuentan como OPP, leídas del CRM.
 - **Cuatro sub-pestañas**: (1) **Datos de Campañas** — por campaña solo Inversión ·
   Leads plataforma · Leads CRM · CPL; impresiones, clics, CTR, CPC, plataformas y
-  anuncios quedan plegados dentro de cada campaña; (2) **Calidad de Lead** — tabla por
+  anuncios quedan plegados dentro de cada campaña. El pliegue va por **conjunto → anuncio**
+  con el CRM al lado de la plataforma (Dirección, 12-oct-2026): **Leads CRM · SQL+**
+  ("calificados" = SQL + SQL Selvadentro, la definición del semáforo) **· Zoom** (realizado)
+  **· CPL CRM** (inversión ÷ leads CRM). El `utm_content` del lead se cruza SOLO contra su
+  campaña: ID del anuncio (`{{ad.id}}` en Meta, `{creative}` en Google; se guarda como
+  `adId` antes de traducirlo a nombre) → conjunto (hoy los 29 anuncios con gasto de Meta
+  mandan `{{adset.name}}` y Google `{adgroupid}`) → nombre de anuncio que solo existe en un
+  conjunto. Mientras el lead traiga el conjunto, el CRM va por conjunto y las celdas del
+  anuncio salen en "—" (con el porqué); se llenan solas cuando llegue el ID. Lo que no cruza
+  (sin `utm_content`, nombre de anuncio repetido en varios conjuntos o valor que no existe en
+  la campaña) va en la fila **"Sin anuncio identificado"**, con el motivo; conjuntos + esa
+  fila = Leads CRM de la campaña (lo dice la nota al pie). Antes el cruce era contra toda la
+  cuenta y un valor que es nombre de conjunto y de anuncio a la vez
+  (ES_LLAMADA_NUEVO6-ESCAPE_CENOTES) caía en el primer conjunto donde corría ese anuncio;
+  Conclusiones tampoco le acredita al anuncio un lead cuyo `utm_content` es el conjunto;
+  (2) **Calidad de Lead** — tabla por
   campaña desplegable a conjunto → anuncio con el semáforo; (3) **Reporte Combinado** —
   tarjetas Inversión total · Leads CRM · SQL+ · Costo por SQL · WON, lectura automática
   del semáforo, barras horizontales de inversión por campaña (un solo eje en MXN, nombre
