@@ -30,7 +30,7 @@
 //     cf = campos personalizados de la oportunidad (id → valor): Causa, Evidencia, Asesor
 //     que descalificó y Fecha de entrada a Descalificado (spec v1.1 §2).
 //   { action:"users" } → { users, fields, oppFields, pipelines }
-//   { action:"citas", start, end } → { citas:[{id,ct,u,t,ag,st,cal}], calendarios, errores[] }
+//   { action:"citas", start, end } → { citas:[{id,ct,u,t,ag,st,cal,cb}], calendarios, errores[] }
 //     citas de TODOS los calendarios con fecha de la cita en [start, end] (no por alta del
 //     lead); ag = cuándo se agendó. El front pide el fin del rango + 120 días para ver
 //     también las citas que se AGENDARON en el rango para fechas posteriores.
@@ -476,8 +476,11 @@ async function citas({ start, end }) {
           if (!t || (ev.id && vistos.has(ev.id))) return;
           if (ev.id) vistos.add(ev.id);
           // ag = cuándo se AGENDÓ (alta del evento); t = cuándo es la cita.
+          // cb = quién la creó (usuario del CRM), si el API lo trae: con eso el reporte de
+          // Primer Contacto sabe qué sesiones agendó el ejecutivo y cuáles el asesor.
+          const cb = ev.createdBy && typeof ev.createdBy === "object" ? (ev.createdBy.userId || ev.createdBy.id || "") : "";
           out.push({ id: ev.id || "", ct: ev.contactId || "", u: ev.assignedUserId || "", t, ag: ts(ev.dateAdded),
-            st: String(ev.appointmentStatus || ev.status || "").toLowerCase(), cal: c.name || "" });
+            st: String(ev.appointmentStatus || ev.status || "").toLowerCase(), cal: c.name || "", cb: String(cb || "") });
         });
       } catch (e) { errores.push(c.name || c.id); }
     }));
@@ -598,3 +601,9 @@ exports.handler = async (event) => {
     return json(status, { error: String(e.message || e), detail: e.detail });
   }
 };
+
+// Piezas que reutiliza el reporte de Primer Contacto (pc-report.js): la MISMA definición de
+// acción manual, canal, desenlace y duración de llamada que Desempeño. Si una cambia aquí,
+// cambia en los dos reportes; duplicarlas era garantizar que algún día dijeran cosas distintas.
+exports.internals = { attrOf, cfMap, mapContact, contacts, users, citas, ts, isManual, chanOf,
+  callStatus, callDesenlace, callDur, dayKey, TZ_MS, AUTO_SOURCES, CALL_LINEA };

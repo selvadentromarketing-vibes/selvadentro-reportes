@@ -46,6 +46,12 @@ function canalesDeClave(k, op) {
   if (key.startsWith("crm:agg")) return ["crm_live", "direccion_comercial"];
   // sla:agg (el reporte, con nombres) y sla:nocall (etiquetas "sin llamada" retiradas, spec v1.1).
   if (key.startsWith("sla:")) return ["sla_view", "crm_live", "direccion_comercial"];
+  // Reporte de Primer Contacto: la configuración (quién es el ejecutivo, desde cuándo, qué
+  // campos son los cinco datos) la fija Dirección; el ejecutivo no mueve su propia vara.
+  if (key.startsWith("pc:config")) {
+    return (op === "set" || op === "del") ? ["direccion_general", "direccion_comercial"] : ["pc_view", "sla_view", "crm_live", "direccion_comercial"];
+  }
+  if (key.startsWith("pc:")) return ["pc_view", "sla_view", "crm_live", "direccion_comercial"];
   // lq: cubre lq:agg y también lq:ia (el análisis compartido), que antes quedaba sin gate.
   if (key.startsWith("lq:")) return ["mkt_lq", "marketing"];
   // Los datos de Redes Sociales son de su módulo: mkt_lq no pinta nada ahí.

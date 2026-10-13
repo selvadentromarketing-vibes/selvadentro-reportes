@@ -250,7 +250,8 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
     .lq-search{ min-width:0; width:100%; }
     table.usr-table td.ch-col{ min-width:0; }
     .periodo{ gap:12px; padding:12px 14px; }
-    .periodo .grp{ flex:1 1 140px; }
+    .periodo .grp{ flex:1 1 140px; min-width:0; max-width:100%; }
+    .periodo select{ max-width:100%; min-width:0; }   /* las etiquetas largas de semana empujaban la página de lado */
   }
   @media (max-width:700px){
     /* iOS Safari acerca la pantalla al enfocar un campo de menos de 16px y no vuelve a
@@ -621,6 +622,26 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .lq-re{ display:inline-block; white-space:nowrap; font-size:var(--fs-xs); font-weight:600; color:#6b5a1c; background:#f6edd2; border:1px solid #e3d3a4; border-radius:10px; padding:0 7px; margin-left:4px; cursor:help; }
   .lq-re-n{ color:#6b5a1c; }
   .crm-kpi.sla-chica .k-val, .sla-chica-v{ color:var(--neutro); opacity:.75; }
+  /* ---- Primer Contacto y Rescate ---- */
+  .pc-det{ margin:8px 0 4px; font-style:normal; }
+  .pc-det .table-scroll{ margin-bottom:6px; }
+  table.pc-tabla td, table.pc-tabla th{ font-size:var(--fs-s); }
+  table.pc-tabla th{ white-space:normal; vertical-align:bottom; line-height:1.25; padding:8px 7px; }
+  table.pc-tabla td{ padding:7px 7px; }
+  table.pc-matriz th{ text-align:left; }
+  table.pc-matriz td.pc-mx{ text-align:left; vertical-align:top; white-space:normal; min-width:190px; color:var(--neutro); }
+  table.pc-matriz td.pc-mx div{ font-size:var(--fs-xs); margin-top:3px; }
+  table.pc-matriz td.pc-mx-on{ color:var(--texto); box-shadow:inset 0 0 0 2px var(--olivo); }
+  table.pc-matriz td.pc-mx-verde{ background:#e4f0ec; } table.pc-matriz td.pc-mx-amarillo{ background:#f3ecd9; } table.pc-matriz td.pc-mx-rojo{ background:#f6e6df; }
+  details.pc-cfg{ background:#fff; border:1px solid var(--linea); border-radius:var(--r-l); padding:12px 16px; margin:22px 0 10px; }
+  details.pc-cfg summary{ cursor:pointer; color:var(--verde-prof); }
+  .pc-cfg-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:12px 18px; margin:12px 0; }
+  .pc-cfg-grid > label{ display:flex; flex-direction:column; gap:4px; font-size:var(--fs-s); font-weight:600; color:var(--texto); }
+  .pc-cfg-grid select, .pc-cfg-grid input[type=text], .pc-cfg-grid input[type=date], .pc-cfg-grid input[type=time], .pc-cfg-grid textarea{ font-family:var(--sans); font-size:var(--fs-s); padding:5px 8px; border:1px solid var(--linea); border-radius:var(--r-s); background:#fff; max-width:100%; }
+  .pc-cfg-grid input[type=text]{ width:44%; }
+  .pc-cfg-grid .lq-sub{ font-weight:400; }
+  .pc-dias{ display:flex; flex-wrap:wrap; gap:4px 10px; font-weight:400; }
+  .pc-dias label{ display:inline-flex; align-items:center; gap:3px; }
   .sla-det-btn{ display:block; margin-top:3px; background:none; border:none; padding:0; color:var(--verde-prof); font-size:var(--fs-xs); font-weight:600; cursor:pointer; text-decoration:underline; }
   tr.sla-det-row > td{ background:var(--crema); padding:8px 10px 12px 18px; white-space:normal; }
   table.sla-det td, table.sla-det th{ font-size:var(--fs-xs); padding:5px 7px; }
@@ -923,6 +944,23 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
         <div class="cp-track"><div class="cp-bar" id="sla-progress-bar"></div></div>
       </div>
       <div id="sla-content"><div class="empty-rep">Elige el rango de semanas y pulsa Generar: el reporte recorre las conversaciones y citas de cada lead del CRM (toma 1–3 minutos).</div></div>
+    </div>
+
+    <!-- ============ PRIMER CONTACTO Y RESCATE ============ -->
+    <div class="view" id="view-pc">
+      <div class="periodo">
+        <div class="grp"><label>Periodo</label><select id="pc-tipo"><option value="semana">Semana</option><option value="mes">Mes</option></select></div>
+        <div class="grp"><label>Cuál</label><select id="pc-per"></select></div>
+        <div class="grp"><label>Ejecutivo</label><select id="pc-quien"><option value="">Ejecutivo: sin configurar</option></select></div>
+        <div class="spacer"></div>
+        <div class="grp"><label>Última generación</label><div class="semana-badge" id="pc-last">—</div></div>
+        <button class="btn btn-olive" id="pc-run">Generar reporte</button>
+      </div>
+      <div class="crm-progress" id="pc-progress" style="display:none">
+        <div class="cp-lbl" id="pc-progress-lbl">Leyendo el CRM…</div>
+        <div class="cp-track"><div class="cp-bar" id="pc-progress-bar"></div></div>
+      </div>
+      <div id="pc-content"><div class="empty-rep">Cargando…</div></div>
     </div>
 
     <!-- ============ DIAGNÓSTICO ============ -->
@@ -2255,6 +2293,7 @@ const NAV_GRUPOS = [
     { id:"reporte",   name:"Reporte",             view:"reporte",    canal:true, ver:()=>navConCanal() },
     { id:"analitica", name:"Analítica",           view:"analitica",  canal:true, ver:()=>navConCanal(), abrir:()=>renderAnalitica() },
     { id:"desempeno", name:"Desempeño de Ventas", view:"sla",        ver:()=>puedeVerDesempeno(), abrir:()=>showSLA() },
+    { id:"primer",    name:"Primer contacto",     view:"pc",         ver:()=>puedeVerPC(),        abrir:()=>showPC() },
     { id:"crm",       name:"CRM en vivo",         view:"crm",        ver:()=>navPermiso("crm_live"), abrir:()=>showCRM() },
   ]},
   { id:"marketing", name:"Marketing", subs:[
@@ -8261,6 +8300,830 @@ async function showSLA(){
   }
 }
 
+/* ===================== PRIMER CONTACTO Y RESCATE ===================== */
+/* Reporte del Ejecutivo de Primer Contacto y Rescate. Fuente de cada regla: el Manual
+   Operativo de Primer Contacto y Rescate (Dirección General, oct-2026); la sección va junto
+   a cada constante para saber qué tocar cuando el manual cambie (se revisa cada trimestre).
+   La lectura de mensajes y llamadas es la de Desempeño de Ventas: el backend (pc-report.js)
+   importa esas reglas de sla-report.js en vez de copiarlas. El puesto arranca el
+   26-oct-2026; antes se puede ENSAYAR con un usuario actual del CRM para probar la medición
+   con datos reales sin esperar al primer día. */
+const PC_CFG_KEY = "pc:config:v1";
+const PC_AGG_PREF = "pc:agg:v1:";
+const PC_ACTIVA_DEF = "2026-10-26";
+const PC_DOBLE_MS = 10*60e3;          // 3.4 y 7.3: dos llamadas seguidas al mismo prospecto (≤10 min) = un intento
+const PC_RAFAGA_MS = 10*60e3;         // mensajes del mismo canal en ≤10 min = un solo mensaje (no se infla con burbujas)
+const PC_MAX_DIA = 3;                 // 7.3: máximo 3 puntos de contacto por prospecto al día
+const PC_CONV_SEG = 60;               // 7.3: conversación = llamada de 60 s o más
+const PC_CONV_MES = 120;              // 7.3: candado del bono, 120 conversaciones al mes
+const PC_RESP_MS = 48*3600e3;         // una respuesta del prospecto cuenta como contacto efectivo si llega ≤48 h después del toque
+const PC_CURSO_MS = 7*86400e3;        // contacto efectivo de hace menos de 7 días sin cierre: sigue en juego
+const PC_CITA_ATRIB_MS = 72*3600e3;   // si el CRM no dice quién creó la cita: es del ejecutivo si tocó al prospecto en las 72 h previas
+const PC_CALIF_MS = 48*3600e3;        // 12.1: el asesor marca la cita calificada en 48 h; si no, se paga igual
+const PC_RECEP_MS = 60*60e3;          // 8.2: entrega con introducción por WhatsApp → primer contacto del asesor ≤60 min
+const PC_TOPE_CITAS = 29;             // 7.8: el tope de $9,000 solo aparece arriba de 29 citas en un mes sin venta
+const PC_META = { vel:1, puntos:100, entrega:0.40, asist:0.75, calif:0.80, datos:1 };   // 10.1
+const PC_N_MIN = 5;
+const PC_RX_ENTREGA = /^(contacto establecido|interes identificado|zoom|tour|cotizacion|seguimiento de opp|carta oferta|apartado|won)/;
+// 1.1 y 3.3: brokers y referidos no son de este puesto: no son lead nuevo ni suman puntos.
+// Prospección directa, alianzas y legal tampoco son lead nuevo de pauta, pero si el ejecutivo
+// los marca como parte de una lista de cartera, sí suman.
+const PC_RX_PIPE_AJENO = /referid|broker/;
+const PC_RX_PIPE_FUERA = /referid|broker|third party|legal|rp vip|prospeccion/;
+const PC_RX_PIPE_VENTAS = /seguimiento de ventas/;
+const PC_5DATOS = [["motivo","Motivo (vivir / invertir)"],["horizonte","Horizonte de decisión"],["rango","Rango de inversión"],["experiencia","Experiencia previa"],["atractivo","Qué le llamó la atención"]];   // 6.1
+const PC_CFG_DEF = { usuarios:[], activa:PC_ACTIVA_DEF, marcador:"", dias:[1,2,3,4,5], abre:"09:00", cierra:"19:00",
+  festivos:["2026-11-16","2026-12-25","2027-01-01","2027-02-01","2027-03-15"], smsCuenta:true,
+  campos5:{ motivo:"", horizonte:"", rango:"", experiencia:"", atractivo:"" }, lp:{ motivo:"", fecha:"" },
+  calif:{ campo:"", si:"cita calificada", no:"cita no calificada" }, cartera:{ vencida:"cartera vencida", fria:"cartera fria" } };
+const pcState = { built:false, cfg:null, cfgAuto:{}, cat:null, agg:null, syncing:false, tipo:"semana", clave:"", quien:"" };
+
+async function pcFn(body){
+  const r = await fetch("/.netlify/functions/pc-report", { method:"POST", headers:{"Content-Type":"application/json", "Authorization":"Bearer "+AUTH_TOKEN}, body:JSON.stringify(body) });
+  if(r.status===401){ handleAuthExpired(); throw new Error("sesión expirada"); }
+  const d = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.error ? d.error + (d.detail ? " — "+d.detail : "") : ("HTTP "+r.status));
+  return d;
+}
+
+/* --- Configuración ------------------------------------------------------------------- */
+function pcCfgDe(saved){
+  const s = saved && typeof saved === "object" ? saved : {};
+  const c = { ...PC_CFG_DEF, ...s };
+  ["campos5","lp","calif","cartera"].forEach(k=>{ c[k] = { ...PC_CFG_DEF[k], ...(s[k] && typeof s[k]==="object" ? s[k] : {}) }; });
+  if(!Array.isArray(c.usuarios)) c.usuarios = [];
+  if(!Array.isArray(c.dias) || !c.dias.length) c.dias = PC_CFG_DEF.dias.slice();
+  if(!Array.isArray(c.festivos)) c.festivos = PC_CFG_DEF.festivos.slice();
+  return c;
+}
+// Campos del CRM detectados por nombre cuando nadie los ha elegido. Solo llena los vacíos y
+// marca cuáles adivinó, para que la pantalla lo diga ("detectado") en vez de presentarlo como elegido.
+function pcAutoCampos(cfg, cat){
+  const F = (cat && cat.fields)||[], O = (cat && cat.oppFields)||[];
+  const find = (arr, pre, ...rxs)=>{ for(const re of rxs){ const f = arr.find(x=>re.test(x.name||"")||re.test(x.key||"")); if(f) return pre+f.id; } return ""; };
+  const c = JSON.parse(JSON.stringify(cfg)), auto = {};
+  const set = (g, k, v)=>{ if(!c[g][k] && v){ c[g][k] = v; auto[g+"."+k] = true; } };
+  set("campos5","motivo", find(F,"c:",/vivir.*invertir|invertir.*vivir/i, /motivo de (la )?compra|prop[oó]sito de (la )?compra|objetivo de (la )?(compra|inversi)/i));
+  set("campos5","horizonte", find(F,"c:",/^horizonte de inversi[oó]n$/i, /horizonte|investment timeline|tiempo.*decisi/i));
+  set("campos5","rango", find(F,"c:",/^budget range$/i, /rango de inversi|presupuesto|budget/i));
+  set("campos5","experiencia", find(F,"c:",/experiencia/i, /previous.?investment|propiedad en la zona|primera compra/i));
+  set("campos5","atractivo", find(F,"c:",/llam[oó] la atenci/i, /atractivo/i));
+  set("lp","motivo", find(O,"o:",/motivo.*(largo plazo|momento)/i) || find(F,"c:",/motivo.*(largo plazo|momento)/i));
+  set("lp","fecha", find(O,"o:",/fecha estimada|fecha de decisi/i) || find(F,"c:",/fecha estimada|fecha de decisi/i));
+  set("calif","campo", find(O,"o:",/cita calificada|calificaci[oó]n de (la )?cita/i) || find(F,"c:",/cita calificada|calificaci[oó]n de (la )?cita/i));
+  return { cfg:c, auto };
+}
+// Valor de un campo elegido en la configuración: "c:<id>" es del contacto, "o:<id>" de la oportunidad.
+function pcValor(ref, c, op){
+  const m = String(ref||"").match(/^([co]):(.+)$/); if(!m) return "";
+  const src = m[1]==="c" ? (c && c.cf) : (op && op.cf);
+  return String((src && src[m[2]]) || "").trim();
+}
+const pcTag = (tags, t)=> !!t && (Array.isArray(tags) ? tags : []).some(x=>slaNorm(x)===slaNorm(t));
+// Marca de cita calificada (12.1). La define Sistemas: una etiqueta o un campo (contacto u oportunidad).
+function pcCalif(c, op, cfg){
+  const K = cfg.calif||{}, tags = (c && c.tags)||[];
+  if(pcTag(tags, K.no)) return "no";
+  if(pcTag(tags, K.si)) return "si";
+  const v = slaNorm(pcValor(K.campo, c, op));
+  if(!v) return "";
+  if(/^(no\b|false|0$|descalificad)/.test(v)) return "no";
+  if(/^(si\b|sí|true|1$|yes|calificad)/.test(v)) return "si";
+  return "";
+}
+
+/* --- Calendario del puesto (hora de Tulum) ------------------------------------------- */
+const pcDia = (t)=> new Date(t - LQ_TZ_MS).toISOString().slice(0,10);
+const pcDiasEntre = (a, b)=> Math.round((Date.parse(b+"T12:00:00Z") - Date.parse(a+"T12:00:00Z"))/86400e3);
+const pcSegDe = (hhmm, def)=>{ const m = String(hhmm||"").match(/^(\d{1,2}):(\d{2})$/); return m ? (+m[1])*3600 + (+m[2])*60 : def; };
+// ¿El lead entró dentro de la ventana operativa? (3.1: "no hay excepciones por horario dentro de la ventana operativa")
+function pcVentana(t, cfg){
+  const loc = new Date(t - LQ_TZ_MS), dow = loc.getUTCDay();
+  const seg = loc.getUTCHours()*3600 + loc.getUTCMinutes()*60 + loc.getUTCSeconds();
+  if((cfg.festivos||[]).includes(pcDia(t))) return false;
+  return (cfg.dias||[]).includes(dow) && seg >= pcSegDe(cfg.abre, 9*3600) && seg < pcSegDe(cfg.cierra, 19*3600);
+}
+// Días hábiles de [ini, fin] (YYYY-MM-DD): los días de la ventana operativa, sin festivos.
+function pcDiasHabiles(ini, fin, cfg){
+  const out = []; if(!ini || !fin || ini > fin) return out;
+  const d = new Date(ini+"T12:00:00Z"), f = new Date(fin+"T12:00:00Z");
+  for(let i=0; d <= f && i < 400; i++){ const ymd = d.toISOString().slice(0,10);
+    if((cfg.dias||[]).includes(d.getUTCDay()) && !(cfg.festivos||[]).includes(ymd)) out.push(ymd);
+    d.setUTCDate(d.getUTCDate()+1); }
+  return out;
+}
+function pcMesBounds(ym){
+  const m = String(ym||"").match(/^(\d{4})-(\d{2})$/); if(!m) return null;
+  const ult = new Date(Date.UTC(+m[1], +m[2], 0)).getUTCDate();
+  return { startISO:`${ym}-01T00:00:00${LQ_TZ}`, endISO:`${ym}-${String(ult).padStart(2,"0")}T23:59:59.999${LQ_TZ}`, startYMD:`${ym}-01`, endYMD:`${ym}-${String(ult).padStart(2,"0")}` };
+}
+function pcPeriodo(tipo, clave){
+  const b = tipo==="mes" ? pcMesBounds(clave) : lqWeekBounds(clave);
+  return b ? { tipo, clave, ini:Date.parse(b.startISO), fin:Date.parse(b.endISO), iniYMD:b.startYMD, finYMD:b.endYMD } : null;
+}
+
+/* --- Puntos de contacto de un prospecto en un día (7.3) --------------------------------
+   Doble llamada = dos marcaciones seguidas (≤10 min), conectadas o no: 1 punto. Una llamada
+   sola no completa el toque, salvo que la hayan contestado (no hay segunda que marcar). Las
+   llamadas que la línea no completó (failed, busy, canceled) no son marcación del ejecutivo.
+   Mensaje por WhatsApp, Instagram, Facebook (y SMS, si la configuración lo cuenta) y correo
+   propio: 1 punto; las ráfagas del mismo canal en ≤10 min cuentan una vez. Tope: 3 al día. */
+function pcPuntosDia(evs){
+  const r = { dobles:0, cont:0, solas:0, linea:0, mens:0, correos:0, bruto:0, pts:0 };
+  const calls = evs.filter(e=>e[1]==="call"), val = calls.filter(e=>e[4]!=="linea");
+  r.linea = calls.length - val.length;
+  for(let i=0; i<val.length; ){
+    if(i+1 < val.length && val[i+1][0]-val[i][0] <= PC_DOBLE_MS){ r.dobles++; i+=2; }
+    else { if(val[i][4]==="ok") r.cont++; else r.solas++; i++; }
+  }
+  const ult = {};
+  evs.filter(e=>e[1]!=="call").forEach(e=>{
+    const k = e[1], prev = ult[k]; ult[k] = e[0];
+    if(prev!=null && e[0]-prev <= PC_RAFAGA_MS) return;
+    if(k==="email") r.correos++; else r.mens++;
+  });
+  r.bruto = r.dobles + r.cont + r.mens + r.correos;
+  r.pts = Math.min(PC_MAX_DIA, r.bruto);
+  return r;
+}
+
+// Segmento de cartera (7.1/7.2). La lista la arma Sistemas; si la marca con etiqueta, manda la
+// etiqueta. Si no, la etapa que tenía el prospecto cuando el ejecutivo lo tocó: solo se conoce
+// si la oportunidad no cambió de etapa después (si cambió —p.ej. ya se entregó— queda "sin dato").
+function pcSegmento(c, o, t, cfg){
+  const tags = (c && c.tags)||[], K = cfg.cartera||{};
+  if(pcTag(tags, K.vencida)) return "vencida";
+  if(pcTag(tags, K.fria)) return "fria";
+  if(!o || !o.op) return "otra";
+  if(o.sc && o.sc > t) return "sindato";
+  const e = slaNorm(o.etapa);
+  if(/^(rescate|largo plazo|cotizacion)|no show/.test(e)) return "vencida";
+  if(/^sin respuesta/.test(e)) return "fria";
+  return "otra";
+}
+// Largo plazo bien cerrado (10.3): motivo, fecha estimada y tarea de recontacto programada.
+function pcLpCheck(c, o, cfg){
+  const lp = cfg.lp||{};
+  if(!lp.motivo || !lp.fecha) return { medible:false, ok:false, falta:"campos de motivo y fecha estimada sin configurar" };
+  const tk = c && c.tk;
+  if(!tk) return { medible:false, ok:false, falta:"no se pudieron leer sus tareas" };
+  const falta = [];
+  if(!pcValor(lp.motivo, c, o && o.op)) falta.push("motivo");
+  if(!pcValor(lp.fecha, c, o && o.op)) falta.push("fecha estimada");
+  if(!(tk.fut > 0)) falta.push("tarea de recontacto");
+  return { medible:true, ok:!falta.length, falta:falta.join(", ") };
+}
+
+/* --- El modelo ------------------------------------------------------------------------
+   D = { per, epc:[userId], ensayo, users, pipelines, leads:[contacto], cts:{id:contacto},
+         ev:{contactId:[[t,canal,origen,userId,desenlace,duración]]}, evErr:{id:true},
+         opps:{contactId:[opp]}, citas:[cita], diag, fallos }
+   Evento: origen "m" acción manual de un usuario, "a" automática (el marcador cae aquí aunque
+   traiga el usuario del ejecutivo), "i" entrante del prospecto. */
+function pcBuild(D, cfg, now){
+  now = now || Date.now();
+  const epc = new Set(D.epc||[]), users = D.users||{}, per = D.per;
+  const activaT = Date.parse((cfg.activa||PC_ACTIVA_DEF)+"T00:00:00"+LQ_TZ);
+  // Periodo medido: desde el inicio del puesto (salvo en ensayo) y hasta ahora.
+  const ini = D.ensayo ? per.ini : Math.max(per.ini, activaT), fin = Math.min(per.fin, now);
+  const enPer = (t)=> t >= ini && t <= fin;
+  const stageName = {}, pipeName = {};
+  (D.pipelines||[]).forEach(p=>{ pipeName[p.id] = p.name||""; (p.stages||[]).forEach(s=>{ stageName[s.id] = s.name||""; }); });
+  const info = {};
+  Object.values(D.cts||{}).forEach(c=>{ if(c && c.id) info[c.id] = c; });
+  (D.leads||[]).forEach(c=>{ info[c.id] = { ...(info[c.id]||{}), ...c }; });
+  const altaDe = (ct)=> info[ct] ? (Date.parse(info[ct].c)||null) : null;
+  // Oportunidad principal: la de Seguimiento de ventas movida más recientemente.
+  const oppDe = {};
+  Object.entries(D.opps||{}).forEach(([ct, arr])=>{
+    let best = null, bestV = false; const pipes = new Set();
+    (arr||[]).forEach(o=>{ const pn = slaNorm(pipeName[o.p]||""); if(pn) pipes.add(pn);
+      const t = Date.parse(o.scE||o.sc||o.c)||0, v = PC_RX_PIPE_VENTAS.test(pn);
+      if(!best || (v && !bestV) || (v===bestV && t > best._t)){ best = { ...o, _t:t }; bestV = v; } });
+    oppDe[ct] = { op:best, etapa: best ? (stageName[best.s]||"") : "", sc: best ? (Date.parse(best.scE||best.sc)||null) : null,
+      fuera:[...pipes].some(p=>PC_RX_PIPE_FUERA.test(p)), ajeno:[...pipes].some(p=>PC_RX_PIPE_AJENO.test(p)) };
+  });
+  const esBroker = (ct)=> pcTag((info[ct]||{}).tags, "broker");
+  const fueraDe = (ct)=> !!(oppDe[ct] && oppDe[ct].fuera) || esBroker(ct);   // fuera del universo de lead nuevo
+  const ajenoDe = (ct)=> !!(oppDe[ct] && oppDe[ct].ajeno) || esBroker(ct);   // no es trabajo de este puesto
+  const esPrueba = (ct)=> RX_REGISTRO_PRUEBA.test(String((info[ct]||{}).n||""));
+  const ev = D.ev||{}, evErr = D.evErr||{};
+  const esEpc = (e)=> epc.has(e[3]);
+  const llamadaEpc = (e)=> e[1]==="call" && e[2]!=="i" && esEpc(e);
+  const msgEpc = (e)=> e[1]!=="call" && e[2]==="m" && esEpc(e) && (e[1]!=="sms" || cfg.smsCuenta!==false);
+  const toqueEpc = (e)=> llamadaEpc(e) || msgEpc(e);
+  const nombre = (ct)=> (info[ct] && info[ct].n) || "(sin nombre)";
+  const quien = (u)=> u ? (users[u] || "(usuario sin nombre)") : "(sin asesor)";
+
+  // 1) Universo de lead nuevo (1.1): pauta digital y orgánica del periodo; sin referidos ni brokers.
+  const excl = { fuera:0, prueba:0, ajenos:0 };
+  const U = (D.leads||[]).filter(c=>{
+    const t = Date.parse(c.c); if(!(t >= ini && t <= fin)) return false;
+    if(esPrueba(c.id)){ excl.prueba++; return false; }
+    if(fueraDe(c.id)){ excl.fuera++; return false; }
+    // Ensayo: solo los leads de ese usuario (dueño o que él tocó); el puesto real atiende todos.
+    if(D.ensayo && !epc.has(c.u) && !(ev[c.id]||[]).some(esEpc)){ excl.ajenos++; return false; }
+    return true;
+  });
+
+  // 2) Velocidad de primer contacto (3.1): primera llamada del puesto —del ejecutivo o del
+  //    marcador automático— desde el registro. Solo leads que entraron en la ventana operativa;
+  //    solo se evalúa desde que el marcador opera (antes es informativa).
+  const marcT = cfg.marcador ? Date.parse(cfg.marcador+"T00:00:00"+LQ_TZ) : null;
+  const vel = U.map(c=>{
+    const t0 = Date.parse(c.c), evs = ev[c.id]||[];
+    const calls = evs.filter(e=>e[1]==="call" && e[2]!=="i" && e[0] >= t0 - 5000);
+    const puesto = calls.filter(e=>esEpc(e) || e[2]==="a");
+    const p1 = puesto[0] || null, p2 = puesto[1] || null;
+    const otro = calls.find(e=>!puesto.includes(e) && (!p1 || e[0] < p1[0]));
+    return { id:c.id, n:c.n||"(sin nombre)", t0, u:c.u||"", err:!!evErr[c.id], vent:pcVentana(t0, cfg), eval:!!(marcT && t0 >= marcT),
+      dt: p1 ? Math.max(0, p1[0]-t0) : null,
+      org: p1 ? (esEpc(p1) ? (p1[2]==="a" ? "marcador" : "ejecutivo") : "automática") : "",
+      doble: !!(p1 && (p1[4]==="ok" || (p2 && p2[0]-p1[0] <= PC_DOBLE_MS))),
+      otro: otro ? quien(otro[3]) : "" };
+  });
+
+  // 3) Puntos de contacto por día hábil (7.3) y conversaciones de ≥60 s.
+  const dias = {}, ptsCt = {}, primerToque = {};
+  let fueraPts = 0, conv60 = 0, convSinDur = 0;
+  const hoy = pcDia(now), cierreHoy = pcSegDe(cfg.cierra, 19*3600);
+  const locNow = new Date(now - LQ_TZ_MS), segNow = locNow.getUTCHours()*3600 + locNow.getUTCMinutes()*60;
+  const diaCerrado = (d)=> d < hoy || (d === hoy && segNow >= cierreHoy);
+  const frenteDe = (ct, t)=>{ const a = altaDe(ct); return a && t >= a - 60e3 && t - a <= 8*86400e3 ? "nuevo" : "cartera"; };
+  const nuevoDia = ()=>({ pts:0, pros:0, dobles:0, cont:0, solas:0, linea:0, mens:0, correos:0, tope:0, nuevo:0, cartera:0, conv:0 });
+  Object.entries(ev).forEach(([ct, evs])=>{
+    // Conversaciones: llamada del ejecutivo (saliente o entrante que él atendió) de ≥60 s.
+    evs.forEach(e=>{ if(e[1]==="call" && esEpc(e) && enPer(e[0])){
+      if((e[5]||0) >= PC_CONV_SEG){ conv60++; (dias[pcDia(e[0])] = dias[pcDia(e[0])] || nuevoDia()).conv++; }
+      else if(e[5]==null && e[4]==="ok") convSinDur++; } });
+    const mios = evs.filter(e=>toqueEpc(e) && enPer(e[0]));
+    if(!mios.length) return;
+    if(ajenoDe(ct) || esPrueba(ct)){ fueraPts++; return; }
+    primerToque[ct] = mios[0][0];
+    const porDia = {}; mios.forEach(e=>{ (porDia[pcDia(e[0])] = porDia[pcDia(e[0])] || []).push(e); });
+    Object.entries(porDia).forEach(([d, arr])=>{
+      const r = pcPuntosDia(arr), X = dias[d] = dias[d] || nuevoDia();
+      X.pts += r.pts; X.pros++; X.dobles += r.dobles; X.cont += r.cont; X.solas += r.solas; X.linea += r.linea;
+      X.mens += r.mens; X.correos += r.correos; X.tope += r.bruto - r.pts; X[frenteDe(ct, arr[0][0])] += r.pts;
+      ptsCt[ct] = (ptsCt[ct]||0) + r.pts;
+    });
+  });
+  const habiles = pcDiasHabiles(pcDia(ini), pcDia(fin), cfg).filter(diaCerrado);
+  const ptsCerrados = Object.entries(dias).filter(([d])=>diaCerrado(d)).reduce((a,[,x])=>a+x.pts, 0);
+  const mesDe = pcMesBounds(pcDia(ini).slice(0,7));
+  const habMes = mesDe ? pcDiasHabiles(mesDe.startYMD, mesDe.endYMD, cfg).length : 22;
+  const habPer = pcDiasHabiles(pcDia(ini), pcDia(fin), cfg).length;
+  const metaConv = per.tipo==="mes" ? PC_CONV_MES : Math.round(PC_CONV_MES * habPer / Math.max(1, habMes));
+
+  // 4) Contacto efectivo del ejecutivo: llamada suya de ≥60 s, o respuesta del prospecto en las
+  //    48 h siguientes a un toque suyo (sin que otro usuario le haya escrito en medio).
+  const efect = {};
+  Object.entries(ev).forEach(([ct, evs])=>{
+    let ult = null;
+    for(const e of evs){
+      if(toqueEpc(e)) ult = e[0];
+      else if(e[2]==="m" && !esEpc(e)) ult = null;
+      if(!enPer(e[0])) continue;
+      const larga = e[1]==="call" && esEpc(e) && (e[5]||0) >= PC_CONV_SEG;
+      const resp = e[2]==="i" && e[1]!=="call" && ult!=null && e[0]-ult <= PC_RESP_MS;
+      if(larga || resp){ efect[ct] = e[0]; break; }
+    }
+  });
+
+  // 5) Conversión a entrega (10.1, 10.3): la entrega es la tarjeta en Contacto establecido (o
+  //    más adelante) DESPUÉS del contacto, asignada a un asesor. Largo plazo bien cerrado sale
+  //    del denominador; mal cerrado cuenta como fallo.
+  const coh = Object.entries(efect).filter(([ct])=>!ajenoDe(ct) && !esPrueba(ct)).map(([ct, fe])=>{
+    const o = oppDe[ct] || {}, et = slaNorm(o.etapa||""), asesor = (o.op && o.op.u) || (info[ct]||{}).u || "";
+    let res, falta = "";
+    if(PC_RX_ENTREGA.test(et)){
+      if(o.sc && o.sc < fe - 3600e3) res = "previo";
+      // En ensayo el usuario es dueño de sus propios leads: no se le exige pasarlos a otro asesor.
+      else if(!D.ensayo && (!asesor || epc.has(asesor))) res = "sinAsesor";
+      else res = "entregado";
+    } else if(/^largo plazo/.test(et)){
+      const k = pcLpCheck(info[ct], o, cfg); falta = k.falta;
+      res = k.ok ? "lpOk" : k.medible ? "lpMal" : "lpNoVer";
+    } else if(/^descalificad/.test(et)) res = "descarte";
+    else res = now - fe < PC_CURSO_MS ? "curso" : "sinCierre";
+    return { id:ct, n:nombre(ct), fe, etapa:o.etapa||"(sin oportunidad)", res, asesor, falta, frente:frenteDe(ct, fe) };
+  });
+  const PC_DEN = ["entregado","sinAsesor","lpMal","descarte","sinCierre"];
+
+  // 6) Sesiones (10.1): agendadas por el ejecutivo. Si el CRM trae quién creó la cita, manda
+  //    eso; si no, es suya cuando él tocó al prospecto en las 72 h previas al agendamiento.
+  const tocoAntes = (ct, t)=> (ev[ct]||[]).some(e=>toqueEpc(e) && e[0] <= t && t - e[0] <= PC_CITA_ATRIB_MS);
+  const citas = (D.citas||[]).filter(c=>c.ct && !ajenoDe(c.ct));
+  const cbVisto = citas.some(c=>c.cb);
+  const mias = citas.filter(c=> c.cb ? epc.has(c.cb) : (!!c.ag && tocoAntes(c.ct, c.ag))).map(c=>({ ...c, via: c.cb ? "creador" : "toque" }));
+  const agendadas = mias.filter(c=>c.ag && enPer(c.ag));
+  const porCt = {}; mias.forEach(c=>{ (porCt[c.ct] = porCt[c.ct] || []).push(c); });
+  const ses = Object.entries(porCt).filter(([,arr])=>arr.some(c=>enPer(c.t) && c.t <= now)).map(([ct, arr])=>{
+    const o = oppDe[ct] || {};
+    const st = arr.map(c=>({ ...c, a: slaAsistencia(c.st, c.t, o.etapa, now) })).sort((a,b)=>a.t-b.t);
+    const pas = st.filter(c=>c.t <= now), fut = st.some(c=>c.t > now && c.a.est!=="cancelada");
+    const asis = pas.filter(c=>c.a.est==="asistio");
+    const vivas = pas.filter(c=>c.a.est!=="cancelada"), ultima = vivas[vivas.length-1];
+    const est = asis.length ? "asistio" : fut ? "reagendada" : ultima ? ultima.a.est : "cancelada";
+    const tRef = asis.length ? asis[asis.length-1].t : (ultima || pas[pas.length-1]).t;
+    let calif = "";
+    if(est==="asistio"){ const k = pcCalif(info[ct], o.op, cfg); calif = k || (now - tRef >= PC_CALIF_MS ? "sinMarca" : "pendiente"); }
+    return { id:ct, n:nombre(ct), est, t:tRef, via:st[0].via, asesor:(st.find(c=>c.u)||{}).u || "", calif,
+      viaAs: asis.length ? asis[asis.length-1].a.via : (ultima ? ultima.a.via : "") };
+  });
+  // Registro de los cinco datos (6.1): sobre los prospectos con sesión agendada en el periodo.
+  const refs5 = PC_5DATOS.map(([k])=>(cfg.campos5||{})[k]||"");
+  const datos = [...new Set(agendadas.map(c=>c.ct))].map(ct=>{
+    const tiene = refs5.map(r=> r ? !!pcValor(r, info[ct], (oppDe[ct]||{}).op) : null);
+    return { id:ct, n:nombre(ct), tiene, completo: tiene.every(x=>x===true) };
+  });
+
+  // 7) Cadencia del lead nuevo (3.4): 6 toques en 7 días para el lead en silencio. Día 0 admite
+  //    dos (primer contacto y reintento a las 2 h, separados ≥90 min); después, uno por día.
+  const cad = U.map(c=>{
+    const t0 = Date.parse(c.c), lim = t0 + 7*86400e3 + 12*3600e3, d0 = pcDia(t0);
+    const base = { id:c.id, n:c.n||"(sin nombre)", t0 };
+    if(now < lim) return { ...base, est:"curso" };
+    const w = (ev[c.id]||[]).filter(e=>e[0] >= t0 && e[0] <= lim);
+    const conv = w.some(e=>(e[2]==="i" && e[1]!=="call") || (e[1]==="call" && (e[5]||0) >= PC_CONV_SEG));
+    const mios = w.filter(e=>toqueEpc(e) || (e[1]==="call" && e[2]==="a"));
+    const porDia = {}; mios.forEach(e=>{ const k = pcDiasEntre(d0, pcDia(e[0])); (porDia[k] = porDia[k] || []).push(e); });
+    let toques = 0, deLlamada = 0, conDoble = 0;
+    const evalToque = (g)=>{ const ll = g.filter(e=>e[1]==="call" && e[4]!=="linea"); if(!ll.length) return;
+      deLlamada++; if(ll.some(e=>e[4]==="ok") || ll.some((e,i)=>i>0 && e[0]-ll[i-1][0] <= PC_DOBLE_MS)) conDoble++; };
+    Object.entries(porDia).forEach(([k, arr])=>{
+      if(+k===0){
+        const grupos = []; arr.forEach(e=>{ const g = grupos[grupos.length-1]; if(g && e[0]-g[g.length-1][0] < 90*60e3) g.push(e); else grupos.push([e]); });
+        const g1 = grupos[0], g2 = grupos.slice(1).flat();
+        toques++; evalToque(g1); if(g2.length){ toques++; evalToque(g2); }
+      } else { toques++; evalToque(arr); }
+    });
+    const breakUp = mios.some(e=>e[1]!=="call" && pcDiasEntre(d0, pcDia(e[0])) >= 6);
+    const etapa = (oppDe[c.id]||{}).etapa || "";
+    return { ...base, est: conv ? "conv" : "silencio", toques, deLlamada, conDoble, breakUp, sinResp:/^sin respuesta/.test(slaNorm(etapa)), etapa };
+  });
+
+  // 8) Cartera (cap. 7): prospectos que el ejecutivo tocó y que no son lead nuevo.
+  const cart = {};
+  const sesAg = new Set(agendadas.map(c=>c.ct));
+  Object.entries(ptsCt).forEach(([ct, p])=>{
+    const t = primerToque[ct]; if(frenteDe(ct, t) !== "cartera") return;
+    const seg = pcSegmento(info[ct], oppDe[ct], t, cfg);
+    const X = cart[seg] = cart[seg] || { pros:0, pts:0, efect:0, entreg:0, ses:0 };
+    X.pros++; X.pts += p;
+    const r = coh.find(x=>x.id===ct);
+    if(r){ X.efect++; if(r.res==="entregado") X.entreg++; }
+    if(sesAg.has(ct)) X.ses++;
+  });
+
+  // 9) Compromiso de recepción del asesor (8.2).
+  const recep = coh.filter(r=>r.res==="entregado" && !epc.has(r.asesor)).map(r=>{
+    const o = oppDe[r.id] || {}, et = slaNorm(o.etapa||"");
+    const exacta = /^contacto establecido/.test(et) && !!o.sc && o.sc >= r.fe - 3600e3;
+    const tE = exacta ? o.sc : r.fe, evs = ev[r.id]||[];
+    const pri = evs.find(e=>e[0] >= tE && e[2]==="m" && e[3]===r.asesor);
+    const dt = pri ? pri[0]-tE : null;
+    const ag = agendadas.filter(c=>c.ct===r.id).sort((a,b)=>a.ag-b.ag)[0];
+    let conf = "";
+    if(ag){ const d = pcDia(ag.ag); conf = evs.some(e=>e[0] >= ag.ag && e[2]==="m" && e[3]===r.asesor && pcDia(e[0])===d) ? "si" : pcDia(now)===d ? "pend" : "no"; }
+    return { id:r.id, n:r.n, asesor:r.asesor, tE, exacta, dt, ses:!!ag, conf,
+      est: pri ? (dt <= PC_RECEP_MS ? "ok" : "tarde") : (now - tE < PC_RECEP_MS ? "pend" : "sin") };
+  });
+
+  // 10) Diagnóstico: llamadas automáticas sin usuario en leads nuevos (si el marcador las
+  //     registra así, no suman puntos: el CRM no dice quién atendió), fallas de línea.
+  let autoSinU = 0, autoConU = 0, lineaEpc = 0;
+  U.forEach(c=>(ev[c.id]||[]).forEach(e=>{ if(e[1]==="call" && e[2]==="a"){ if(esEpc(e)) autoConU++; else autoSinU++; } }));
+  Object.values(ev).forEach(evs=>evs.forEach(e=>{ if(llamadaEpc(e) && e[4]==="linea" && enPer(e[0])) lineaEpc++; }));
+
+  return { v:1, ts:now, ensayo:!!D.ensayo, epc:[...epc], epcNom:[...epc].map(quien),
+    per:{ tipo:per.tipo, clave:per.clave, iniYMD:pcDia(ini), finYMD:pcDia(fin), recortado: ini > per.ini, enCurso: per.fin > now },
+    cfg:{ activa:cfg.activa, marcador:cfg.marcador||"", dias:cfg.dias, abre:cfg.abre, cierra:cfg.cierra, smsCuenta:cfg.smsCuenta!==false,
+      campos5:refs5.map(Boolean), lp:!!((cfg.lp||{}).motivo && (cfg.lp||{}).fecha), calif:!!((cfg.calif||{}).campo || (cfg.calif||{}).si) },
+    users, excl, nU:U.length, vel, dias, habiles, ptsCerrados, ptsHoy:(dias[hoy]&&!diaCerrado(hoy)) ? dias[hoy].pts : 0,
+    conv60, convSinDur, metaConv, fueraPts, coh, PC_DEN, ses, datos, cad, cart, recep,
+    citas:{ agendadas:agendadas.length, cbVisto, porToque: mias.filter(c=>c.via==="toque").length, mias: mias.length },
+    diag:{ ...(D.diag||{}), autoSinU, autoConU, lineaEpc, evErr:Object.keys(evErr).length },
+    fallos: D.fallos||[] };
+}
+
+/* --- Pantalla -------------------------------------------------------------------------- */
+const pcPct = (n, d)=> d ? Math.round(n*100/d)+"%" : "—";
+const pcHora = (t)=> t ? new Date(t - LQ_TZ_MS).toISOString().slice(5,16).replace("T"," ").replace(/^(\d\d)-(\d\d)/, "$2/$1") : "—";
+const pcSeg = (ms)=> ms==null ? "—" : ms < 90e3 ? Math.round(ms/1000)+" s" : fmtDur(ms);
+const pcFechaTxt = (ymd)=> slaFechaCorta(ymd);
+// Tarjeta de indicador con semáforo: verde si cumple la meta, rojo si no; gris si es
+// informativo o la muestra es chica (menos de PC_N_MIN casos).
+function pcKpi({ v, l, s, n, ok, info }){
+  const cls = info || (n!=null && n < PC_N_MIN) ? "sla-chica" : ok===true ? "lq-kpi-verde" : ok===false ? "lq-kpi-rojo" : "";
+  return `<div class="crm-kpi ${cls}"><div class="k-val">${v}</div><div class="k-lbl">${l}</div>${s?`<div class="k-sub">${s}</div>`:""}</div>`;
+}
+let pcDetN = 0;
+const pcDet = (titulo, html)=>{ const id = "pc-det-" + (pcDetN++);
+  return `<button type="button" class="sla-det-btn" data-pc-det="${id}">${titulo} ▸</button><div class="pc-det" id="${id}" hidden>${html}</div>`; };
+const pcTabla = (cab, filas, vacio)=> `<div class="table-scroll mb-sec"><table class="cons pc-tabla"><tr>${cab.map((c,i)=>`<th${i===0?' class="lft"':""}>${c}</th>`).join("")}</tr>${filas.length ? filas.join("") : `<tr><td colspan="${cab.length}" class="lft txt-nota">${vacio||"Sin casos en el periodo."}</td></tr>`}</table></div>`;
+const PC_RES_TXT = { entregado:"Entregado a asesor", sinAsesor:"En etapa de entrega pero sin asesor asignado", lpOk:"Largo plazo bien cerrado", lpMal:"Largo plazo incompleto",
+  lpNoVer:"Largo plazo sin verificar", descarte:"Descalificado", sinCierre:"Sin cierre", curso:"En curso (<7 días)", previo:"Ya estaba con asesor (reconfirmación)" };
+const PC_SES_TXT = { asistio:"Se realizó", noshow:"No se presentó", cancelada:"Cancelada", reagendada:"Reagendada (pendiente)", sinreg:"Sin asistencia registrada" };
+const PC_SEG_TXT = { vencida:"Cartera vencida", fria:"Cartera fría", otra:"Otra base (Nurturing, sin oportunidad u otra etapa)", sindato:"Sin dato de segmento (cambió de etapa después)" };
+
+// 10.2: asistencia y calificación se leen como par.
+function pcMatriz(as, ca){
+  const L = [["Desempeño correcto. Es el objetivo","verde"],["Está agendando de más y calificando de menos. Se corrige de inmediato","amarillo"],
+    ["Califica bien pero no logra compromiso real. Entra a coaching de cierre de agendamiento","amarillo"],["Problema de fondo. Evaluación formal de continuidad","rojo"]];
+  const k = as==null || ca==null ? -1 : as >= PC_META.asist ? (ca >= PC_META.calif ? 0 : 1) : (ca >= PC_META.calif ? 2 : 3);
+  const celda = (i, t)=> `<td class="pc-mx ${k===i ? "pc-mx-on pc-mx-"+L[i][1] : ""}"><b>${t}</b><div>${L[i][0]}</div></td>`;
+  return `<div class="table-scroll mb-sec"><table class="cons pc-matriz"><tr><th class="lft"></th><th>Calificación ≥80%</th><th>Calificación &lt;80%</th></tr>
+    <tr><td class="lft"><b>Asistencia ≥75%</b></td>${celda(0,"Correcto")}${celda(1,"Agenda de más")}</tr>
+    <tr><td class="lft"><b>Asistencia &lt;75%</b></td>${celda(2,"Falta compromiso")}${celda(3,"Problema de fondo")}</tr></table></div>
+    <p class="hint" style="margin-top:-6px">${k<0 ? `Sin cuadrante todavía: hacen falta al menos ${PC_N_MIN} prospectos con asistencia definida y ${PC_N_MIN} sesiones con marca de calificación; con menos, cualquier porcentaje es una o dos citas.` : `Lectura del periodo: <b>${L[k][0]}</b>.`} Veintidós citas al 90% de calificación son preferibles a treinta al 55% (10.2).</p>`;
+}
+
+function pcRender(){
+  const host = document.getElementById("pc-content"); if(!host) return;
+  const A = pcState.agg, cfg = pcState.cfg || pcCfgDe(null);
+  const last = document.getElementById("pc-last"); if(last) last.textContent = A ? crmAgo(A.ts) : "—";
+  let html = pcAvisos(cfg);
+  if(!A){ host.innerHTML = html + `<div class="empty-rep">Elige el periodo y pulsa <b>Generar reporte</b>: recorre los leads del periodo, las conversaciones con actividad manual y las citas (1–5 minutos según el periodo).</div>` + pcCfgHtml(); pcEnlazar(); return; }
+  pcDetN = 0;
+  const name = (u)=> (A.users||{})[u] || (u ? "(usuario sin nombre)" : "(sin asesor)");
+  html += bannerIncompleto(A.fallos, "Generar reporte");
+  html += `<p class="hint" style="margin-top:0"><b>${A.ensayo ? "Ensayo" : "Ejecutivo"}:</b> ${escAttr(A.epcNom.join(", ")||"—")} · <b>Periodo medido:</b> ${pcFechaTxt(A.per.iniYMD)} → ${pcFechaTxt(A.per.finYMD)}${A.per.enCurso?" (en curso)":""}${A.per.recortado?` · empieza el ${pcFechaTxt(A.cfg.activa)}, día de inicio del puesto`:""}.
+    ${A.ensayo ? "Ensayo con un usuario actual: mide sus leads y su actividad con las reglas del puesto, para validar la medición antes del arranque. No es una evaluación: como el usuario es dueño de sus propios leads, la entrega cuenta por etapa sin exigir que pase a otro asesor, y la recepción del asesor no aplica." : ""}</p>`;
+
+  // --- 10.1 Indicadores del puesto
+  const V = A.vel.filter(v=>v.vent && !v.err), Vev = V.filter(v=>v.eval), Vb = Vev.length ? Vev : V;
+  const v60 = Vb.filter(v=>v.dt!=null && v.dt<=60e3).length;
+  const velInfo = !A.cfg.marcador || !Vev.length;
+  const nH = A.habiles.length, prom = nH ? A.ptsCerrados/nH : null;
+  const den = A.coh.filter(r=>A.PC_DEN.includes(r.res)), ent = den.filter(r=>r.res==="entregado").length;
+  const S = A.ses, as = S.filter(s=>s.est==="asistio").length, dAs = S.filter(s=>["asistio","noshow","cancelada"].includes(s.est)).length;
+  const cSi = S.filter(s=>s.calif==="si").length, cNo = S.filter(s=>s.calif==="no").length;
+  const conf5 = A.cfg.campos5.filter(Boolean).length, d5 = A.datos.filter(d=>d.completo).length;
+  html += `<h3 class="diag-h">Indicadores del puesto <span class="lq-sub">manual 10.1</span></h3><div class="crm-kpis">
+    ${pcKpi({ v:pcPct(v60, Vb.length), l:"Velocidad de primer contacto · meta 100% ≤60 s",
+      s:`${v60} de ${Vb.length} leads en la ventana operativa marcados en ≤60 s${velInfo ? " · <b>informativo</b>: no se evalúa mientras el marcador automático no opere (3.1)" : ""}`, n:Vb.length, ok:Vb.length ? v60===Vb.length : null, info:velInfo })}
+    ${pcKpi({ v: prom==null ? "—" : (Math.round(prom*10)/10).toLocaleString(), l:"Puntos de contacto por día hábil · meta ≥100",
+      s:`${A.ptsCerrados.toLocaleString()} puntos en ${nH} día${nH===1?"":"s"} hábil${nH===1?"":"es"} cerrado${nH===1?"":"s"}${A.ptsHoy?` · hoy van ${A.ptsHoy} (no cuenta hasta cerrar la ventana)`:""}`, info: !nH, ok: prom==null ? null : prom >= PC_META.puntos })}
+    ${pcKpi({ v:A.conv60.toLocaleString(), l:`Conversaciones de ≥60 s · candado del bono: ${PC_CONV_MES} al mes`,
+      s:`${A.per.tipo==="mes" ? `meta del mes: ${PC_CONV_MES}` : `ritmo para ${PC_CONV_MES} al mes: ${A.metaConv} en este periodo`}${A.convSinDur?` · ${A.convSinDur} llamada${A.convSinDur===1?"":"s"} conectada${A.convSinDur===1?"":"s"} sin duración en el CRM (no se pueden contar)`:""}${A.per.enCurso?" · periodo en curso: sin semáforo hasta que cierre":""}`, ok: A.per.enCurso ? null : A.conv60 >= A.metaConv })}
+    ${pcKpi({ v:pcPct(ent, den.length), l:"Conversión a entrega · meta ≥40%", s:`${ent} de ${den.length} contactos efectivos entregados a un asesor · Largo plazo bien cerrado no cuenta (10.3)`, n:den.length, ok: den.length ? ent/den.length >= PC_META.entrega : null })}
+    ${pcKpi({ v:pcPct(as, dAs), l:"Tasa de asistencia · meta ≥75%", s:`${as} de ${dAs} prospectos con sesión del periodo se presentaron${S.filter(s=>s.est==="sinreg").length?` · ${S.filter(s=>s.est==="sinreg").length} sin asistencia registrada`:""}`, n:dAs, ok: dAs ? as/dAs >= PC_META.asist : null })}
+    ${pcKpi({ v: A.cfg.calif ? pcPct(cSi, cSi+cNo) : "—", l:"Tasa de calificación · meta ≥80%", s: A.cfg.calif ? `${cSi} de ${cSi+cNo} sesiones realizadas marcadas como calificadas${S.filter(s=>s.calif==="sinMarca").length?` · ${S.filter(s=>s.calif==="sinMarca").length} sin marca después de 48 h (se pagan igual)`:""}` : "Falta definir en Configuración cómo marca el asesor la cita calificada (Sistemas, 12.1)", n:cSi+cNo, ok:(cSi+cNo) ? cSi/(cSi+cNo) >= PC_META.calif : null, info:!A.cfg.calif })}
+    ${pcKpi({ v: conf5===5 ? pcPct(d5, A.datos.length) : "—", l:"Registro de los cinco datos · meta 100%", s: conf5===5 ? `${d5} de ${A.datos.length} prospectos con sesión agendada tienen los cinco datos` : `Faltan ${5-conf5} de los 5 campos en Configuración`, n:A.datos.length, ok: A.datos.length && conf5===5 ? d5===A.datos.length : null, info:conf5!==5 })}
+  </div>`;
+
+  // --- 10.2 Matriz
+  html += `<h3 class="diag-h">Asistencia y calificación, como par <span class="lq-sub">manual 10.2</span></h3>`
+    + pcMatriz(dAs >= PC_N_MIN ? as/dAs : null, (cSi+cNo) >= PC_N_MIN ? cSi/(cSi+cNo) : null);
+
+  // --- Puntos de contacto por día
+  {
+    const D = Object.keys(A.dias).sort();
+    const filas = D.map(d=>{ const x = A.dias[d], hab = A.habiles.includes(d);
+      return `<tr><td class="lft">${pcFechaTxt(d)}${hab ? "" : ` <span class="lq-sub">${d===pcDia(A.ts) ? "en curso" : "no hábil"}</span>`}</td><td class="val">${x.pts}</td><td>${x.pros}</td>
+        <td>${x.dobles}</td><td>${x.cont}</td><td>${x.mens}</td><td>${x.correos}</td><td>${x.conv}</td>
+        <td>${x.nuevo}</td><td>${x.cartera}</td><td class="lq-sub" title="Llamadas solas sin contestar · llamadas con falla de línea · puntos por encima del tope de 3 por prospecto al día">${x.solas} · ${x.linea} · ${x.tope}</td></tr>`; });
+    html += `<h3 class="diag-h">Puntos de contacto <span class="lq-sub">manual 7.3 · cuentan los tres frentes por igual</span></h3>
+      ${pcTabla(["Día","Puntos","Prospectos","Dobles llamadas","Llamada contestada","Mensajes","Correos","Conv. ≥60 s","Lead nuevo","Cartera","No cuentan<br><span class=\"lq-sub\">sola · línea · tope</span>"], filas, "Sin actividad del ejecutivo en el periodo.")}
+      <p class="hint">Punto de contacto: doble llamada al mismo prospecto (dos marcaciones en ≤10 min, conectadas o no), una llamada que el prospecto contestó, un mensaje por WhatsApp, Instagram o Facebook${A.cfg.smsCuenta?" (y SMS)":""} o un correo propio; máximo ${PC_MAX_DIA} por prospecto al día. No cuentan: una llamada sola sin contestar, las que la línea no completó (failed, busy, canceled) ni los envíos automáticos o masivos. Días hábiles: ${slaDiasTxt(A.cfg.dias)}, sin festivos; el día en curso no entra al promedio.${A.fueraPts?` ${A.fueraPts} prospecto${A.fueraPts===1?"":"s"} de brokers o referidos tocado${A.fueraPts===1?"":"s"} por el ejecutivo no suma${A.fueraPts===1?"":"n"} (no son de este puesto, 1.1).`:""}</p>`;
+  }
+
+  // --- Lead nuevo: velocidad y cadencia
+  {
+    const B = [["≤60 s",x=>x.dt!=null&&x.dt<=60e3],["1–5 min",x=>x.dt!=null&&x.dt>60e3&&x.dt<=5*60e3],["5–60 min",x=>x.dt!=null&&x.dt>5*60e3&&x.dt<=3600e3],["más de 1 h",x=>x.dt!=null&&x.dt>3600e3],["sin llamada",x=>x.dt==null]];
+    const fv = A.vel.filter(v=>!v.vent && !v.err);
+    const dist = B.map(([l,f])=>`${l}: <b>${V.filter(f).length}</b>`).join(" · ");
+    const dobles = V.filter(v=>v.dt!=null), conDoble = dobles.filter(v=>v.doble).length;
+    const detV = A.vel.slice().sort((a,b)=>a.t0-b.t0).map(v=>`<tr><td class="lft">${escAttr(v.n)}</td><td>${pcHora(v.t0)}</td><td>${v.err ? "sin datos" : v.vent ? "dentro" : "fuera"}</td><td>${pcSeg(v.dt)}</td><td class="lft">${escAttr(v.org||"—")}</td><td>${v.dt==null ? "—" : v.doble ? "sí" : "no"}</td><td class="lft">${escAttr(v.otro||"")}</td></tr>`);
+    const C = A.cad.filter(c=>c.est==="silencio"), comp = C.filter(c=>c.toques>=6).length;
+    const detC = A.cad.filter(c=>c.est!=="curso").sort((a,b)=>a.t0-b.t0).map(c=>`<tr><td class="lft">${escAttr(c.n)}</td><td>${pcHora(c.t0)}</td><td class="lft">${c.est==="conv" ? "salió a conversación" : "silencio"}</td><td>${c.toques}</td><td>${c.deLlamada ? `${c.conDoble} de ${c.deLlamada}` : "—"}</td><td>${c.breakUp ? "sí" : "no"}</td><td class="lft">${escAttr(c.etapa||"—")}</td></tr>`);
+    html += `<h3 class="diag-h">Lead nuevo <span class="lq-sub">manual 3.1 a 3.4 · ${A.nU} lead${A.nU===1?"":"s"} del periodo</span></h3>
+      <div class="lq-meth"><b>Primera llamada del puesto</b> (ejecutivo o marcador automático) desde el registro, leads que entraron en la ventana operativa (${slaDiasTxt(A.cfg.dias)} ${escAttr(A.cfg.abre)}–${escAttr(A.cfg.cierra)}): ${dist}.
+        Mediana: <b>${pcSeg(slaMedian(V.filter(v=>v.dt!=null).map(v=>v.dt)))}</b>. Doble llamada en el primer toque: <b>${pcPct(conDoble, dobles.length)}</b> (${conDoble} de ${dobles.length}).
+        ${fv.length ? `Fuera de la ventana: ${fv.length} lead${fv.length===1?"":"s"}, mediana a la primera llamada ${pcSeg(slaMedian(fv.filter(v=>v.dt!=null).map(v=>v.dt)))} (no entran a la meta de 60 s).` : ""}
+        ${pcDet("ver leads", pcTabla(["Lead","Registro","Ventana","1ª llamada","Quién marcó","Doble llamada","Marcó antes otro usuario"], detV))}</div>
+      <div class="lq-meth"><b>Cadencia de 6 toques en 7 días</b> (lead en silencio): ${C.length ? `<b>${comp} de ${C.length}</b> (${pcPct(comp, C.length)}) completaron los 6 toques · promedio ${(C.reduce((a,c)=>a+c.toques,0)/C.length).toFixed(1)} toques · break up enviado en ${C.filter(c=>c.breakUp).length} · ${C.filter(c=>c.sinResp).length} movidos a Sin respuesta` : "ningún lead en silencio con la cadencia terminada todavía"}.
+        ${A.cad.filter(c=>c.est==="conv").length} salieron a conversación (la cadencia es para el silencio, 4.4) y ${A.cad.filter(c=>c.est==="curso").length} siguen dentro de sus 7 días.
+        ${pcDet("ver cadencia por lead", pcTabla(["Lead","Registro","Resultado","Toques","Toques de llamada con doble llamada","Break up","Etapa actual"], detC))}
+        <div class="lq-sub" style="margin-top:6px">Toque: día del registro hasta dos (primer contacto y reintento, separados ≥90 min); después, uno por día con llamada o mensaje del ejecutivo. Break up: mensaje del ejecutivo en el día 7 (o después).</div></div>`;
+  }
+
+  // --- Conversión a entrega
+  {
+    const orden = ["entregado","sinAsesor","lpMal","descarte","sinCierre","lpOk","lpNoVer","curso","previo"];
+    const cuenta = (k)=> A.coh.filter(r=>r.res===k).length;
+    const filas = orden.filter(k=>cuenta(k)).map(k=>`<tr><td class="lft">${PC_RES_TXT[k]}</td><td class="val">${cuenta(k)}</td><td>${A.PC_DEN.includes(k) ? "sí" : "no"}</td><td>${A.coh.filter(r=>r.res===k && r.frente==="nuevo").length} · ${A.coh.filter(r=>r.res===k && r.frente==="cartera").length}</td></tr>`);
+    const det = A.coh.slice().sort((a,b)=>a.fe-b.fe).map(r=>`<tr><td class="lft">${escAttr(r.n)}</td><td>${pcHora(r.fe)}</td><td class="lft">${r.frente==="nuevo"?"lead nuevo":"cartera"}</td><td class="lft">${escAttr(r.etapa)}</td><td class="lft">${PC_RES_TXT[r.res]}${r.falta?` <span class="lq-sub">falta: ${escAttr(r.falta)}</span>`:""}</td><td class="lft">${escAttr(name(r.asesor))}</td></tr>`);
+    html += `<h3 class="diag-h">Conversión a entrega <span class="lq-sub">manual 10.1 y 10.3 · ${A.coh.length} contacto${A.coh.length===1?"":"s"} efectivo${A.coh.length===1?"":"s"}</span></h3>
+      ${pcTabla(["Cómo terminó","Prospectos","¿Entra al %?","Lead nuevo · cartera"], filas, "Sin contactos efectivos del ejecutivo en el periodo.")}
+      <div class="hint">Contacto efectivo: llamada del ejecutivo de ≥60 s, o respuesta del prospecto en las 48 h siguientes a un toque suyo. Entrega: la tarjeta en Contacto establecido (o una etapa posterior) movida después de ese contacto y asignada a un asesor. Largo plazo con motivo, fecha estimada y tarea de recontacto sale del denominador; sin ellos, cuenta como fallo (10.3).${A.cfg.lp ? "" : " <b>Configura los campos de motivo y fecha estimada de Largo plazo</b> para poder auditarlo."} ${pcDet("ver contactos", pcTabla(["Prospecto","Contacto efectivo","Frente","Etapa actual","Resultado","Asesor"], det))}</div>`;
+  }
+
+  // --- Sesiones: asistencia, calificación, cinco datos, citas pagables
+  {
+    const cnt = (k)=> S.filter(s=>s.est===k).length;
+    const detS = S.slice().sort((a,b)=>a.t-b.t).map(s=>`<tr><td class="lft">${escAttr(s.n)}</td><td>${pcHora(s.t)}</td><td class="lft">${PC_SES_TXT[s.est]}${s.viaAs==="etapa"?' <span class="lq-sub">por etapa</span>':""}</td><td class="lft">${s.est!=="asistio" ? "—" : {si:"calificada",no:"no calificada",sinMarca:"sin marca (+48 h)",pendiente:"pendiente (<48 h)"}[s.calif]||"—"}</td><td class="lft">${escAttr(name(s.asesor))}</td><td class="lft">${s.via==="creador"?"la creó el ejecutivo":"toque del ejecutivo ≤72 h antes"}</td></tr>`);
+    const det5 = A.datos.map(d=>`<tr><td class="lft">${escAttr(d.n)}</td>${d.tiene.map(x=>`<td>${x==null ? "—" : x ? "✓" : "✗"}</td>`).join("")}</tr>`);
+    const pag = S.filter(s=>s.est==="asistio" && (s.calif==="si" || s.calif==="sinMarca")).length;
+    html += `<h3 class="diag-h">Sesiones <span class="lq-sub">${A.citas.agendadas} agendada${A.citas.agendadas===1?"":"s"} por el ejecutivo en el periodo · ${S.length} prospecto${S.length===1?"":"s"} con sesión en el periodo</span></h3>
+      <div class="lq-meth">Asistencia: ${["asistio","noshow","cancelada","reagendada","sinreg"].filter(cnt).map(k=>`${PC_SES_TXT[k]} <b>${cnt(k)}</b>`).join(" · ")||"sin sesiones"}.
+        Calificación de las realizadas: calificadas <b>${cSi}</b> · no calificadas <b>${cNo}</b> · sin marca después de 48 h <b>${S.filter(s=>s.calif==="sinMarca").length}</b> · pendientes <b>${S.filter(s=>s.calif==="pendiente").length}</b>.
+        <br><b>Citas pagables</b> (realizadas y calificadas, o sin marca después de 48 h): <b>${pag}</b>${pag > PC_TOPE_CITAS ? ` — arriba de ${PC_TOPE_CITAS}: si el canal no cerró ninguna venta en el mes, el bono por citas se liquida hasta $9,000 y el excedente se difiere (7.8)` : ""}. El cálculo del bono es de Contabilidad y Finanzas.
+        ${pcDet("ver sesiones", pcTabla(["Prospecto","Sesión","Asistencia","Calificación","Asesor","Por qué es del ejecutivo"], detS))}
+        ${pcDet("ver cinco datos", pcTabla(["Prospecto", ...PC_5DATOS.map(x=>x[1])], det5, "Sin sesiones agendadas en el periodo."))}
+        <div class="lq-sub" style="margin-top:6px">Unidad: el prospecto. Se realizó si cualquiera de sus sesiones se realizó (calendario o, si el calendario no lo registra, la etapa: Zoom/Tour realizado o posterior); si la canceló y tiene otra por venir, queda pendiente. Tasa de asistencia = se realizó ÷ (se realizó + no se presentó + cancelada). ${A.citas.cbVisto ? "El CRM sí dice quién creó cada cita." : `<b>El CRM no está diciendo quién creó las citas</b>: se atribuyen al ejecutivo cuando él tocó al prospecto en las 72 h previas (${A.citas.porToque} así).`}</div></div>`;
+  }
+
+  // --- Cartera
+  {
+    const segs = ["vencida","fria","otra","sindato"].filter(k=>A.cart[k]);
+    const totP = segs.reduce((a,k)=>a+A.cart[k].pts,0);
+    const filas = segs.map(k=>{ const x = A.cart[k]; return `<tr><td class="lft">${PC_SEG_TXT[k]}</td><td>${x.pros}</td><td class="val">${x.pts}</td><td>${pcPct(x.pts, totP)}</td><td>${x.efect}</td><td>${x.entreg}</td><td>${x.ses}</td></tr>`; });
+    const v = (A.cart.vencida||{}).pts||0, f = (A.cart.fria||{}).pts||0;
+    html += `<h3 class="diag-h">Cartera vencida y fría <span class="lq-sub">manual cap. 7</span></h3>
+      ${pcTabla(["Segmento","Prospectos","Puntos","% de puntos de cartera","Contactos efectivos","Entregas","Sesiones agendadas"], filas, "Sin trabajo de cartera en el periodo.")}
+      <p class="hint">Orden de ataque (7.1): primero la vencida, después la fría. ${v+f ? `Este periodo: ${pcPct(v, v+f)} de los puntos de cartera fueron a la vencida.` : ""} Segmento: la etiqueta que ponga Sistemas (${escAttr((cfg.cartera||{}).vencida||"—")} / ${escAttr((cfg.cartera||{}).fria||"—")}); sin etiqueta, la etapa del prospecto cuando lo tocó (Rescate, Largo plazo, cotización o no show = vencida; Sin respuesta = fría).</p>`;
+  }
+
+  // --- Recepción del asesor
+  {
+    const por = {}; A.recep.forEach(r=>{ (por[r.asesor] = por[r.asesor] || []).push(r); });
+    const filas = Object.entries(por).sort((a,b)=>b[1].length-a[1].length).map(([u, arr])=>{
+      const ses = arr.filter(r=>r.ses), sinS = arr.filter(r=>!r.ses);
+      const ok = sinS.filter(r=>r.est==="ok").length, medS = sinS.filter(r=>r.dt!=null).map(r=>r.dt);
+      return `<tr><td class="lft">${escAttr(name(u))}</td><td>${arr.length}</td><td>${sinS.length ? `${ok} de ${sinS.filter(r=>r.est!=="pend").length}` : "—"}</td><td>${medS.length ? fmtDur(slaMedian(medS)) : "—"}</td><td>${arr.filter(r=>r.est==="sin").length}</td>
+        <td>${ses.length ? `${ses.filter(r=>r.conf==="si").length} de ${ses.filter(r=>r.conf!=="pend").length}` : "—"}</td></tr>`; });
+    const det = A.recep.slice().sort((a,b)=>a.tE-b.tE).map(r=>`<tr><td class="lft">${escAttr(r.n)}</td><td class="lft">${escAttr(name(r.asesor))}</td><td>${pcHora(r.tE)}${r.exacta?"":' <span class="lq-sub">aprox.</span>'}</td><td>${r.dt==null ? (r.est==="pend" ? "en plazo" : "sin contacto") : fmtDur(r.dt)}</td><td>${r.ses ? ({si:"sí",no:"no",pend:"hoy"}[r.conf]) : "—"}</td></tr>`);
+    html += `<h3 class="diag-h">Compromiso de recepción del asesor <span class="lq-sub">manual 8.2 · se reporta con nombre en la junta del lunes</span></h3>
+      ${pcTabla(["Asesor","Entregas","Primer contacto ≤60 min","Mediana al primer contacto","Sin contacto","Sesión confirmada el mismo día"], filas, "Sin entregas en el periodo.")}
+      <div class="hint">Entrega sin sesión (introducción por WhatsApp u otro medio): primer contacto manual del asesor dentro de 60 minutos. Entrega con sesión agendada: el asesor le escribe o llama al prospecto el mismo día del agendamiento. Momento de la entrega: cuando la tarjeta llegó a Contacto establecido; si ya avanzó a otra etapa, el contacto efectivo del ejecutivo (aprox.). La transferencia en caliente (15 min) no se distingue en el CRM. ${pcDet("ver entregas", pcTabla(["Prospecto","Asesor","Entrega","Al primer contacto del asesor","Confirmó el mismo día"], det))}</div>`;
+  }
+
+  // --- Diagnóstico
+  {
+    const d = A.diag||{}, p = [];
+    if(d.convModo) p.push(`<b>Cartera</b>: ${d.convN||0} conversaciones con actividad manual leídas (${d.convModo==="manual" ? "por fecha del último mensaje manual" : "por fecha del último mensaje: el CRM no aceptó el orden por mensaje manual"})${d.convOrden===false ? ` · <b style="color:var(--rojo)">el CRM no devolvió las fechas en orden: puede faltar actividad de cartera</b>` : ""}${d.convTrunc ? ` · <b style="color:var(--rojo)">se cortó en ${d.convN} conversaciones</b>` : ""}`);
+    if(d.cobN) p.push(`<b>Cobertura del listado</b>: ${d.cobOk} de ${d.cobN} leads con acción manual aparecen en el listado de conversaciones con actividad manual (${pcPct(d.cobOk, d.cobN)})${d.cobOk < d.cobN ? ` — <b style="color:var(--rojo)">el listado no ve todo: los puntos de cartera pueden estar subcontados</b>${d.cobSoloLlam ? ` (${d.cobSoloLlam} de los que faltan solo tenían llamadas)` : ""}` : ""}`);
+    if(d.autoSinU || d.autoConU) p.push(`<b>Llamadas automáticas en leads nuevos</b>: ${d.autoConU} con el usuario del ejecutivo · ${d.autoSinU} sin usuario o de otro usuario${d.autoSinU ? " — esas cuentan para la velocidad pero <b>no suman puntos</b> (el CRM no dice quién atendió): Sistemas debe hacer que el marcador registre al ejecutivo" : ""}`);
+    if(d.lineaEpc) p.push(`<b>Falla de línea</b>: ${d.lineaEpc} llamada${d.lineaEpc===1?"":"s"} del ejecutivo ${d.lineaEpc===1?"volvió":"volvieron"} failed, busy o canceled (telefonía, no desempeño; no suman puntos)`);
+    if(d.evErr) p.push(`<b style="color:var(--rojo)">${d.evErr} conversaci${d.evErr===1?"ón":"ones"} no se pudieron leer</b>`);
+    if(A.excl.prueba || A.excl.fuera || A.excl.ajenos) p.push(`Fuera del universo de lead nuevo: ${A.excl.fuera} de brokers, referidos u otros canales (prospección directa, alianzas, legal), ${A.excl.prueba} de prueba${A.ensayo ? `, ${A.excl.ajenos} de otros usuarios (ensayo)` : ""}`);
+    if(p.length) html += `<div class="lq-meth">🔎 <b>Diagnóstico de datos</b> — ${p.join(" · ")}.</div>`;
+  }
+  html += pcCfgHtml();
+  host.innerHTML = html;
+  pcEnlazar();
+}
+
+// Avisos de arranque: lo que falta para que el reporte mida el puesto real.
+function pcAvisos(cfg){
+  const hoy = slaHoyYMD(), out = [];
+  if(!cfg.usuarios.length) out.push(`<b>Falta elegir al ejecutivo</b> en Configuración (abajo). Primero hay que darlo de alta como usuario en GoHighLevel. Mientras, el selector <b>Ejecutivo</b> permite un ensayo con cualquier usuario actual.`);
+  if(hoy < (cfg.activa||PC_ACTIVA_DEF)) out.push(`El puesto arranca el <b>${pcFechaTxt(cfg.activa||PC_ACTIVA_DEF)}</b>: el reporte real mide desde ese día. Antes, usa el ensayo para validar la medición con un usuario actual.`);
+  if(!cfg.marcador) out.push(`La <b>velocidad de 60 s es informativa</b> hasta que se registre en Configuración la fecha en que el marcador automático empezó a operar (3.1: no se evalúa sin la herramienta).`);
+  const pend = PC_5DATOS.filter(([k])=>!(cfg.campos5||{})[k]).length;
+  if(pend) out.push(`Faltan ${pend} de los cinco datos de calificación por asignar a un campo del CRM.`);
+  return out.length ? `<div class="lq-meth" style="border-color:#e3d3a4;background:#fbf6e6">${out.map(x=>"• "+x).join("<br>")}</div>` : "";
+}
+
+/* --- Configuración en pantalla --------------------------------------------------------- */
+const pcPuedeConfigurar = ()=> isAdmin() || navPermiso("direccion_general","direccion_comercial");
+function pcCfgHtml(){
+  const cat = pcState.cat, cfg = pcState.cfg || pcCfgDe(null), auto = pcState.cfgAuto || {}, ed = pcPuedeConfigurar();
+  const users = cat ? Object.entries(cat.users||{}).sort((a,b)=>a[1].localeCompare(b[1])) : [];
+  const opcCampos = (val, conOpp)=> `<option value="">— sin asignar —</option>`
+    + (cat ? (cat.fields||[]).map(f=>`<option value="c:${escAttr(f.id)}"${val==="c:"+f.id?" selected":""}>Contacto · ${escAttr(f.name||f.key)}</option>`).join("") : "")
+    + (cat && conOpp ? (cat.oppFields||[]).map(f=>`<option value="o:${escAttr(f.id)}"${val==="o:"+f.id?" selected":""}>Oportunidad · ${escAttr(f.name||f.key)}</option>`).join("") : "");
+  const det = (k)=> auto[k] ? ' <span class="lq-inf" title="Detectado por nombre; se fija al guardar">detectado</span>' : "";
+  const dis = ed ? "" : " disabled";
+  return `<details class="pc-cfg" id="pc-cfg"${cfg.usuarios.length ? "" : " open"}><summary><b>Configuración del reporte</b> <span class="lq-sub">${ed ? "la fija Dirección; el ejecutivo no mueve su propia vara" : "solo lectura: la fija Dirección"}</span></summary>
+    ${cat ? "" : `<p class="hint">Cargando el catálogo de usuarios y campos del CRM…</p>`}
+    <div class="pc-cfg-grid">
+      <label>Ejecutivo(s) de Primer Contacto<select id="pc-c-usu" multiple size="5"${dis}>${users.map(([id,n])=>`<option value="${escAttr(id)}"${cfg.usuarios.includes(id)?" selected":""}>${escAttr(n)}</option>`).join("")}</select><span class="lq-sub">Usuario de GoHighLevel con el que marca y escribe.</span></label>
+      <label>Inicio del puesto<input type="date" id="pc-c-activa" value="${escAttr(cfg.activa||"")}"${dis}><span class="lq-sub">Desde aquí mide el reporte real.</span></label>
+      <label>Marcador automático operando desde<input type="date" id="pc-c-marc" value="${escAttr(cfg.marcador||"")}"${dis}><span class="lq-sub">Vacío = la velocidad de 60 s es informativa.</span></label>
+      <label>Ventana operativa<span class="pc-dias">${[1,2,3,4,5,6,0].map(d=>`<label><input type="checkbox" class="pc-c-dia" value="${d}"${cfg.dias.includes(d)?" checked":""}${dis}>${SLA_DIAS_CORTOS[d]}</label>`).join("")}</span>
+        <span><input type="time" id="pc-c-abre" value="${escAttr(cfg.abre)}"${dis}> a <input type="time" id="pc-c-cierra" value="${escAttr(cfg.cierra)}"${dis}></span><span class="lq-sub">Días hábiles = estos días, sin festivos.</span></label>
+      <label>Festivos (no hábiles)<textarea id="pc-c-fest" rows="3"${dis}>${escAttr((cfg.festivos||[]).join(", "))}</textarea><span class="lq-sub">AAAA-MM-DD separados por coma.</span></label>
+      <label><span><input type="checkbox" id="pc-c-sms"${cfg.smsCuenta!==false?" checked":""}${dis}> El SMS cuenta como mensaje</span><span class="lq-sub">El manual pide SMS en el toque 2; la tabla de 7.3 nombra WhatsApp, Instagram y Facebook.</span></label>
+      ${PC_5DATOS.map(([k,l])=>`<label><span>Dato: ${l}${det("campos5."+k)}</span><select class="pc-c-c5" data-k="${k}"${dis}>${opcCampos((cfg.campos5||{})[k]||"", false)}</select></label>`).join("")}
+      <label><span>Largo plazo: motivo${det("lp.motivo")}</span><select id="pc-c-lpm"${dis}>${opcCampos((cfg.lp||{}).motivo||"", true)}</select></label>
+      <label><span>Largo plazo: fecha estimada de decisión${det("lp.fecha")}</span><select id="pc-c-lpf"${dis}>${opcCampos((cfg.lp||{}).fecha||"", true)}</select></label>
+      <label><span>Cita calificada: campo${det("calif.campo")}</span><select id="pc-c-calc"${dis}>${opcCampos((cfg.calif||{}).campo||"", true)}</select><span class="lq-sub">Valores Sí/Calificada o No.</span></label>
+      <label>Cita calificada: etiquetas<span><input type="text" id="pc-c-cals" value="${escAttr((cfg.calif||{}).si||"")}" placeholder="sí"${dis}> / <input type="text" id="pc-c-caln" value="${escAttr((cfg.calif||{}).no||"")}" placeholder="no"${dis}></span></label>
+      <label>Etiquetas de cartera (Sistemas)<span><input type="text" id="pc-c-cv" value="${escAttr((cfg.cartera||{}).vencida||"")}" placeholder="vencida"${dis}> / <input type="text" id="pc-c-cf" value="${escAttr((cfg.cartera||{}).fria||"")}" placeholder="fría"${dis}></span></label>
+    </div>
+    ${ed ? `<button class="btn btn-olive" id="pc-c-save">Guardar configuración</button>` : ""}</details>`;
+}
+async function pcGuardarCfg(){
+  const val = (id)=> (document.getElementById(id)||{}).value || "";
+  const fest = val("pc-c-fest").split(/[\s,;]+/).filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x));
+  const c = pcCfgDe({
+    usuarios: [...(document.getElementById("pc-c-usu")||{}).selectedOptions||[]].map(o=>o.value),
+    activa: val("pc-c-activa") || PC_ACTIVA_DEF, marcador: val("pc-c-marc"),
+    dias: [...document.querySelectorAll(".pc-c-dia:checked")].map(x=>+x.value).sort(),
+    abre: val("pc-c-abre") || "09:00", cierra: val("pc-c-cierra") || "19:00", festivos: fest,
+    smsCuenta: !!(document.getElementById("pc-c-sms")||{}).checked,
+    campos5: Object.fromEntries([...document.querySelectorAll(".pc-c-c5")].map(s=>[s.dataset.k, s.value])),
+    lp: { motivo: val("pc-c-lpm"), fecha: val("pc-c-lpf") },
+    calif: { campo: val("pc-c-calc"), si: val("pc-c-cals").trim(), no: val("pc-c-caln").trim() },
+    cartera: { vencida: val("pc-c-cv").trim(), fria: val("pc-c-cf").trim() },
+  });
+  c.por = (SESSION && SESSION.email) || ""; c.en = new Date().toISOString();
+  try{ await sSet(PC_CFG_KEY, c); pcState.cfg = c; pcState.cfgAuto = {}; toast("Configuración guardada ✓"); pcPoblarQuien(); pcRender(); }
+  catch(e){ toast("No se guardó: "+(e.message||e)); }
+}
+function pcEnlazar(){
+  document.querySelectorAll("#pc-content [data-pc-det]").forEach(b=>{
+    b.onclick = ()=>{ const d = document.getElementById(b.dataset.pcDet); if(!d) return; d.hidden = !d.hidden; b.textContent = b.textContent.replace(/[▸▾]$/, d.hidden ? "▸" : "▾"); };
+  });
+  const s = document.getElementById("pc-c-save"); if(s) s.onclick = pcGuardarCfg;
+}
+
+/* --- Periodo, ejecutivo y caché ---------------------------------------------------------- */
+function pcPoblarPeriodos(){
+  const tipoSel = document.getElementById("pc-tipo"), perSel = document.getElementById("pc-per"); if(!tipoSel || !perSel) return;
+  tipoSel.value = pcState.tipo;
+  let ops = [];
+  const hoy = new Date(Date.now()-LQ_TZ_MS);
+  if(pcState.tipo==="mes"){
+    for(let i=0;i<6;i++){ const d = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth()-i, 1)); const k = d.toISOString().slice(0,7);
+      ops.push([k, `${SLA_MESES[d.getUTCMonth()]} ${d.getUTCFullYear()}${i===0?" · EN CURSO":""}`]); }
+  } else {
+    let d = hoy; for(let i=0;i<LQ_SYNC_WEEKS;i++){ const w = isoWeekId(d); ops.push([w, weekLabel(w)]); d = new Date(d.getTime()-7*86400e3); }
+  }
+  perSel.innerHTML = ops.map(([v,l])=>`<option value="${v}">${escAttr(l)}</option>`).join("");
+  if(!ops.some(o=>o[0]===pcState.clave)) pcState.clave = ops[0][0];
+  perSel.value = pcState.clave;
+}
+function pcPoblarQuien(){
+  const sel = document.getElementById("pc-quien"); if(!sel) return;
+  const cfg = pcState.cfg || pcCfgDe(null), users = (pcState.cat && pcState.cat.users) || {};
+  const nom = cfg.usuarios.map(u=>users[u]||u).join(", ");
+  sel.innerHTML = `<option value="">${cfg.usuarios.length ? "Ejecutivo: "+escAttr(nom) : "Ejecutivo: sin configurar"}</option>`
+    + (Object.keys(users).length ? `<optgroup label="Ensayo con un usuario actual">${Object.entries(users).sort((a,b)=>a[1].localeCompare(b[1])).map(([id,n])=>`<option value="${escAttr(id)}">Ensayo · ${escAttr(n)}</option>`).join("")}</optgroup>` : "");
+  sel.value = pcState.quien && users[pcState.quien] ? pcState.quien : "";
+  pcState.quien = sel.value;
+}
+const pcAggKey = ()=> PC_AGG_PREF + pcState.clave + ":" + (pcState.quien ? "e-"+pcState.quien : "real");
+async function pcCargarAgg(){
+  pcState.agg = null;
+  try{ const a = await sGet(pcAggKey()); if(a && a.v===1 && Array.isArray(a.vel)) pcState.agg = a; }catch(e){}
+  pcRender();
+}
+
+/* --- Sincronización ---------------------------------------------------------------------- */
+async function pcSync(){
+  if(pcState.syncing) return;
+  const cfg = pcState.cfg || pcCfgDe(null);
+  const epc = pcState.quien ? [pcState.quien] : cfg.usuarios;
+  if(!epc.length){ toast("Elige al ejecutivo en Configuración, o un usuario para ensayar"); return; }
+  const per = pcPeriodo(pcState.tipo, pcState.clave); if(!per){ toast("Periodo inválido"); return; }
+  const ensayo = !!pcState.quien, now = Date.now();
+  const activaT = Date.parse((cfg.activa||PC_ACTIVA_DEF)+"T00:00:00"+LQ_TZ);
+  if(!ensayo && per.fin < activaT){ toast("Ese periodo es anterior al inicio del puesto: usa el ensayo"); return; }
+  if(per.ini > now){ toast("Ese periodo todavía no empieza"); return; }
+  pcState.syncing = true;
+  const btn = document.getElementById("pc-run"), prog = document.getElementById("pc-progress"), bar = document.getElementById("pc-progress-bar"), lbl = document.getElementById("pc-progress-lbl");
+  prog.style.display = "block"; bar.style.width = "2%";
+  const restaurar = syncCancelable("pc", btn, "Generar reporte");
+  const clave = pcAggKey();
+  try{
+    const fallos = [];
+    const ini = ensayo ? per.ini : Math.max(per.ini, activaT), fin = Math.min(per.fin, now);
+    const desde = ini - 3*86400e3;     // 3 días antes: las citas se atribuyen por un toque de las 72 h previas
+    lbl.textContent = "Leyendo usuarios, campos y etapas…";
+    if(!pcState.cat) pcAplicarCat(await pcFn({ action:"users" }));
+    const cat = pcState.cat;
+    lbl.textContent = "Trayendo los leads del periodo…";
+    const leads = []; let cur = null;
+    do{ const r = await pcFn({ action:"contacts", start:new Date(ini).toISOString(), end:new Date(fin).toISOString(), ...(cur?{searchAfter:cur}:{}) });
+      leads.push(...(r.contacts||[])); cur = r.searchAfter; }while(cur);
+    bar.style.width = "6%";
+    lbl.textContent = "Trayendo las citas…";
+    let citas = [];
+    try{ const r = await pcFn({ action:"citas", start:new Date(desde).toISOString(), end:new Date(per.fin + 120*86400e3).toISOString() }); citas = r.citas||[];
+      if((r.errores||[]).length) fallos.push(`las citas de ${r.errores.length} calendario${r.errores.length===1?"":"s"}`); }
+    catch(e){ fallos.push("las citas (asistencia, calificación y cinco datos quedan en cero)"); }
+    bar.style.width = "9%";
+    // Conversaciones con actividad manual desde `desde`: el universo de cartera.
+    lbl.textContent = "Buscando conversaciones con actividad manual…";
+    const convs = []; let cc = null, modo = "", orden = true, trunc = false, vueltas = 0;
+    do{ const r = await pcFn({ action:"conversaciones", desde, ...(cc?{cursor:cc}:{}) });
+      convs.push(...(r.convs||[])); cc = r.cursor; modo = r.modo; if(r.ordenOk===false) orden = false;
+      lbl.textContent = `Buscando conversaciones con actividad manual… ${convs.length}`;
+      if(++vueltas >= 14 && cc){ trunc = true; break; }
+      if(syncCancelado("pc")){ toast("Reporte cancelado"); return; } }while(cc);
+    if(trunc) fallos.push(`las conversaciones de cartera más allá de las primeras ${convs.length}`);
+    bar.style.width = "14%";
+    // Eventos: los leads del periodo por contacto; el resto por conversación.
+    const leadIds = new Set(leads.map(c=>c.id));
+    const items = [...leads.map(c=>({ ct:c.id })), ...convs.filter(c=>!leadIds.has(c.ct)).map(c=>({ id:c.id, ct:c.ct }))];
+    const ev = {}, evErr = {}, cvDe = {};
+    for(let i=0; i<items.length; i+=10){
+      if(syncCancelado("pc")){ toast("Reporte cancelado"); return; }
+      const lote = items.slice(i, i+10);
+      try{
+        const r = await pcFn({ action:"eventos", desde, hasta:now, cts:lote.filter(x=>!x.id).map(x=>x.ct), convs:lote.filter(x=>x.id) });
+        (r.res||[]).forEach(x=>{ if(!x.ct) return; (ev[x.ct] = ev[x.ct] || []).push(...x.ev); if(x.err) evErr[x.ct] = true; if(x.cv) cvDe[x.ct] = x.cv; });
+      }catch(e){ lote.forEach(x=>{ if(x.ct) evErr[x.ct] = true; }); }
+      bar.style.width = (14 + Math.round(Math.min(i+10, items.length)/Math.max(1, items.length)*62)) + "%";
+      lbl.textContent = `Leyendo conversaciones… ${Math.min(i+10, items.length)} de ${items.length}`;
+    }
+    Object.values(ev).forEach(a=>a.sort((x,y)=>x[0]-y[0]));
+    const nErr = Object.keys(evErr).length;
+    if(nErr) fallos.push(`las conversaciones de ${nErr} prospecto${nErr===1?"":"s"}`);
+    // Cobertura del listado: los leads (leídos por contacto) con acción manual en la ventana
+    // deberían aparecer en el listado por mensaje manual. Si no aparecen, el listado no ve todo.
+    const listadas = new Set(convs.map(c=>c.id));
+    let cobN = 0, cobOk = 0, cobSoloLlam = 0;
+    leads.forEach(c=>{ const m = (ev[c.id]||[]).filter(e=>e[2]==="m" && e[0] >= desde); if(!m.length || !cvDe[c.id]) return;
+      cobN++; if(cvDe[c.id].some(id=>listadas.has(id))) cobOk++; else if(m.every(e=>e[1]==="call")) cobSoloLlam++; });
+    // Detalle (nombre, etiquetas, campos) de los prospectos que tocó el ejecutivo o con cita suya.
+    const epcSet = new Set(epc);
+    const tocados = Object.entries(ev).filter(([,a])=>a.some(e=>epcSet.has(e[3]))).map(([ct])=>ct);
+    // Citas que pueden ser del ejecutivo: las que creó él o, si el CRM no dice quién, las de
+    // prospectos que tocó en las 72 h previas al agendamiento (misma regla que pcBuild).
+    const conCita = citas.filter(c=>c.ct && (c.cb ? epcSet.has(c.cb)
+      : !!c.ag && (ev[c.ct]||[]).some(e=>epcSet.has(e[3]) && e[0] <= c.ag && c.ag - e[0] <= PC_CITA_ATRIB_MS))).map(c=>c.ct);
+    const faltan = [...new Set([...tocados, ...conCita])].filter(ct=>!leadIds.has(ct));
+    const cts = {};
+    for(let i=0; i<faltan.length; i+=30){
+      if(syncCancelado("pc")){ toast("Reporte cancelado"); return; }
+      try{ const r = await pcFn({ action:"contactos", ids:faltan.slice(i, i+30) }); (r.contactos||[]).forEach(c=>{ cts[c.id] = c; }); }
+      catch(e){ fallos.push("el detalle de algunos prospectos de cartera"); }
+      bar.style.width = (76 + Math.round(Math.min(i+30, faltan.length)/Math.max(1, faltan.length)*8)) + "%";
+      lbl.textContent = `Leyendo prospectos de cartera… ${Math.min(i+30, faltan.length)} de ${faltan.length}`;
+    }
+    // Oportunidades de todos los que entran al reporte.
+    const conOpp = [...new Set([...leads.map(c=>c.id), ...tocados, ...conCita])];
+    const opps = {};
+    for(let i=0; i<conOpp.length; i+=40){
+      if(syncCancelado("pc")){ toast("Reporte cancelado"); return; }
+      try{ const r = await pcFn({ action:"opps", contactIds:conOpp.slice(i, i+40) }); (r.opps||[]).forEach(o=>{ (opps[o.ct] = opps[o.ct] || []).push(o); });
+        if((r.fallidos||[]).length) fallos.push(`las oportunidades de ${r.fallidos.length} prospecto${r.fallidos.length===1?"":"s"}`); }
+      catch(e){ fallos.push("parte de las oportunidades"); }
+      bar.style.width = (84 + Math.round(Math.min(i+40, conOpp.length)/Math.max(1, conOpp.length)*10)) + "%";
+      lbl.textContent = `Leyendo oportunidades… ${Math.min(i+40, conOpp.length)} de ${conOpp.length}`;
+    }
+    // Largo plazo: tareas de recontacto de los que el ejecutivo dejó ahí (10.3).
+    const stage = {}; (cat.pipelines||[]).forEach(p=>(p.stages||[]).forEach(s=>{ stage[s.id] = s.name||""; }));
+    const enLp = Object.entries(opps).filter(([ct, arr])=>tocados.includes(ct) && arr.some(o=>/^largo plazo/.test(slaNorm(stage[o.s]||"")))).map(([ct])=>ct);
+    for(let i=0; i<enLp.length; i+=30){
+      try{ const r = await pcFn({ action:"contactos", ids:enLp.slice(i, i+30), tareas:true });
+        (r.contactos||[]).forEach(c=>{ const prev = cts[c.id] || leads.find(x=>x.id===c.id) || {}; cts[c.id] = { ...prev, ...c }; }); }
+      catch(e){ fallos.push("las tareas de Largo plazo"); }
+    }
+    bar.style.width = "97%"; lbl.textContent = "Calculando…";
+    const D = { per, epc, ensayo, users:cat.users||{}, pipelines:cat.pipelines||[], leads, cts, ev, evErr, opps, citas, fallos,
+      diag:{ convModo:modo, convOrden:orden, convN:convs.length, convTrunc:trunc, cobN, cobOk, cobSoloLlam } };
+    const agg = pcBuild(D, pcState.cfg || cfg, now);
+    if(pcAggKey() === clave){ pcState.agg = agg; pcRender(); }
+    let txt = JSON.stringify(agg);
+    if(txt.length > 480*1024){ agg.vel = agg.vel.slice(0, 300); agg.coh = agg.coh.slice(0, 400); agg.cad = agg.cad.slice(0, 300); agg.recortadoCache = true; txt = JSON.stringify(agg); }
+    sSet(clave, agg).catch(e=>toast("Cache del reporte no guardado: "+(e.message||e)));
+    toast(fallos.length ? "Reporte generado con huecos ⚠" : "Reporte de Primer Contacto generado ✓");
+  }catch(e){
+    toast("Error al generar el reporte: "+(e.message||e));
+  }finally{
+    pcState.syncing = false; restaurar();
+    setTimeout(()=>{ prog.style.display="none"; bar.style.width="0%"; }, 600);
+  }
+}
+
+async function showPC(){
+  if(!pcState.built){
+    pcState.built = true;
+    document.getElementById("pc-run").onclick = pcSync;
+    document.getElementById("pc-tipo").onchange = (e)=>{ pcState.tipo = e.target.value; pcState.clave = ""; pcPoblarPeriodos(); pcCargarAgg(); };
+    document.getElementById("pc-per").onchange = (e)=>{ pcState.clave = e.target.value; pcCargarAgg(); };
+    document.getElementById("pc-quien").onchange = (e)=>{ pcState.quien = e.target.value; pcCargarAgg(); };
+    pcPoblarPeriodos();
+  }
+  if(!pcState.cfg){ try{ pcState.cfg = pcCfgDe(await sGet(PC_CFG_KEY)); }catch(e){ pcState.cfg = pcCfgDe(null); } }
+  pcPoblarQuien();
+  await pcCargarAgg();
+  if(!pcState.cat){
+    try{ pcAplicarCat(await pcFn({ action:"users" })); pcPoblarQuien(); pcRender(); }
+    catch(e){ toast("No se pudo leer el catálogo del CRM: "+(e.message||e)); }
+  }
+  // Una vez al día, sin botón: si el puesto ya arrancó y el reporte guardado de la semana en
+  // curso es de un día anterior (o no existe), el primero que abre la pestaña lo regenera para
+  // todo el equipo — igual que Desempeño cada lunes.
+  const cfg = pcState.cfg, hoy = slaHoyYMD();
+  if(!pcState.syncing && !pcState.quien && cfg.usuarios.length && hoy >= (cfg.activa||PC_ACTIVA_DEF)
+     && pcState.tipo==="semana" && semanaEnCurso(pcState.clave) && (!pcState.agg || pcDia(pcState.agg.ts) < hoy)){
+    toast("Generando el reporte de Primer Contacto del día…");
+    pcSync();
+  }
+}
+function pcAplicarCat(cat){
+  pcState.cat = cat;
+  const a = pcAutoCampos(pcState.cfg || pcCfgDe(null), cat);
+  pcState.cfg = a.cfg; pcState.cfgAuto = a.auto;
+}
+
 /* ===================== ANALÍTICA ===================== */
 const METRIC_LABELS = { leads:"Leads", zooms:"Zooms realizados (tot.)", tours:"Tours realizados (tot.)", zooms_ag:"Zooms agendados", tours_ag:"Tours agendados",
   zooms_seg:"Zooms realizados de seguimiento", tours_seg:"Tours realizados de seguimiento", zooms_ag_seg:"Zooms agendados de seguimiento", tours_ag_seg:"Tours agendados de seguimiento",
@@ -9640,6 +10503,13 @@ function applyTabsVisibility(){
 
 // Desempeño de Ventas: sub-pestaña de Ventas, que es de donde es. Estuvo escondido como un
 // "canal" sintético dentro de un desplegable, donde nadie lo encontraba.
+// Primer Contacto y Rescate: su canal propio (pc_view: para el ejecutivo o Gerencia de Ventas
+// sin abrirles todo Desempeño) o cualquiera de los que ya leen el CRM con nombres.
+function puedeVerPC(){
+  if(isAdmin()) return true;
+  const ch = sessionChannels();
+  return ["pc_view","sla_view","crm_live","direccion_comercial"].some(k=>ch.includes(k));
+}
 function puedeVerDesempeno(){
   if(isAdmin()) return true;
   const ch = sessionChannels();
@@ -9796,9 +10666,9 @@ const DATA_CH_KEYS = ["brokers","paid_organico","seminarios","referidos","pd_lea
 // así que sus canales ya no abren una pestaña propia: abren la pestaña contenedora.
 const MKT_CH_KEYS = ["mkt_rrss","mkt_lq"];   // PPC Ads y CRM Manager se retiraron
 const SLA_CH_KEY = "sla_view";               // abre "Desempeño de Ventas" dentro de Ventas
-const VENTAS_CH_KEYS = [...DATA_CH_KEYS, "direccion_general", "direccion_comercial", "crm_live", SLA_CH_KEY];
+const VENTAS_CH_KEYS = [...DATA_CH_KEYS, "direccion_general", "direccion_comercial", "crm_live", SLA_CH_KEY, "pc_view"];
 const ALL_CH_KEYS  = [...VENTAS_CH_KEYS, ...MKT_CH_KEYS];
-const ALL_CH_NAMES = { brokers:"Brokers", paid_organico:"Paid Orgánico", seminarios:"Seminarios", referidos:"Referidos", pd_leads:"PD Leads", pd_brokers:"PD Brokers", rp_vip:"RP VIP", direccion_general:"Dir. General", direccion_comercial:"Dir. Comercial", crm_live:"CRM en vivo", sla_view:"Desempeño de Ventas", mkt_rrss:"Redes Sociales", mkt_lq:"Calidad de Leads" };
+const ALL_CH_NAMES = { brokers:"Brokers", paid_organico:"Paid Orgánico", seminarios:"Seminarios", referidos:"Referidos", pd_leads:"PD Leads", pd_brokers:"PD Brokers", rp_vip:"RP VIP", direccion_general:"Dir. General", direccion_comercial:"Dir. Comercial", crm_live:"CRM en vivo", sla_view:"Desempeño de Ventas", pc_view:"Primer contacto", mkt_rrss:"Redes Sociales", mkt_lq:"Calidad de Leads" };
 window.getMktAllowedModules = function(){
   if(isAdmin()) return null;
   if(!SESSION) return [];

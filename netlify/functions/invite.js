@@ -23,7 +23,7 @@ const json = S.json;
 // esta lista no conoce se descartaba EN SILENCIO al crear el usuario (le pasó a
 // sla_view: el admin marcaba "Desempeño de Ventas", veía "Usuario creado ✓" y la
 // persona no podía abrir el reporte).
-const ALL_CH = ["brokers","paid_organico","seminarios","referidos","pd_leads","pd_brokers","rp_vip","direccion_general","direccion_comercial","crm_live","sla_view","marketing","mkt_rrss","mkt_ppc","mkt_crm","mkt_lq"];
+const ALL_CH = ["brokers","paid_organico","seminarios","referidos","pd_leads","pd_brokers","rp_vip","direccion_general","direccion_comercial","crm_live","sla_view","pc_view","marketing","mkt_rrss","mkt_ppc","mkt_crm","mkt_lq"];
 
 const norm = (e) => String(e || "").trim().toLowerCase();
 const linkFor = (email, nonce) => `${SITE_URL}/#invite=${encodeURIComponent(S.signInvite({ email, nonce }))}`;

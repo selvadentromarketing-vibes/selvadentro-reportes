@@ -16,6 +16,7 @@
 const { chromium } = require('playwright');
 const { spawn } = require('child_process'); const path = require('path');
 const { fixture } = require('./lq-fixture.js');
+const { pcFixture } = require('./pc-fixture.js');
 const ALL = ["brokers","paid_organico","seminarios","referidos","pd_leads","pd_brokers","rp_vip","direccion_general","direccion_comercial","crm_live","sla_view","marketing","mkt_rrss","mkt_lq"];
 const PORT = process.env.PORT || 8765;
 (async () => {
@@ -48,6 +49,18 @@ const PORT = process.env.PORT || 8765;
       if (op === 'get' && body.k === 'selvadentro:metas') return ok({ v: JSON.stringify({ __global: { conv: { zo: 0.30, to: 0.35, oa: 0.33, aw: 0.80 } } }) });
       return ok(op === 'get' ? { v: null } : op === 'list' ? { keys: [] } : op === 'dump' ? { rows: [] } : { ok: true }); }
     if (fn === 'sla-report' && body.action === 'users') return ok({ users: {}, fields: [], pipelines: [] });
+    // Primer Contacto: el CRM simulado con la semana sintética de scripts/pc-fixture.js
+    if (fn === 'pc-report') {
+      const { D } = pcFixture(), a = body.action;
+      if (a === 'users') return ok({ users: D.users, fields: [{ id: 'f1', name: '¿Para vivir o invertir?' }], oppFields: [], pipelines: D.pipelines });
+      if (a === 'contacts') { const t0 = Date.parse(body.start), t1 = Date.parse(body.end); return ok({ contacts: D.leads.filter(c => Date.parse(c.c) >= t0 && Date.parse(c.c) <= t1), searchAfter: null }); }
+      if (a === 'citas') return ok({ citas: D.citas, calendarios: 1, errores: [] });
+      if (a === 'conversaciones') return ok({ convs: Object.keys(D.ev).map(ct => ({ id: 'cv-' + ct, ct, k: 1 })), cursor: null, modo: 'manual', ordenOk: true });
+      if (a === 'eventos') return ok({ res: [...(body.cts || []).map(ct => ({ ct, cv: ['cv-' + ct], ev: D.ev[ct] || [], err: false })),
+        ...(body.convs || []).map(c => ({ ct: c.ct, cv: [c.id], ev: D.ev[c.ct] || [], err: false }))] });
+      if (a === 'contactos') return ok({ contactos: body.ids.map(id => D.cts[id] || D.leads.find(c => c.id === id)).filter(Boolean).map(c => body.tareas ? c : { ...c, tk: undefined }), fallidos: [] });
+      if (a === 'opps') return ok({ opps: body.contactIds.flatMap(ct => D.opps[ct] || []), fallidos: [] });
+    }
     return route.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ error: 'stub: sin backend en la prueba' }) });
   });
   await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'domcontentloaded' });
@@ -74,7 +87,7 @@ const PORT = process.env.PORT || 8765;
     if (r.malos.length || r.tablas.length) hallazgos.push({ vista, ...r });
   };
   await escanear('boot');
-  const grupos = [['direccion', 'general'], ['direccion', 'comercial'], ['ventas', 'ingreso'], ['ventas', 'reporte'], ['ventas', 'analitica'], ['ventas', 'desempeno'], ['ventas', 'crm'], ['marketing', 'calidad'], ['marketing', 'ingreso']];
+  const grupos = [['direccion', 'general'], ['direccion', 'comercial'], ['ventas', 'ingreso'], ['ventas', 'reporte'], ['ventas', 'analitica'], ['ventas', 'desempeno'], ['ventas', 'primer'], ['ventas', 'crm'], ['marketing', 'calidad'], ['marketing', 'ingreso']];
   for (const [g, s] of grupos) { const ok = await page.evaluate(([g, s]) => { try { return navIr(g, s); } catch (e) { return 'ERR ' + e.message; } }, [g, s]); if (ok !== true) console.log(`  navIr(${g},${s}) →`, ok); await escanear(`${g}/${s}`); }
   for (const t of ['metas', 'asesores', 'db', 'diag', 'admin']) { const ok = await page.evaluate(t => { try { return navIrLateral(t); } catch (e) { return 'ERR ' + e.message; } }, t); if (ok !== true) console.log(`  navIrLateral(${t}) →`, ok); await escanear(t); }
   // Ingreso: seguimiento > total debe marcar el campo y bloquear el guardado
@@ -829,6 +842,64 @@ const PORT = process.env.PORT || 8765;
   // Dirección General: encabezados nuevos y guiones de Brokers
   const dg = await page.evaluate(() => { navIr('direccion', 'general'); return new Promise(r => setTimeout(() => { const t = document.querySelector('#view-resultados table.cons'); const ths = [...t.querySelectorAll('thead th')].map(x => x.innerText.trim()); const filaB = [...t.querySelectorAll('tbody tr')].find(tr => /Brokers/.test(tr.innerText)); r({ ths, brokers: filaB ? [...filaB.querySelectorAll('td')].map(x => x.innerText.trim()).slice(0, 10) : null }); }, 500)); });
   console.log('\n[DG] encabezados:', dg.ths.join(' | ')); console.log('[DG] fila Brokers (10 primeras):', dg.brokers && dg.brokers.join(' | '));
+  // Primer Contacto y Rescate (manual operativo, oct-2026): una semana sintética del puesto con
+  // los casos del manual y el resultado de cada indicador calculado a mano (scripts/pc-fixture.js).
+  VISTA = 'pc:modelo';
+  const pcx = await page.evaluate(async (F) => {
+    const A = pcBuild(F.D, pcCfgDe(F.cfg), F.now), E = F.esperado, r = {};
+    const V = A.vel.filter(v => v.vent && !v.err);
+    r.universo = A.nU === E.nU && A.excl.fuera === E.excl.fuera && A.excl.prueba === E.excl.prueba;
+    r.velocidad = V.length === E.vel.den && V.filter(v => v.dt != null && v.dt <= 60e3).length === E.vel.ok
+      && A.vel.find(v => v.id === 'lead00001').org === 'marcador' && A.vel.find(v => v.id === 'lead00001').doble === true;
+    r.puntos = A.ptsCerrados === E.puntos && A.habiles.length === E.habiles && Object.entries(E.dia).every(([d, n]) => A.dias[d] && A.dias[d].pts === n)
+      && A.dias['2026-10-26'].tope === 1 && A.dias['2026-10-30'].solas === 1 && A.dias['2026-10-30'].linea === 1 && A.fueraPts === E.fueraPts;
+    r.conv60 = A.conv60 === E.conv60;
+    const den = A.coh.filter(x => A.PC_DEN.includes(x.res));
+    r.entrega = den.length === E.entrega.den && den.filter(x => x.res === 'entregado').length === E.entrega.ent
+      && Object.entries(E.res).every(([k, n]) => A.coh.filter(x => x.res === k).length === n);
+    const S = A.ses;
+    r.asistencia = S.filter(s => s.est === 'asistio').length === E.asist.as && S.filter(s => ['asistio', 'noshow', 'cancelada'].includes(s.est)).length === E.asist.den
+      && S.filter(s => s.calif === 'si').length === E.calif.si && S.filter(s => s.calif === 'no').length === E.calif.no;
+    r.datos = A.datos.length === E.datos.n && A.datos.filter(d => d.completo).length === E.datos.ok && A.citas.porToque === 1;
+    const C = A.cad.filter(c => c.est === 'silencio');
+    r.cadencia = C.length === E.cad.silencio && C.filter(c => c.toques >= 6).length === E.cad.completos
+      && (A.cad.find(c => c.id === 'lead00002') || {}).breakUp === true && (A.cad.find(c => c.id === 'lead00002') || {}).sinResp === true;
+    r.cartera = Object.entries(E.cart).every(([k, [p, pts]]) => A.cart[k] && A.cart[k].pros === p && A.cart[k].pts === pts);
+    r.recepcion = Object.entries(E.recep).every(([id, [est, conf]]) => { const x = A.recep.find(y => y.id === id); return x && x.est === est && x.conf === conf; });
+    // Antes del arranque (modo real) el periodo no mide nada anterior al 26-oct
+    const F2 = JSON.parse(JSON.stringify(F)); F2.D.per = { ...F2.D.per, ini: Date.parse('2026-10-19T05:00:00Z') };
+    F2.D.leads.push({ id: 'leadAntes1', n: 'Lead Anterior', c: '2026-10-20T15:00:00Z', u: 'epc1', tags: [], cf: {} });
+    const A2 = pcBuild(F2.D, pcCfgDe(F2.cfg), F2.now);
+    r.arranque = A2.nU === E.nU && A2.per.iniYMD === '2026-10-26' && A2.per.recortado === true;
+    // Sin marcador registrado: la velocidad es informativa (3.1)
+    const A3 = pcBuild(F.D, pcCfgDe({ ...F.cfg, marcador: '' }), F.now);
+    r.marcador = A3.vel.every(v => v.eval === false);
+    // Pantalla
+    navIr('ventas', 'primer');
+    pcState.cfg = pcCfgDe(F.cfg); pcState.agg = A; pcRender();
+    await new Promise(res => setTimeout(res, 200));
+    const t = document.getElementById('pc-content').innerText;
+    r.pantalla = /Indicadores del puesto/.test(t) && /50%/.test(t) && /4\.2/.test(t) && /67%/.test(t) && /Agenda de más|Problema de fondo|Correcto/.test(t)
+      && !/undefined|NaN|\[object Object\]/.test(t);
+    // Los desplegables abren y cierran
+    const b = document.querySelector('#pc-content [data-pc-det]'); b.click();
+    r.desplegable = !document.getElementById(b.dataset.pcDet).hidden;
+    // Sincronización de punta a punta contra el CRM simulado: mismo resultado que el modelo.
+    const ahora = Date.now; Date.now = () => F.now;
+    try {
+      pcState.cfg = pcCfgDe(F.cfg); pcState.quien = ''; pcState.tipo = 'semana'; pcState.clave = '2026-W44'; pcState.agg = null;
+      await pcSync();
+    } finally { Date.now = ahora; }
+    const S2 = pcState.agg;
+    r.sync = !!S2 && S2.ptsCerrados === E.puntos && S2.nU === E.nU && S2.coh.filter(x => x.res === 'entregado').length === E.entrega.ent
+      && S2.ses.filter(s => s.est === 'asistio').length === E.asist.as && S2.recep.length === Object.keys(E.recep).length
+      && S2.coh.filter(x => x.res === 'lpOk').length === 1 && S2.diag.cobN === S2.diag.cobOk && S2.diag.cobN > 0 && !(S2.fallos || []).length;
+    r.ok = Object.values(r).every(Boolean);
+    return r;
+  }, pcFixture());
+  console.log('\n[primer contacto] modelo y pantalla', JSON.stringify(pcx));
+  if (!pcx.ok) hallazgos.push({ vista: 'pc:modelo', pcx });
+  await escanear('ventas/primer (con datos)');
   console.log('\n=== RESUMEN ===');
   console.log('errores de página:', errores.length); errores.slice(0, 15).forEach(e => console.log('  ✗', e.vista, '·', e.msg));
   console.log('errores de consola:', consola.length); [...new Set(consola.map(c => c.vista + ' · ' + c.msg))].slice(0, 15).forEach(c => console.log('  ·', c));

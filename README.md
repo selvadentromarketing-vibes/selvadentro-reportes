@@ -27,6 +27,11 @@ Producción: https://team.selvadentrotulum.com (Netlify site: `slvd-reportes`).
     oportunidades con sus campos personalizados, usuarios y catálogos de campos de
     contacto y de oportunidad, contactos por etiqueta) para **Desempeño de Ventas**
     (requiere canal `crm_live`, `direccion_comercial` o admin).
+  - `pc-report` — proxy a GoHighLevel para **Primer contacto** (Ejecutivo de Primer Contacto y
+    Rescate): conversaciones con actividad manual, eventos compactos por conversación, contactos
+    y oportunidades por id, citas con su creador. Importa de `sla-report` la definición de acción
+    manual, canal, desenlace y duración de llamada (no la copia). Requiere canal `pc_view`,
+    `sla_view`, `crm_live`, `direccion_comercial` o admin.
   - `kpi-analyze` / `notes-analyze` — conclusiones ejecutivas con Claude (requieren sesión).
   - `invite` — alta de usuarios por **liga mágica**: `create` / `relink` (admin, con su token de sesión)
     y `peek` / `claim` (públicas, para que la persona invitada defina su contraseña). No usa
@@ -822,6 +827,79 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
   servidor y en el tab.
 - Requiere scopes de conversaciones y calendarios en el token (el token actual los
   tiene todos); si faltan, esas columnas degradan a "—" sin romper el reporte.
+
+## Primer contacto — Ejecutivo de Primer Contacto y Rescate (desde el 26-oct-2026)
+
+Ventas → **Primer contacto** (`#/ventas/primer`). Mide el puesto contra la sección 10.1 del
+**Manual Operativo de Primer Contacto y Rescate** (Dirección General, oct-2026); el número de
+sección va junto a cada constante `PC_*` en `index.html` para saber qué tocar cuando el manual
+cambie (se revisa cada trimestre). Backend: `netlify/functions/pc-report.js`.
+
+**Antes de arrancar (lo que configura Dirección en el pliegue "Configuración del reporte",
+clave `pc:config:v1`; solo `direccion_general` / `direccion_comercial` / admin la guardan):**
+- **Ejecutivo**: el usuario de GoHighLevel con el que marca y escribe (hay que crearlo en GHL).
+- **Inicio del puesto**: 26-oct-2026. El reporte real no mide nada anterior.
+- **Marcador automático operando desde**: mientras esté vacío, la velocidad de 60 s es
+  **informativa** (3.1: "no se evalúa ni se castiga mientras el marcador no esté operando").
+- **Ventana operativa** y **festivos**: días hábiles = días de la ventana sin festivos
+  (precargados los de ley 2026-27). Los leads que entran fuera de la ventana no cuentan para
+  la meta de 60 s; se reportan aparte.
+- **Cinco datos** (6.1), **motivo y fecha estimada de Largo plazo** (10.3) y **marca de cita
+  calificada** (12.1, campo o etiqueta): se detectan por nombre y se marcan "detectado" hasta
+  que alguien los guarda. Sin la marca de cita calificada la tasa de calificación sale "—".
+- **Etiquetas de cartera** que ponga Sistemas (vencida / fría); sin etiqueta, la etapa.
+
+**Ensayo**: el selector *Ejecutivo* permite correr el reporte con cualquier usuario actual
+sobre semanas pasadas, para validar la medición con datos reales antes del 26. En ensayo la
+entrega cuenta por etapa (el usuario es dueño de sus leads) y la recepción del asesor no aplica.
+
+**Cómo se mide** (cada regla, con su sección):
+- **Universo de lead nuevo** (1.1, 3.3): contactos creados en el periodo, sin referidos,
+  brokers, prospección directa, alianzas ni legal (por pipeline) y sin registros de prueba.
+- **Velocidad (3.1)**: primera llamada **del puesto** —del ejecutivo o del marcador automático—
+  desde el registro, ≤60 s. Doble llamada en el primer toque = segunda llamada ≤10 min (o la
+  primera contestada).
+- **Puntos de contacto (7.3)**: por prospecto y día, doble llamada (dos marcaciones ≤10 min,
+  conectadas o no) = 1; una llamada contestada = 1; una llamada sola sin contestar = 0; las que
+  la línea no completó (failed, busy, canceled) no cuentan; mensaje manual por WhatsApp,
+  Instagram, Facebook (y SMS, configurable) = 1 y correo propio = 1, con ráfagas de ≤10 min del
+  mismo canal contadas una vez; tope 3 por prospecto al día. Promedio sobre días hábiles
+  **cerrados** (el día en curso no entra). Las llamadas del marcador suman solo si el CRM las
+  registra con el usuario del ejecutivo; si llegan sin usuario, el diagnóstico lo dice.
+- **Conversaciones ≥60 s** (candado del bono, 120/mes; en una semana, prorrateado por días hábiles).
+- **Contacto efectivo**: llamada del ejecutivo ≥60 s, o respuesta escrita del prospecto ≤48 h
+  después de un toque suyo.
+- **Conversión a entrega (10.1, 10.3)**: la tarjeta en Contacto establecido o más adelante,
+  movida **después** del contacto y asignada a un asesor. Largo plazo con motivo, fecha y tarea
+  abierta con fecha sale del denominador; sin ellos, es fallo. Contactos de <7 días sin cierre
+  quedan "en curso"; los que ya estaban con asesor (reconfirmación, 4.1) no cuentan.
+- **Sesiones**: del ejecutivo si el CRM dice que él creó la cita (`createdBy`); si no lo dice,
+  si él tocó al prospecto en las 72 h previas al agendamiento. Asistencia por prospecto (calendario
+  o, sin estatus, la etapa); calificación con la marca configurada, "sin marca" después de 48 h
+  se paga igual; cinco datos sobre las sesiones agendadas en el periodo. Matriz 10.2 con ≥5 casos.
+- **Cadencia 6 toques en 7 días (3.4)** para el lead en silencio, break up y paso a Sin respuesta.
+- **Cartera (cap. 7)**: prospectos tocados que no son lead nuevo (más de 8 días desde su alta),
+  por segmento; orden de ataque vencida → fría.
+- **Recepción del asesor (8.2)**: primer contacto manual ≤60 min tras la entrega y, si hubo
+  sesión, contacto del asesor el mismo día del agendamiento. Con nombre del asesor.
+
+**De dónde sale la cartera**: el CRM no dice qué conversaciones tocó un usuario, así que se
+listan las conversaciones con **actividad manual** desde 3 días antes del periodo (orden por
+último mensaje manual; si el API no lo acepta, por último mensaje) y se leen solo sus mensajes
+de la ventana. El diagnóstico compara contra los leads del periodo (leídos aparte, por contacto)
+cuántos aparecen en ese listado: si alguno falta, la cartera puede estar subcontada y lo dice.
+
+**Caché**: `pc:agg:v1:<periodo>:<real|e-usuario>`; se regenera solo una vez al día (semana en
+curso, modo real) al abrir la pestaña, o con *Generar reporte*. Permiso del canal: `pc_view`
+("Primer contacto" en Admin) para dárselo al ejecutivo o a Gerencia sin abrir Desempeño.
+
+**No mide todavía** (declarado): leads que regresan por re-envío de formulario (10.4; falta que
+GHL guarde la hora del último formulario), la transferencia en caliente de 15 min (el CRM no la
+distingue), la confirmación de seminarios y el monto del bono (es de Contabilidad).
+
+Pruebas: `node scripts/test-pc-report.js` (backend con GHL simulado) y el bloque
+`pc:modelo` de `scripts/smoke-ui.js`, con la semana sintética de `scripts/pc-fixture.js`
+y el resultado de cada indicador calculado a mano, incluida la sincronización completa.
 
 ## Historial de la migración de seguridad (ago 2026)
 
