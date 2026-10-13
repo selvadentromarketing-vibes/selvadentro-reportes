@@ -823,6 +823,13 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
     conserva como `lvCrm` y el reporte declara cuántos leads lo traen.
   - **Actividad efectiva** del estado de entrega de cada mensaje (entregados +
     leídos ÷ enviados).
+- **Con el Ejecutivo de Primer Contacto** (desde su inicio, 26-oct-2026; Dirección, 13-oct-2026):
+  el barrido recibe `excluir` = sus usuarios (de `pc:config:v1`) y sus toques **no cuentan como del
+  asesor**. Los leads que siguen asignados al ejecutivo salen del ranking (se miden en Primer
+  contacto) y se declaran en el alcance. A los que entregó se les mide **desde la entrega** —su
+  contacto efectivo (`ex.fe`: llamada suya ≥90 s o respuesta del lead a su toque) o, si no hay, su
+  último toque—, con el contacto efectivo del asesor como el primero que no es del ejecutivo
+  (`efT`), y la llamada automática ya no cuenta como 1er toque del asesor (es del marcador del ejecutivo).
 - **Permisos**: canal `crm_live` o `direccion_comercial` (o admin) — mismo gate en
   servidor y en el tab.
 - Requiere scopes de conversaciones y calendarios en el token (el token actual los

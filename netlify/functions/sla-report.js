@@ -7,7 +7,11 @@
 // Acciones (POST JSON + Authorization: Bearer <token>):
 //   { action:"contacts", start, end, searchAfter? }
 //     → { contacts:[{id,n,c,src,u,tags,attr}], total, searchAfter|null }
-//   { action:"sweep", ids:[contactId,...], opts?:{ [contactId]: { cut?, ncD?, ncR? } } }   (máx 8 por llamada)
+//   { action:"sweep", ids:[contactId,...], opts?:{ [contactId]: { cut?, ncD?, ncR? } }, excluir?:[userId] }   (máx 8 por llamada)
+//     excluir = usuarios del Ejecutivo de Primer Contacto (desde el 26-oct-2026): sus toques NO cuentan
+//     como acción manual del asesor (1er toque, días, llamadas, canales…). Van aparte en ex = { n, f, l,
+//     fe } (cuántos, primero, último, primer contacto efectivo suyo) y efT = momentos de contacto
+//     efectivo que no son suyos, para que el front mida al asesor desde la entrega.
 //     → { results:[{id, fo, fi, fe, lm, foM, foMch, foC, days[], calls, callsOk, chans[], deliv{}, users[], cerr, aerr, ap{}, cl{}, tel{}, nc?, cortados}] }
 //     cl = llamadas manuales del asesor: intentos, desenlace (ok/na/linea/otro), conectadas sin
 //     duración (dn) y el momento de cada intento (t) · tel = diagnóstico de duración de TODAS
@@ -200,7 +204,7 @@ function callDur(m) {
 const llavesDe = (m) => [...Object.keys(m || {}), ...Object.keys((m && m.meta) || {}).map((k) => "meta." + k),
   ...Object.keys((m && m.meta && m.meta.call) || {}).map((k) => "meta.call." + k)];
 
-async function sweepOne(id, opt) {
+async function sweepOne(id, opt, excl) {
   // Opciones de la spec v1.1, todas en ms. Sin opciones el barrido es el de siempre.
   const num = (x) => { const n = Number(x); return isFinite(n) && n > 0 ? n : null; };
   const cut = num(opt && opt.cut), ncD = num(opt && opt.ncD), ncR = num(opt && opt.ncR);
@@ -245,6 +249,10 @@ async function sweepOne(id, opt) {
     ap: { tot: 0, sh: 0, ns: 0, fut: 0, f: null },
   };
   const dset = new Set(), cset = new Set(), uset = new Set(), llaves = new Set();
+  // Toques del ejecutivo de primer contacto (excluir): aparte, para medir al asesor desde la entrega.
+  if (excl) { out.ex = { n: 0, f: null, l: null, fe: null }; out.efT = []; }
+  const inbT = [];                         // respuestas del prospecto (para el contacto efectivo del ejecutivo)
+  const delEx = (m) => !!(excl && m.userId && excl.has(m.userId));
   // Evidencia de una etiqueta "sin llamada" (R-05), SIEMPRE anterior a su fecha de inicio:
   // intentos de llamada del asesor que no conectaron y en cuántos días distintos, algún
   // mensaje entrante del lead, alguna llamada ≥90 s. post = intentos después del retiro.
@@ -284,6 +292,15 @@ async function sweepOne(id, opt) {
         if (autoContacto) { out.nA++; if (!out.foA || t < out.foA) out.foA = t; }
         const efectivo = m.direction === "inbound" || (dur != null && dur >= 90 && (m.direction === "inbound" || isManual(m) || autoContacto));
         if (efectivo && (!out.fe || t < out.fe)) out.fe = t;
+        if (excl) {
+          if (m.direction === "outbound" && delEx(m)) {
+            const ex = out.ex; ex.n++;
+            if (!ex.f || t < ex.f) ex.f = t;
+            if (!ex.l || t > ex.l) ex.l = t;
+            if (esLlamada && dur != null && dur >= 90 && (!ex.fe || t < ex.fe)) ex.fe = t;
+          } else if (efectivo && !delEx(m) && out.efT.length < 60) out.efT.push(t);
+          if (m.direction === "inbound" && !["call", "otro"].includes(chanOf(m))) inbT.push(t);
+        }
         // Toda llamada (manual o no) alimenta el diagnóstico de telefonía (A4/D4)
         if (esLlamada) {
           const st = callStatus(m), des = callDesenlace(st);
@@ -306,7 +323,7 @@ async function sweepOne(id, opt) {
           if (!out.li || t > out.li) out.li = t;      // última respuesta del lead
         }
         if (!out.lm || t > out.lm) out.lm = t;
-        if (m.direction === "outbound" && isManual(m)) {
+        if (m.direction === "outbound" && isManual(m) && !delEx(m)) {
           if (!out.foM || t < out.foM) { out.foM = t; out.foMch = chanOf(m); }
           if (!out.lmM || t > out.lmM) out.lmM = t;   // último toque manual del asesor
           dset.add(dayKey(t));
@@ -357,6 +374,12 @@ async function sweepOne(id, opt) {
     // (típicamente falta el scope de mensajes en el token), no ausencia de contacto.
     if (convs.length && convFallidas === convs.length) out.cerr = true;
     if (out.nc) out.nc.dias = ncDias.size;
+    if (excl) {
+      out.efT.sort((a, b) => a - b);
+      // Respuesta del prospecto a un toque del ejecutivo = contacto efectivo suyo (si no hubo llamada ≥90 s antes)
+      const r = out.ex.f ? inbT.sort((a, b) => a - b).find((x) => x >= out.ex.f) : null;
+      if (r && (!out.ex.fe || r < out.ex.fe)) out.ex.fe = r;
+    }
     out.cl.t.sort((a, b) => a - b);
     out.tel.llaves = [...llaves].slice(0, 30);
   } catch (e) { out.cerr = true; /* conversaciones no disponibles: se marca, no se asume "sin contacto" */ }
@@ -414,14 +437,15 @@ async function sweepOne(id, opt) {
   return out;
 }
 
-async function sweep({ ids, opts }) {
+async function sweep({ ids, opts, excluir }) {
   if (!Array.isArray(ids) || !ids.length) throw Object.assign(new Error("ids requerido"), { status: 400 });
   const batch = ids.slice(0, SWEEP_MAX).filter((x) => typeof x === "string" && x);
   const o = opts && typeof opts === "object" ? opts : {};
+  const ex = Array.isArray(excluir) && excluir.length ? new Set(excluir.map(String)) : null;
   const results = [];
   // Concurrencia 4 para quedar lejos del burst limit de GHL (100 req/10s)
   for (let i = 0; i < batch.length; i += 4) {
-    const part = await Promise.all(batch.slice(i, i + 4).map((id) => sweepOne(id, o[id])));
+    const part = await Promise.all(batch.slice(i, i + 4).map((id) => sweepOne(id, o[id], ex)));
     results.push(...part);
   }
   return { results };

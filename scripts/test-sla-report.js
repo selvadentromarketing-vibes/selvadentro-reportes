@@ -50,6 +50,10 @@ const CONV = {
   // dura 2 min; el asesor escribe a mano a los 10 min. Y una automática de 20 s, sin contacto.
   auto90: [msg("a", T0 + 40e3, { messageType: "TYPE_CALL", status: "completed", source: "workflow", userId: null, callDuration: 120 }), msg("b", T0 + 10 * 60e3)],
   auto20: [msg("a", T0 + 40e3, { messageType: "TYPE_CALL", status: "completed", source: "workflow", userId: null, callDuration: 20 }), msg("b", T0 + 10 * 60e3)],
+  // Ejecutivo de Primer Contacto (desde el 26-oct-2026): el ejecutivo (epc1) marca a los 30 s y habla
+  // 2 min, entrega; la asesora (u1) escribe 3 h después y el lead le contesta a las 4 h.
+  conEpc: [msg("a", T0 + 30e3, { messageType: "TYPE_CALL", status: "completed", userId: "epc1", callDuration: 120 }),
+    msg("b", T0 + 3 * H), msg("c", T0 + 4 * H, { direction: "inbound", userId: null, source: "" })],
   // Origen de cada llamada: del asesor, automática (workflow / marcador de campaña) o entrante.
   telOrg: [
     msg("a", T0 + 1 * H, { messageType: "TYPE_CALL", status: "busy" }),                                              // asesor: falla de línea
@@ -112,6 +116,13 @@ const call = async (body) => { const r = await handler({ httpMethod: "POST", hea
     && ci.d.citas.find((c) => c.id === "e1").st === "confirmed" && ci.d.citas.find((c) => c.id === "e2").t === Date.parse("2026-10-06T16:00:00Z")
     && ci.d.citas.find((c) => c.id === "e1").ag === T0 - 3 * 24 * H && ci.d.citas.find((c) => c.id === "e2").ag === null,
     "citas por fecha de la cita, de todos los calendarios, sin duplicados; un calendario que falla se reporta", ci.d);
+  const ep = await call({ action: "sweep", ids: ["conEpc"], excluir: ["epc1"] });
+  const EP = ep.d.results && ep.d.results[0];
+  ok(EP && EP.foM === T0 + 3 * H && EP.calls === 0 && EP.days.length === 1 && EP.ex.n === 1 && EP.ex.fe === T0 + 30e3 && EP.ex.f === T0 + 30e3
+    && JSON.stringify(EP.efT) === JSON.stringify([T0 + 4 * H]) && EP.fe === T0 + 30e3,
+    "excluir: los toques del ejecutivo no son del asesor; van aparte con su contacto efectivo, y efT trae solo los que no son suyos", EP && { foM: EP.foM && iso(EP.foM), calls: EP.calls, ex: EP.ex, efT: EP.efT });
+  const ep2 = await call({ action: "sweep", ids: ["conEpc"] });
+  ok(ep2.d.results[0].foM === T0 + 30e3 && !("ex" in ep2.d.results[0]), "sin excluir, el barrido es el de siempre", { foM: iso(ep2.d.results[0].foM) });
   const og = await call({ action: "sweep", ids: ["telOrg"] });
   const P = og.d.results && og.d.results[0] && og.d.results[0].tel.por;
   ok(P && P.manual.tot === 1 && P.manual.linea === 1 && P.auto.tot === 2 && P.auto.linea === 1 && P.auto.ok === 1 && P.auto.c90 === 1 && P.entrante.tot === 1 && P.entrante.c90 === 1,

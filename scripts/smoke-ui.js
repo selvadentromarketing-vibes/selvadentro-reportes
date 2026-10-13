@@ -175,6 +175,31 @@ const PORT = process.env.PORT || 8765;
     return { by, califCrm: agg.califCrm, q5: score.q5, qTot: score.qTot };
   });
   console.log('\n[sla] índice de calidad por reglas', JSON.stringify(sla));
+  // Desempeño con Ejecutivo de Primer Contacto (13-oct-2026): el lead que sigue en sus manos sale del
+  // ranking; el que entregó se mide desde la entrega y solo con los toques del asesor.
+  VISTA = 'sla:primerContacto';
+  const slaPc = await page.evaluate(() => {
+    const T = Date.parse('2026-10-27T15:00:00Z'), H = 3600e3;
+    const c = (id, u) => ({ id, n: 'Lead ' + id, c: new Date(T).toISOString(), src: 'facebook', u, tags: [], attr: {}, cf: {} });
+    const contactos = [c('p1', 'epc1'), c('p2', 'u1'), c('p3', 'u1')];
+    const sweeps = {
+      p1: { foM: null, ex: { n: 2, f: T + 30e3, l: T + 60e3, fe: null }, efT: [] },
+      // Entregado: el ejecutivo habló a los 60 s (fe); la asesora escribe a las 3 h; el lead le contesta a las 4 h.
+      // La llamada automática de 2 min a los 20 s es del marcador del ejecutivo, no de la asesora.
+      p2: { foM: T + 3 * H, foA: T + 20e3, fe: T + 20e3, ex: { n: 1, f: T + 60e3, l: T + 60e3, fe: T + 60e3 }, efT: [T + 4 * H] },
+      p3: { foM: T + 10 * 60e3, fi: T + H, fe: T + H },
+    };
+    const agg = buildSlaAgg([lqWeekOf(new Date(T).toISOString())], contactos, sweeps, [], { u1: 'Asesora Uno', epc1: 'Ejecutivo' }, [], [],
+      { now: T + 48 * H, pc: { epc: ['epc1'], activaT: Date.parse('2026-10-26T05:00:00Z'), activaYMD: '2026-10-26' } });
+    const by = {}; agg.leads.forEach(l => by[l.id] = { created: l.created, slaAt: l.slaAt, fi: l.fi, tAuto: l.tAuto, entPc: l.entPc });
+    const r = { n: agg.leads.length, pc: agg.pc, p2: by.p2, p3: by.p3 };
+    r.ok = r.n === 2 && agg.pc.enEj === 1 && agg.pc.ent === 1 && !by.p1
+      && by.p2.created === T + 60e3 && by.p2.slaAt === 3 * H - 60e3 && by.p2.fi === T + 4 * H && by.p2.tAuto === false && by.p2.entPc === true
+      && by.p3.created === T && by.p3.slaAt === 10 * 60e3 && by.p3.entPc === false;
+    return r;
+  });
+  console.log('[sla] con Ejecutivo de Primer Contacto', JSON.stringify(slaPc));
+  if (!slaPc.ok) hallazgos.push({ vista: 'sla:primerContacto', slaPc });
   // c1: OPP real → sqls aunque el CRM no traiga calificación; c2: solo respondió → mql; c3: campo manual MQL, reglas mql.
   if (!(sla.by.c1 && sla.by.c1.lv === 'sqls' && sla.by.c1.lvCrm === 'nc' && sla.by.c1.o === 1 && sla.by.c2.lv === 'mql' && sla.by.c3.lvCrm === 'mql' && sla.califCrm === 1 && sla.qTot === 3 && sla.q5 != null && sla.q5 > 1)) hallazgos.push({ vista: 'sla:indiceCalidad', sla });
   // Change Spec v1.2 (25-sep-2026): Velocidad de primer contacto con umbrales 20·40·60·80

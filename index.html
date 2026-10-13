@@ -7214,28 +7214,43 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
   // v1.1 (R-01/R-03): brokers e inválidos salen de TODO desde su alta, en los dos sentidos.
   // Antes (reglas v1.0) solo salían los leads cuyas oportunidades vivían TODAS en Expansión.
   const excluir = (c)=> v11 ? fueraDeTodo(c.id) : esExpansion(c.id);
+  // Ejecutivo de Primer Contacto (desde que arranca el puesto, 26-oct-2026; Dirección General,
+  // 13-oct-2026): el asesor se mide desde la ENTREGA y solo con sus propios toques —el barrido ya
+  // excluye los del ejecutivo—. Los leads que siguen en manos del ejecutivo salen del ranking de
+  // asesores: se miden en su reporte (Ventas → Primer contacto).
+  const PCX = X.pc && Array.isArray(X.pc.epc) && X.pc.epc.length ? { epc:new Set(X.pc.epc), desde:X.pc.activaT||0 } : null;
+  const pcEnEj = [], pcEnt = [];
   const leads = contactsArr.filter(c=>!esTest(c) && !excluir(c)).map(c=>{
     const wk = lqWeekOf(c.c); if(!wk || !rangoSet.has(wk)) return null;
     const sw = sweepMap[c.id] || {sin:true};
     const dp = disp[c.id] || null;
+    const altaPc = new Date(c.c).getTime();
+    if(PCX && altaPc >= PCX.desde && PCX.epc.has(c.u)){ pcEnEj.push(c.id); return null; }
     // Contacto efectivo (R-06): respuesta del lead o llamada ≥90 s; antes, solo la respuesta.
-    const fiEf = v11 && sw.fe !== undefined ? sw.fe : sw.fi;
+    const fiEf0 = v11 && sw.fe !== undefined ? sw.fe : sw.fi;
     const cf = (f)=> f && c.cf ? String(c.cf[f.id]||"").trim() : "";
     const cp = ctPipe[c.id] || null;
     const alta = new Date(c.c).getTime();
     // Si el lead entró al pipeline DESPUÉS de darse de alta, ese es el momento en que
     // ventas se hizo cargo y desde ahí se le mide.
     const hand = traspaso[c.id] || null;
-    const created = (hand && hand > alta) ? hand : alta;
+    const created0 = (hand && hand > alta) ? hand : alta;
+    // Entregado por el ejecutivo: el reloj del asesor arranca en la entrega —el contacto efectivo
+    // del ejecutivo (o su último toque)— y su contacto efectivo es el primero que no es del ejecutivo.
+    const entPc = !!(PCX && alta >= PCX.desde && sw.ex && sw.ex.n > 0);
+    const created = entPc ? Math.max(created0, sw.ex.fe || sw.ex.l || created0) : created0;
+    if(entPc) pcEnt.push(c.id);
+    const fiEf = entPc ? ((sw.efT||[]).find(t=>t >= created) || null) : fiEf0;
     // El Anexo 1 define el SLA de primera respuesta contra el CONTACTO EFECTIVO
     // (el lead respondió), no contra el intento. Se miden los dos por separado.
     // Primer toque para la VELOCIDAD y el SLA de 60 s: el toque manual del asesor o, con las
     // reglas v1.1, una llamada que el CRM marcó solo y que conectó ≥90 s (spec v1.2 §3:
     // "automatización con contacto cuenta a su hora real"; Dirección General, 7-oct-2026) —
     // lo que llegue primero. La columna "1er toque manual" sigue contando solo lo manual.
-    const tAuto = !!(v11 && sw.foA && (!sw.foM || sw.foA < sw.foM));
+    // La llamada automática de un lead que trabajó el ejecutivo es suya (su marcador), no del asesor.
+    const tAuto = !entPc && !!(v11 && sw.foA && (!sw.foM || sw.foA < sw.foM));
     const foT = tAuto ? sw.foA : sw.foM;
-    const slaAt = (foT && foT>=created) ? foT-created : null;  // hasta el 1er toque
+    const slaAt = (foT && (foT>=created || entPc)) ? Math.max(0, foT-created) : null;  // hasta el 1er toque
     const slaEf = (fiEf && fiEf>=created) ? fiEf-created : null;        // hasta el contacto efectivo
     // Velocidad (R-04): en horario, 1er toque manual en ≤5 min; fuera de horario, antes de
     // las 11:00 del siguiente día de servicio. Con las reglas v1.0, ≤5 min las 24 horas.
@@ -7303,6 +7318,7 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
                            h24: (sw.cl.t||[]).filter(t=>t>=created && t<=created+24*3600e3).length } : null,
              bucket: (()=>{ const r=slaReloj(created); return slaBucket(foT && foT>=r ? (foT-r)/60000 : (foT ? 0 : null)); })(),
              tAuto,                                   // el 1er toque fue una llamada automática con contacto ≥90 s
+             entPc,                                   // entregado por el Ejecutivo de Primer Contacto: reloj desde la entrega
              d10: (sw.days||[]).filter(d=>{ const t=Date.parse(d+"T12:00:00Z"); return t>=created-86400e3 && t<=created+10*86400e3; }).length,
              breakup: slaBreakup({calls:sw.calls, chans:sw.chans, fi:fiEf, li:sw.li}, sinLlamada),
              // lvCrm = campo manual "Calificación del lead" tal cual. lv se fija más abajo
@@ -7396,6 +7412,7 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
   return { ts:Date.now(), rango, users:usersMap||{}, fields:F, leads, byRepOpp, hrs, dow,
            testExcl, callSt, callTot, tel, califCrm,
            exclExpansion: v11 ? 0 : exclExpansion, pipelines: pipesArr||[],
+           pc: PCX ? { enEj: pcEnEj.length, ent: pcEnt.length, desde: X.pc.activaYMD || "" } : null,
            citasP: slaCitasDelPeriodo(X, contactsArr, oppsArr, ctPipe, v11 ? fueraDeTodo : null, now, per),
            v11: v11 ? slaResumenV11({ contactsArr, tagged: X.tagged||[], disp, esTest, rangoSet, per, C11, H11, X, leads }) : null };
 }
@@ -7643,7 +7660,8 @@ function slaRender(){
   // Alcance en pantalla (spec D1): una regla, un universo, y las diferencias explicadas.
   html += `<p class="hint" style="margin-top:0"><b>Alcance:</b> todo lead creado en las semanas del rango cuenta, esté en el pipeline que esté — el universo lo define el <b>dueño</b>, no el pipeline.
     Excluidos: ${V11 ? `${V11.invalidos.length} lead${V11.invalidos.length!==1?"s":""} inválido${V11.invalidos.length!==1?"s":""}, ${V11.brokers.length} error${V11.brokers.length!==1?"es":""} de asignación (brokers)` : `${agg.exclExpansion||0} lead${(agg.exclExpansion||0)!==1?"s":""} de <b>Brokers Expansión y activación</b> (recluta brokers, no vende a clientes)`} y ${agg.testExcl||0} registro${(agg.testExcl||0)!==1?"s":""} de prueba.
-    La <b>N</b> del ranking cuenta solo leads con conversaciones legibles; la columna <b>Leads</b> los cuenta todos — la diferencia aparece como "s/d" en cada tabla.</p>`;
+    La <b>N</b> del ranking cuenta solo leads con conversaciones legibles; la columna <b>Leads</b> los cuenta todos — la diferencia aparece como "s/d" en cada tabla.
+    ${agg.pc ? `<br><b>Ejecutivo de Primer Contacto</b> (desde el ${slaFechaCorta(agg.pc.desde)}): ${agg.pc.enEj} lead${agg.pc.enEj===1?"":"s"} siguen en sus manos y no entran a este reporte (se miden en Ventas → Primer contacto); ${agg.pc.ent} que él entregó se miden <b>desde la entrega</b> y solo con los toques del asesor. Los toques del ejecutivo nunca cuentan como del asesor.` : ""}</p>`;
   // Filtro por campaña de origen (spec D5)
   {
     const cuenta = {}; todos.forEach(l=>{ const k=(l.camp||"").trim()||"__sin"; cuenta[k]=(cuenta[k]||0)+1; });
@@ -8234,6 +8252,11 @@ async function slaSync(){
         if(Object.keys(o).length) sweepOpts[c.id] = o;
       });
     }
+    // Ejecutivo de Primer Contacto: sus toques no son del asesor (reporte propio en Primer contacto).
+    let pcX = null;
+    try{ const pc = pcCfgDe(await sGet(PC_CFG_KEY));
+      if(pc.usuarios.length) pcX = { epc: pc.usuarios, activaT: Date.parse((pc.activa||PC_ACTIVA_DEF)+"T00:00:00"+LQ_TZ), activaYMD: pc.activa||PC_ACTIVA_DEF }; }
+    catch(e){ fallos.push("la configuración del Ejecutivo de Primer Contacto (sus toques pueden contarse como del asesor)"); }
     // Barrido de conversaciones y citas, en lotes de 8
     const sweepMap={};
     for(let i=0;i<contactsArr.length;i+=8){
@@ -8241,7 +8264,7 @@ async function slaSync(){
       const ids = contactsArr.slice(i,i+8).map(c=>c.id);
       const opts = {}; ids.forEach(id=>{ if(sweepOpts[id]) opts[id] = sweepOpts[id]; });
       try{
-        const res = await slaFn({action:"sweep", ids, ...(Object.keys(opts).length ? { opts } : {})});
+        const res = await slaFn({action:"sweep", ids, ...(Object.keys(opts).length ? { opts } : {}), ...(pcX ? { excluir: pcX.epc } : {})});
         (res.results||[]).forEach(r=>{ sweepMap[r.id]=r; });
       }catch(e){
         // Un lote fallido deja a esos leads sin conversaciones, y sin conversaciones se leen
@@ -8260,7 +8283,7 @@ async function slaSync(){
         + `sus asesores salen con menos actividad de la real`);
     }
     slaState.agg = buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr, pipesArr,
-      { oppFields, oppFieldsOk, ncState, tagged, taggedOk, taggedTruncado, now: ahora, citas: citasArr, citasOk, citasErr });
+      { oppFields, oppFieldsOk, ncState, tagged, taggedOk, taggedTruncado, now: ahora, citas: citasArr, citasOk, citasErr, pc: pcX });
     slaState.agg.fallos = fallos;
     sSet(SLA_AGG_KEY, slaState.agg).catch(e=>toast("Cache del reporte no guardado: "+(e.message||e)));
     slaPopulateWeeks(); slaRender();
