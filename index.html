@@ -620,6 +620,10 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   table.lq-pl-tabla tr.lq-pl-grp td{ background:var(--crema-2); }
   .lq-re{ display:inline-block; white-space:nowrap; font-size:var(--fs-xs); font-weight:600; color:#6b5a1c; background:#f6edd2; border:1px solid #e3d3a4; border-radius:10px; padding:0 7px; margin-left:4px; cursor:help; }
   .lq-re-n{ color:#6b5a1c; }
+  .crm-kpi.sla-chica .k-val, .sla-chica-v{ color:var(--neutro); opacity:.75; }
+  .sla-det-btn{ display:block; margin-top:3px; background:none; border:none; padding:0; color:var(--verde-prof); font-size:var(--fs-xs); font-weight:600; cursor:pointer; text-decoration:underline; }
+  tr.sla-det-row > td{ background:var(--crema); padding:8px 10px 12px 18px; white-space:normal; }
+  table.sla-det td, table.sla-det th{ font-size:var(--fs-xs); padding:5px 7px; }
   table.lq-pl-tabla tr.lq-pl-sin td{ color:#6b5a1c; }
   table.lq-pl-tabla td.lq-nd{ color:var(--neutro); cursor:help; }
   table.lq-pl-tabla{ width:100%; }
@@ -4066,7 +4070,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
       // Etapa REAL del pipeline de GoHighLevel (si el lead tiene oportunidad);
       // pst = etiqueta de tags, que solo se usa cuando no hay oportunidad.
       pipe: stg ? stg.p : "", pstage: stg ? stg.s : "", ost: op ? op.st : "",
-      n:l.n, c:l.c, wk:lqWeekOf(l.c), mo:lqMonthOf(l.c), lv, st:lqStage(lv, tagsLower),
+      id:l.id, n:l.n, c:l.c, wk:lqWeekOf(l.c), mo:lqMonthOf(l.c), lv, st:lqStage(lv, tagsLower),
       fuente:sc.fuente, camp:sc.camp, hint:sc.hint||"", ad:(l.attr && l.attr.ad) || "", adId:(l.attr && l.attr.adId) || "", grp:(l.attr && l.attr.grp) || "", u:l.u||"",
       em:l.em||"", ph:l.ph||"",
       hs: !!(l.src || (l.attr && (l.attr.camp||l.attr.src))),   // fuente identificada
@@ -4081,7 +4085,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
       ...(l.attr && l.attr.inf ? { inf:1 } : {}),   // atribución inferida (LQ_INFERIDA)
       ...(l.attr && l.attr.pid ? { pid:1, cid:l.attr.cidOk } : {}),   // campaña resuelta por su ID (y cuál), no por nombre
       ...(l.attr && l.attr.kw ? { kw:String(l.attr.kw).slice(0,80) } : {}),   // palabra clave de Google (utm_term={keyword})
-      ...(l._re ? { re:1, id:l.id, alta:l._re.alta, ...(l._re.aprox ? { reAprox:1 } : {}) } : {}),   // re-envío de formulario (id: para pedir sus oportunidades)
+      ...(l._re ? { re:1, alta:l._re.alta, ...(l._re.aprox ? { reAprox:1 } : {}) } : {}),   // re-envío de formulario
       _si: stg ? (stg.i ?? 0) : null,    // posición de la etapa, solo para el cálculo de abajo
     };
   }).filter(l=>l.wk);
@@ -6414,6 +6418,25 @@ function slaRangeWeeks(){
   return weeks.slice(i, f+1);
 }
 
+const slaSlug = (t)=> String(t||"").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+// "Ver leads" de una fila de Desempeño: de dónde sale cada mediana, lead por lead.
+function slaDetalleLeads(arr, V11, name){
+  const hora = (ms)=> ms ? new Date(ms - LQ_TZ_MS).toISOString().slice(5,16).replace("T"," ").replace(/^(\d\d)-(\d\d)/, "$2/$1") : "—";
+  const canal = (l)=> l.tAuto ? "llamada automática con contacto" : ({ call:"llamada", whatsapp:"WhatsApp", sms:"SMS", email:"correo" }[l.fch] || l.fch || "—");
+  const motivo = (l)=> l.sd ? "no: sin datos de conversación" : (V11 && l.fh) ? "no: entró fuera de horario" : l.slaAt == null ? "no: sin 1er toque" : "sí";
+  const filas = arr.slice().sort((a,b)=>(a.created||0)-(b.created||0)).slice(0,80).map(l=>`<tr>
+      <td class="lft">${escAttr(l.n||"—")}</td><td>${hora(l.created)}</td><td>${V11 ? (l.fh ? "fuera" : "en horario") : "—"}</td>
+      <td class="lft">${escAttr(name(l.u))}</td>
+      <td>${l.slaAt != null ? hora(l.created + l.slaAt) : "—"}</td><td class="lft">${l.slaAt != null ? escAttr(canal(l)) : "—"}</td>
+      <td>${fmtDur(l.slaAt)}</td><td class="lft">${motivo(l)}</td><td>${fmtDur(l.slaEf)}</td></tr>`).join("");
+  return `<div class="table-scroll" style="border:none;box-shadow:none"><table class="rep sla-det">
+    <thead><tr><th class="lft">Lead</th><th>Entrada</th><th>Horario</th><th class="lft">Asesor</th><th>1er toque</th><th class="lft">Canal</th><th>Tiempo</th><th class="lft">¿En la mediana?</th><th>Contacto efectivo</th></tr></thead>
+    <tbody>${filas}</tbody></table></div>${arr.length > 80 ? `<p class="hint">Se muestran los primeros 80 de ${arr.length}.</p>` : ""}
+    <p class="hint" style="margin:4px 0 0">Hora de Tulum. Reloj desde la entrada del lead (o su traspaso a ventas). 1er toque = el primer mensaje o llamada manual del asesor, o una llamada automática que conectó ≥90 s, lo que llegue primero.</p>`;
+}
+// Muestra mínima para leer una mediana de velocidad (menos = "muestra chica", en gris).
+const SLA_N_MIN = 5;
+const slaNTxt = (n)=> !n ? "sin leads medibles" : `${n} lead${n===1?"":"s"}${n < SLA_N_MIN ? " · muestra chica, no comparar" : ""}`;
 const slaMedian = (arr)=>{ if(!arr.length) return null; const s=arr.slice().sort((a,b)=>a-b); const m=Math.floor(s.length/2); return s.length%2 ? s[m] : (s[m-1]+s[m])/2; };
 function fmtDur(ms){
   if(ms==null) return "—";
@@ -7521,12 +7544,33 @@ function slaRosterIds(users){
   return ids;
 }
 
+/* Campaña de origen con el MISMO cruce que Calidad de Leads (ID de campaña, alias de UTM,
+   atribución inferida de la landing de seguridad), por id de contacto, desde su agregado. Antes
+   Desempeño agrupaba por la utm_campaign tal cual llega y sus totales por campaña no cuadraban
+   con Calidad de Leads (Dirección, 13-oct-2026). Si ese agregado no está en memoria se lee del
+   kv una vez; mientras tanto, la utm_campaign tal cual. */
+function slaCampLq(){
+  const a = (lqState.agg && Array.isArray(lqState.agg.leads)) ? lqState.agg : slaState.lqAgg;
+  if(!a && !slaState.lqPidio){
+    slaState.lqPidio = true;
+    sGet(LQ_AGG_KEY).then(v=>{ if(v && Array.isArray(v.leads)){ slaState.lqAgg = v; if(slaState.agg) slaRender(); } }).catch(()=>{});
+  }
+  if(!a) return null;
+  if(slaState._lqMapDe !== a){
+    const m = {}; (a.leads||[]).forEach(l=>{ if(l.id) m[l.id] = l.camp === LQ_SIN_CAMP ? "" : String(l.camp||""); });
+    slaState._lqMap = Object.keys(m).length ? m : null; slaState._lqMapDe = a;
+  }
+  return slaState._lqMap;
+}
+
 function slaRender(){
   const agg = slaState.agg; if(!agg) return;
   document.getElementById("sla-last-sync").textContent = crmAgo(agg.ts);
+  const mapC = slaCampLq();
+  const todos = mapC ? agg.leads.map(l=> Object.prototype.hasOwnProperty.call(mapC, l.id) ? { ...l, camp: mapC[l.id] } : l) : agg.leads;
   // Filtro por campaña de origen (spec D5). "" = todas; "__sin" = sin campaña atribuida.
   const fCamp = slaState.camp || "";
-  const leads = !fCamp ? agg.leads : agg.leads.filter(l=> fCamp==="__sin" ? !(l.camp||"").trim() : l.camp===fCamp);
+  const leads = !fCamp ? todos : todos.filter(l=> fCamp==="__sin" ? !(l.camp||"").trim() : l.camp===fCamp);
   const now = Date.now();
   const name = (u)=> agg.users[u] || (u ? "(sin nombre)" : "(sin asesor)");
   const pcti = (n,d)=> d ? Math.round(n/d*100)+"%" : "—";
@@ -7542,6 +7586,9 @@ function slaRender(){
   const sinCitas = leads.length - conCitas.length;
 
   const kpi = (v,l)=>`<div class="crm-kpi"><div class="k-val">${v}</div><div class="k-lbl">${l}</div></div>`;
+  // Mediana con su N a la vista (Dirección, 13-oct-2026): "5 min" de Escape US/CA salía de UN
+  // solo lead y se comparaba como si fuera una tendencia. Con menos de SLA_N_MIN leads, gris.
+  const kpiMed = (arr, l)=> `<div class="crm-kpi${arr.length && arr.length < SLA_N_MIN ? " sla-chica" : ""}"><div class="k-val">${fmtDur(slaMedian(arr))}</div><div class="k-lbl">${l}</div><div class="k-lbl" style="opacity:.7">${slaNTxt(arr.length)}</div></div>`;
   const conDatos = leads.filter(l=>!l.sd);
   const telG = slaTelefonia(conDatos);
   const nAuto = conDatos.filter(l=>l.tAuto).length;   // 1er toque por llamada automática con contacto
@@ -7560,15 +7607,16 @@ function slaRender(){
     La <b>N</b> del ranking cuenta solo leads con conversaciones legibles; la columna <b>Leads</b> los cuenta todos — la diferencia aparece como "s/d" en cada tabla.</p>`;
   // Filtro por campaña de origen (spec D5)
   {
-    const cuenta = {}; agg.leads.forEach(l=>{ const k=(l.camp||"").trim()||"__sin"; cuenta[k]=(cuenta[k]||0)+1; });
+    const cuenta = {}; todos.forEach(l=>{ const k=(l.camp||"").trim()||"__sin"; cuenta[k]=(cuenta[k]||0)+1; });
     const camps = Object.keys(cuenta).filter(k=>k!=="__sin").sort();
     html += `<div class="lq-toggle" style="margin:4px 0 10px">
       <span class="lt-lbl">Campaña de origen</span>
       <select id="sla-camp" class="lq-search" style="max-width:340px;cursor:pointer">
-        <option value="">Todas (${agg.leads.length})</option>
+        <option value="">Todas (${todos.length})</option>
         ${camps.map(c=>`<option value="${escAttr(c)}"${fCamp===c?" selected":""}>${escAttr(c)} (${cuenta[c]})</option>`).join("")}
         ${cuenta.__sin?`<option value="__sin"${fCamp==="__sin"?" selected":""}>(sin campaña atribuida) (${cuenta.__sin})</option>`:""}
       </select>
+      <span class="lq-sub">${mapC ? "Campaña cruzada igual que en Calidad de Leads (ID de campaña, alias de UTM y atribución inferida)." : "Campaña tal como llega en utm_campaign: abre Calidad de Leads una vez para cruzarla por ID de campaña."}</span>
       ${fCamp?`<span class="lq-sub">Filtrando: las tablas de leads respetan el filtro; OPPs/WONs por asesor y el horario observado no (van por oportunidad, no por lead).</span>`:""}
     </div>`;
   }
@@ -7595,8 +7643,8 @@ function slaRender(){
     ${kpi(und(15),"Contacto efectivo ≤15 min (transferencia en caliente)")}
     ${kpiND(conDatos.filter(l=>l.slaAt!=null && l.slaAt<=60000).length,conDatos.length,V11?"1er toque ≤60 s · SLA del Ejecutivo de Primer Contacto · manual o llamada automática con contacto ≥90 s":"1er toque manual ≤60 s · SLA del Ejecutivo de Primer Contacto","meta 60 s")}
     ${kpi(fmtDur(slaMedian(slasEf)),"Med. contacto efectivo · desde la entrada del lead")}
-    ${kpi(fmtDur(slaMedian(slasAt)),V11?"Med. 1er toque · cualquier canal o llamada automática con contacto · solo leads que entraron en horario":"Med. 1er toque manual · cualquier canal · desde la entrada del lead")}
-    ${kpi(fmtDur(slaMedian(slasCall)),V11?"Med. 1er intento de llamada · solo leads que entraron en horario":"Med. 1er intento de llamada · desde la entrada del lead")}
+    ${kpiMed(slasAt, V11?"Med. 1er toque · cualquier canal o llamada automática con contacto · solo leads que entraron en horario":"Med. 1er toque manual · cualquier canal · desde la entrada del lead")}
+    ${kpiMed(slasCall, V11?"Med. 1er intento de llamada · solo leads que entraron en horario":"Med. 1er intento de llamada · desde la entrada del lead")}
     ${CP ? kpi(CP.agendadas.length.toLocaleString(), "Citas agendadas en el periodo · por fecha en que se agendaron, de cualquier lead") : ""}
     ${kpiND(agN,agB.length,"Tasa de agendamiento · leads del rango con cita ÷ los que tuvieron contacto efectivo o agendaron")}
     ${kpi(diasCita==null?"—":(Math.round(diasCita*10)/10)+" d","Días a la cita (mediana, efectivo → fecha de cita) · estándar 1 semana")}
@@ -7648,6 +7696,7 @@ function slaRender(){
   };
   // showDe(k): asistencia de las citas del periodo de ese grupo (solo la tabla por asesor);
   // sin ella, la columna Show usa las citas de los leads que entraron en el rango.
+  let slaDetN = 0;
   const groupTbl = (title, keyFn, labelFn, showDe)=>{
     const groups = {};
     leads.forEach(l=>{ const k=keyFn(l); (groups[k]=groups[k]||[]).push(l); });
@@ -7658,6 +7707,16 @@ function slaRender(){
       const sc = arr.filter(l=>!(V11 && l.fh)).map(l=>l.slaCall).filter(x=>x!=null);  // 1er intento de llamada, mismo criterio
       const u15 = ss.length ? Math.round(ss.filter(x=>x<=15*60000).length/ss.length*100)+"%" : "—";
       const u60 = ss.length ? Math.round(ss.filter(x=>x<=60*60000).length/ss.length*100)+"%" : "—";
+      // Mediana con su N; con menos de SLA_N_MIN leads va en gris ("muestra chica").
+      const medN = (xs)=> xs.length ? `<span${xs.length < SLA_N_MIN ? ' class="sla-chica-v"' : ""}>${fmtDur(slaMedian(xs))}</span><div class="lq-sub"${xs.length < SLA_N_MIN ? ' title="Muestra chica: no comparar"' : ""}>${xs.length} lead${xs.length===1?"":"s"}${xs.length < SLA_N_MIN ? " · chica" : ""}</div>` : "—";
+      // En horario (R-04): cuántos leads entraron en horario —la mediana solo los usa— y, de
+      // los que entraron fuera, cuántos se atendieron antes de las 11:00 del siguiente día hábil.
+      const nEnH = arr.filter(l=>!l.fh).length, fhCd = cd.filter(l=>l.fh), fhOk = fhCd.filter(l=>l.velOk).length;
+      const enHor = !V11 ? "—" : `${nEnH} de ${arr.length} <span class="lq-sub">(${pcti(nEnH, arr.length)})</span>${fhCd.length ? `<div class="lq-sub" title="Leads que entraron fuera de horario atendidos antes de las 11:00 del siguiente día de servicio">fuera: ${fhOk} de ${fhCd.length} a tiempo</div>` : ""}`;
+      // Quién atiende el grupo (los 3 asesores con más leads)
+      const porU = {}; arr.forEach(l=>{ const u = name(l.u); porU[u] = (porU[u]||0) + 1; });
+      const asesores = Object.entries(porU).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([u,n])=>`${u} ${n}`).join(" · ");
+      const detId = "sla-det-" + slaSlug(title) + "-" + (slaDetN++);
       // Tasa de agendamiento (spec D3): citas ÷ contactados efectivos con citas legibles.
       // Sustituye a "Cita ≤48h", que dividía entre TODOS los leads (medía tasa de
       // respuesta) y arrancaba el reloj en la entrada del lead (doble conteo de velocidad).
@@ -7666,23 +7725,26 @@ function slaRender(){
       const sh = arr.reduce((a,l)=>a+l.ap.sh,0), ns = arr.reduce((a,l)=>a+l.ap.ns,0);
       // Llamadas del asesor por lead, y "no marcó" separado de "marcó y la línea falló".
       const T = slaTelefonia(cd);
-      return `<tr><td class="name">${escAttr(labelFn(k))}</td><td>${arr.length}${arr.length-cd.length?`<span style="color:var(--neutro);font-size:var(--fs-xs)"> (${arr.length-cd.length} s/d)</span>`:""}</td>
+      return `<tr><td class="name">${escAttr(labelFn(k))}${title !== "Asesor" || Object.keys(porU).length > 1 ? `<div class="lq-sub">${escAttr(asesores)}</div>` : ""}<button type="button" class="sla-det-btn" data-sla-det="${detId}">ver leads ▸</button></td><td>${arr.length}${arr.length-cd.length?`<span style="color:var(--neutro);font-size:var(--fs-xs)"> (${arr.length-cd.length} s/d)</span>`:""}</td>
+        <td class="pct">${enHor}</td>
         <td class="pct">${pcti(cd.filter(l=>l.foM).length,cd.length)}</td>
         <td class="lft" style="white-space:nowrap;font-size:var(--fs-xs)">${mixCanal(cd)}</td>
         <td class="pct">${pcti(cd.filter(l=>l.foC).length,cd.length)}</td>
         <td class="pct">${pcti(cd.filter(l=>l.fi).length,cd.length)}</td>
-        <td>${fmtDur(slaMedian(sa))}</td><td>${fmtDur(slaMedian(sc))}</td>
+        <td>${medN(sa)}</td><td>${medN(sc)}</td>
         <td title="${T.leads?`${T.h24} intentos en las primeras 24 h y ${T.n} en total, sobre ${T.leads} leads · conectadas ${T.ok} · sin respuesta ${T.na} · falla de línea ${T.li} · sin estatus ${T.ot}`:""}">${T.leads?`${(T.h24/T.leads).toFixed(1)} / ${(T.n/T.leads).toFixed(1)}`:"—"}</td>
         <td title="Leads a los que el asesor no hizo ningún intento de llamada">${T.leads?`${T.sinMarcar} <span class="lq-sub">(${Math.round(T.sinMarcar*100/T.leads)}%)</span>`:"—"}</td>
         <td title="Leads con intentos de llamada que TODOS volvieron failed, busy o canceled: marcó y la línea falló — telefonía, no desempeño"${T.soloLinea?' style="color:var(--cobre);font-weight:600"':""}>${T.leads?T.soloLinea:"—"}</td>
-        <td>${fmtDur(slaMedian(ss))}</td><td class="pct">${u15}</td><td class="pct">${u60}</td>
+        <td>${medN(ss)}</td><td class="pct" title="Sobre ${ss.length} leads con contacto efectivo, entren o no en horario">${u15}</td><td class="pct" title="Sobre ${ss.length} leads con contacto efectivo, entren o no en horario">${u60}</td>
         <td class="pct" title="${agN2} de ${agB2.length} leads del rango con contacto efectivo o cita, que tienen cita">${agB2.length?Math.round(agN2/agB2.length*100)+"%":"—"}</td>
         ${(()=>{ const R = showDe ? showDe(k) : null;
           return R ? `<td title="Citas del periodo por fecha de la cita, no canceladas">${R.tot-R.can}</td><td class="pct" title="Asistió ${R.as} (${R.asC} calendario, ${R.asE} etapa) · no show ${R.ns} · sin registrar ${R.sinreg} · por venir ${R.fut}">${R.den?pcti(R.as,R.den):"—"}</td>`
-                   : `<td>${arr.filter(l=>!l.ad).reduce((a,l)=>a+l.ap.tot,0)}</td><td class="pct">${(sh+ns)?pcti(sh,sh+ns):"—"}</td>`; })()}</tr>`;
+                   : `<td>${arr.filter(l=>!l.ad).reduce((a,l)=>a+l.ap.tot,0)}</td><td class="pct">${(sh+ns)?pcti(sh,sh+ns):"—"}</td>`; })()}</tr>
+        <tr class="sla-det-row" id="${detId}" hidden><td colspan="18" class="lft">${slaDetalleLeads(arr, V11, name)}</td></tr>`;
     }).join("");
     return `<div class="table-scroll mb-sec"><table class="cons">
       <tr><th class="lft">${title}</th><th>Leads</th>
+        <th title="Leads que entraron en horario de atención (L–V 9:00–19:00, hora de Tulum): son los únicos que entran en la mediana de 1er toque. Debajo, los que entraron fuera de horario y se atendieron antes de las 11:00 del siguiente día hábil">En horario</th>
         <th title="Primera acción manual del asesor: su llamada, su WhatsApp, su SMS o su email escrito a mano">1er toque manual</th>
         <th class="lft" title="Con qué canal fue el 1er toque manual: % llamada, WhatsApp, SMS y correo. La mediana de 1er toque mezcla canales que no se comparan entre sí; léela con este mix">Canal del 1er toque</th>
         <th title="Primera llamada del asesor que sí conectó (estatus completed)">Llamada conectada</th>
@@ -7694,7 +7756,7 @@ function slaRender(){
         <th>Med. efectivo</th><th>≤15m</th><th>≤60m</th><th title="De los leads del rango con contacto efectivo o con cita, cuántos tienen cita (spec D3)">Agend.</th>
         <th title="${showDe?"Citas del periodo por fecha de la cita, de cualquier lead":"Citas de los leads que entraron en el rango"}">Citas</th>
         <th title="${showDe?"Asistió ÷ (asistió + no show), de las citas del periodo; si el calendario no tiene la asistencia, la etapa del lead en el pipeline":"Showed ÷ (showed + no show), de las citas de los leads que entraron en el rango"}">Show · 75%</th></tr>
-      ${rows || `<tr><td colspan="17" class="lft txt-nota">Sin datos.</td></tr>`}
+      ${rows || `<tr><td colspan="18" class="lft txt-nota">Sin datos.</td></tr>`}
     </table></div>`;
   };
   if(sinDatos){
@@ -8033,6 +8095,11 @@ function slaRender(){
     <b>Con reserva:</b> la confirmación el mismo día es una aproximación (GHL no guarda la hora de confirmación) y el SLA de 60 s se reporta sin saber si el puesto de Ejecutivo de Primer Contacto ya está activo.</div>`;
 
   document.getElementById("sla-content").innerHTML = html;
+  // "Ver leads" de las tablas por grupo
+  document.querySelectorAll("#sla-content [data-sla-det]").forEach(b=>{
+    b.onclick = (e)=>{ e.stopPropagation(); const r = document.getElementById(b.dataset.slaDet); if(!r) return;
+      r.hidden = !r.hidden; b.textContent = r.hidden ? "ver leads ▸" : "ocultar ▾"; };
+  });
   // Filtro de campaña (spec D5)
   const selC = document.getElementById("sla-camp");
   if(selC) selC.onchange = ()=>{ slaState.camp = selC.value; slaRender(); };

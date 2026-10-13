@@ -652,6 +652,20 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
     asesora". Desde el 7-oct-2026 (`SLA_LINEA_DESDE`, mismo criterio de periodo que la
     v1.1/v1.2) las fallas de línea salen del denominador de la **actividad efectiva**: son
     telefonía, no desempeño. `sla:agg:v12`.
+  - **Medianas auditables** (Dirección, 13-oct-2026): el análisis semanal comparó "5 min"
+    de Escape US/CA (la mediana de UN solo lead: 11 de 12 entraron fuera de horario) contra
+    "74 min" de MX Dynamic como si fuera una tendencia. Ahora cada mediana trae su **N**
+    debajo (tarjetas y tablas) y con menos de `SLA_N_MIN` (5) sale en gris como "muestra
+    chica, no comparar". Las tablas por grupo suman la columna **En horario** (cuántos
+    leads entraron en horario —los únicos que entran en la mediana de 1er toque— y, de los
+    de fuera, cuántos se atendieron antes de las 11:00), los **asesores** que atienden cada
+    campaña/canal/pipeline y un **"ver leads"** con, por lead: entrada, horario, asesor,
+    hora y canal del 1er toque, tiempo, si entra en la mediana (y por qué no) y contacto
+    efectivo. "≤15m/≤60m" dicen en su ayuda sobre cuántos leads se calculan.
+  - **Campaña de origen = la de Calidad de Leads**: se toma por id de contacto del agregado
+    de Calidad de Leads (ID de campaña, alias de UTM, atribución inferida), que ahora guarda
+    el `id` de cada lead; si no está en memoria se lee del kv una vez. Sin él, la
+    utm_campaign tal cual y la pantalla lo dice.
   - **Manual vs automática**: todas las columnas por asesora cuentan solo llamadas del
     asesor (`isManual`: con usuario, y sin `source` workflow/campaign/bulk_actions/api ni
     `TYPE_CAMPAIGN_*`). El diagnóstico agregado de telefonía (las 594 llamadas) mezclaba

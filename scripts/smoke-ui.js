@@ -705,20 +705,42 @@ const PORT = process.env.PORT || 8765;
     navIr('ventas', 'desempeno'); slaRender();
     const vista = document.getElementById('view-sla');
     const tablaCon = (txt) => [...vista.querySelectorAll('table')].find(t => t.querySelector('tr') && t.querySelector('tr').innerText.toUpperCase().includes(txt));
-    const filaDe = (t) => t && [...t.querySelectorAll('tr')].find(tr => tr.querySelector('td') && tr.querySelector('td').innerText.trim() === 'Daniela Arana');
+    // (la primera celda trae debajo el botón "ver leads": se compara la primera línea)
+    const filaDe = (t) => t && [...t.querySelectorAll('tr')].find(tr => tr.querySelector('td') && tr.querySelector('td').innerText.split('\n')[0].trim() === 'Daniela Arana');
     const celdas = (tr) => tr ? [...tr.querySelectorAll('td')].map(td => td.innerText.replace(/\s+/g, ' ').trim()) : null;
     const g = celdas(filaDe(tablaCon('CANAL DEL 1ER TOQUE'))), t = celdas(filaDe(tablaCon('INTENTOS 24 H')));
     const txt = vista.innerText;
     // Actividad efectiva: deliv {read 2, failed 1, linea 3} → 2 de 3 desde el 7-oct; 2 de 6 antes
     const leadsE = [{ sd: false, deliv: { read: 2, failed: 1, linea: 3 }, ap: { tot: 0, sh: 0 }, bucket: 'b5' }];
     const nuevo = slaScoreAsesor(leadsE, slaRubrica('2026-10-05', '2026-10-11'), { lineaFuera: true }).cnt.efec, viejo = slaScoreAsesor(leadsE, slaRubrica('2026-09-28', '2026-10-04'), { lineaFuera: false }).cnt.efec;
+    // Medianas auditables (Dirección, 13-oct-2026): N en la tarjeta, "ver leads" con el porqué
+    // de cada lead, y la campaña cruzada igual que en Calidad de Leads (por id de contacto).
+    const kpiTxt = [...vista.querySelectorAll('.crm-kpi')].map(k => k.innerText.replace(/\s+/g, ' ')).find(x => /Med\. 1er toque · cualquier canal/i.test(x)) || '';
+    const tCamp = tablaCon('CAMPAÑA DE ORIGEN');
+    const btn = tCamp && tCamp.querySelector('[data-sla-det]');
+    if (btn) btn.click();
+    const det = btn && document.getElementById(btn.dataset.slaDet);
+    const auditoria = { kpi: kpiTxt, abierto: !!det && !det.hidden && btn.textContent === 'ocultar ▾',
+      cols: det ? [...det.querySelectorAll('thead th')].map(th => th.innerText.trim()).join('|') : '',
+      filas: det ? [...det.querySelectorAll(':scope table.sla-det > tbody > tr')].map(tr => tr.cells[7].innerText.trim()).join('|') : '' };
+    const lqPrev = slaState.lqAgg, lqA = lqState.agg;
+    lqState.agg = null; slaState.lqAgg = { leads: [{ id: 't1', camp: 'CAMPANA_DE_LQ' }, { id: 't2', camp: LQ_SIN_CAMP }] }; slaState._lqMapDe = null; slaRender();
+    const tCamp2 = tablaCon('CAMPAÑA DE ORIGEN');
+    auditoria.campLq = tCamp2 ? [...tCamp2.querySelectorAll(':scope > tbody > tr')].slice(1).filter(tr => !tr.classList.contains('sla-det-row')).map(tr => tr.cells[0].innerText.split('\n')[0].trim() + '=' + tr.cells[1].innerText.trim()).join('|') : '';
+    auditoria.notaLq = /Campaña cruzada igual que en Calidad de Leads/.test(vista.innerText);
+    slaState.lqAgg = lqPrev; lqState.agg = lqA; slaState._lqMapDe = null;
     ADVISOR_LIST = advPrev; slaState.agg = aggPrev; slaState.asesor = selPrev;
-    const r = { g, t, efec: { nuevo, viejo }, sinGris: !/1er msj \(autom\.\)/i.test(txt) && !/Cualquier salida ≤60 s/i.test(txt),
+    const r = { g, t, auditoria, efec: { nuevo, viejo }, sinGris: !/1er msj \(autom\.\)/i.test(txt) && !/Cualquier salida ≤60 s/i.test(txt),
       duracion: /conocida en 5 de 6 \(83%\)/.test(txt) && /1 conectaron sin duración legible/.test(txt) && /meta\.call\.recordingUrl/.test(txt),
       origen: /6 del asesor — 3 con falla de línea \(50%\), 2 conectadas, 1 sin duración · 4 automáticas \(workflow, campaña, envío masivo, API o sin usuario\) — 4 con falla de línea \(100%\)/.test(txt) && /2 entrantes del lead/.test(txt),
       kpi: /Med\. 1er intento de llamada/i.test(txt) && /1 no medible: llamada conectada sin duración/i.test(txt), ficha: /Llamadas: 6 intentos \(5 en las primeras 24 h\)/.test(txt) && /falla de línea 3/.test(txt) };
-    // groupTbl: [nombre, leads, 1er toque, canal, conectada, efectivos, med toque, med 1er llamada, llamadas/lead, sin marcar, solo línea, ...]
-    r.ok = !!g && g[3] === 'Llamada 50% · WhatsApp 25% SMS 0% · Correo 25%' && g[7] === '4 min' && g[8] === '1.3 / 1.5' && g[9] === '1 (25%)' && g[10] === '1'
+    // groupTbl: [nombre, leads, en horario, 1er toque, canal, conectada, efectivos, med toque, med 1er llamada, llamadas/lead, sin marcar, solo línea, ...]
+    // (las medianas traen su N debajo y "chica" con menos de 5 leads)
+    r.ok = !!g && g[0] === 'Daniela Arana ver leads ▸' && g[2] === '4 de 4 (100%)' && g[4] === 'Llamada 50% · WhatsApp 25% SMS 0% · Correo 25%' && g[7] === '2 min 4 leads · chica' && g[8] === '4 min 3 leads · chica'
+      && g[9] === '1.3 / 1.5' && g[10] === '1 (25%)' && g[11] === '1'
+      && /^2 min MED\. 1ER TOQUE .* 4 LEADS · MUESTRA CHICA, NO COMPARAR$/i.test(auditoria.kpi) && auditoria.abierto
+      && auditoria.cols === 'LEAD|ENTRADA|HORARIO|ASESOR|1ER TOQUE|CANAL|TIEMPO|¿EN LA MEDIANA?|CONTACTO EFECTIVO' && auditoria.filas === 'sí|sí|sí|sí'
+      && auditoria.campLq === '(sin campaña atribuida)=3|CAMPANA_DE_LQ=1' && auditoria.notaLq
       && !!t && t.slice(1).join('|') === '4|1|3|5|6|2 (33%)|1 (17%)|3 (50%)|·|1|1|1'
       && nuevo[0] === 2 && nuevo[1] === 3 && viejo[1] === 6 && r.sinGris && r.duracion && r.kpi && r.ficha && r.origen;
     return r;
