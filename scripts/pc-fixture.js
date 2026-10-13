@@ -106,7 +106,7 @@ function pcFixture() {
   // Lo que el manual dice que debe salir, calculado a mano (ver comentarios en smoke-ui.js).
   // Contacto efectivo = llamada ≥90 s, respuesta escrita o sesión agendada por el ejecutivo:
   // Lead Nueve (llamada de 65 s) es efectivo por su cita; Lead Diez por la automática de 120 s.
-  const esperado = { nU: 9, excl: { fuera: 1, prueba: 1 }, vel: { ok: 5, den: 8 }, puntos: 23, habiles: 5, conv60: 7,
+  const esperado = { nU: 9, excl: { fuera: 1, prueba: 1 }, vel: { ok: 4, den: 8 }, puntos: 23, habiles: 5, conv60: 7,
     dia: { "2026-10-26": 4, "2026-10-27": 6, "2026-10-28": 3, "2026-10-29": 5, "2026-10-30": 2, "2026-10-31": 2, "2026-11-01": 1 },
     entrega: { ent: 5, den: 7 }, res: { entregado: 5, lpOk: 1, descarte: 1, sinCierre: 1 }, asist: { as: 1, den: 2 }, calif: { si: 1, no: 0 },
     datos: { ok: 1, n: 3 }, cad: { silencio: 3, completos: 1 }, cart: { vencida: [2, 4], fria: [1, 1], sindato: [1, 1] }, fueraPts: 1,

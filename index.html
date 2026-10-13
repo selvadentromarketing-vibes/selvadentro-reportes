@@ -8540,28 +8540,32 @@ function pcBuild(D, cfg, now){
   const toqueEpc = (e, ct)=> llamadaPuesto(e, ct) || msgEpc(e);
   const llamadaLarga = (e, ct, seg)=> e[1]==="call" && (llamadaPuesto(e, ct) || (e[2]==="i" && esEpc(e))) && (e[5]||0) >= seg;
 
-  // 2) Velocidad de primer contacto (3.1): primera llamada del puesto —del ejecutivo o la
-  //    automática del CRM— desde el registro. Solo leads que entraron en la ventana operativa;
-  //    solo se evalúa desde que el marcador opera (antes es informativa). Protocolo del primer
-  //    toque: la automática contestada ≥90 s lo resuelve; si no conectó o duró menos, cuenta la
-  //    remarcación manual del ejecutivo, que debe ser inmediata (≤2 min).
+  // 2) Velocidad de primer contacto (3.1). Se mide el trabajo de la PERSONA, no del CRM
+  //    (Dirección General, 13-oct-2026): cuenta la primera llamada manual del ejecutivo, o la
+  //    automática solo si la contestaron y duró ≥90 s (ahí sí hubo alguien hablando). Una
+  //    automática que no conectó o duró menos no es "marcó". Solo leads que entraron en la ventana
+  //    operativa; se evalúa desde que el marcador opera (antes es informativa).
+  //    Primer toque completo (protocolo): la automática contestada ≥90 s lo resuelve; si no
+  //    conectó o duró menos, el ejecutivo remarca a mano de inmediato (≤2 min). Sin automática,
+  //    doble llamada manual en ≤60 s.
   const marcT = cfg.marcador ? Date.parse(cfg.marcador+"T00:00:00"+LQ_TZ) : null;
   const vel = U.map(c=>{
     const t0 = Date.parse(c.c), evs = ev[c.id]||[];
     const calls = evs.filter(e=>e[1]==="call" && e[2]!=="i" && e[0] >= t0 - 5000);
     const puesto = calls.filter(e=>esEpc(e) || e[2]==="a");
     const p1 = puesto[0] || null, p2 = puesto[1] || null;
-    const otro = calls.find(e=>!puesto.includes(e) && (!p1 || e[0] < p1[0]));
     const auto1 = p1 && p1[2]==="a" ? p1 : null, auto90 = !!(auto1 && (auto1[5]||0) >= PC_EFECTIVO_SEG);
     let rem = null;          // de que terminó la automática a la remarcación manual del ejecutivo
     if(auto1 && !auto90){ const m = calls.find(e=>e[0] > auto1[0] && e[2]==="m" && esEpc(e)); if(m) rem = Math.max(0, m[0] - (auto1[0] + (auto1[5]||0)*1000)); }
-    const dt = p1 ? Math.max(0, p1[0]-t0) : null;
+    // Primera marcación de la persona: manual del ejecutivo, o automática (suya o sin usuario) contestada ≥90 s.
+    const pp = puesto.find(e=>(e[2]==="m" && esEpc(e)) || (e[2]==="a" && (e[5]||0) >= PC_EFECTIVO_SEG)) || null;
+    const otro = calls.find(e=>e[2]==="m" && !esEpc(e) && (!pp || e[0] < pp[0]));
+    const dt = pp ? Math.max(0, pp[0]-t0) : null;
     const doble = !!(p1 && (auto1 ? (auto90 || (p2 && p2[0]-p1[0] <= PC_DOBLE_MS)) : (pcContestada(p1) || (p2 && p2[0]-p1[0] <= PC_DOBLE_MS))));
     return { id:c.id, n:c.n||"(sin nombre)", t0, u:c.u||"", err:!!evErr[c.id], vent:pcVentana(t0, cfg), eval:!!(marcT && t0 >= marcT),
-      dt, org: p1 ? (esEpc(p1) ? (p1[2]==="a" ? "marcador" : "ejecutivo") : "automática") : "",
+      dt, org: pp ? (pp[2]==="a" ? "automática contestada ≥90 s" : "ejecutivo") : "",
       doble, auto: auto1 ? (auto90 ? "90" : "corta") : "", rem,
-      // Primer toque completo: marcó en ≤60 s y, si fue la automática sin 90 s, remarcó de inmediato.
-      t1: dt!=null && dt <= 60e3 && (auto1 ? (auto90 || (rem!=null && rem <= PC_REMARCA_MS)) : doble),
+      t1: auto1 ? (auto90 || (rem!=null && rem <= PC_REMARCA_MS)) : (dt!=null && dt <= 60e3 && doble),
       otro: otro ? quien(otro[3]) : "" };
   });
 
@@ -8783,7 +8787,7 @@ function pcRender(){
   const V = A.vel.filter(v=>v.vent && !v.err), Vev = V.filter(v=>v.eval), Vb = Vev.length ? Vev : V;
   const v60 = Vb.filter(v=>v.dt!=null && v.dt<=60e3).length;
   const velInfo = !A.cfg.marcador || !Vev.length;
-  const T1 = Vb.filter(v=>v.dt!=null && v.dt<=60e3), t1ok = T1.filter(v=>v.t1).length;
+  const T1 = Vb, t1ok = T1.filter(v=>v.t1).length;
   const nH = A.habiles.length, prom = nH ? A.ptsCerrados/nH : null;
   const den = A.coh.filter(r=>A.PC_DEN.includes(r.res)), ent = den.filter(r=>r.res==="entregado").length;
   const S = A.ses, as = S.filter(s=>s.est==="asistio").length, dAs = S.filter(s=>["asistio","noshow","cancelada"].includes(s.est)).length;
@@ -8791,9 +8795,9 @@ function pcRender(){
   const conf5 = A.cfg.campos5.filter(Boolean).length, d5 = A.datos.filter(d=>d.completo).length;
   html += `<h3 class="diag-h">Indicadores del puesto <span class="lq-sub">manual 10.1</span></h3><div class="crm-kpis">
     ${pcKpi({ v:pcPct(v60, Vb.length), l:"Velocidad de primer contacto · meta 100% ≤60 s",
-      s:`${v60} de ${Vb.length} leads en la ventana operativa marcados en ≤60 s (llamada automática del CRM o del ejecutivo)${velInfo ? " · <b>informativo</b>: no se evalúa mientras el marcador automático no opere (3.1)" : ""}`, n:Vb.length, ok:Vb.length ? v60===Vb.length : null, info:velInfo })}
+      s:`${v60} de ${Vb.length} leads en la ventana operativa marcados en ≤60 s por el ejecutivo (la automática solo cuenta si la contestaron y duró ≥90 s)${velInfo ? " · <b>informativo</b>: no se evalúa mientras el marcador automático no opere (3.1)" : ""}`, n:Vb.length, ok:Vb.length ? v60===Vb.length : null, info:velInfo })}
     ${pcKpi({ v:pcPct(t1ok, T1.length), l:"Primer toque completo · meta 100%",
-      s:`${t1ok} de ${T1.length} leads marcados en ≤60 s: la automática contestó ≥90 s, o el ejecutivo remarcó a mano en ≤2 min (si no hubo automática, doble llamada)${velInfo ? " · <b>informativo</b> hasta que opere el marcador" : ""}`, n:T1.length, ok:T1.length ? t1ok===T1.length : null, info:velInfo })}
+      s:`${t1ok} de ${T1.length} leads: la automática contestó ≥90 s, o el ejecutivo remarcó a mano en ≤2 min; sin automática, doble llamada manual en ≤60 s${velInfo ? " · <b>informativo</b> hasta que opere el marcador" : ""}`, n:T1.length, ok:T1.length ? t1ok===T1.length : null, info:velInfo })}
     ${pcKpi({ v: prom==null ? "—" : (Math.round(prom*10)/10).toLocaleString(), l:"Puntos de contacto por día hábil · meta ≥100",
       s:`${A.ptsCerrados.toLocaleString()} puntos en ${nH} día${nH===1?"":"s"} hábil${nH===1?"":"es"} cerrado${nH===1?"":"s"}${A.ptsHoy?` · hoy van ${A.ptsHoy} (no cuenta hasta cerrar la ventana)`:""}`, info: !nH, ok: prom==null ? null : prom >= PC_META.puntos })}
     ${pcKpi({ v:A.conv60.toLocaleString(), l:`Conversaciones de ≥60 s · candado del bono: ${PC_CONV_MES} al mes`,
@@ -8834,11 +8838,11 @@ function pcRender(){
     const C = A.cad.filter(c=>c.est==="silencio"), comp = C.filter(c=>c.toques>=6).length;
     const detC = A.cad.filter(c=>c.est!=="curso").sort((a,b)=>a.t0-b.t0).map(c=>`<tr><td class="lft">${escAttr(c.n)}</td><td>${pcHora(c.t0)}</td><td class="lft">${c.est==="conv" ? "salió a conversación" : "silencio"}</td><td>${c.toques}</td><td>${c.deLlamada ? `${c.conDoble} de ${c.deLlamada}` : "—"}</td><td>${c.breakUp ? "sí" : "no"}</td><td class="lft">${escAttr(c.etapa||"—")}</td></tr>`);
     html += `<h3 class="diag-h">Lead nuevo <span class="lq-sub">manual 3.1 a 3.4 · ${A.nU} lead${A.nU===1?"":"s"} del periodo</span></h3>
-      <div class="lq-meth"><b>Primera llamada del puesto</b> (ejecutivo o marcador automático) desde el registro, leads que entraron en la ventana operativa (${slaDiasTxt(A.cfg.dias)} ${escAttr(A.cfg.abre)}–${escAttr(A.cfg.cierra)}): ${dist}.
+      <div class="lq-meth"><b>Primera marcación del ejecutivo</b> (a mano, o la automática si la contestaron y duró ≥90 s) desde el registro, leads que entraron en la ventana operativa (${slaDiasTxt(A.cfg.dias)} ${escAttr(A.cfg.abre)}–${escAttr(A.cfg.cierra)}): ${dist}.
         Mediana: <b>${pcSeg(slaMedian(V.filter(v=>v.dt!=null).map(v=>v.dt)))}</b>. Doble llamada en el primer toque: <b>${pcPct(conDoble, dobles.length)}</b> (${conDoble} de ${dobles.length}).
         <br><b>Llamada automática del CRM</b>: ${Va.length ? `entró en ${Va.length} de ${V.length} leads · contestada ≥90 s en <b>${V90.length}</b> (contacto efectivo, no hace falta remarcar) · sin conectar o <90 s en ${Vc.length}: el ejecutivo remarcó a mano en ≤2 min en <b>${VremOk.length} de ${Vc.length}</b>${Vrem.length ? `, mediana ${pcSeg(slaMedian(Vrem.map(v=>v.rem)))} desde que terminó la automática` : ""}${Vc.length - Vrem.length ? ` · ${Vc.length - Vrem.length} sin remarcación manual` : ""}` : "ningún lead del periodo recibió llamada automática: el marcador no está disparando o el CRM no la registra"}.
         ${fv.length ? `Fuera de la ventana: ${fv.length} lead${fv.length===1?"":"s"}, mediana a la primera llamada ${pcSeg(slaMedian(fv.filter(v=>v.dt!=null).map(v=>v.dt)))} (no entran a la meta de 60 s).` : ""}
-        ${pcDet("ver leads", pcTabla(["Lead","Registro","Ventana","1ª llamada","Quién marcó","Automática","Remarcación manual","Primer toque completo","Marcó antes otro usuario"], detV))}</div>
+        ${pcDet("ver leads", pcTabla(["Lead","Registro","Ventana","Marcó a los","Cómo","Automática","Remarcación manual","Primer toque completo","Marcó antes otro usuario"], detV))}</div>
       <div class="lq-meth"><b>Cadencia de 6 toques en 7 días</b> (lead en silencio): ${C.length ? `<b>${comp} de ${C.length}</b> (${pcPct(comp, C.length)}) completaron los 6 toques · promedio ${(C.reduce((a,c)=>a+c.toques,0)/C.length).toFixed(1)} toques · break up enviado en ${C.filter(c=>c.breakUp).length} · ${C.filter(c=>c.sinResp).length} movidos a Sin respuesta` : "ningún lead en silencio con la cadencia terminada todavía"}.
         ${A.cad.filter(c=>c.est==="conv").length} salieron a conversación (la cadencia es para el silencio, 4.4) y ${A.cad.filter(c=>c.est==="curso").length} siguen dentro de sus 7 días.
         ${pcDet("ver cadencia por lead", pcTabla(["Lead","Registro","Resultado","Toques","Toques de llamada con doble llamada","Break up","Etapa actual"], detC))}
