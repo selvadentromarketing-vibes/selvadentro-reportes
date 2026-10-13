@@ -618,6 +618,8 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .lq-pl-kpis{ display:flex; flex-wrap:wrap; gap:6px 18px; font-size:var(--fs-s); color:var(--neutro); margin-bottom:8px; }
   .lq-pl-kpis b{ color:var(--texto); }
   table.lq-pl-tabla tr.lq-pl-grp td{ background:var(--crema-2); }
+  .lq-re{ display:inline-block; white-space:nowrap; font-size:var(--fs-xs); font-weight:600; color:#6b5a1c; background:#f6edd2; border:1px solid #e3d3a4; border-radius:10px; padding:0 7px; margin-left:4px; cursor:help; }
+  .lq-re-n{ color:#6b5a1c; }
   table.lq-pl-tabla tr.lq-pl-sin td{ color:#6b5a1c; }
   table.lq-pl-tabla td.lq-nd{ color:var(--neutro); cursor:help; }
   table.lq-pl-tabla{ width:100%; }
@@ -3022,7 +3024,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v22";  // v22: datos de la decisión de hoy (rango fijo 30 días y 7 contra 7) en `dec`  // v21: el v20 guardado el 9-oct pudo quedar sin detalle por anuncio (la consulta con campos extra se volvía lenta)  // v20: URL de destino por anuncio, gasto por keyword de Google y presupuesto diario (recomendaciones concretas)  // v19: trabajado (tr) y contactado (ct) por etapa, separados  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
+const LQ_AGG_KEY = "lq:agg:v23";  // v23: re-envíos de formulario (agg.reenvios)  // v22: datos de la decisión de hoy (rango fijo 30 días y 7 contra 7) en `dec`  // v21: el v20 guardado el 9-oct pudo quedar sin detalle por anuncio (la consulta con campos extra se volvía lenta)  // v20: URL de destino por anuncio, gasto por keyword de Google y presupuesto diario (recomendaciones concretas)  // v19: trabajado (tr) y contactado (ct) por etapa, separados  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 // (LQ_TZ y LQ_TZ_MS ahora viven junto al resto de helpers de fecha, arriba)
@@ -3864,7 +3866,38 @@ function lqTrabajado(l, contactado){
 
 // `adExtra` = los datos de la decisión de hoy (acción `decision`): { ventana, meta, google,
 // faltan }. Conclusiones los usa con su rango fijo; la exploración no los toca.
-function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adExtra){
+/* ---- Re-envíos de formulario (Dirección, 13-oct-2026) ----------------------------------
+   Un contacto que YA existía y vuelve a llenar un formulario no es un contacto nuevo: el
+   webhook de la landing lo actualiza (utm_campaign, utm_content y tags nuevos) y el reporte,
+   que contaba por fecha de alta, no lo veía. Caso real: dos re-envíos del 9 y el 11-oct a
+   INVESTORS_US/CA_ESCAPE_090926 salían con 0 leads CRM.
+   · Fecha del re-envío: el campo del contacto "Fecha último formulario" (o submitted_at) si
+     existe; la landing ya manda submitted_at, pero hoy el flujo de GHL no lo guarda. Mientras
+     tanto, la última actualización del contacto (dateUpdated), marcada como aproximada.
+   · Atribución: la que trae ESE formulario (los utm_* que el webhook escribe en el contacto),
+     no la attributionSource de su primera visita.
+   · Con fecha aproximada solo cuenta si el contacto se dio de alta ANTES de que empezara la
+     campaña que hoy trae: entonces esa utm_campaign solo pudo llegar con un formulario nuevo.
+     (Sin esa prueba, cualquier contacto que el equipo editó contaría como lead.)
+   · Cuentan como lead de la semana del re-envío, marcados "Re-envío"; el CPL muestra el total
+     y el de leads nuevos. Solo Calidad de Leads los ve (lqVista); Ventas y Dirección no. */
+const LQ_RX_ULT_FORM = /submitted[ _]?at|(fecha|date)\W*(del?\s+)?(últim[oa]|ultim[oa]|last)\W*(formulario|form|env[ií]o|registro|entrada|submission)/i;
+const lqCampoUltimoForm = (fields)=> (fields||[]).find(f=>LQ_RX_ULT_FORM.test(String(f.name||""))) || null;
+const lqFechaIso = (v)=>{ const t = String(v||"").trim(); if(!t) return "";
+  const n = /^\d{12,13}$/.test(t) ? Number(t) : Date.parse(t); return isNaN(n) ? "" : new Date(n).toISOString(); };
+// Primer día de gasto de cada campaña (por ID y por nombre). Si su primer gasto es el primer día
+// de la ventana, empezó antes y no se sabe cuándo; Meta da campaign_start_time en `decision`.
+function lqInicioCampanias(spendRows, dec, primerDia){
+  const ini = {};
+  (spendRows||[]).forEach(r=>{ if(!(r.spend > 0) || !r.d) return;
+    [r.cid ? "id:"+r.cid : "", "n:"+lqNormCamp(r.camp)].forEach(k=>{ if(k && k !== "n:" && (!ini[k] || r.d < ini[k])) ini[k] = r.d; }); });
+  Object.keys(ini).forEach(k=>{ if(primerDia && ini[k] <= primerDia) ini[k] = null; });
+  Object.entries((dec && dec.meta && dec.meta.camps) || {}).forEach(([cid, c])=>{
+    if(c && c.inicio){ ini["id:"+cid] = c.inicio; if(c.name) ini["n:"+lqNormCamp(c.name)] = c.inicio; } });
+  return ini;
+}
+
+function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adExtra, rawRe){
   // Paso 0 del manual de limpieza (jul-2026), aplicado ANTES de cualquier cálculo:
   // fuera los registros de prueba y los leads sin email NI teléfono (no hay a quién
   // contactar ni forma de detectar duplicados). Se cuentan y se muestran; no desaparecen.
@@ -3879,6 +3912,34 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
   const llenos = lqCamposLlenos(boot, rawLeads);
   const F = lqDetectFields(boot.fields, llenos);
   const A = lqDetectAtrib(boot.fields);
+  // Re-envíos: contactos creados antes de la ventana y actualizados en ella (acción
+  // `reenvios`), más los de la ventana cuyo "Fecha último formulario" cae en otra semana.
+  const FU = lqCampoUltimoForm(boot.fields);
+  const cfDe = (r, f)=> f && r.cf ? String(r.cf[f.id]||"").trim() : "";
+  // Sin utm_campaign en el contacto no hay a qué campaña atribuirlo: no cuenta como re-envío
+  // (y no se le aplican atribuciones deducidas, que mirarían la fecha del re-envío).
+  const comoReenvio = (r, fecha, aprox)=>{
+    const camp = cfDe(r, A.camp) || cfDe(r, A.campAlt);
+    if(!camp) return;
+    reRaw.push({ ...r, cf:{ ...(r.cf||{}) }, c:fecha, _re:{ alta:r.c, aprox },
+      attr:{ ...(r.attr||{}), camp, campId:"", cid: cfDe(r, A.cid), ad: cfDe(r, A.ad), grp: cfDe(r, A.grp),
+             src: cfDe(r, A.src) || cfDe(r, A.srcAlt) || (r.attr||{}).src || "", med: cfDe(r, A.med) || (r.attr||{}).med || "", host:"" } });
+  };
+  const reRaw = [];
+  (rawRe||[]).forEach(r=>{
+    if(esRegistroPrueba(r) || (!r.em && !r.ph)) return;
+    const exacto = FU ? lqFechaIso(cfDe(r, FU)) : "";
+    const f = exacto || lqFechaIso(r.up);
+    if(f) comoReenvio(r, f, !exacto);
+  });
+  // Contactos dados de alta DENTRO de la ventana que volvieron a llenar un formulario en otra
+  // semana: con el campo exacto, o con la última actualización (y la prueba de la campaña).
+  rawLeads.forEach(r=>{
+    const exacto = FU ? lqFechaIso(cfDe(r, FU)) : "";
+    const f = exacto || lqFechaIso(r.up);
+    if(f && lqWeekOf(f) && lqWeekOf(r.c) && lqWeekOf(f) > lqWeekOf(r.c)) comoReenvio(r, f, !exacto);
+  });
+  const todos = rawLeads.concat(reRaw);
   const adw0 = lqBucketAds(adRows);
   const idIdx = lqIdIndex(adw0, spendRows);
   const adIdx0 = lqAdIndex({adw:adw0});
@@ -3907,7 +3968,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
   // La atribución REAL de Selvadentro no viaja en attributionSource (13% de cobertura)
   // sino en campos personalizados: utm_campaign 38%, utm_content 38%, Campaign 43%,
   // Medium 56%, Session source 56%. Se completa lo que falta desde ahí.
-  rawLeads.forEach(l=>{
+  todos.forEach(l=>{
     l.attr = l.attr || {};
     const cf = (f)=> f && l.cf ? String(l.cf[f.id]||"").trim() : "";
     if(!l.attr.camp) l.attr.camp = cf(A.camp) || cf(A.campAlt);
@@ -3994,7 +4055,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
     if(!l.attr.plat && l.attr.camp) l.attr.plat = campPlat[lqNormCamp(l.attr.camp)] || "";
   });
   const O = oppsByContact || {};
-  const leads = rawLeads.map(l=>{
+  const leads = todos.map(l=>{
     const tagsLower = (l.tags||[]).map(x=>String(x).toLowerCase());
     const lv = lqClassify(F.calif ? l.cf[F.calif.id] : "");
     const sc = lqSourceCamp(l);
@@ -4020,6 +4081,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
       ...(l.attr && l.attr.inf ? { inf:1 } : {}),   // atribución inferida (LQ_INFERIDA)
       ...(l.attr && l.attr.pid ? { pid:1, cid:l.attr.cidOk } : {}),   // campaña resuelta por su ID (y cuál), no por nombre
       ...(l.attr && l.attr.kw ? { kw:String(l.attr.kw).slice(0,80) } : {}),   // palabra clave de Google (utm_term={keyword})
+      ...(l._re ? { re:1, id:l.id, alta:l._re.alta, ...(l._re.aprox ? { reAprox:1 } : {}) } : {}),   // re-envío de formulario (id: para pedir sus oportunidades)
       _si: stg ? (stg.i ?? 0) : null,    // posición de la etapa, solo para el cálculo de abajo
     };
   }).filter(l=>l.wk);
@@ -4038,6 +4100,20 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
     delete l._si;
     l.tags = l.tags.slice(0,140);
   });
+  // Re-envíos que sí cuentan: fecha exacta en otra semana que el alta, o (fecha aproximada)
+  // alta anterior al inicio de la campaña que traen y actualización desde ese inicio.
+  const primerDia = (weeks && weeks.length) ? lqWeekBounds([...weeks].sort()[0]).startYMD : "";
+  const iniC = lqInicioCampanias(spendRows, adExtra && adExtra.ventana ? adExtra : null, primerDia);
+  const diaT = (iso)=>{ const t = Date.parse(iso); return isNaN(t) ? "" : new Date(t - LQ_TZ_MS).toISOString().slice(0,10); };
+  const reenvios = leads.filter(l=>{
+    if(!l.re) return false;
+    if(!l.camp || l.camp === LQ_SIN_CAMP) return false;
+    if(!l.reAprox) return lqWeekOf(l.alta) !== l.wk;
+    // (y solo si la campaña empezó dentro de la ventana: si empezó antes, el re-envío pudo ser
+    // cualquier día desde entonces y la última actualización no dice cuándo)
+    const ini = (l.cid && iniC["id:"+l.cid]) || iniC["n:"+lqNormCamp(l.camp)];
+    return !!ini && ini >= primerDia && diaT(l.alta) < ini && diaT(l.c) >= ini;
+  });
   return { ts:Date.now(), users:boot.users||{}, califField:F.calif, fuenteField:F.fuente, presField:F.pres, horField:F.hor, windsor:!!boot.windsor, excl, exclWk,
            oppStages: lqOppStageNames(boot.stages, lqOppThresholds(boot.stages)),
            zoomStages: [...new Set(Object.values(boot.stages||{}).filter(st=>LQ_RX_ZOOM_OK.test(st.s||"")).map(st=>(st.p?st.p+" › ":"")+st.s))].sort(),
@@ -4045,7 +4121,8 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
            campos: lqCamposLlenos(boot, rawLeads),
            atrib: lqCoberturaAtrib(rawLeads, lqAdIndex({adw:adw0})),
            utm: lqAuditUtm(adw0, rawLeads),
-           weeks:weeks||[], spend:spendRows||[], adw:adw0, leads,
+           weeks:weeks||[], spend:spendRows||[], adw:adw0, leads: leads.filter(l=>!l.re), reenvios,
+           campoUltForm: FU ? FU.name : "",
            // Para las recomendaciones: URL de destino por anuncio, gasto por keyword por semana
            // y presupuesto diario vigente (MXN/día) por ID de campaña.
            // Datos de la decisión de hoy (Conclusiones): ventana fija y lo que trajo `decision`.
@@ -4056,7 +4133,9 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
 // IA y las alertas leen esta vista; Diagnóstico y el resto de la app, el agregado completo.
 function lqVista(agg){
   if(!agg) return agg;
-  if(lqState._vistaDe !== agg){ lqState._vista = { ...agg, leads:(agg.leads||[]).filter(l=>!l.bk) }; lqState._vistaDe = agg; }
+  // + los re-envíos de formulario (contactos existentes que volvieron a llenar uno): cuentan
+  // como lead de la semana del re-envío solo aquí, no en Ventas ni Dirección.
+  if(lqState._vistaDe !== agg){ lqState._vista = { ...agg, leads:(agg.leads||[]).concat(agg.reenvios||[]).filter(l=>!l.bk) }; lqState._vistaDe = agg; }
   return lqState._vista;
 }
 // Excluidos de todos los cálculos, contados en el rango que se está leyendo.
@@ -4402,10 +4481,12 @@ function lqUnionTree(agg, leads, rangoSet, plat){
 function lqMetricas(arr, inv, res){
   const c = lqCount(arr), n = arr.length, sqlp = lqSqlPlus(c);
   inv = inv || 0;
+  const re = arr.filter(l=>l.re).length, nNuevos = n - re;
   return { n, inv, res: res||0, cql:c.cql||0, mql:c.mql||0, sqlp,
     zoom: arr.filter(l=>l.zm).length, opp: arr.filter(l=>(l.o||0)>0).length, won: arr.filter(l=>(l.w||0)>0).length,
     tr: arr.filter(l=>l.tr).length, ct: arr.filter(l=>l.ct).length, inf: arr.filter(l=>l.inf).length,
-    cpl: inv>0 && n ? inv/n : null, cps: inv>0 && sqlp ? inv/sqlp : null };
+    re, nNuevos,                                         // re-envíos de formulario y leads nuevos
+    cpl: inv>0 && n ? inv/n : null, cplNuevos: inv>0 && nNuevos ? inv/nNuevos : null, cps: inv>0 && sqlp ? inv/sqlp : null };
 }
 // Filas por campaña con semáforo y alerta de CPL; `pagado` = total de las campañas con
 // inversión (la fila de totales y la tarjeta de costo por SQL).
@@ -4455,10 +4536,10 @@ const lqDdMm = (ymd)=> ymd ? ymd.slice(8,10)+"/"+ymd.slice(5,7) : "";
 function lqEvid(o){
   const na = o.sp == null;
   const p = [na ? "gasto no disponible" : `gasto ${lqMXN(o.sp)}`];
-  if(o.n != null) p.push(o.unidad ? `${Math.round(o.n*10)/10} ${o.unidad}` : lqPl(Math.round(o.n), "lead") + (o.fte ? ` (${o.fte})` : ""));
+  if(o.n != null) p.push(o.unidad ? `${Math.round(o.n*10)/10} ${o.unidad}` : lqPl(Math.round(o.n), "lead") + (o.fte ? ` (${o.fte})` : "") + (o.re ? ` (${lqPl(o.re, "re-envío")})` : ""));
   p.push(o.sqlTxt || `${o.sqlp||0} SQL+`);
   if(na) return p.join(", ");
-  if(o.n) p.push(`CPL ${lqMXN(o.sp/o.n)}`);
+  if(o.n) p.push(`CPL ${lqMXN(o.sp/o.n)}` + (o.re && o.n > o.re ? ` (nuevos ${lqMXN(o.sp/(o.n-o.re))})` : ""));
   else if(o.n === 0) p.push("CPL —");
   if(o.sqlp > 0 && !o.sqlTxt) p.push(`costo por SQL ${lqMXN(o.sp/o.sqlp)}`);
   return p.join(", ");
@@ -4506,7 +4587,7 @@ function lqRecomendar(m, ctx){
   const ruta = (...xs)=> [plat, camp, ...xs].filter(Boolean).join(" › ");
   const rutaCamp = meta ? `Meta Ads › Campañas › ${camp}` : google ? `Google Ads › Campañas › ${camp}` : ruta();
   const k = sem.chica ? "chica" : sem.k;
-  const campEv = lqEvid({ sp:m.inv, n:m.n, sqlp:m.sqlp });
+  const campEv = lqEvid({ sp:m.inv, n:m.n, sqlp:m.sqlp, re:m.re });
   const on = (s)=> !s || lqIsOn(s);
   const nivel = google ? "grupo" : "conjunto";
   // Google da como nombre del anuncio adaptable sus 15 títulos pegados con " | " (o solo el ID):
@@ -5090,8 +5171,8 @@ function lqModeloDecision(agg){
 const LQ_CCOLS = {
   inv:  { th:"Inversión",        t:"Inversión de la campaña en el rango, en MXN (Windsor)" },
   res:  { th:"Leads plataforma", t:"Leads que reporta Meta / Google para la campaña" },
-  n:    { th:"Leads CRM",        t:"Contactos que entraron a GoHighLevel en el rango" },
-  cpl:  { th:"CPL",              t:"Costo por lead = inversión ÷ leads CRM del rango elegido" },
+  n:    { th:"Leads CRM",        t:"Contactos que entraron a GoHighLevel en el rango, más los que ya existían y volvieron a llenar un formulario (re-envíos, contados aparte debajo)" },
+  cpl:  { th:"CPL",              t:"Costo por lead = inversión ÷ leads CRM del rango elegido. Si hay re-envíos, arriba el CPL total (nuevos + re-envíos) y abajo el de leads nuevos" },
   tr:   { th:"% trabajados",     t:"Leads que ya salieron de \"Nuevo lead (no contactado)\": cualquier etapa posterior, también Sin respuesta, toques, Rescate o Descalificado. Si es bajo, el problema es de seguimiento, no de la campaña" },
   ct:   { th:"% contactados",    t:"Leads con conversación: Contacto establecido, Interés identificado, Nurturing, Zoom, Largo plazo, OPP, Carta oferta, WON o posterior. Sin respuesta y los toques sin respuesta no cuentan. Trabajados altos con contactados bajos = los leads no contestan (calidad del lead)" },
   cql:  { th:"CQL",              t:"Volumen: capturado, sin respuesta todavía", sec:true },
@@ -5126,8 +5207,10 @@ function lqCeldas(m, keys, o){
     switch(k){
       case "inv":  return `<td>${m.inv>0 ? lqMXN(m.inv) : "—"}</td>`;
       case "res":  return `<td>${m.res ? m.res.toLocaleString() : "—"}</td>`;
-      case "n":    return `<td><b>${m.n.toLocaleString()}</b></td>`;
-      case "cpl":  return `<td>${m.cpl!=null ? lqMXN(m.cpl) : "—"}</td>`;
+      case "n":    return `<td><b>${m.n.toLocaleString()}</b>${m.re ? `<div class="lq-sub lq-re-n" title="Contactos que ya existían y volvieron a llenar un formulario en el rango (re-envío). Incluidos en el total.">${m.re} re-envío${m.re===1?"":"s"}</div>` : ""}</td>`;
+      case "cpl":  return m.re && m.cpl!=null
+        ? `<td title="CPL total = inversión ÷ leads CRM (nuevos + re-envíos). CPL nuevos = inversión ÷ solo leads nuevos.">${lqMXN(m.cpl)}<div class="lq-sub">total</div><div class="lq-sub lq-re-n">${m.cplNuevos!=null ? lqMXN(m.cplNuevos) : "—"}<br>nuevos</div></td>`
+        : `<td>${m.cpl!=null ? lqMXN(m.cpl) : "—"}</td>`;
       case "tr":   return `<td class="pct" title="${escAttr(LQ_CCOLS.tr.t)}">${m.n ? lqPct(m.tr, m.n) : "—"}</td>`;
       case "ct":   return `<td class="pct" title="${escAttr(LQ_CCOLS.ct.t)}">${m.n ? lqPct(m.ct, m.n) : "—"}</td>`;
       case "cql":  return `<td class="lq-sec">${cnt(m.cql)}</td>`;
@@ -5145,6 +5228,9 @@ function lqCeldas(m, keys, o){
     return "<td></td>";
   }).join("");
 }
+// Texto del badge "Re-envío": cuándo se dio de alta y cuándo volvió a llenar el formulario.
+const lqReTitulo = (l)=>{ const f = (iso)=>{ const t = Date.parse(iso); return isNaN(t) ? "?" : new Date(t - LQ_TZ_MS).toISOString().slice(0,10).split("-").reverse().join("/"); };
+  return `Contacto existente (alta ${f(l.alta)}) que volvió a llenar un formulario el ${f(l.c)}${l.reAprox ? " (fecha aproximada: última actualización del contacto; GHL no guarda la fecha del formulario)" : ""}. Cuenta como lead de esa semana, atribuido a la utm_campaign que trae.`; };
 const lqInfBadge = (n)=> n ? ` <span class="lq-inf" title="Atribución inferida: leads de la landing seguridad.selvadentrotulum.com que llegaron sin utm_campaign antes del 08-oct-2026; se asignan a la campaña de Meta que alimentaba esa landing.">${n} con atribución inferida</span>` : "";
 
 // Fila de la tabla de calidad, a cualquier profundidad
@@ -5565,7 +5651,7 @@ function lqConclusionesSection(){
       const cambio = d.cambio ? `<div class="lq-dec-cambio">Último cambio (${escAttr(d.cambio.fuente)}): ${lqFechaCorta(d.cambio.fecha)} · ${escAttr(d.cambio.que||"")}${d.cambio.motivo ? ` — ${escAttr(d.cambio.motivo)}` : ""}</div>` : "";
       const t = m.tend || {};
       const tend = `<div class="lq-tend${m.alerta?" alza":""}">${m.alerta?"⚠ ":""}7 días: ${t.cpl7!=null?`CPL ${lqMXN(t.cpl7)}`:`${lqMXN(t.sp7||0)} sin leads`} vs. ${t.cplP!=null?`${lqMXN(t.cplP)} los 7 anteriores`:"sin leads los 7 anteriores"}${t.pct!=null?` (${t.pct>0?"+":""}${t.pct}%)`:""}</div>`;
-      const ev = `${escAttr(lqEvid({ sp:m.inv, n:m.n, sqlp:m.sqlp }))}${m.n?` · ${lqPct(m.tr, m.n)} trabajados`:""}`;
+      const ev = `${escAttr(lqEvid({ sp:m.inv, n:m.n, sqlp:m.sqlp, re:m.re }))}${m.n?` · ${lqPct(m.tr, m.n)} trabajados`:""}`;
       return `<tr data-dec-camp="${escAttr(m.camp)}"><td class="name">${origen(m.plat)}${escAttr(m.camp)}${lqInfBadge(m.inf)}${m.estadoConfirmado?"":`<div class="lq-sub">estado sin confirmar en Windsor</div>`}</td>
         ${lqSemCell(m.sem, false, false)}
         <td class="lft lq-decision">${cuando}${atender}<div class="lq-dec-acc">${escAttr(lqDecisionTexto(m))}</div>${cambio}</td>
@@ -5581,7 +5667,7 @@ function lqConclusionesSection(){
   if(M.pausadas.length){
     html += `<h4 style="margin:14px 0 2px">Pausadas recientemente</h4>
       <p class="hint pegada">Pausadas en los últimos 30 días: sin acción ni semáforo. Cifras de los 30 días de decisión; fecha de pausa = último día con gasto.</p>
-      <ul class="lq-pausadas">${M.pausadas.map(m=>`<li data-pausada="${escAttr(m.camp)}">${origen(m.plat)}<b>${escAttr(m.camp)}</b> — ${escAttr(lqEvid({ sp:m.inv, n:m.n, sqlp:m.sqlp }))}${m.cps==null?", costo por SQL —":""} · pausada el ${lqFechaCorta(m.ultimoGasto)}</li>`).join("")}</ul>`;
+      <ul class="lq-pausadas">${M.pausadas.map(m=>`<li data-pausada="${escAttr(m.camp)}">${origen(m.plat)}<b>${escAttr(m.camp)}</b> — ${escAttr(lqEvid({ sp:m.inv, n:m.n, sqlp:m.sqlp, re:m.re }))}${m.cps==null?", costo por SQL —":""} · pausada el ${lqFechaCorta(m.ultimoGasto)}</li>`).join("")}</ul>`;
   }
   html += lqBitacoraHtml(M);
 
@@ -5667,7 +5753,7 @@ async function lqAnalizar(forzar){
     const P = LQ_SEMAFORO;
     const r0 = (v)=> v==null ? null : Math.round(v);
     const campanias = M.activas.filter(m=>m.sem).slice(0,20).map(m=>({
-      nombre:m.camp, plataforma:m.plat, inv:r0(m.inv), leadsPlataforma:m.res||0, leads:m.n, sqlPlus:m.sqlp,
+      nombre:m.camp, plataforma:m.plat, inv:r0(m.inv), leadsPlataforma:m.res||0, leads:m.n, reenvios:m.re||0, cplNuevos:r0(m.cplNuevos), sqlPlus:m.sqlp,
       costoSql:r0(m.cps), cpl:r0(m.cpl), zoom:m.zoom, opp:m.opp, won:m.won,
       trabajadosPct: m.n ? Math.round(m.tr/m.n*100) : null,
       contactadosPct: m.n ? Math.round(m.ct/m.n*100) : null,
@@ -5971,7 +6057,7 @@ function lqRender(){
     const campBlocks = camps.map(([camp,arr])=>{
       const sorted = arr.slice().sort((a,b)=>(LQ_RANK[a.lv]-LQ_RANK[b.lv]) || a.n.localeCompare(b.n));
       const rows = sorted.map(l=>`<tr>
-        <td class="lft celda-fuerte">${escAttr(l.n)}</td>
+        <td class="lft celda-fuerte">${escAttr(l.n)}${l.re ? ` <span class="lq-re" title="${escAttr(lqReTitulo(l))}">Re-envío</span>` : ""}</td>
         <td class="lft">${lqBadge(l.lv)}${qual==="auto"&&l.crmLv!==l.lv?`<div style="font-size:var(--fs-xs);color:var(--neutro);margin-top:3px">CRM: ${escAttr((LQ_LEVEL_BY_ID[l.crmLv]||LQ_LEVEL_BY_ID.nc).name)}</div>`:""}</td>
         <td class="lft">${l.pstage
           ? `<b>${escAttr(l.pstage)}</b>${l.ost&&l.ost!=="open"?` <span class="txt-micro">(${escAttr(l.ost)})</span>`:""}<div class="txt-micro">${escAttr(l.pipe)}</div>`
@@ -6174,6 +6260,18 @@ async function lqSync(){
       else bar.classList.add("indet");
       lbl.textContent=`Sincronizando contactos… ${rawLeads.length.toLocaleString()}${total?(" de "+total.toLocaleString()):""}`;
     }while(cursor);
+    // Re-envíos: contactos que ya existían y se actualizaron en la ventana (candidatos; cuáles
+    // cuentan lo decide buildLqAgg). Si falla, el reporte sigue sin ellos y lo avisa.
+    const rawRe = [];
+    try{
+      let rc = null;
+      do{
+        const res = await lqFn({action:"reenvios", start:b0.startISO, end:b1.endISO, ...(rc?{searchAfter:rc}:{})});
+        if(syncCancelado("lq")){ toast("Sincronización cancelada"); return; }
+        rawRe.push(...(res.leads||[])); rc = res.searchAfter;
+        lbl.textContent=`Buscando re-envíos de formulario… ${rawRe.length.toLocaleString()}`;
+      }while(rc);
+    }catch(e){ fallos.push("re-envíos de formulario (contactos existentes que volvieron a llenar uno no se cuentan)"); toast("Re-envíos no disponibles: "+(e.message||e)); }
     // Oportunidades del CRM (con contactId) para atribuir OPPs y WONs por campaña
     bar.style.width="82%"; lbl.textContent="Sincronizando oportunidades…";
     const oppsByContact = {};
@@ -6223,7 +6321,20 @@ async function lqSync(){
       fallos.push("Windsor no está configurado (sin WINDSOR_API_KEY)");
     }
     bar.style.width="100%"; lbl.textContent="Procesando…";
-    lqState.agg = buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adExtra);
+    lqState.agg = buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adExtra, rawRe);
+    // Las oportunidades de los re-envíos son anteriores a la ventana: se piden por contacto
+    // (solo los que sí cuentan como re-envío) y se vuelve a armar el agregado.
+    const reIds = [...new Set((lqState.agg.reenvios||[]).map(l=>l.id).filter(Boolean))].filter(id=>!oppsByContact[id]);
+    if(reIds.length){
+      lbl.textContent="Etapas de los re-envíos…";
+      try{
+        for(let i = 0; i < reIds.length; i += 40){
+          const res = await lqFn({ action:"opps", contactIds: reIds.slice(i, i+40) });
+          for(const o of res.opps) lqSumarOpp(oppsByContact, o, boot.stages, oppTh, C11);
+        }
+        lqState.agg = buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adExtra, rawRe);
+      }catch(e){ fallos.push("etapas del CRM de los re-envíos (salen con la señal de sus tags)"); }
+    }
     // Sincronización incompleta: se marca EN el agregado para que quien lo lea del
     // cache lo vea en pantalla. Antes el error era solo un toast pasajero que veía
     // quien pulsó Sincronizar, y el resto del equipo leía los ceros como si fueran datos.

@@ -15,10 +15,16 @@
 //   { action:"leads", start, end, searchAfter? }
 //     → { leads:[...], total, fetched, searchAfter|null }
 //     Pagina /contacts/search en bloques; el frontend repite con searchAfter.
-//   { action:"opps", startAfter?, startAfterId? }
+//   { action:"reenvios", start, end, searchAfter? }
+//     → { leads:[...+up], total, fetched, searchAfter|null, filtroAlta:bool }
+//     Contactos que YA existían antes de `start` y se actualizaron en el rango: candidatos
+//     a re-envío de formulario (el webhook de la landing actualiza el contacto y GHL no
+//     crea uno nuevo). El frontend decide cuáles son re-envíos de verdad.
+//   { action:"opps", startAfter?, startAfterId? }  |  { action:"opps", contactIds:[...] }
 //     → { opps:[{ct,st,c,v}], cursor|null, total, fetched }
 //     Recorre todas las oportunidades (con contactId) para unirlas a los leads
-//     por campaña: OPPs y WONs que produjo cada campaña.
+//     por campaña: OPPs y WONs que produjo cada campaña. Con `contactIds` trae solo las de
+//     esos contactos (los re-envíos: sus oportunidades son anteriores a la ventana).
 //   { action:"spend", start, end }   (fechas YYYY-MM-DD)
 //     → { configured:bool, rows:[{d,src,camp,cid,spend,clicks,impr,cur}], monedas }
 //   { action:"ads", start, end }     (fechas YYYY-MM-DD)
@@ -99,6 +105,7 @@ const slim = (c) => ({
   em: (c.email || "").trim().toLowerCase(),
   ph: String(c.phone || "").replace(/[^\d]/g, "").slice(-10), // últimos 10 dígitos p/ detectar duplicados
   c: c.dateAdded || "",
+  up: c.dateUpdated || "",           // última actualización: fecha aproximada de un re-envío de formulario
   src: (c.source || "").trim(),
   u: c.assignedTo || "",
   tags: Array.isArray(c.tags) ? c.tags : [],
@@ -139,6 +146,38 @@ async function bootstrap() {
   return { users, fields, oppFields, stages, windsor: !!WINDSOR_KEY };
 }
 
+// Re-envíos (Dirección, 13-oct-2026): un contacto existente que vuelve a llenar el formulario
+// no aparece por dateAdded. Se piden los contactos actualizados en el rango y creados antes de
+// él; `up` = dateUpdated, la única fecha que deja el webhook de la landing en el contacto (la
+// landing manda submitted_at, pero el flujo de GHL no lo guarda en un campo).
+async function reenvios({ start, end, searchAfter }) {
+  if (!start || !end) throw Object.assign(new Error("start y end requeridos (ISO datetime)"), { status: 400 });
+  const out = [];
+  let cursor = Array.isArray(searchAfter) && searchAfter.length ? searchAfter : null;
+  let total = 0, filtroAlta = true;
+  const tAlta = Date.parse(start);
+  for (let i = 0; i < PAGES_PER_CALL; i++) {
+    const filters = [{ field: "dateUpdated", operator: "range", value: { gte: start, lte: end } }];
+    if (filtroAlta) filters.push({ field: "dateAdded", operator: "range", value: { lte: start } });
+    const body = { locationId: LOCATION_ID, pageLimit: PAGE_SIZE, filters, sort: [{ field: "dateUpdated", direction: "asc" }] };
+    if (cursor) body.searchAfter = cursor;
+    let data;
+    try { data = await ghl("/contacts/search", { method: "POST", body }); }
+    catch (e) {
+      // Si el API no acepta el rango abierto de dateAdded, se pide sin él y se filtra aquí
+      if (!filtroAlta || !(e.status === 400 || e.status === 422)) throw e;
+      filtroAlta = false; i--; continue;
+    }
+    const batch = data.contacts || [];
+    batch.forEach((c) => { const t = Date.parse(c.dateAdded || ""); if (!isNaN(t) && t < tAlta) out.push(slim(c)); });
+    total = data.total ?? total;
+    const lastRaw = batch[batch.length - 1];
+    cursor = batch.length === PAGE_SIZE && lastRaw && Array.isArray(lastRaw.searchAfter) ? lastRaw.searchAfter : null;
+    if (!cursor) break;
+  }
+  return { leads: out, total, fetched: out.length, searchAfter: cursor, filtroAlta };
+}
+
 async function leads({ start, end, searchAfter }) {
   if (!start || !end) throw Object.assign(new Error("start y end requeridos (ISO datetime)"), { status: 400 });
   const out = [];
@@ -170,7 +209,45 @@ async function leads({ start, end, searchAfter }) {
 // de los leads analizados. Antes se recorría TODO el histórico del CRM en cada
 // sincronización — con auto-refresco cada 30 min por usuario — solo para descartarlo al
 // filtrar por semana. Si el API rechaza el filtro, se reintenta sin él.
-async function opps({ startAfter, startAfterId, since }) {
+function slimOpp(o) {
+  // Citas embebidas (si el API las devuelve): señal fuerte de calificación
+  const evs = Array.isArray(o.calendarEvents) ? o.calendarEvents : [];
+  const ap = { tot: 0, sh: 0, ns: 0 };
+  evs.forEach((e) => {
+    ap.tot++;
+    const st = String(e.appointmentStatus || e.status || "").toLowerCase();
+    if (st === "showed" || st === "completed") ap.sh++;
+    else if (st === "noshow") ap.ns++;
+  });
+  return {
+    ct: o.contactId || (o.contact && o.contact.id) || "",
+    st: o.status || "open",
+    c: o.createdAt || "",
+    v: Number(o.monetaryValue) || 0,
+    s: o.pipelineStageId || "",                                        // etapa real del pipeline
+    sc: o.lastStageChangeAt || o.lastStatusChangeAt || o.updatedAt || o.createdAt || "",
+    ap,
+    cf: cfMap(o.customFields),
+  };
+}
+
+// Oportunidades de contactos puntuales (los re-envíos): de 6 en 6, máximo 40 por llamada.
+async function oppsDeContactos(ids) {
+  const lista = [...new Set((ids || []).map(String).filter((x) => /^[A-Za-z0-9]{6,40}$/.test(x)))].slice(0, 40);
+  const out = [], fallidos = [];
+  for (let i = 0; i < lista.length; i += 6) {
+    await Promise.all(lista.slice(i, i + 6).map(async (id) => {
+      try {
+        const data = await ghl(`/opportunities/search?location_id=${LOCATION_ID}&contact_id=${encodeURIComponent(id)}&limit=100&getCalendarEvents=true`);
+        (data.opportunities || []).forEach((o) => out.push(slimOpp(o)));
+      } catch (e) { fallidos.push(id); }
+    }));
+  }
+  return { opps: out, cursor: null, total: out.length, fetched: out.length, fallidos };
+}
+
+async function opps({ startAfter, startAfterId, since, contactIds }) {
+  if (Array.isArray(contactIds)) return oppsDeContactos(contactIds);
   const out = [];
   let cursor = startAfter && startAfterId ? { startAfter, startAfterId } : null;
   let total = 0;
@@ -190,27 +267,7 @@ async function opps({ startAfter, startAfterId, since }) {
       data = await ghl(`/opportunities/search?${q2}`);
     }
     const batch = data.opportunities || [];
-    batch.forEach((o) => {
-      // Citas embebidas (si el API las devuelve): señal fuerte de calificación
-      const evs = Array.isArray(o.calendarEvents) ? o.calendarEvents : [];
-      const ap = { tot: 0, sh: 0, ns: 0 };
-      evs.forEach((e) => {
-        ap.tot++;
-        const st = String(e.appointmentStatus || e.status || "").toLowerCase();
-        if (st === "showed" || st === "completed") ap.sh++;
-        else if (st === "noshow") ap.ns++;
-      });
-      out.push({
-        ct: o.contactId || (o.contact && o.contact.id) || "",
-        st: o.status || "open",
-        c: o.createdAt || "",
-        v: Number(o.monetaryValue) || 0,
-        s: o.pipelineStageId || "",                                        // etapa real del pipeline
-        sc: o.lastStageChangeAt || o.lastStatusChangeAt || o.updatedAt || o.createdAt || "",
-        ap,
-        cf: cfMap(o.customFields),
-      });
-    });
+    batch.forEach((o) => out.push(slimOpp(o)));
     total = (data.meta && data.meta.total) || total;
     const meta = data.meta || {};
     if (batch.length < 100 || !meta.startAfterId) { cursor = null; break; }
@@ -700,6 +757,7 @@ exports.handler = async (event) => {
     if (payload.action === "bootstrap") return json(200, await bootstrap());
     if (payload.action === "diag") return json(200, await diag());
     if (payload.action === "leads") return json(200, await leads(payload));
+    if (payload.action === "reenvios") return json(200, await reenvios(payload));
     if (payload.action === "opps") return json(200, await opps(payload));
     if (payload.action === "spend") return json(200, await spend(payload));
     if (payload.action === "ads") return json(200, await ads(payload));

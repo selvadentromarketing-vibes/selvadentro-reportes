@@ -246,6 +246,28 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
   un lead trae un ID que Windsor no conoce, un aviso lo dice en pantalla. `LQ_CAMP_ALIAS` traduce
   `INVESTORS-GOOGLE-SEARCH-MX` / `-USCAN` a "INVESTORS - GOOGLE SEARCH -- MX" /
   "INVESTORS - GOOGLE SEARCH - US+CAN".
+- **Re-envíos de formulario** (Dirección, 13-oct-2026): un contacto que YA existía y vuelve a
+  llenar un formulario no es contacto nuevo: el webhook de la landing lo actualiza (utm_campaign,
+  utm_content, tags) y el reporte, que contaba por fecha de alta, no lo veía (dos re-envíos del 9 y el
+  11-oct a INVESTORS_US/CA_ESCAPE_090926 salían como 0 leads CRM). Acción **`reenvios`**:
+  contactos actualizados en la ventana y dados de alta antes de ella (`dateUpdated` + `dateAdded`;
+  si GHL rechaza el rango abierto de alta, filtra el backend). Todos los contactos traen `up`
+  (dateUpdated). `opps` acepta `contactIds` (sus oportunidades son anteriores a la ventana).
+  - **Fecha**: el campo del contacto "Fecha último formulario" / `submitted_at` si existe
+    (`LQ_RX_ULT_FORM`). La landing de seguridad YA manda `submitted_at` en el webhook, pero el
+    flujo de GHL no lo guarda; hasta mapearlo se usa `dateUpdated`, marcada como aproximada.
+  - **Cuándo cuenta**: con fecha exacta, si cae en otra semana que el alta. Con fecha
+    aproximada, solo si el contacto se dio de alta ANTES del inicio de la campaña que hoy trae
+    (esa utm_campaign solo pudo llegar con un formulario nuevo) y la campaña empezó dentro de la
+    ventana (inicio = `campaign_start_time` de Meta o primer día de gasto). Sin utm_campaign en
+    el contacto no cuenta. Atribución: los utm_* del contacto (los del último formulario), no la
+    attributionSource de su primera visita.
+  - **Dónde**: `agg.reenvios` (fuera de `agg.leads`: Ventas, Dirección y Diagnóstico no los
+    ven); `lqVista` los suma a Calidad de Leads. Leads CRM muestra "N re-envíos" debajo; CPL
+    muestra total y nuevos; la lista de leads los marca "Re-envío" (con alta y fecha del
+    re-envío); Conclusiones dice "(N re-envíos)" y "CPL … (nuevos …)"; la IA los recibe.
+    "Medición rota" cuenta los re-envíos: solo salta si después del cruce el CRM sigue sin
+    leads de la campaña. Agregado `lq:agg:v23`.
 - **Atribución inferida** (`LQ_INFERIDA`): leads con origen `landing-seguridad`
   (seguridad.selvadentrotulum.com) **sin utm_campaign y creados antes del 08-oct-2026**
   se asignan a `INVESTORS_MX_DYNAMIC-TOPLPS_090926`, conjunto SEGURIDAD_PATRIMONIO, con la

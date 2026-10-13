@@ -42,10 +42,12 @@ const CONTACTOS = [
   { id: "s1", contactName: "Landing seguridad", email: "c@x.com", dateAdded: "2026-09-24T15:00:00Z", source: "landing-seguridad",
     attributionSource: { url: "https://seguridad.selvadentrotulum.com/?ref=1" } },
 ];
-S.ghlFetch = async (path) => {
+// lead-quality toma S.ghlFetch al cargarse: se simula con un despachador que cada prueba cambia.
+let ghlSim = async (path) => {
   if (path === "/contacts/search") return { contacts: CONTACTOS, total: CONTACTOS.length };
   throw Object.assign(new Error("no simulado: " + path), { status: 404 });
 };
+S.ghlFetch = (path, opt) => ghlSim(path, opt);
 
 (async () => {
   const LQ = require("../netlify/functions/lead-quality.js");
@@ -62,6 +64,41 @@ S.ghlFetch = async (path) => {
   ok(by.m1 && by.m1.attr.camp === "Intelligent Investors", "Meta: el nombre de la atribución se conserva (el ID manda en la app)");
   ok(by.g1 && by.g1.attr.cid === "23710551755", "Google: hsa_cam de la URL de la landing", by.g1 && by.g1.attr);
   ok(by.s1 && by.s1.attr.host === "seguridad.selvadentrotulum.com" && !by.s1.attr.camp, "Landing de seguridad: dominio sin utm_campaign", by.s1 && by.s1.attr);
+
+  console.log("\n[lead-quality] re-envíos: contactos existentes actualizados en el rango");
+  const cuerpos = [];
+  const VIEJOS = [
+    { id: "contactoViejo0000002", contactName: "Contacto viejo", email: "j3@x.com", dateAdded: "2026-02-22T07:02:13Z", dateUpdated: "2026-10-09T14:10:17Z", source: "landing-seguridad",
+      customFields: [{ id: "f_camp", value: "INVESTORS_US/CA_ESCAPE_090926" }], lastAttributionSource: { campaign: "Intelligent Investors", campaignId: "120200000000000001" } },
+    { id: "nuevo", contactName: "Alta en el rango", email: "n@x.com", dateAdded: "2026-10-06T10:00:00Z", dateUpdated: "2026-10-08T10:00:00Z" },
+  ];
+  let rechaza = 0;
+  ghlSim = async (path, opt) => {
+    if (path !== "/contacts/search") throw Object.assign(new Error("no simulado"), { status: 404 });
+    const b = opt && opt.body; cuerpos.push(b);
+    if (rechaza && b.filters.some((f) => f.field === "dateAdded")) { rechaza--; throw Object.assign(new Error("filtro no admitido"), { status: 422 }); }
+    return { contacts: VIEJOS, total: VIEJOS.length };
+  };
+  const rre = JSON.parse((await LQ.handler(ev({ action: "reenvios", start: "2026-10-05T00:00:00-05:00", end: "2026-10-11T23:59:59-05:00" }))).body);
+  const f0 = (cuerpos[0] && cuerpos[0].filters) || [];
+  ok(f0.some((f) => f.field === "dateUpdated" && f.value.gte === "2026-10-05T00:00:00-05:00") && f0.some((f) => f.field === "dateAdded" && f.value.lte === "2026-10-05T00:00:00-05:00"),
+    "pide los contactos actualizados en el rango y dados de alta antes de él", f0);
+  ok(rre.leads.length === 1 && rre.leads[0].id === "contactoViejo0000002" && rre.leads[0].up === "2026-10-09T14:10:17Z" && rre.leads[0].c === "2026-02-22T07:02:13Z" && rre.leads[0].cf.f_camp === "INVESTORS_US/CA_ESCAPE_090926",
+    "devuelve el contacto viejo con su última actualización (up) y su utm_campaign; descarta el dado de alta en el rango", rre.leads);
+  rechaza = 1; cuerpos.length = 0;
+  const rre2 = JSON.parse((await LQ.handler(ev({ action: "reenvios", start: "2026-10-05T00:00:00-05:00", end: "2026-10-11T23:59:59-05:00" }))).body);
+  ok(rre2.filtroAlta === false && rre2.leads.length === 1 && rre2.leads[0].id === "contactoViejo0000002" && cuerpos.length === 2,
+    "si GHL no acepta el filtro de alta, repite sin él y filtra aquí", { filtroAlta: rre2.filtroAlta, n: rre2.leads.length });
+  const pedidasOpp = [];
+  ghlSim = async (path) => {
+    pedidasOpp.push(path);
+    if (/contact_id=contactoViejo0000001/.test(path)) return { opportunities: [{ id: "o1", contactId: "contactoViejo0000001", status: "open", createdAt: "2026-03-04T17:52:40Z", pipelineStageId: "st7", lastStageChangeAt: "2026-07-21T10:29:44Z", monetaryValue: 0 }] };
+    return { opportunities: [] };
+  };
+  const ro = JSON.parse((await LQ.handler(ev({ action: "opps", contactIds: ["contactoViejo0000001", "otroContacto1234567", "contactoViejo0000001"] }))).body);
+  ok(pedidasOpp.length === 2 && pedidasOpp.every((p) => /\/opportunities\/search\?location_id=.*&contact_id=/.test(p)) && ro.opps.length === 1 && ro.opps[0].ct === "contactoViejo0000001" && ro.opps[0].s === "st7",
+    "oportunidades por contacto (las de un re-envío son anteriores a la ventana)", { pedidasOpp, ro });
+  ghlSim = async (path) => { if (path === "/contacts/search") return { contacts: CONTACTOS, total: CONTACTOS.length }; throw Object.assign(new Error("no simulado"), { status: 404 }); };
 
   console.log("\n[lead-quality] la inversión diaria de Windsor trae el ID de campaña");
   const pedidas = [];
@@ -202,7 +239,7 @@ S.ghlFetch = async (path) => {
     campanias: [
       { nombre: "INVESTORS_US/CA_ESCAPE_090926", plataforma: "Meta", inv: 11360, leadsPlataforma: 13, leads: 9, sqlPlus: 0, costoSql: null, cpl: 1262, zoom: 0, opp: 0, won: 0,
         trabajadosPct: 100, contactadosPct: 30, semaforo: "ROJO", accion: "pausar", regla: "inversión 11,360 MXN ≥ 8,000 MXN con 0 SQL+", muestraChica: false, alertaCpl: "", inferidos: 0,
-        recomendaciones: ["Pausar la campaña INVESTORS_US/CA_ESCAPE_090926 — gasto 11,360 MXN, 9 leads, 0 SQL+, CPL 1,262 MXN"], esperar: "" },
+        recomendaciones: ["Pausar la campaña INVESTORS_US/CA_ESCAPE_090926 — gasto 11,360 MXN, 9 leads, 0 SQL+, CPL 1,262 MXN"], esperar: "", reenvios: 2, cplNuevos: 1623 },
       { nombre: "INVESTORS_MX_DYNAMIC-TOPLPS_090926", plataforma: "Meta", inv: 9230, leadsPlataforma: 51, leads: 10, sqlPlus: 2, costoSql: 4615, cpl: 923, zoom: 1, opp: 1, won: 0,
         trabajadosPct: 90, contactadosPct: 40, semaforo: "AMARILLO", accion: "optimizar", accionTexto: "Optimizar costo", regla: "costo por SQL 4,615 MXN", muestraChica: false, alertaCpl: "", inferidos: 8,
         recomendaciones: ["Probar 2 creativos nuevos junto a ES_LLAMADA_NUEVO6-ESCAPE_CENOTES (conjunto ES_LLAMADA_NUEVO6-SEGURIDAD_PATRIMONIO), que hoy lleva a https://seguridad.selvadentrotulum.com/seguridadpatrimonio/ — gasto 3,965 MXN"],
@@ -237,6 +274,8 @@ S.ghlFetch = async (path) => {
      && /no calcules su CPL ni su costo por SQL y no lo uses para recomendar qué conservar o pausar/.test(prompt)
      && /SIN DETALLE DE META: no llegó la consulta de 30 días/.test(prompt) && /"Sin detalle de Meta en esta sincronización; revisar en Meta Ads"/.test(prompt),
      "gasto no disponible y sin detalle de Meta llegan al prompt con su regla (no calcular CPL, no conservar ni pausar, no sugerir conjuntos)");
+  ok(/9 leads en CRM \(incluye 2 re-envíos: contactos que ya existían y volvieron a llenar un formulario; CPL solo de nuevos 1,623 MXN\)/.test(prompt),
+     "los re-envíos llegan al prompt con el CPL de leads nuevos");
 
   console.log(fallas.length ? `\n${fallas.length} prueba(s) fallaron` : "\nTodas las pruebas del backend de Calidad de Leads pasaron");
   process.exit(fallas.length ? 1 : 0);

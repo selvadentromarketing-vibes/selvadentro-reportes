@@ -558,6 +558,39 @@ const PORT = process.env.PORT || 8765;
       /gasto 0 MXN|CPL 0 MXN|costo por SQL 0 MXN/.test(recsMeta), /Pausar el conjunto|Pausar los? \d? ?anuncios?|Lo que sostiene|conservar algo, lo único/.test(recsMeta),
       pay4 ? pay4.sinDetalleMeta : 'sin llamada', pay4 ? pay4.anuncios.filter(a => !/GOOGLE/.test(a.campania)).length : -1].join(' · ');
     lqState.agg = agg3;
+    // Re-envíos de formulario (Dirección, 13-oct-2026): contacto existente que vuelve a llenar
+    // un formulario. Cuenta si se dio de alta ANTES de que empezara la campaña que hoy trae.
+    const RE = (id, n, c, up, camp) => ({ id, n, em: id + '@x.com', ph: '', c, up, src: 'landing-seguridad', u: '', tags: ['squeeze'],
+      cf: camp ? { f_camp: camp, f_cont: 'EN_LLAMADA_ESCAPE' } : {}, attr: { camp: 'Intelligent Investors', cid: '120200000000000001', src: 'facebook' } });
+    const fx6 = copia();
+    const rawRe = [RE('re1', 'Contacto viejo', '2026-02-22T07:02:13Z', '2026-09-30T15:00:00Z', 'INVESTORS_US/CA_ESCAPE_090926'),
+                   RE('re2', 'Alta despues del inicio', '2026-09-20T10:00:00Z', '2026-10-01T10:00:00Z', 'INVESTORS_US/CA_ESCAPE_090926'),
+                   RE('re3', 'Sin utm', '2026-02-01T10:00:00Z', '2026-09-29T10:00:00Z', ''),
+                   RE('re4', 'Campana anterior a la ventana', '2026-03-01T10:00:00Z', '2026-09-29T10:00:00Z', 'INVESTORS_US/CA_ESCAPE_100626')];
+    const agg6 = buildLqAgg(fx6.boot, fx6.rawLeads, fx6.spendRows, fx6.weeks, fx6.opps, fx6.adRows, fx6.adExtra, rawRe); agg6.fallos = []; agg6.monedas = ['MXN'];
+    r.reCuentan = (agg6.reenvios || []).map(l => `${l.n} ${l.wk} ${l.camp}${l.reAprox ? ' aprox' : ''}`).join(' | ');
+    r.reFueraDeVentas = !agg6.leads.some(l => l.re);
+    lqState.agg = agg6; rango('2026-W37', '2026-W40'); lqState.sub = 'combinado'; lqRender();
+    const fRe = [...document.querySelectorAll('table.lq-combo tr')].find(tr => /INVESTORS_US\/CA_ESCAPE_090926/.test(tr.textContent));
+    r.reCombo = fRe ? [...fRe.cells].slice(1, 4).map(td => td.innerText.replace(/\s+/g, ' ').trim()).join(' ¦ ') : '';
+    lqState.sub = 'calidad'; lqRender();
+    const bloque = [...document.querySelectorAll('#lq-content .lq-camp')].find(d => /INVESTORS_US\/CA_ESCAPE_090926/.test(d.querySelector('.lc-name').textContent));
+    const celdaRe = bloque ? [...bloque.querySelectorAll('tbody tr td:first-child')].find(td => /Contacto viejo/.test(td.textContent)) : null;
+    r.reBadge = celdaRe ? celdaRe.textContent.replace(/\s+/g, ' ').trim() + ' · ' + (celdaRe.querySelector('.lq-re') || {}).title : '';
+    // Con el campo "Fecha último formulario" la fecha es exacta y basta con que caiga en otra semana que el alta
+    const fx7 = copia();
+    fx7.boot.fields = (fx7.boot.fields || []).concat([{ id: 'f_ult', name: 'Fecha último formulario' }]);
+    const r7 = fx7.rawLeads.find(l => l.cf && l.cf.f_camp === 'INVESTORS_US/CA_ESCAPE_090926');
+    r7.cf.f_ult = new Date(Date.parse(r7.c) + 8 * 86400e3).toISOString();
+    const agg7 = buildLqAgg(fx7.boot, fx7.rawLeads, fx7.spendRows, fx7.weeks, fx7.opps, fx7.adRows, fx7.adExtra, []);
+    r.reExacto = (agg7.reenvios || []).map(l => `${l.n === r7.n} ${l.reAprox ? 'aprox' : 'exacta'} ${agg7.campoUltForm}`).join(' | ');
+    // Medición rota: solo si DESPUÉS de contar los re-envíos el CRM sigue sin leads de la campaña
+    const Vd = agg.dec.ventana, d3 = [0, 1, 2].map(i => lqSumaDias(Vd.fin, -i));
+    const decP = { dias: { '777': { [d3[0]]: { sp: 100, res: 1 }, [d3[1]]: { sp: 100, res: 1 } } } };
+    const Cm = (leads) => ({ cids: new Set(['777']), grps: [], leads, sp: { dias: { [Vd.fin]: 100 } } });
+    r.medicionSinRe = lqAtenderHoy({ plat: 'Meta' }, Cm([]), decP, Vd).map(e => e.tipo).join(',');
+    r.medicionConRe = lqAtenderHoy({ plat: 'Meta' }, Cm([{ re: 1, dia: d3[1] }]), decP, Vd).map(e => e.tipo).join(',');
+    lqState.agg = agg3;
     // Sin datos de decisión (Windsor no respondió): Conclusiones sigue saliendo, con aviso
     lqState.sub = 'conclusiones'; lqRender();
     r.sinDec = /No llegó de Windsor el detalle de la ventana de decisión/.test(txt()) && !!document.getElementById('lq-decision-etq');
@@ -633,6 +666,11 @@ const PORT = process.env.PORT || 8765;
     && /Buscar el conjunto con más gasto y 0 SQL\+/.test(lqx.sinDetalleMeta) && /Buscar los anuncios activos con CPL arriba de 400 MXN/.test(lqx.sinDetalleMeta)
     && !/CONJ_|AD_/.test(lqx.sinDetalleMeta) && /\|\| $/.test(lqx.sinDetalleMeta)
     && /^[1-9]\d* · true · false · false · true · 0$/.test(lqx.sinA30)
+    && lqx.reCuentan === 'Contacto viejo 2026-W40 INVESTORS_US/CA_ESCAPE_090926 aprox' && lqx.reFueraDeVentas
+    && lqx.reCombo === '11,200 MXN ¦ 8 1 re-envío ¦ 1,400 MXN total 1,600 MXN nuevos'
+    && /^Contacto viejo Re-envío · Contacto existente \(alta 22\/02\/2026\) que volvió a llenar un formulario el 30\/09\/2026 \(fecha aproximada/.test(lqx.reBadge)
+    && lqx.reExacto === 'true exacta Fecha último formulario'
+    && lqx.medicionSinRe === 'medicion' && lqx.medicionConRe === ''
     && /^Gasto detenido: 0 MXN ayer \(04 oct\) con la campaña activa; los 7 días previos gastó 900 MXN$/.test(lqx.gastoDetenido)
     && lqx.iaPayload === '2026-09-05 → 2026-10-04 · false · INVESTORS - GOOGLE SEARCH - US+CAN · true · ES_LLAMADA_NUEVO6-ESCAPE_CENOTES'
     && lqx.diagUnit === 'Optimizar calidad [tasa SQL 6.7% (< 10%): calidad] || Optimizar costo [CPL 667 MXN (> 400 MXN): costo] || Optimizar calidad y costo [tasa SQL 9.1% (< 10%): calidad · CPL 455 MXN (> 400 MXN): costo] || Mantener (muestra chica) []';
