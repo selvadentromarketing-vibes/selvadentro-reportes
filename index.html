@@ -6428,7 +6428,7 @@ async function showLQ(){
 // Reporte de disciplina comercial directo del CRM: SLA de primera respuesta por
 // asesor y canal, leads >7 días sin toque, trabajados vs contactados efectivos,
 // citas y show rate, y OPPs/WONs por asesor. Con nombres, acumulable por semanas.
-const SLA_AGG_KEY = "sla:agg:v14";   // v14: citas agendadas en el periodo por fecha de agendado; base de agendamiento con quien agendó sin escribir   // v13: citas del periodo por fecha de la cita y su asistencia (show rate)   // v12: telefonía por lead (canal del 1er toque, intentos, desenlace, duración conocida)   // v11: spec v1.1 (filtros de medición: inválidos, brokers, revertidas, horario, sin llamada, contacto efectivo)   // v10: calificación por reglas (la etapa manda), no el campo manual vacío   // v9: razón de descarte por lead   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
+const SLA_AGG_KEY = "sla:agg:v15";   // v15: si el asesor tocó al lead antes del traspaso a ventas, su reloj arranca en el alta   // v14: citas agendadas en el periodo por fecha de agendado; base de agendamiento con quien agendó sin escribir   // v13: citas del periodo por fecha de la cita y su asistencia (show rate)   // v12: telefonía por lead (canal del 1er toque, intentos, desenlace, duración conocida)   // v11: spec v1.1 (filtros de medición: inválidos, brokers, revertidas, horario, sin llamada, contacto efectivo)   // v10: calificación por reglas (la etapa manda), no el campo manual vacío   // v9: razón de descarte por lead   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
 const SLA_STALE_MS = 7*86400e3; // "sin toque" = 7 días sin mensaje
 const slaState = { built:false, agg:null, syncing:false, asesor:"", camp:"" };   // asesor/camp "" = sin filtro
 
@@ -6475,24 +6475,25 @@ function slaDetalleLeads(arr, V11, name){
   const hora = (ms)=> ms ? new Date(ms - LQ_TZ_MS).toISOString().slice(5,16).replace("T"," ").replace(/^(\d\d)-(\d\d)/, "$2/$1") : "—";
   const canal = (l)=> l.tAuto ? "llamada automática con contacto" : ({ call:"llamada", whatsapp:"WhatsApp", sms:"SMS", email:"correo" }[l.fch] || l.fch || "—");
   const motivo = (l)=> l.sd ? "no: sin datos de conversación" : (V11 && l.fh) ? "no: entró fuera de horario"
-    : slaAntesReloj(l) ? `no: su 1er toque fue antes de que arrancara su reloj${l.hand ? " (el traspaso a ventas)" : ""}` : l.slaAt == null ? "no: sin 1er toque" : "sí";
+    : slaAntesReloj(l) ? "no: su 1er toque es anterior a su alta en el CRM" : l.slaAt == null ? "no: sin 1er toque" : "sí";
   const filas = arr.slice().sort((a,b)=>(a.created||0)-(b.created||0)).slice(0,80).map(l=>`<tr>
-      <td class="lft">${escAttr(l.n||"—")}</td><td>${hora(l.created)}${l.hand ? `<div class="lq-sub" title="El reloj arranca en el traspaso a ventas (cuando se creó su oportunidad), no en el alta del ${escAttr(hora(l.alta))}">traspaso</div>` : ""}</td><td>${V11 ? (l.fh ? "fuera" : "en horario") : "—"}</td>
+      <td class="lft">${escAttr(l.n||"—")}</td><td>${hora(l.created)}${l.hand ? `<div class="lq-sub" title="Nadie lo tocó antes de que se creara su oportunidad: el reloj arranca en ese traspaso a ventas, no en el alta del ${escAttr(hora(l.alta))}">traspaso</div>`
+        : l.hAntes ? `<div class="lq-sub" title="Lo tocaron antes de que se creara su oportunidad (${escAttr(hora(l.hAntes))}): el reloj arranca en el alta">alta · tocado antes del traspaso</div>` : ""}</td><td>${V11 ? (l.fh ? "fuera" : "en horario") : "—"}</td>
       <td class="lft">${escAttr(name(l.u))}</td>
       <td>${l.slaAt != null ? hora(l.created + l.slaAt) : "—"}</td><td class="lft">${l.slaAt != null ? escAttr(canal(l)) : "—"}</td>
       <td>${fmtDur(l.slaAt)}</td><td class="lft">${motivo(l)}</td><td>${fmtDur(l.slaEf)}</td></tr>`).join("");
   return `<div class="table-scroll" style="border:none;box-shadow:none"><table class="rep sla-det">
     <thead><tr><th class="lft">Lead</th><th>Entrada</th><th>Horario</th><th class="lft">Asesor</th><th>1er toque</th><th class="lft">Canal</th><th>Tiempo</th><th class="lft">¿En la mediana?</th><th>Contacto efectivo</th></tr></thead>
     <tbody>${filas}</tbody></table></div>${arr.length > 80 ? `<p class="hint">Se muestran los primeros 80 de ${arr.length}.</p>` : ""}
-    <p class="hint" style="margin:4px 0 0">Hora de Tulum. Reloj desde la entrada del lead o, si su oportunidad se creó después, desde ese traspaso a ventas ("traspaso" bajo la hora). 1er toque = el primer mensaje o llamada manual del asesor, o una llamada automática que conectó ≥90 s, lo que llegue primero. Si ese toque fue antes de que arrancara el reloj, no hay tiempo que medir y no entra en la mediana.</p>`;
+    <p class="hint" style="margin:4px 0 0">Hora de Tulum. Reloj desde la entrada (alta) del lead. Si nadie lo tocó antes de que se creara su oportunidad, desde ese traspaso a ventas ("traspaso" bajo la hora); si ya lo habían tocado, desde el alta. 1er toque = el primer mensaje o llamada manual del asesor, o una llamada automática que conectó ≥90 s, lo que llegue primero.</p>`;
 }
 // Muestra mínima para leer una mediana de velocidad (menos = "muestra chica", en gris).
 const SLA_N_MIN = 5;
 const slaNTxt = (n)=> !n ? "sin leads medibles" : `${n} lead${n===1?"":"s"}${n < SLA_N_MIN ? " · muestra chica, no comparar" : ""}`;
-// 1er toque ANTES de que arrancara su reloj: el reloj arranca en el traspaso a ventas (la
-// creación de la oportunidad) cuando es posterior al alta, y si el asesor ya le había escrito
-// o llamado, ese toque queda antes del reloj. slaAt sale vacío (no entra en la mediana), pero
-// velOk lo da por cumplido. "Ver leads" decía "sin 1er toque" y no era cierto.
+// 1er toque ANTES de que arrancara su reloj: slaAt sale vacío (no entra en la mediana) y velOk
+// lo da por cumplido. Desde el 13-oct-2026 el toque previo al traspaso a ventas ya no cae aquí
+// (su reloj arranca en el alta, ver hAntes); queda solo el toque anterior al alta del contacto
+// (un contacto fusionado o importado con mensajes previos). "Ver leads" decía "sin 1er toque".
 const slaAntesReloj = (l)=> l.slaAt == null && !l.sd && !!(l.foM || l.tAuto);
 const slaMedian = (arr)=>{ if(!arr.length) return null; const s=arr.slice().sort((a,b)=>a-b); const m=Math.floor(s.length/2); return s.length%2 ? s[m] : (s[m-1]+s[m])/2; };
 function fmtDur(ms){
@@ -7244,15 +7245,21 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
     // Si el lead entró al pipeline DESPUÉS de darse de alta, ese es el momento en que
     // ventas se hizo cargo y desde ahí se le mide.
     const hand = traspaso[c.id] || null;
-    const created = (hand && hand > alta) ? hand : alta;
-    // El Anexo 1 define el SLA de primera respuesta contra el CONTACTO EFECTIVO
-    // (el lead respondió), no contra el intento. Se miden los dos por separado.
     // Primer toque para la VELOCIDAD y el SLA de 60 s: el toque manual del asesor o, con las
     // reglas v1.1, una llamada que el CRM marcó solo y que conectó ≥90 s (spec v1.2 §3:
     // "automatización con contacto cuenta a su hora real"; Dirección General, 7-oct-2026) —
     // lo que llegue primero. La columna "1er toque manual" sigue contando solo lo manual.
     const tAuto = !!(v11 && sw.foA && (!sw.foM || sw.foA < sw.foM));
     const foT = tAuto ? sw.foA : sw.foM;
+    // Si el asesor ya lo había tocado ANTES del traspaso (le llamó o escribió y después le
+    // creó la oportunidad), el reloj arranca en el alta: es buen trabajo y cuenta con su tiempo
+    // real desde la entrada (Dirección General, 13-oct-2026). Antes ese toque quedaba antes del
+    // reloj: fuera de la mediana y del SLA de 60 s, cumplido en el de 5 min y 0 min en la de
+    // 1ª llamada. El traspaso sigue mandando para el lead que nadie tocó hasta que pasó a ventas.
+    const tocadoAntes = !!(hand && hand > alta && foT && foT < hand);
+    const created = (hand && hand > alta && !tocadoAntes) ? hand : alta;
+    // El Anexo 1 define el SLA de primera respuesta contra el CONTACTO EFECTIVO
+    // (el lead respondió), no contra el intento. Se miden los dos por separado.
     const slaAt = (foT && foT>=created) ? foT-created : null;  // hasta el 1er toque
     const slaEf = (fiEf && fiEf>=created) ? fiEf-created : null;        // hasta el contacto efectivo
     // Velocidad (R-04): en horario, 1er toque manual en ≤5 min; fuera de horario, antes de
@@ -7285,7 +7292,9 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
     return { id:c.id, n:c.n, wk, canal, u:c.u||"", created, alta,
              camp, pipe: cp ? cp.p : "", stage: cp ? cp.s : "",
              // hand = el reloj arrancó en el traspaso a ventas, no en el alta del contacto
-             hand: (hand && hand > alta) ? hand : null,
+             hand: created !== alta ? hand : null,
+             // tocado antes del traspaso: su reloj arranca en el alta (hAntes = la hora del traspaso)
+             hAntes: tocadoAntes ? hand : null,
              // fo = primer mensaje saliente de CUALQUIER origen, workflows incluidos. Se
              // conserva para poder mostrar la diferencia con el toque manual, pero NINGÚN
              // porcentaje de desempeño se calcula con él: por eso el "1er toque" salía
@@ -7695,9 +7704,10 @@ function slaRender(){
   const horTxt = `${H.dias.join() === "1,2,3,4,5" ? "lunes a viernes" : H.dias.map(d=>DN[d]).join(", ")} de ${String(H.abre/3600).padStart(2,"0")}:00 a ${String(H.cierra/3600-1).padStart(2,"0")}:59, hora Tulum`;
   const pl = (n, s, p)=> `${n} ${n===1 ? s : (p || s+"s")}`;
   const cd = conDatos.length, cdTxt = `Base: leads con conversaciones legibles (${cd})${sinDatos ? `; sin datos de conversación, no entran (${sinDatos})` : ""}.`;
-  const reloj = "El reloj arranca en la entrada del lead o, si su oportunidad se creó después (traspaso a ventas), en ese traspaso; si el asesor ya le había escrito o llamado, ese toque queda antes del reloj y no hay tiempo que medir.";
+  const reloj = "El reloj arranca en la entrada (alta) del lead. Solo si nadie lo tocó antes de que se creara su oportunidad, arranca en ese traspaso a ventas. Un toque anterior al alta (contacto fusionado o importado) no tiene tiempo que medir.";
   const antesN = conDatos.filter(slaAntesReloj).length, sinToque = conDatos.filter(l=>!(l.foM || l.tAuto)).length;
   const enH = V11 ? leads.filter(l=>!l.fh) : leads, fueraN = leads.length - enH.length;
+  const hAntesN = enH.filter(l=>l.hAntes).length;
   const atNo = enH.filter(l=>l.slaAt == null), atSd = atNo.filter(l=>l.sd).length, atAntes = atNo.filter(slaAntesReloj).length;
   const callCero = enH.filter(l=>l.slaCall === 0).length;
   const sinEf = leads.filter(l=>!l.fi).length, efAntes = leads.filter(l=>l.fi && l.slaEf == null).length;
@@ -7746,6 +7756,7 @@ function slaRender(){
         atAntes ? `1er toque antes de que arrancara su reloj (${atAntes})` : "",
         atNo.length - atSd - atAntes ? `sin 1er toque todavía (${atNo.length - atSd - atAntes})` : "",
         atSd ? `sin datos de conversación (${atSd})` : ""].filter(Boolean).join(" · ") || "ninguno"} → <b>${slasAt.length} en la mediana</b>.`,
+      hAntesN ? `Incluye ${hAntesN} tocado${hAntesN===1?"":"s"} antes de que se creara su oportunidad: cuentan con su tiempo real desde el alta (Dirección General, 13-oct-2026).` : "",
       atAntes ? reloj : "", verLeads))}
     ${kpiMed(slasCall, V11?"Med. 1er intento de llamada · solo leads que entraron en horario":"Med. 1er intento de llamada · desde la entrada del lead", lqNota(
       `<b>Mediana del tiempo entre la entrada del lead y la primera llamada del asesor</b>, conecte o no. Solo llamadas manuales.`,
@@ -8131,9 +8142,12 @@ function slaRender(){
     }
   }
 
-  const conHand = leads.filter(l=>l.hand).length;
+  const conHand = leads.filter(l=>l.hand).length, conHAntes = leads.filter(l=>l.hAntes).length;
   if(conHand){
-    html += `<div class="lq-meth">ℹ En <b>${conHand}</b> de ${leads.length} leads el reloj no arranca en la fecha de alta del contacto sino en el <b>traspaso a ventas</b> (cuando entró al pipeline). Son leads que estuvieron un tiempo en marketing antes de asignarse: medirlos desde su alta los haría ver como respuestas de días o semanas.</div>`;
+    html += `<div class="lq-meth">ℹ En <b>${conHand}</b> de ${leads.length} leads el reloj no arranca en la fecha de alta del contacto sino en el <b>traspaso a ventas</b> (cuando entró al pipeline). Son leads que nadie tocó mientras estuvieron en marketing: medirlos desde su alta los haría ver como respuestas de días o semanas.</div>`;
+  }
+  if(conHAntes){
+    html += `<div class="lq-meth">ℹ <b>${conHAntes}</b> de ${leads.length} leads se tocaron <b>antes</b> de que se creara su oportunidad: su reloj arranca en el alta y cuentan con su tiempo real (Dirección General, 13-oct-2026).</div>`;
   }
   // --- Manual vs CRM (spec B1): el catálogo de etapas del pipeline principal, lado a
   // lado con el manual, con las cuatro etapas por verificar señaladas. Los filtros del
