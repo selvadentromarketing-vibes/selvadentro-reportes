@@ -15,7 +15,7 @@ function pcFixture() {
   const lead = (id, n, c, extra) => Object.assign({ id, n, c: iso(c), src: "", u: E, tags: [], attr: {}, cf: {} }, extra || {});
   const opp = (ct, p, s, sc, u, cf) => ({ id: "op-" + ct, ct, u: u || A1, st: "open", p, s, sc: iso(sc), scE: iso(sc), c: iso(sc), cf: cf || {} });
   const L6c = T + 2 * DIA, L9c = T + DIA, L7c = T + 2 * DIA + H, L8c = T + 3 * DIA, L2c = T + H;
-  const VIE = Date.parse("2026-10-30T15:00:00Z");
+  const VIE = Date.parse("2026-10-30T15:00:00Z"), L10c = T + 3 * DIA + 2 * H, L11c = VIE + H;
   const leads = [
     lead("lead00001", "Lead Uno", T),
     lead("lead00002", "Lead Dos", L2c),
@@ -26,6 +26,8 @@ function pcFixture() {
     lead("lead00007", "Lead Siete", L7c),
     lead("lead00008", "Lead Ocho", L8c),
     lead("lead00009", "Lead Nueve", L9c, { cf: { f1: "Vivir" } }),
+    lead("lead00010", "Lead Diez", L10c),
+    lead("lead00011", "Lead Once", L11c),
   ];
   const ev = {
     lead00001: [call(T + 30e3, E, "a", "na", 40), call(T + 60e3, E, "m", "ok", 300), msg(T + 40 * M, A1, "whatsapp")],
@@ -38,7 +40,12 @@ function pcFixture() {
     lead00003: [call(Date.parse("2026-11-02T14:05:00Z"), E)],
     lead00006: [call(L6c + 40e3, E, "m", "ok", 90), call(L6c + 3 * H, A2, "m", "ok", 200)],
     lead00007: [msg(L7c + 2 * M, E, "whatsapp"), inb(L7c + 30 * M, "whatsapp")],
-    lead00008: [call(L8c + 2 * M, E, "m", "ok", 70)],
+    lead00008: [call(L8c + 2 * M, E, "m", "ok", 95)],
+    // Protocolo del primer toque (13-oct-2026): la automática del CRM entra primero, aquí SIN
+    // usuario. Lead Diez: contestó 120 s → contacto efectivo y primer toque completo.
+    lead00010: [call(L10c + 20e3, "", "a", "ok", 120), msg(L10c + 30 * M, A2, "whatsapp")],
+    // Lead Once: conectó 30 s (<90) y el ejecutivo remarcó a mano 4 min después: tarde.
+    lead00011: [call(L11c + 25e3, "", "a", "ok", 30), call(L11c + 5 * M, E)],
     lead00009: [call(L9c + 50e3, E, "m", "ok", 65)],
     // Cartera
     cart00001: [call(T + DIA + 2 * H, E), call(T + DIA + 2 * H + M, E), msg(T + DIA + 2 * H + 2 * M, E, "whatsapp"),
@@ -71,6 +78,8 @@ function pcFixture() {
     cart00003: [opp("cart00003", "pV", "sRe", viejo, A1)],
     cart00004: [opp("cart00004", "pB", "sBP", viejo, A2)],
     cart00005: [opp("cart00005", "pV", "sZA", VIE + 12 * M, A2)],
+    lead00010: [opp("lead00010", "pV", "sCE", L10c + 10 * M, A2)],
+    lead00011: [opp("lead00011", "pV", "sNL", L11c, E)],
   };
   const citas = [
     { id: "c6", ct: "lead00006", u: A2, t: T + 3 * DIA, ag: L6c + 8 * M, st: "showed", cal: "Zoom", cb: E },
@@ -95,11 +104,14 @@ function pcFixture() {
     lp: { motivo: "o:oLPm", fecha: "o:oLPf" }, calif: { campo: "", si: "cita calificada", no: "cita no calificada" } };
   const now = Date.parse("2026-11-09T18:00:00Z");
   // Lo que el manual dice que debe salir, calculado a mano (ver comentarios en smoke-ui.js).
-  const esperado = { nU: 7, excl: { fuera: 1, prueba: 1 }, vel: { ok: 3, den: 6 }, puntos: 21, habiles: 5, conv60: 6,
-    dia: { "2026-10-26": 4, "2026-10-27": 6, "2026-10-28": 3, "2026-10-29": 4, "2026-10-30": 1, "2026-10-31": 2, "2026-11-01": 1 },
-    entrega: { ent: 4, den: 6 }, res: { entregado: 4, lpOk: 1, descarte: 1, sinCierre: 1 }, asist: { as: 1, den: 2 }, calif: { si: 1, no: 0 },
-    datos: { ok: 1, n: 3 }, cad: { silencio: 2, completos: 1 }, cart: { vencida: [2, 4], fria: [1, 1], sindato: [1, 1] }, fueraPts: 1,
-    recep: { lead00001: ["ok", ""], lead00006: ["tarde", "si"], lead00009: ["sin", "no"], cart00005: ["tarde", "si"] } };
+  // Contacto efectivo = llamada ≥90 s, respuesta escrita o sesión agendada por el ejecutivo:
+  // Lead Nueve (llamada de 65 s) es efectivo por su cita; Lead Diez por la automática de 120 s.
+  const esperado = { nU: 9, excl: { fuera: 1, prueba: 1 }, vel: { ok: 5, den: 8 }, puntos: 23, habiles: 5, conv60: 7,
+    dia: { "2026-10-26": 4, "2026-10-27": 6, "2026-10-28": 3, "2026-10-29": 5, "2026-10-30": 2, "2026-10-31": 2, "2026-11-01": 1 },
+    entrega: { ent: 5, den: 7 }, res: { entregado: 5, lpOk: 1, descarte: 1, sinCierre: 1 }, asist: { as: 1, den: 2 }, calif: { si: 1, no: 0 },
+    datos: { ok: 1, n: 3 }, cad: { silencio: 3, completos: 1 }, cart: { vencida: [2, 4], fria: [1, 1], sindato: [1, 1] }, fueraPts: 1,
+    t1: { lead00001: [true, "corta", 0], lead00010: [true, "90", null], lead00011: [false, "corta", 245e3] },
+    recep: { lead00001: ["ok", ""], lead00006: ["tarde", "si"], lead00009: ["sin", "no"], cart00005: ["tarde", "si"], lead00010: ["ok", ""] } };
   return { D, cfg, now, esperado };
 }
 module.exports = { pcFixture, fixtureTexto: () => pcFixture.toString() };

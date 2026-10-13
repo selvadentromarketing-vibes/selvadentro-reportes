@@ -856,19 +856,26 @@ entrega cuenta por etapa (el usuario es dueño de sus leads) y la recepción del
 **Cómo se mide** (cada regla, con su sección):
 - **Universo de lead nuevo** (1.1, 3.3): contactos creados en el periodo, sin referidos,
   brokers, prospección directa, alianzas ni legal (por pipeline) y sin registros de prueba.
-- **Velocidad (3.1)**: primera llamada **del puesto** —del ejecutivo o del marcador automático—
-  desde el registro, ≤60 s. Doble llamada en el primer toque = segunda llamada ≤10 min (o la
-  primera contestada).
+- **Velocidad (3.1)**: primera llamada **del puesto** —del ejecutivo o la automática del CRM—
+  desde el registro, ≤60 s.
+- **Primer toque completo** (protocolo de Dirección, 13-oct-2026): entra primero la llamada
+  automática del CRM; si la contestan y dura ≥90 s, es contacto efectivo y el toque queda
+  hecho. Si no conecta o dura menos de 90 s, el ejecutivo remarca a mano **de inmediato**: se
+  mide desde que terminó la automática y cuenta si es ≤2 min (`PC_REMARCA_MS`). Sin automática,
+  cuenta la doble llamada manual (o la primera contestada). La automática de un lead nuevo es
+  del puesto aunque el CRM la registre sin usuario.
 - **Puntos de contacto (7.3)**: por prospecto y día, doble llamada (dos marcaciones ≤10 min,
-  conectadas o no) = 1; una llamada contestada = 1; una llamada sola sin contestar = 0; las que
+  conectadas o no; la automática más la remarcación manual = 1) = 1; una llamada contestada = 1
+  (la automática, solo si duró ≥90 s); una llamada sola sin contestar = 0; las que
   la línea no completó (failed, busy, canceled) no cuentan; mensaje manual por WhatsApp,
   Instagram, Facebook (y SMS, configurable) = 1 y correo propio = 1, con ráfagas de ≤10 min del
   mismo canal contadas una vez; tope 3 por prospecto al día. Promedio sobre días hábiles
-  **cerrados** (el día en curso no entra). Las llamadas del marcador suman solo si el CRM las
-  registra con el usuario del ejecutivo; si llegan sin usuario, el diagnóstico lo dice.
+  **cerrados** (el día en curso no entra). Fuera de los leads nuevos, solo suman las llamadas
+  registradas con el usuario del ejecutivo; el diagnóstico dice cuántas automáticas llegan sin usuario.
 - **Conversaciones ≥60 s** (candado del bono, 120/mes; en una semana, prorrateado por días hábiles).
-- **Contacto efectivo**: llamada del ejecutivo ≥60 s, o respuesta escrita del prospecto ≤48 h
-  después de un toque suyo.
+- **Contacto efectivo**: llamada de ≥90 s —del ejecutivo o la automática del CRM—, igual que en
+  Desempeño (`PC_EFECTIVO_SEG`); respuesta escrita del prospecto ≤48 h después de un toque suyo;
+  o una sesión que él agendó. Las conversaciones del candado siguen siendo de ≥60 s (7.3).
 - **Conversión a entrega (10.1, 10.3)**: la tarjeta en Contacto establecido o más adelante,
   movida **después** del contacto y asignada a un asesor. Largo plazo con motivo, fecha y tarea
   abierta con fecha sale del denominador; sin ellos, es fallo. Contactos de <7 días sin cierre
