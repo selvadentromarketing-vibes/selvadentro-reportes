@@ -110,7 +110,9 @@ function pcFixture() {
     dia: { "2026-10-26": 4, "2026-10-27": 6, "2026-10-28": 3, "2026-10-29": 5, "2026-10-30": 2, "2026-10-31": 2, "2026-11-01": 1 },
     entrega: { ent: 5, den: 7 }, res: { entregado: 5, lpOk: 1, descarte: 1, sinCierre: 1 }, asist: { as: 1, den: 2 }, calif: { si: 1, no: 0 },
     datos: { ok: 1, n: 3 }, cad: { silencio: 3, completos: 1 }, cart: { vencida: [2, 4], fria: [1, 1], sindato: [1, 1] }, fueraPts: 1,
-    t1: { lead00001: [true, "corta", 0], lead00010: [true, "90", null], lead00011: [false, "corta", 245e3] },
+    // "Marcó en 60 s": [cumple, cómo, remarcación] por lead
+    t1: { lead00001: [true, "remarca", 0], lead00002: [false, "manualTarde", null], lead00006: [true, "manual", null], lead00007: [false, "sinLlamada", null],
+      lead00008: [false, "manualTarde", null], lead00009: [true, "manual", null], lead00010: [true, "auto90", null], lead00011: [false, "remarcaTarde", 245e3] },
     recep: { lead00001: ["ok", ""], lead00006: ["tarde", "si"], lead00009: ["sin", "no"], cart00005: ["tarde", "si"], lead00010: ["ok", ""] } };
   return { D, cfg, now, esperado };
 }

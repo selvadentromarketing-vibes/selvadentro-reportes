@@ -856,15 +856,13 @@ entrega cuenta por etapa (el usuario es dueño de sus leads) y la recepción del
 **Cómo se mide** (cada regla, con su sección):
 - **Universo de lead nuevo** (1.1, 3.3): contactos creados en el periodo, sin referidos,
   brokers, prospección directa, alianzas ni legal (por pipeline) y sin registros de prueba.
-- **Velocidad (3.1)**: se mide el trabajo de la **persona**, no del CRM (Dirección, 13-oct-2026):
-  primera llamada manual del ejecutivo desde el registro, ≤60 s. La automática solo cuenta si la
-  contestaron y duró ≥90 s (hubo alguien hablando); si no conectó o duró menos, no es "marcó".
-- **Primer toque completo** (protocolo de Dirección, 13-oct-2026): entra primero la llamada
-  automática del CRM; si la contestan y dura ≥90 s, es contacto efectivo y el toque queda
-  hecho. Si no conecta o dura menos de 90 s, el ejecutivo remarca a mano **de inmediato**: se
-  mide desde que terminó la automática y cuenta si es ≤2 min (`PC_REMARCA_MS`). Sin automática,
-  cuenta la doble llamada manual en ≤60 s (o la primera contestada). La automática de un lead
-  nuevo es del puesto aunque el CRM la registre sin usuario.
+- **Primer toque completo** — la "velocidad de primer contacto" del manual (3.1, 10.1), con el
+  protocolo de Dirección (13-oct-2026). Se mide el trabajo de la **persona**, no del CRM, y se
+  cumple de dos formas: la llamada automática del CRM conectó y hubo una llamada de ≥90 s, o la
+  automática no fue exitosa (no conectó o duró menos) y el ejecutivo remarcó a mano en ≤2 min
+  desde que terminó (`PC_REMARCA_MS`). Si la automática no entró, cuenta la llamada manual del
+  ejecutivo en ≤60 s desde el registro. A qué tiempo entra la automática es de Sistemas y se
+  reporta aparte. La automática de un lead nuevo es del puesto aunque el CRM la registre sin usuario.
 - **Puntos de contacto (7.3)**: por prospecto y día, doble llamada (dos marcaciones ≤10 min,
   conectadas o no; la automática más la remarcación manual = 1) = 1; una llamada contestada = 1
   (la automática, solo si duró ≥90 s); una llamada sola sin contestar = 0; las que

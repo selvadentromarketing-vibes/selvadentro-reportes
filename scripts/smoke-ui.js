@@ -849,11 +849,11 @@ const PORT = process.env.PORT || 8765;
     const A = pcBuild(F.D, pcCfgDe(F.cfg), F.now), E = F.esperado, r = {};
     const V = A.vel.filter(v => v.vent && !v.err);
     r.universo = A.nU === E.nU && A.excl.fuera === E.excl.fuera && A.excl.prueba === E.excl.prueba;
-    r.velocidad = V.length === E.vel.den && V.filter(v => v.dt != null && v.dt <= 60e3).length === E.vel.ok
+    r.velocidad = V.length === E.vel.den && V.filter(v => v.cumple).length === E.vel.ok
       && A.vel.find(v => v.id === 'lead00001').org === 'ejecutivo' && A.vel.find(v => v.id === 'lead00001').doble === true
       && A.vel.find(v => v.id === 'lead00010').org === 'automática contestada ≥90 s' && A.vel.find(v => v.id === 'lead00011').dt === 5 * 60e3;
-    // Protocolo del primer toque: automática ≥90 s, o remarcación manual en ≤2 min
-    r.protocolo = Object.entries(E.t1).every(([id, [t1, auto, rem]]) => { const v = A.vel.find(x => x.id === id); return v && v.t1 === t1 && v.auto === auto && v.rem === rem; })
+    // Marcó en 60 s: la automática conectó ≥90 s, o remarcación manual en ≤2 min tras la automática fallida
+    r.protocolo = Object.entries(E.t1).every(([id, [ok, via, rem]]) => { const v = A.vel.find(x => x.id === id); return v && v.cumple === ok && v.via === via && v.rem === rem; })
       && A.coh.some(x => x.id === 'lead00010') && A.coh.some(x => x.id === 'lead00009') && A.diag.autoSinU === 2 && A.diag.autoConU === 1;
     r.dbg = '';
     r.puntos = A.ptsCerrados === E.puntos && A.habiles.length === E.habiles && Object.entries(E.dia).every(([d, n]) => A.dias[d] && A.dias[d].pts === n)
@@ -884,7 +884,7 @@ const PORT = process.env.PORT || 8765;
     pcState.cfg = pcCfgDe(F.cfg); pcState.agg = A; pcRender();
     await new Promise(res => setTimeout(res, 200));
     const t = document.getElementById('pc-content').innerText;
-    r.pantalla = /Indicadores del puesto/.test(t) && /4 de 8 leads en la ventana operativa marcados en ≤60 s por el ejecutivo/.test(t) && /4 de 8 leads: la automática contestó/.test(t) && /4\.6/.test(t) && /71%/.test(t) && /primer toque completo/i.test(t) && /remarcó a mano en ≤2 min en 1 de 2/.test(t) && /Agenda de más|Problema de fondo|Correcto/.test(t)
+    r.pantalla = /Indicadores del puesto/.test(t) && /4 de 8 leads en la ventana operativa: la automática conectó/.test(t) && /4\.6/.test(t) && /71%/.test(t) && /4 de 8 cumplieron/.test(t) && /en ≤2 min 1/.test(t) && /primer toque completo/i.test(t) && /Agenda de más|Problema de fondo|Correcto/.test(t)
       && !/undefined|NaN|\[object Object\]/.test(t);
     // Los desplegables abren y cierran
     const b = document.querySelector('#pc-content [data-pc-det]'); b.click();
