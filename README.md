@@ -667,6 +667,17 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
     campaña/canal/pipeline y un **"ver leads"** con, por lead: entrada, horario, asesor,
     hora y canal del 1er toque, tiempo, si entra en la mediana (y por qué no) y contacto
     efectivo. "≤15m/≤60m" dicen en su ayuda sobre cuántos leads se calculan.
+  - **Notas en las tarjetas** (Dirección, 13-oct-2026): al pasar el mouse sobre cada
+    tarjeta de Desempeño (o tocarla en celular) sale qué cuenta exactamente, sobre qué base,
+    qué queda fuera y por qué, con los números del rango (`lqNota`, misma nota flotante que
+    los nombres de los SQL+). La de "Med. contacto efectivo" ahora también trae su N.
+  - **1er toque antes del reloj** (`slaAntesReloj`): el reloj arranca en el traspaso a
+    ventas (la creación de la oportunidad) cuando es posterior al alta; si el asesor ya le
+    había escrito o llamado, ese toque queda antes del reloj. Hoy esos leads **no entran** en
+    la mediana de 1er toque ni en el SLA de 60 s, **sí** cuentan como cumplidos en el SLA de
+    5 min / 11:00, y en la mediana de 1ª llamada cuentan como **0 min** (`slaCall` se
+    recorta a 0). Las notas lo desglosan y "ver leads" ya no los marca como "sin 1er toque"
+    (decía eso aunque sí tenían toque) y señala "traspaso" bajo la hora de entrada.
   - **Campaña de origen = la de Calidad de Leads**: se toma por id de contacto del agregado
     de Calidad de Leads (ID de campaña, alias de UTM, atribución inferida), que ahora guarda
     el `id` de cada lead; si no está en memoria se lee del kv una vez. Sin él, la

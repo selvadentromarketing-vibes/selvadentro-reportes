@@ -838,6 +838,52 @@ const PORT = process.env.PORT || 8765;
   if (!lqx.ok) hallazgos.push({ vista: 'lq:rediseño', lqx });
   console.log('\n[reglas v1.1] aceptación', JSON.stringify(v11));
   if (!v11.ok) hallazgos.push({ vista: 'reglas:v1.1', v11 });
+  // Notas de las tarjetas de Desempeño (Dirección, 13-oct-2026): "28 leads y solo 4 en la
+  // mediana de 1er toque". Un lead tocado ANTES de su traspaso a ventas (la oportunidad se creó
+  // después del primer toque) no tiene tiempo que medir: la nota lo cuenta aparte, "ver leads"
+  // ya no dice "sin 1er toque" y la mediana de 1ª llamada avisa que lo cuenta como 0 min.
+  VISTA = 'desempeno:notas';
+  const notas = await page.evaluate(() => {
+    const Z = (local) => Date.parse(local + '-05:00'), iso = (t) => new Date(t).toISOString();
+    const users = { u1: 'Daniela Arana' }, pipes = [{ id: 'p1', name: 'Seguimiento de ventas', stages: [{ id: 's1', name: 'Contacto establecido' }] }];
+    const contactos = [], sweeps = {}, opps = [];
+    const lead = (id, local, sw, oppLocal) => {
+      contactos.push({ id, n: 'Lead ' + id, c: iso(Z(local)), src: 'facebook', u: 'u1', tags: [], attr: {}, cf: {} });
+      sweeps[id] = Object.assign({ foM: null, fi: null, fe: null, days: [], calls: 0, chans: [], deliv: { sent: 0, delivered: 0, read: 0, failed: 0 }, ap: { tot: 0, sh: 0, ns: 0, fut: 0 }, tk: { prog: 0, enFecha: 0, venc: 0 } }, sw);
+      opps.push({ id: 'o-' + id, ct: id, u: 'u1', st: 'open', c: iso(Z(oppLocal || local)), p: 'p1', s: 's1', sc: '', cf: {} });
+    };
+    lead('med', '2026-10-05T10:00:00', { foM: Z('2026-10-05T10:03:00'), foMch: 'whatsapp' });                                   // en la mediana: 3 min
+    lead('antes', '2026-10-05T11:00:00', { foM: Z('2026-10-05T11:05:00'), foMch: 'call', calls: 1, chans: ['call'],
+      cl: { n: 1, ok: 0, na: 1, linea: 0, otro: 0, dn: 0, t: [Z('2026-10-05T11:05:00')] } }, '2026-10-05T11:20:00');           // llamó y DESPUÉS se creó la OPP
+    lead('noche', '2026-10-05T22:00:00', { foM: Z('2026-10-06T09:30:00'), foMch: 'whatsapp' });                                 // fuera de horario
+    lead('nada', '2026-10-05T12:00:00', {});                                                                                    // sin toque
+    const now = Z('2026-10-12T12:00:00');
+    const agg = buildSlaAgg(['2026-W41'], contactos, sweeps, opps, users, [], pipes, { oppFields: [], oppFieldsOk: true, ncState: {}, tagged: [], taggedOk: true, now });
+    const aggPrev = slaState.agg, selPrev = slaState.asesor, advPrev = ADVISOR_LIST;
+    ADVISOR_LIST = [{ name: 'Daniela Arana', active: true }]; slaState.asesor = 'u1'; slaState.agg = agg; agg.ts = now;
+    navIr('ventas', 'desempeno'); slaRender();
+    const tarjeta = (rx) => [...document.querySelectorAll('#view-sla .crm-kpi')].find(k => rx.test(k.querySelector('.k-lbl').textContent));
+    const nota = (rx) => { const k = tarjeta(rx); if (!k || !k.dataset.lqTip) return ''; const d = document.createElement('div'); d.innerHTML = k.dataset.lqTip; return d.textContent.replace(/\s+/g, ' '); };
+    const L = {}; agg.leads.forEach(l => { L[l.id] = l; });
+    const r = {};
+    r.antes = !!(L.antes && L.antes.hand && L.antes.slaAt == null && slaAntesReloj(L.antes) && L.antes.slaCall === 0 && !slaAntesReloj(L.nada));
+    r.sinNota = [...document.querySelector('#view-sla .crm-kpis').querySelectorAll('.crm-kpi')].filter(k => !k.dataset.lqTip).map(k => k.querySelector('.k-lbl').textContent);
+    r.conNota = !r.sinNota.length;
+    r.mediana = nota(/^Med\. 1er toque/);
+    r.llamada = nota(/^Med\. 1er intento de llamada/);
+    r.sla5 = nota(/^Cumplieron su SLA/);
+    r.det = slaDetalleLeads(agg.leads, agg.v11, (u) => users[u] || '');
+    ADVISOR_LIST = advPrev; slaState.asesor = selPrev; slaState.agg = aggPrev;
+    r.ok = r.antes && r.conNota
+      && /Por qué 1 de 4: fuera de horario, 1 \(no entran por regla.*En horario, 3; de ellos no entran: 1er toque antes de que arrancara su reloj \(1\) · sin 1er toque todavía \(1\) → 1 en la mediana\./.test(r.mediana)
+      && /⚠ 1 de 1 cuentan como 0 min: su primera llamada fue antes de que arrancara su reloj/.test(r.llamada)
+      && /Incluye 1 lead cuyo 1er toque fue antes de que arrancara su reloj: se dan por cumplidos/.test(r.sla5)
+      && /no: su 1er toque fue antes de que arrancara su reloj \(el traspaso a ventas\)/.test(r.det) && />traspaso</.test(r.det) && /no: sin 1er toque/.test(r.det);
+    delete r.det;
+    return r;
+  });
+  console.log('[desempeño] notas de las tarjetas', JSON.stringify(notas).slice(0, 900));
+  if (!notas.ok) hallazgos.push({ vista: 'desempeno:notas', notas });
   // Metas → Rúbrica de desempeño: los dos juegos de Velocidad, con su fecha
   const rbm = await page.evaluate(async () => { navIrLateral('metas'); await new Promise(r => setTimeout(r, 400)); const h = document.getElementById('metas-rubrica'); const t = h ? h.innerText : '';
     return { existe: !!h, viejo: /10 · 20 · 30 · 45%/.test(t), nuevo: /20 · 40 · 60 · 80%/.test(t), fecha: /1-oct-2026/.test(t), form: !!document.getElementById('rb-save') }; });
