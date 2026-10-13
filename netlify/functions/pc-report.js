@@ -28,6 +28,11 @@
 //   { action:"contactos", ids:[contactId], tareas? }   (máx 30 por llamada)
 //     → { contactos:[{id,n,c,src,u,tags,attr,cf, tk?}], fallidos[] }
 //     tk = tareas: abiertas con fecha (para auditar Largo plazo: "motivo, fecha y tarea").
+//   { action:"regresan", start, end, campo, searchAfter? }
+//     → { contactos:[…como contacts], searchAfter|null, revisados }
+//     Leads que regresan (10.4): contactos que ya existían antes de `start`, se actualizaron
+//     después, y cuyo campo `campo` (la fecha del último formulario, que llena el workflow) cae en
+//     [start, end]. El filtro por el campo se hace aquí para no mandar al navegador todo lo actualizado.
 //   { action:"opps", contactIds:[...] }      (máx 40 por llamada)
 //     → { opps:[{id,ct,u,st,p,s,sc,scE,c,cf}], fallidos[] }
 
@@ -212,6 +217,41 @@ async function contactos({ ids, tareas }) {
   return { contactos: out, fallidos };
 }
 
+async function regresan({ start, end, campo, searchAfter }) {
+  const t0 = Date.parse(start), t1 = Date.parse(end);
+  if (!isFinite(t0) || !isFinite(t1) || t1 <= t0) throw bad("start y end requeridos (ISO datetime)");
+  if (!ID_RX.test(String(campo || ""))) throw bad("campo requerido (id del campo de la fecha del último formulario)");
+  const out = [];
+  let cursor = Array.isArray(searchAfter) && searchAfter.length ? searchAfter : null, revisados = 0, filtroAlta = true;
+  for (let i = 0; i < 5; i++) {
+    // Actualizados desde `start` hasta hoy (no hasta `end`): un contacto que regresó en el rango y se
+    // volvió a tocar después tiene su dateUpdated posterior.
+    const filters = [{ field: "dateUpdated", operator: "range", value: { gte: start, lte: new Date().toISOString() } }];
+    if (filtroAlta) filters.push({ field: "dateAdded", operator: "range", value: { lte: start } });
+    const body = { locationId: LOCATION_ID, pageLimit: 100, filters, sort: [{ field: "dateUpdated", direction: "asc" }] };
+    if (cursor) body.searchAfter = cursor;
+    let data;
+    try { data = await ghl("/contacts/search", { method: "POST", body }); }
+    catch (e) {
+      // Si el API no acepta el rango abierto de dateAdded, se pide sin él y se filtra aquí
+      if (!filtroAlta || !(e.status === 400 || e.status === 422)) throw e;
+      filtroAlta = false; i--; continue;
+    }
+    const batch = data.contacts || [];
+    batch.forEach((c) => {
+      revisados++;
+      if (!(Date.parse(c.dateAdded || "") < t0)) return;
+      const x = mapContact(c), v = String(x.cf[campo] || "").trim();
+      const t = /^\d{12,13}$/.test(v) ? Number(v) : Date.parse(v);
+      if (v && isFinite(t) && t >= t0 - 86400e3 && t <= t1 + 86400e3) out.push(x);   // ±1 día: el front decide con la hora de Tulum
+    });
+    const lastRaw = batch[batch.length - 1];
+    cursor = batch.length === 100 && lastRaw && Array.isArray(lastRaw.searchAfter) ? lastRaw.searchAfter : null;
+    if (!cursor) break;
+  }
+  return { contactos: out, searchAfter: cursor, revisados };
+}
+
 async function opps({ contactIds }) {
   const lista = [...new Set((Array.isArray(contactIds) ? contactIds : []).map(String).filter((x) => ID_RX.test(x)))].slice(0, OPP_MAX);
   if (!lista.length) throw bad("contactIds requerido");
@@ -258,7 +298,8 @@ exports.handler = async (event) => {
       case "eventos": return json(200, await eventos(payload));
       case "contactos": return json(200, await contactos(payload));
       case "opps": return json(200, await opps(payload));
-      default: return json(400, { error: "action debe ser users, contacts, citas, conversaciones, eventos, contactos u opps" });
+      case "regresan": return json(200, await regresan(payload));
+      default: return json(400, { error: "action debe ser users, contacts, citas, conversaciones, eventos, contactos, opps o regresan" });
     }
   } catch (e) {
     const status = e.status === 429 ? 429 : e.status === 400 ? 400 : 502;

@@ -8323,7 +8323,13 @@ const PC_EFECTIVO_SEG = 90;
 // que terminó la automática.
 const PC_REMARCA_MS = 2*60e3;
 const PC_CONV_MES = 120;              // 7.3: candado del bono, 120 conversaciones al mes
-const PC_RESP_MS = 48*3600e3;         // una respuesta del prospecto cuenta como contacto efectivo si llega ≤48 h después del toque
+const PC_REENVIO_DIAS = 90;            // 10.4: el que vuelve a llenar el formulario es lead nuevo; candado de duplicidad de 90 días
+// "Pidió otro momento" (4.4, máximo 3 recontactos): el ejecutivo le pone la etiqueta del intento
+// en curso, "recontacto 1", "recontacto 2" o "recontacto 3", junto con la tarea a la hora indicada.
+const PC_RX_RECONTACTO = /^recontacto\s*([123])$/;
+// "Fecha formulario anterior": la copia que hace el workflow antes de pisar la fecha del último
+// formulario; con ella se aplica el candado de 90 días. Sin ella, se usa el alta del contacto.
+const PC_RX_FORM_ANT = /(fecha|date)\W*(del?\s+)?formulario\s+anterior|previous\W*(form|submission)/i;
 const PC_CURSO_MS = 7*86400e3;        // contacto efectivo de hace menos de 7 días sin cierre: sigue en juego
 const PC_CITA_ATRIB_MS = 72*3600e3;   // si el CRM no dice quién creó la cita: es del ejecutivo si tocó al prospecto en las 72 h previas
 const PC_CALIF_MS = 48*3600e3;        // 12.1: el asesor marca la cita calificada en 48 h; si no, se paga igual
@@ -8339,7 +8345,10 @@ const PC_RX_PIPE_AJENO = /referid|broker/;
 const PC_RX_PIPE_FUERA = /referid|broker|third party|legal|rp vip|prospeccion/;
 const PC_RX_PIPE_VENTAS = /seguimiento de ventas/;
 const PC_5DATOS = [["motivo","Motivo (vivir / invertir)"],["horizonte","Horizonte de decisión"],["rango","Rango de inversión"],["experiencia","Experiencia previa"],["atractivo","Qué le llamó la atención"]];   // 6.1
-const PC_CFG_DEF = { usuarios:[], activa:PC_ACTIVA_DEF, marcador:"", dias:[1,2,3,4,5], abre:"09:00", cierra:"19:00",
+// Ventana operativa (Dirección General, 13-oct-2026): el ejecutivo cubre todos los días de 6:00 a
+// 24:00; de 0:00 a 6:00 sale un mensaje automático y se le marca a la apertura. Los días hábiles
+// (denominador de los puntos de contacto, 7.3) son aparte: lunes a viernes sin festivos.
+const PC_CFG_DEF = { usuarios:[], activa:PC_ACTIVA_DEF, marcador:"", dias:[0,1,2,3,4,5,6], abre:"06:00", cierra:"00:00", habiles:[1,2,3,4,5],
   festivos:["2026-11-16","2026-12-25","2027-01-01","2027-02-01","2027-03-15"], smsCuenta:true,
   campos5:{ motivo:"", horizonte:"", rango:"", experiencia:"", atractivo:"" }, lp:{ motivo:"", fecha:"" },
   calif:{ campo:"", si:"cita calificada", no:"cita no calificada" }, cartera:{ vencida:"cartera vencida", fria:"cartera fria" } };
@@ -8360,6 +8369,7 @@ function pcCfgDe(saved){
   ["campos5","lp","calif","cartera"].forEach(k=>{ c[k] = { ...PC_CFG_DEF[k], ...(s[k] && typeof s[k]==="object" ? s[k] : {}) }; });
   if(!Array.isArray(c.usuarios)) c.usuarios = [];
   if(!Array.isArray(c.dias) || !c.dias.length) c.dias = PC_CFG_DEF.dias.slice();
+  if(!Array.isArray(c.habiles) || !c.habiles.length) c.habiles = PC_CFG_DEF.habiles.slice();
   if(!Array.isArray(c.festivos)) c.festivos = PC_CFG_DEF.festivos.slice();
   return c;
 }
@@ -8408,16 +8418,41 @@ function pcVentana(t, cfg){
   const loc = new Date(t - LQ_TZ_MS), dow = loc.getUTCDay();
   const seg = loc.getUTCHours()*3600 + loc.getUTCMinutes()*60 + loc.getUTCSeconds();
   if((cfg.festivos||[]).includes(pcDia(t))) return false;
-  return (cfg.dias||[]).includes(dow) && seg >= pcSegDe(cfg.abre, 9*3600) && seg < pcSegDe(cfg.cierra, 19*3600);
+  return (cfg.dias||[]).includes(dow) && seg >= pcSegDe(cfg.abre, 6*3600) && seg < pcCierre(cfg);
 }
-// Días hábiles de [ini, fin] (YYYY-MM-DD): los días de la ventana operativa, sin festivos.
+// Cierre de la ventana en segundos del día; "00:00" es medianoche (fin del día, no inicio).
+function pcCierre(cfg){ const c = pcSegDe(cfg.cierra, 24*3600); return c===0 ? 86400 : c; }
+const pcHoraTxt = (hhmm)=> hhmm==="00:00" ? "24:00" : hhmm;
+// Siguiente apertura de la ventana a partir de t (t mismo si ya está dentro): desde ahí se mide
+// al lead que entró de noche.
+function pcAbre(t, cfg){
+  if(pcVentana(t, cfg)) return t;
+  const abre = pcSegDe(cfg.abre, 6*3600), loc = new Date(t - LQ_TZ_MS);
+  for(let i=0; i<10; i++){
+    const cand = Date.UTC(loc.getUTCFullYear(), loc.getUTCMonth(), loc.getUTCDate()+i) + LQ_TZ_MS + abre*1000;
+    if(cand >= t && pcVentana(cand, cfg)) return cand;
+  }
+  return null;
+}
+// Días hábiles de [ini, fin] (YYYY-MM-DD): los de la configuración (lunes a viernes), sin festivos.
 function pcDiasHabiles(ini, fin, cfg){
   const out = []; if(!ini || !fin || ini > fin) return out;
+  const hab = cfg.habiles || PC_CFG_DEF.habiles;
   const d = new Date(ini+"T12:00:00Z"), f = new Date(fin+"T12:00:00Z");
   for(let i=0; d <= f && i < 400; i++){ const ymd = d.toISOString().slice(0,10);
-    if((cfg.dias||[]).includes(d.getUTCDay()) && !(cfg.festivos||[]).includes(ymd)) out.push(ymd);
+    if(hab.includes(d.getUTCDay()) && !(cfg.festivos||[]).includes(ymd)) out.push(ymd);
     d.setUTCDate(d.getUTCDate()+1); }
   return out;
+}
+// Fecha con HORA de un campo del CRM, en ms. undefined = vacío o sin hora (no sirve para medir 60 s).
+// Sin zona horaria explícita se toma como hora de Tulum.
+function pcFechaHora(v){
+  const t = String(v==null ? "" : v).trim(); if(!t) return undefined;
+  if(/^\d{12,13}$/.test(t)) return Number(t);
+  if(!/\d{1,2}:\d{2}/.test(t)) return undefined;
+  const local = t.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  const n = local ? Date.parse(`${local[1]}T${local[2].padStart(2,"0")}:${local[3]}:${local[4]||"00"}${LQ_TZ}`) : Date.parse(t);
+  return isFinite(n) ? n : undefined;
 }
 function pcMesBounds(ym){
   const m = String(ym||"").match(/^(\d{4})-(\d{2})$/); if(!m) return null;
@@ -8563,7 +8598,11 @@ function pcBuild(D, cfg, now){
     const via = auto1 ? (auto90 ? "auto90" : rem==null ? "sinRemarca" : rem <= PC_REMARCA_MS ? "remarca" : "remarcaTarde")
       : !pp ? "sinLlamada" : dt <= 60e3 ? "manual" : "manualTarde";
     const a0 = calls.find(e=>e[2]==="a");   // la automática, aunque haya entrado después de una manual
-    return { id:c.id, n:c.n||"(sin nombre)", t0, u:c.u||"", err:!!evErr[c.id], vent:pcVentana(t0, cfg), eval:!!(marcT && t0 >= marcT),
+    // Entró fuera de la ventana (de noche): se mide desde la apertura y se revisa el mensaje automático.
+    const vent = pcVentana(t0, cfg), abre = vent ? null : pcAbre(t0, cfg);
+    const autoMsg = evs.some(e=>e[2]==="a" && e[1]!=="call" && e[0] >= t0 - 5000 && e[0] - t0 <= 10*60e3);
+    return { id:c.id, n:c.n||"(sin nombre)", t0, u:c.u||"", err:!!evErr[c.id], vent, eval:!!(marcT && t0 >= marcT), re:!!c.re,
+      dtAbre: abre!=null && pp ? Math.max(0, pp[0]-abre) : null, autoMsg,
       dt, org: pp ? (pp[2]==="a" ? "automática contestada ≥90 s" : "ejecutivo") : "",
       doble, auto: auto1 ? (auto90 ? "90" : "corta") : "", rem, via,
       cumple: via==="auto90" || via==="remarca" || via==="manual",
@@ -8574,7 +8613,7 @@ function pcBuild(D, cfg, now){
   // 3) Puntos de contacto por día hábil (7.3) y conversaciones de ≥60 s.
   const dias = {}, ptsCt = {}, primerToque = {};
   let fueraPts = 0, conv60 = 0, convSinDur = 0;
-  const hoy = pcDia(now), cierreHoy = pcSegDe(cfg.cierra, 19*3600);
+  const hoy = pcDia(now), cierreHoy = pcCierre(cfg);
   const locNow = new Date(now - LQ_TZ_MS), segNow = locNow.getUTCHours()*3600 + locNow.getUTCMinutes()*60;
   const diaCerrado = (d)=> d < hoy || (d === hoy && segNow >= cierreHoy);
   const frenteDe = (ct, t)=>{ const a = altaDe(ct); return a && t >= a - 60e3 && t - a <= 8*86400e3 ? "nuevo" : "cartera"; };
@@ -8611,21 +8650,41 @@ function pcBuild(D, cfg, now){
   const mias = citas.filter(c=> c.cb ? epc.has(c.cb) : (!!c.ag && tocoAntes(c.ct, c.ag))).map(c=>({ ...c, via: c.cb ? "creador" : "toque" }));
   const agendadas = mias.filter(c=>c.ag && enPer(c.ag));
 
-  // 4) Contacto efectivo del puesto: llamada de ≥90 s (del ejecutivo o la automática), respuesta
-  //    escrita del prospecto en las 48 h siguientes a un toque suyo (sin que otro usuario le haya
-  //    escrito en medio), o una sesión que él agendó: la cita es la prueba más clara de contacto.
-  const efect = {};
+  // 4) Contacto efectivo del puesto (Dirección General, 13-oct-2026). Con evidencia en el CRM:
+  //    llamada de ≥90 s (del ejecutivo o la automática); respuesta escrita del prospecto a un toque
+  //    suyo mientras el lead siga siendo suyo —sin plazo: quien contesta el break up 4 días después
+  //    sí tuvo contacto; deja de contar si otro usuario tomó la conversación—, o una sesión que él
+  //    agendó. Y "por registro del ejecutivo", en línea aparte porque lo declara él mismo y se audita
+  //    con las grabaciones: la tarjeta movida después de su toque a Contacto establecido o más
+  //    adelante, a Largo plazo con motivo o a Descalificado por "no alineado", o los cinco datos capturados.
+  const efect = {}, efVia = {};
   Object.entries(ev).forEach(([ct, evs])=>{
     let ult = null;
     for(const e of evs){
       if(toqueEpc(e, ct)) ult = e[0];
       else if(e[2]==="m" && !esEpc(e)) ult = null;
       if(!enPer(e[0])) continue;
-      const resp = e[2]==="i" && e[1]!=="call" && ult!=null && e[0]-ult <= PC_RESP_MS;
-      if(llamadaLarga(e, ct, PC_EFECTIVO_SEG) || resp){ efect[ct] = e[0]; break; }
+      const larga = llamadaLarga(e, ct, PC_EFECTIVO_SEG), resp = e[2]==="i" && e[1]!=="call" && ult!=null;
+      if(larga || resp){ efect[ct] = e[0]; efVia[ct] = larga ? "llamada" : "respuesta"; break; }
     }
   });
-  agendadas.forEach(c=>{ if(!efect[c.ct] || c.ag < efect[c.ct]) efect[c.ct] = c.ag; });
+  agendadas.forEach(c=>{ if(!efect[c.ct] || c.ag < efect[c.ct]){ efect[c.ct] = c.ag; efVia[c.ct] = "cita"; } });
+  const fCausa = (D.oppFields||[]).find(f=>/causa de descalificaci/i.test(f.name||""));
+  const refs5 = PC_5DATOS.map(([k])=>(cfg.campos5||{})[k]||"");
+  Object.entries(ev).forEach(([ct, evs])=>{
+    if(efect[ct] || ajenoDe(ct) || esPrueba(ct)) return;
+    const t1 = (evs.find(e=>toqueEpc(e, ct) && enPer(e[0]))||[])[0]; if(!t1) return;
+    const o = oppDe[ct] || {}, et = slaNorm(o.etapa||""), op = o.op;
+    const movida = !!o.sc && o.sc >= t1 - 60e3;
+    const lpMotivo = !(cfg.lp||{}).motivo || !!pcValor(cfg.lp.motivo, info[ct], op);
+    const noAlineado = !!(fCausa && op && /no alineado/i.test(String((op.cf||{})[fCausa.id]||"")));
+    const porEtapa = movida && (PC_RX_ENTREGA.test(et) || (/^largo plazo/.test(et) && lpMotivo) || (/^descalificad/.test(et) && noAlineado));
+    const cinco = refs5.every(Boolean) && refs5.every(r=>!!pcValor(r, info[ct], op));
+    if(!porEtapa && !cinco) return;
+    efect[ct] = porEtapa && enPer(o.sc) ? o.sc : t1; efVia[ct] = "registro";
+  });
+  // Recontacto agendado (4.4): etiqueta "recontacto 1/2/3".
+  const recontacto = (ct)=>{ for(const t of ((info[ct]||{}).tags||[])){ const m = slaNorm(t).match(PC_RX_RECONTACTO); if(m) return +m[1]; } return 0; };
 
   // 5) Conversión a entrega (10.1, 10.3): la entrega es la tarjeta en Contacto establecido (o
   //    más adelante) DESPUÉS del contacto, asignada a un asesor. Largo plazo bien cerrado sale
@@ -8642,8 +8701,9 @@ function pcBuild(D, cfg, now){
       const k = pcLpCheck(info[ct], o, cfg); falta = k.falta;
       res = k.ok ? "lpOk" : k.medible ? "lpMal" : "lpNoVer";
     } else if(/^descalificad/.test(et)) res = "descarte";
+    else if(recontacto(ct)){ res = "recontacto"; falta = `intento ${recontacto(ct)} de 3`; }
     else res = now - fe < PC_CURSO_MS ? "curso" : "sinCierre";
-    return { id:ct, n:nombre(ct), fe, etapa:o.etapa||"(sin oportunidad)", res, asesor, falta, frente:frenteDe(ct, fe) };
+    return { id:ct, n:nombre(ct), fe, etapa:o.etapa||"(sin oportunidad)", res, asesor, falta, frente:frenteDe(ct, fe), via:efVia[ct] };
   });
   const PC_DEN = ["entregado","sinAsesor","lpMal","descarte","sinCierre"];
 
@@ -8662,8 +8722,12 @@ function pcBuild(D, cfg, now){
     return { id:ct, n:nombre(ct), est, t:tRef, via:st[0].via, asesor:(st.find(c=>c.u)||{}).u || "", calif,
       viaAs: asis.length ? asis[asis.length-1].a.via : (ultima ? ultima.a.via : "") };
   });
+  // Cita sin conversación registrada: sin llamada de ≥90 s ni respuesta escrita en las 72 h previas
+  // al agendamiento. El manual (6.1) exige confirmación verbal de fecha y hora: o no la hubo, o se
+  // habló fuera del CRM. Cuenta igual; se lista para que Gerencia revise la grabación.
+  const citaSinConv = [...new Map(agendadas.filter(c=>!(ev[c.ct]||[]).some(e=>e[0] <= c.ag + 15*60e3 && c.ag - e[0] <= PC_CITA_ATRIB_MS
+      && (llamadaLarga(e, c.ct, PC_EFECTIVO_SEG) || (e[2]==="i" && e[1]!=="call")))).map(c=>[c.ct, { id:c.ct, n:nombre(c.ct), ag:c.ag, u:c.u||"" }])).values()];
   // Registro de los cinco datos (6.1): sobre los prospectos con sesión agendada en el periodo.
-  const refs5 = PC_5DATOS.map(([k])=>(cfg.campos5||{})[k]||"");
   const datos = [...new Set(agendadas.map(c=>c.ct))].map(ct=>{
     const tiene = refs5.map(r=> r ? !!pcValor(r, info[ct], (oppDe[ct]||{}).op) : null);
     return { id:ct, n:nombre(ct), tiene, completo: tiene.every(x=>x===true) };
@@ -8679,7 +8743,7 @@ function pcBuild(D, cfg, now){
     // Sale de la cadencia (4.4: es para el silencio) con respuesta escrita, llamada de ≥90 s,
     // contacto efectivo del puesto o una cita agendada dentro de sus 7 días.
     const conv = w.some(e=>(e[2]==="i" && e[1]!=="call") || (e[1]==="call" && (e[5]||0) >= PC_EFECTIVO_SEG))
-      || (efect[c.id] && efect[c.id] <= lim) || citas.some(x=>x.ct===c.id && x.ag && x.ag >= t0 && x.ag <= lim);
+      || (efect[c.id] && efect[c.id] <= lim) || citas.some(x=>x.ct===c.id && x.ag && x.ag >= t0 && x.ag <= lim) || !!recontacto(c.id);
     const mios = w.filter(e=>toqueEpc(e, c.id));
     const porDia = {}; mios.forEach(e=>{ const k = pcDiasEntre(d0, pcDia(e[0])); (porDia[k] = porDia[k] || []).push(e); });
     let toques = 0, deLlamada = 0, conDoble = 0;
@@ -8732,10 +8796,10 @@ function pcBuild(D, cfg, now){
 
   return { v:1, ts:now, ensayo:!!D.ensayo, epc:[...epc], epcNom:[...epc].map(quien),
     per:{ tipo:per.tipo, clave:per.clave, iniYMD:pcDia(ini), finYMD:pcDia(fin), recortado: ini > per.ini, enCurso: per.fin > now },
-    cfg:{ activa:cfg.activa, marcador:cfg.marcador||"", dias:cfg.dias, abre:cfg.abre, cierra:cfg.cierra, smsCuenta:cfg.smsCuenta!==false,
+    cfg:{ activa:cfg.activa, marcador:cfg.marcador||"", dias:cfg.dias, habiles:cfg.habiles||PC_CFG_DEF.habiles, abre:cfg.abre, cierra:cfg.cierra, smsCuenta:cfg.smsCuenta!==false,
       campos5:refs5.map(Boolean), lp:!!((cfg.lp||{}).motivo && (cfg.lp||{}).fecha), calif:!!((cfg.calif||{}).campo || (cfg.calif||{}).si) },
     users, excl, nU:U.length, vel, dias, habiles, ptsCerrados, ptsHoy:(dias[hoy]&&!diaCerrado(hoy)) ? dias[hoy].pts : 0,
-    conv60, convSinDur, metaConv, fueraPts, coh, PC_DEN, ses, datos, cad, cart, recep,
+    conv60, convSinDur, metaConv, fueraPts, coh, PC_DEN, ses, datos, cad, cart, recep, citaSinConv, reInfo: D.reInfo || null,
     citas:{ agendadas:agendadas.length, cbVisto, porToque: mias.filter(c=>c.via==="toque").length, mias: mias.length },
     diag:{ ...(D.diag||{}), autoSinU, autoConU, lineaEpc, evErr:Object.keys(evErr).length },
     fallos: D.fallos||[] };
@@ -8757,7 +8821,9 @@ const pcDet = (titulo, html)=>{ const id = "pc-det-" + (pcDetN++);
   return `<button type="button" class="sla-det-btn" data-pc-det="${id}">${titulo} ▸</button><div class="pc-det" id="${id}" hidden>${html}</div>`; };
 const pcTabla = (cab, filas, vacio)=> `<div class="table-scroll mb-sec"><table class="cons pc-tabla"><tr>${cab.map((c,i)=>`<th${i===0?' class="lft"':""}>${c}</th>`).join("")}</tr>${filas.length ? filas.join("") : `<tr><td colspan="${cab.length}" class="lft txt-nota">${vacio||"Sin casos en el periodo."}</td></tr>`}</table></div>`;
 const PC_RES_TXT = { entregado:"Entregado a asesor", sinAsesor:"En etapa de entrega pero sin asesor asignado", lpOk:"Largo plazo bien cerrado", lpMal:"Largo plazo incompleto",
-  lpNoVer:"Largo plazo sin verificar", descarte:"Descalificado", sinCierre:"Sin cierre", curso:"En curso (<7 días)", previo:"Ya estaba con asesor (reconfirmación)" };
+  lpNoVer:"Largo plazo sin verificar", descarte:"Descalificado", sinCierre:"Sin cierre", curso:"En curso (<7 días)", previo:"Ya estaba con asesor (reconfirmación)",
+  recontacto:"Pidió otro momento (recontacto agendado)" };
+const PC_VIA_TXT = { llamada:"llamada de ≥90 s", respuesta:"respuesta escrita", cita:"cita agendada", registro:"por registro del ejecutivo" };
 const PC_SES_TXT = { asistio:"Se realizó", noshow:"No se presentó", cancelada:"Cancelada", reagendada:"Reagendada (pendiente)", sinreg:"Sin asistencia registrada" };
 const PC_SEG_TXT = { vencida:"Cartera vencida", fria:"Cartera fría", otra:"Otra base (Nurturing, sin oportunidad u otra etapa)", sindato:"Sin dato de segmento (cambió de etapa después)" };
 
@@ -8801,7 +8867,7 @@ function pcRender(){
       s:`${A.ptsCerrados.toLocaleString()} puntos en ${nH} día${nH===1?"":"s"} hábil${nH===1?"":"es"} cerrado${nH===1?"":"s"}${A.ptsHoy?` · hoy van ${A.ptsHoy} (no cuenta hasta cerrar la ventana)`:""}`, info: !nH, ok: prom==null ? null : prom >= PC_META.puntos })}
     ${pcKpi({ v:A.conv60.toLocaleString(), l:`Conversaciones de ≥60 s · candado del bono: ${PC_CONV_MES} al mes`,
       s:`${A.per.tipo==="mes" ? `meta del mes: ${PC_CONV_MES}` : `ritmo para ${PC_CONV_MES} al mes: ${A.metaConv} en este periodo`}${A.convSinDur?` · ${A.convSinDur} llamada${A.convSinDur===1?"":"s"} conectada${A.convSinDur===1?"":"s"} sin duración en el CRM (no se pueden contar)`:""}${A.per.enCurso?" · periodo en curso: sin semáforo hasta que cierre":""}`, ok: A.per.enCurso ? null : A.conv60 >= A.metaConv })}
-    ${pcKpi({ v:pcPct(ent, den.length), l:"Conversión a entrega · meta ≥40%", s:`${ent} de ${den.length} contactos efectivos entregados a un asesor · Largo plazo bien cerrado no cuenta (10.3)`, n:den.length, ok: den.length ? ent/den.length >= PC_META.entrega : null })}
+    ${pcKpi({ v:pcPct(ent, den.length), l:"Conversión a entrega · meta ≥40%", s:`${ent} de ${den.length} contactos efectivos entregados a un asesor${den.filter(r=>r.via==="registro").length ? ` (${den.filter(r=>r.via==="registro").length} por registro del ejecutivo)` : ""} · Largo plazo bien cerrado y recontactos pendientes no cuentan (10.3, 4.4)`, n:den.length, ok: den.length ? ent/den.length >= PC_META.entrega : null })}
     ${pcKpi({ v:pcPct(as, dAs), l:"Tasa de asistencia · meta ≥75%", s:`${as} de ${dAs} prospectos con sesión del periodo se presentaron${S.filter(s=>s.est==="sinreg").length?` · ${S.filter(s=>s.est==="sinreg").length} sin asistencia registrada`:""}`, n:dAs, ok: dAs ? as/dAs >= PC_META.asist : null })}
     ${pcKpi({ v: A.cfg.calif ? pcPct(cSi, cSi+cNo) : "—", l:"Tasa de calificación · meta ≥80%", s: A.cfg.calif ? `${cSi} de ${cSi+cNo} sesiones realizadas marcadas como calificadas${S.filter(s=>s.calif==="sinMarca").length?` · ${S.filter(s=>s.calif==="sinMarca").length} sin marca después de 48 h (se pagan igual)`:""}` : "Falta definir en Configuración cómo marca el asesor la cita calificada (Sistemas, 12.1)", n:cSi+cNo, ok:(cSi+cNo) ? cSi/(cSi+cNo) >= PC_META.calif : null, info:!A.cfg.calif })}
     ${pcKpi({ v: conf5===5 ? pcPct(d5, A.datos.length) : "—", l:"Registro de los cinco datos · meta 100%", s: conf5===5 ? `${d5} de ${A.datos.length} prospectos con sesión agendada tienen los cinco datos` : `Faltan ${5-conf5} de los 5 campos en Configuración`, n:A.datos.length, ok: A.datos.length && conf5===5 ? d5===A.datos.length : null, info:conf5!==5 })}
@@ -8820,7 +8886,7 @@ function pcRender(){
         <td>${x.nuevo}</td><td>${x.cartera}</td><td class="lq-sub" title="Llamadas solas sin contestar · llamadas con falla de línea · puntos por encima del tope de 3 por prospecto al día">${x.solas} · ${x.linea} · ${x.tope}</td></tr>`; });
     html += `<h3 class="diag-h">Puntos de contacto <span class="lq-sub">manual 7.3 · cuentan los tres frentes por igual</span></h3>
       ${pcTabla(["Día","Puntos","Prospectos","Dobles llamadas","Llamada contestada","Mensajes","Correos","Conv. ≥60 s","Lead nuevo","Cartera","No cuentan<br><span class=\"lq-sub\">sola · línea · tope</span>"], filas, "Sin actividad del ejecutivo en el periodo.")}
-      <p class="hint">Punto de contacto: doble llamada al mismo prospecto (dos marcaciones en ≤10 min, conectadas o no; la automática del CRM más la remarcación manual cuentan como una), una llamada que el prospecto contestó (la automática, solo si duró ≥90 s), un mensaje por WhatsApp, Instagram o Facebook${A.cfg.smsCuenta?" (y SMS)":""} o un correo propio; máximo ${PC_MAX_DIA} por prospecto al día. No cuentan: una llamada sola sin contestar, las que la línea no completó (failed, busy, canceled) ni los envíos automáticos o masivos. Días hábiles: ${slaDiasTxt(A.cfg.dias)}, sin festivos; el día en curso no entra al promedio.${A.fueraPts?` ${A.fueraPts} prospecto${A.fueraPts===1?"":"s"} de brokers o referidos tocado${A.fueraPts===1?"":"s"} por el ejecutivo no suma${A.fueraPts===1?"":"n"} (no son de este puesto, 1.1).`:""}</p>`;
+      <p class="hint">Punto de contacto: doble llamada al mismo prospecto (dos marcaciones en ≤10 min, conectadas o no; la automática del CRM más la remarcación manual cuentan como una), una llamada que el prospecto contestó (la automática, solo si duró ≥90 s), un mensaje por WhatsApp, Instagram o Facebook${A.cfg.smsCuenta?" (y SMS)":""} o un correo propio; máximo ${PC_MAX_DIA} por prospecto al día. No cuentan: una llamada sola sin contestar, las que la línea no completó (failed, busy, canceled) ni los envíos automáticos o masivos. Días hábiles: ${slaDiasTxt(A.cfg.habiles||[1,2,3,4,5])}, sin festivos; el día en curso no entra al promedio.${A.fueraPts?` ${A.fueraPts} prospecto${A.fueraPts===1?"":"s"} de brokers o referidos tocado${A.fueraPts===1?"":"s"} por el ejecutivo no suma${A.fueraPts===1?"":"n"} (no son de este puesto, 1.1).`:""}</p>`;
   }
 
   // --- Lead nuevo: velocidad y cadencia
@@ -8834,19 +8900,19 @@ function pcRender(){
     const dobles = V.filter(v=>v.dt!=null), conDoble = dobles.filter(v=>v.doble).length;
     const autoTxt = (v)=> v.auto==="90" ? "contestó ≥90 s" : v.auto==="corta" ? "no conectó o <90 s" : "—";
     const remTxt = (v)=> v.auto!=="corta" ? "—" : v.rem==null ? "no remarcó" : pcSeg(v.rem) + (v.rem <= PC_REMARCA_MS ? "" : " (tarde)");
-    const detV = A.vel.slice().sort((a,b)=>a.t0-b.t0).map(v=>`<tr><td class="lft">${escAttr(v.n)}</td><td>${pcHora(v.t0)}</td><td>${v.err ? "sin datos" : v.vent ? "dentro" : "fuera"}</td><td class="lft">${v.cumple ? "sí" : "no"} <span class="lq-sub">${escAttr(VIA_TXT[v.via]||"")}</span></td><td>${pcSeg(v.dt)}</td><td class="lft">${autoTxt(v)}</td><td>${remTxt(v)}</td><td class="lft">${escAttr(v.otro||"")}</td></tr>`);
+    const detV = A.vel.slice().sort((a,b)=>a.t0-b.t0).map(v=>`<tr><td class="lft">${escAttr(v.n)}${v.re ? ' <span class="lq-re" title="Volvió a llenar el formulario: cuenta como lead nuevo desde esa fecha (10.4)">regresa</span>' : ""}</td><td>${pcHora(v.t0)}</td><td>${v.err ? "sin datos" : v.vent ? "dentro" : "fuera"}</td><td class="lft">${v.cumple ? "sí" : "no"} <span class="lq-sub">${escAttr(VIA_TXT[v.via]||"")}</span></td><td>${pcSeg(v.dt)}</td><td class="lft">${autoTxt(v)}</td><td>${remTxt(v)}</td><td class="lft">${escAttr(v.otro||"")}</td></tr>`);
     const Va = V.filter(v=>v.auto), V90 = Va.filter(v=>v.auto==="90"), Vc = Va.filter(v=>v.auto==="corta");
     const Vrem = Vc.filter(v=>v.rem!=null), VremOk = Vrem.filter(v=>v.rem <= PC_REMARCA_MS);
     const VaT = V.filter(v=>v.autoDt!=null), Va60 = VaT.filter(v=>v.autoDt <= 60e3);
     const C = A.cad.filter(c=>c.est==="silencio"), comp = C.filter(c=>c.toques>=6).length;
     const detC = A.cad.filter(c=>c.est!=="curso").sort((a,b)=>a.t0-b.t0).map(c=>`<tr><td class="lft">${escAttr(c.n)}</td><td>${pcHora(c.t0)}</td><td class="lft">${c.est==="conv" ? "salió a conversación" : "silencio"}</td><td>${c.toques}</td><td>${c.deLlamada ? `${c.conDoble} de ${c.deLlamada}` : "—"}</td><td>${c.breakUp ? "sí" : "no"}</td><td class="lft">${escAttr(c.etapa||"—")}</td></tr>`);
     html += `<h3 class="diag-h">Lead nuevo <span class="lq-sub">manual 3.1 a 3.4 · ${A.nU} lead${A.nU===1?"":"s"} del periodo</span></h3>
-      <div class="lq-meth"><b>Primer toque completo</b> — leads que entraron en la ventana operativa (${slaDiasTxt(A.cfg.dias)} ${escAttr(A.cfg.abre)}–${escAttr(A.cfg.cierra)}): <b>${V.filter(v=>v.cumple).length} de ${V.length}</b> cumplieron.
+      <div class="lq-meth"><b>Primer toque completo</b> — leads que entraron en la ventana operativa (${A.cfg.dias.length===7 ? "todos los días" : slaDiasTxt(A.cfg.dias)}, ${escAttr(A.cfg.abre)}–${escAttr(pcHoraTxt(A.cfg.cierra))}): <b>${V.filter(v=>v.cumple).length} de ${V.length}</b> cumplieron${V.filter(v=>v.re).length ? ` (incluye ${V.filter(v=>v.re).length} que regresa${V.filter(v=>v.re).length===1?"":"n"} por formulario, 10.4)` : ""}.
         <br>Cumplieron: ${lista(VIA.slice(0,3))}.
         <br>No cumplieron: ${lista(VIA.slice(3))}.
         <br>Remarcación tras una automática fallida (${Vc.length}): en ≤2 min <b>${VremOk.length}</b>${Vrem.length ? ` · mediana ${pcSeg(slaMedian(Vrem.map(v=>v.rem)))} desde que terminó la automática` : ""}. Doble llamada en el primer toque: <b>${pcPct(conDoble, dobles.length)}</b> (${conDoble} de ${dobles.length}).
         <br><b>Llamada automática del CRM</b> (es de Sistemas, no del ejecutivo): ${VaT.length ? `entró en ${VaT.length} de ${V.length} leads, en ≤60 s en <b>${Va60.length}</b>; conectó ≥90 s en ${V90.length}` : "ningún lead del periodo recibió llamada automática: el marcador no está disparando o el CRM no la registra"}.
-        ${fv.length ? `Fuera de la ventana: ${fv.length} lead${fv.length===1?"":"s"}, mediana a la primera marcación ${pcSeg(slaMedian(fv.filter(v=>v.dt!=null).map(v=>v.dt)))} (no entran al primer toque completo).` : ""}
+        ${fv.length ? `<br><b>Entraron fuera de la ventana</b> (${escAttr(pcHoraTxt(A.cfg.cierra))}–${escAttr(A.cfg.abre)}): ${fv.length} lead${fv.length===1?"":"s"} · mensaje automático en ≤10 min: <b>${fv.filter(v=>v.autoMsg).length} de ${fv.length}</b> · marcados en ≤15 min desde la apertura: <b>${fv.filter(v=>v.dtAbre!=null && v.dtAbre<=15*60e3).length} de ${fv.length}</b>${fv.some(v=>v.dtAbre!=null) ? ` (mediana ${pcSeg(slaMedian(fv.filter(v=>v.dtAbre!=null).map(v=>v.dtAbre)))} desde la apertura)` : ""}. No entran al primer toque completo.` : ""}
         ${pcDet("ver leads", pcTabla(["Lead","Registro","Ventana","¿Primer toque completo?","Primera marcación a los","Automática","Remarcación manual","Marcó antes otro usuario"], detV))}</div>
       <div class="lq-meth"><b>Cadencia de 6 toques en 7 días</b> (lead en silencio): ${C.length ? `<b>${comp} de ${C.length}</b> (${pcPct(comp, C.length)}) completaron los 6 toques · promedio ${(C.reduce((a,c)=>a+c.toques,0)/C.length).toFixed(1)} toques · break up enviado en ${C.filter(c=>c.breakUp).length} · ${C.filter(c=>c.sinResp).length} movidos a Sin respuesta` : "ningún lead en silencio con la cadencia terminada todavía"}.
         ${A.cad.filter(c=>c.est==="conv").length} salieron a conversación (la cadencia es para el silencio, 4.4) y ${A.cad.filter(c=>c.est==="curso").length} siguen dentro de sus 7 días.
@@ -8856,13 +8922,16 @@ function pcRender(){
 
   // --- Conversión a entrega
   {
-    const orden = ["entregado","sinAsesor","lpMal","descarte","sinCierre","lpOk","lpNoVer","curso","previo"];
+    const orden = ["entregado","sinAsesor","lpMal","descarte","sinCierre","lpOk","lpNoVer","recontacto","curso","previo"];
+    const porVia = Object.keys(PC_VIA_TXT).filter(k=>A.coh.some(r=>r.via===k)).map(k=>`${PC_VIA_TXT[k]} <b>${A.coh.filter(r=>r.via===k).length}</b>`).join(" · ");
+    const reco = [1,2,3].map(n=>A.coh.filter(r=>r.res==="recontacto" && r.falta===`intento ${n} de 3`).length);
     const cuenta = (k)=> A.coh.filter(r=>r.res===k).length;
     const filas = orden.filter(k=>cuenta(k)).map(k=>`<tr><td class="lft">${PC_RES_TXT[k]}</td><td class="val">${cuenta(k)}</td><td>${A.PC_DEN.includes(k) ? "sí" : "no"}</td><td>${A.coh.filter(r=>r.res===k && r.frente==="nuevo").length} · ${A.coh.filter(r=>r.res===k && r.frente==="cartera").length}</td></tr>`);
-    const det = A.coh.slice().sort((a,b)=>a.fe-b.fe).map(r=>`<tr><td class="lft">${escAttr(r.n)}</td><td>${pcHora(r.fe)}</td><td class="lft">${r.frente==="nuevo"?"lead nuevo":"cartera"}</td><td class="lft">${escAttr(r.etapa)}</td><td class="lft">${PC_RES_TXT[r.res]}${r.falta?` <span class="lq-sub">falta: ${escAttr(r.falta)}</span>`:""}</td><td class="lft">${escAttr(name(r.asesor))}</td></tr>`);
+    const det = A.coh.slice().sort((a,b)=>a.fe-b.fe).map(r=>`<tr><td class="lft">${escAttr(r.n)}</td><td>${pcHora(r.fe)}</td><td class="lft">${PC_VIA_TXT[r.via]||"—"}</td><td class="lft">${r.frente==="nuevo"?"lead nuevo":"cartera"}</td><td class="lft">${escAttr(r.etapa)}</td><td class="lft">${PC_RES_TXT[r.res]}${r.falta?` <span class="lq-sub">falta: ${escAttr(r.falta)}</span>`:""}</td><td class="lft">${escAttr(name(r.asesor))}</td></tr>`);
     html += `<h3 class="diag-h">Conversión a entrega <span class="lq-sub">manual 10.1 y 10.3 · ${A.coh.length} contacto${A.coh.length===1?"":"s"} efectivo${A.coh.length===1?"":"s"}</span></h3>
       ${pcTabla(["Cómo terminó","Prospectos","¿Entra al %?","Lead nuevo · cartera"], filas, "Sin contactos efectivos del ejecutivo en el periodo.")}
-      <div class="hint">Contacto efectivo: llamada de ≥90 s —del ejecutivo o la automática del CRM—, respuesta escrita del prospecto en las 48 h siguientes a un toque suyo, o una sesión que él agendó. Entrega: la tarjeta en Contacto establecido (o una etapa posterior) movida después de ese contacto y asignada a un asesor. Largo plazo con motivo, fecha estimada y tarea de recontacto sale del denominador; sin ellos, cuenta como fallo (10.3).${A.cfg.lp ? "" : " <b>Configura los campos de motivo y fecha estimada de Largo plazo</b> para poder auditarlo."} ${pcDet("ver contactos", pcTabla(["Prospecto","Contacto efectivo","Frente","Etapa actual","Resultado","Asesor"], det))}</div>`;
+      <div class="hint">${porVia ? `Cómo fue el contacto efectivo: ${porVia}.<br>` : ""}${reco.some(Boolean) ? `Pidieron otro momento (etiqueta recontacto 1/2/3): ${reco.map((n,i)=>`intento ${i+1}: ${n}`).join(" · ")}${reco[2] ? ` — <b>${reco[2]} en el tercer intento</b>: si no agenda, pasa a Largo plazo con su motivo (4.4)` : ""}.<br>` : ""}
+        Contacto efectivo: llamada de ≥90 s —del ejecutivo o la automática del CRM—, respuesta escrita del prospecto a un toque suyo mientras el lead siga siendo suyo (sin plazo), o una sesión que él agendó. <b>Por registro del ejecutivo</b>, aparte porque lo declara él y se audita con las grabaciones: la tarjeta movida después de su toque a Contacto establecido o más adelante, a Largo plazo con motivo o a Descalificado por "no alineado", o los cinco datos capturados. Entrega: la tarjeta en Contacto establecido (o una etapa posterior) movida después de ese contacto y asignada a un asesor. Largo plazo con motivo, fecha estimada y tarea de recontacto sale del denominador; sin ellos, cuenta como fallo (10.3).${A.cfg.lp ? "" : " <b>Configura los campos de motivo y fecha estimada de Largo plazo</b> para poder auditarlo."} ${pcDet("ver contactos", pcTabla(["Prospecto","Contacto efectivo","Cómo","Frente","Etapa actual","Resultado","Asesor"], det))}</div>`;
   }
 
   // --- Sesiones: asistencia, calificación, cinco datos, citas pagables
@@ -8877,6 +8946,8 @@ function pcRender(){
         <br><b>Citas pagables</b> (realizadas y calificadas, o sin marca después de 48 h): <b>${pag}</b>${pag > PC_TOPE_CITAS ? ` — arriba de ${PC_TOPE_CITAS}: si el canal no cerró ninguna venta en el mes, el bono por citas se liquida hasta $9,000 y el excedente se difiere (7.8)` : ""}. El cálculo del bono es de Contabilidad y Finanzas.
         ${pcDet("ver sesiones", pcTabla(["Prospecto","Sesión","Asistencia","Calificación","Asesor","Por qué es del ejecutivo"], detS))}
         ${pcDet("ver cinco datos", pcTabla(["Prospecto", ...PC_5DATOS.map(x=>x[1])], det5, "Sin sesiones agendadas en el periodo."))}
+        ${(A.citaSinConv||[]).length ? `<div style="margin-top:6px"><b style="color:#9a5a14">${A.citaSinConv.length} cita${A.citaSinConv.length===1?"":"s"} sin conversación registrada</b>: ni llamada de ≥90 s ni respuesta escrita en las 72 h previas al agendamiento. El manual exige confirmación verbal de fecha y hora (6.1): o no la hubo, o se habló fuera del CRM. Cuentan igual; Gerencia revisa la grabación.
+          ${pcDet("ver citas sin conversación", pcTabla(["Prospecto","Agendada","Asesor"], A.citaSinConv.map(c=>`<tr><td class="lft">${escAttr(c.n)}</td><td>${pcHora(c.ag)}</td><td class="lft">${escAttr(name(c.u))}</td></tr>`)))}</div>` : ""}
         <div class="lq-sub" style="margin-top:6px">Unidad: el prospecto. Se realizó si cualquiera de sus sesiones se realizó (calendario o, si el calendario no lo registra, la etapa: Zoom/Tour realizado o posterior); si la canceló y tiene otra por venir, queda pendiente. Tasa de asistencia = se realizó ÷ (se realizó + no se presentó + cancelada). ${A.citas.cbVisto ? "El CRM sí dice quién creó cada cita." : `<b>El CRM no está diciendo quién creó las citas</b>: se atribuyen al ejecutivo cuando él tocó al prospecto en las 72 h previas (${A.citas.porToque} así).`}</div></div>`;
   }
 
@@ -8913,6 +8984,9 @@ function pcRender(){
     if(d.autoSinU || d.autoConU) p.push(`<b>Llamadas automáticas en leads nuevos</b>: ${d.autoConU} con el usuario del ejecutivo · ${d.autoSinU} sin usuario o de otro usuario${d.autoSinU ? " — se cuentan como del puesto por ser lead nuevo, pero conviene que el marcador registre al ejecutivo: así el CRM dice quién atendió" : ""}`);
     if(d.lineaEpc) p.push(`<b>Falla de línea</b>: ${d.lineaEpc} llamada${d.lineaEpc===1?"":"s"} del ejecutivo ${d.lineaEpc===1?"volvió":"volvieron"} failed, busy o canceled (telefonía, no desempeño; no suman puntos)`);
     if(d.evErr) p.push(`<b style="color:var(--rojo)">${d.evErr} conversaci${d.evErr===1?"ón":"ones"} no se pudieron leer</b>`);
+    const R = A.reInfo;
+    p.push(R && R.campo ? `<b>Leads que regresan (10.4)</b> por "${escAttr(R.campo)}": ${R.n} cuentan como lead nuevo${R.dentro90 ? ` · ${R.dentro90} volvieron dentro de ${PC_REENVIO_DIAS} días (candado de duplicidad: no son lead nuevo)` : ""}${R.sinHora ? ` · <b style="color:var(--rojo)">${R.sinHora} sin hora exacta en el campo</b>: no se pueden medir` : ""}`
+      : `<b>Leads que regresan (10.4)</b>: no se miden todavía — falta el campo "Fecha último formulario" en el CRM (lo llena el workflow del formulario con la fecha y hora del envío)`);
     if(A.excl.prueba || A.excl.fuera || A.excl.ajenos) p.push(`Fuera del universo de lead nuevo: ${A.excl.fuera} de brokers, referidos u otros canales (prospección directa, alianzas, legal), ${A.excl.prueba} de prueba${A.ensayo ? `, ${A.excl.ajenos} de otros usuarios (ensayo)` : ""}`);
     if(p.length) html += `<div class="lq-meth">🔎 <b>Diagnóstico de datos</b> — ${p.join(" · ")}.</div>`;
   }
@@ -8948,8 +9022,9 @@ function pcCfgHtml(){
       <label>Ejecutivo(s) de Primer Contacto<select id="pc-c-usu" multiple size="5"${dis}>${users.map(([id,n])=>`<option value="${escAttr(id)}"${cfg.usuarios.includes(id)?" selected":""}>${escAttr(n)}</option>`).join("")}</select><span class="lq-sub">Usuario de GoHighLevel con el que marca y escribe.</span></label>
       <label>Inicio del puesto<input type="date" id="pc-c-activa" value="${escAttr(cfg.activa||"")}"${dis}><span class="lq-sub">Desde aquí mide el reporte real.</span></label>
       <label>Marcador automático operando desde<input type="date" id="pc-c-marc" value="${escAttr(cfg.marcador||"")}"${dis}><span class="lq-sub">Vacío = la velocidad de 60 s es informativa.</span></label>
-      <label>Ventana operativa<span class="pc-dias">${[1,2,3,4,5,6,0].map(d=>`<label><input type="checkbox" class="pc-c-dia" value="${d}"${cfg.dias.includes(d)?" checked":""}${dis}>${SLA_DIAS_CORTOS[d]}</label>`).join("")}</span>
-        <span><input type="time" id="pc-c-abre" value="${escAttr(cfg.abre)}"${dis}> a <input type="time" id="pc-c-cierra" value="${escAttr(cfg.cierra)}"${dis}></span><span class="lq-sub">Días hábiles = estos días, sin festivos.</span></label>
+      <label>Ventana operativa (primer toque)<span class="pc-dias">${[1,2,3,4,5,6,0].map(d=>`<label><input type="checkbox" class="pc-c-dia" value="${d}"${cfg.dias.includes(d)?" checked":""}${dis}>${SLA_DIAS_CORTOS[d]}</label>`).join("")}</span>
+        <span><input type="time" id="pc-c-abre" value="${escAttr(cfg.abre)}"${dis}> a <input type="time" id="pc-c-cierra" value="${escAttr(cfg.cierra)}"${dis}></span><span class="lq-sub">Cierre 00:00 = medianoche. Fuera de la ventana sale el mensaje automático y se marca a la apertura.</span></label>
+      <label>Días hábiles (promedio de puntos, 7.3)<span class="pc-dias">${[1,2,3,4,5,6,0].map(d=>`<label><input type="checkbox" class="pc-c-hab" value="${d}"${(cfg.habiles||[]).includes(d)?" checked":""}${dis}>${SLA_DIAS_CORTOS[d]}</label>`).join("")}</span><span class="lq-sub">Sin los festivos de abajo.</span></label>
       <label>Festivos (no hábiles)<textarea id="pc-c-fest" rows="3"${dis}>${escAttr((cfg.festivos||[]).join(", "))}</textarea><span class="lq-sub">AAAA-MM-DD separados por coma.</span></label>
       <label><span><input type="checkbox" id="pc-c-sms"${cfg.smsCuenta!==false?" checked":""}${dis}> El SMS cuenta como mensaje</span><span class="lq-sub">El manual pide SMS en el toque 2; la tabla de 7.3 nombra WhatsApp, Instagram y Facebook.</span></label>
       ${PC_5DATOS.map(([k,l])=>`<label><span>Dato: ${l}${det("campos5."+k)}</span><select class="pc-c-c5" data-k="${k}"${dis}>${opcCampos((cfg.campos5||{})[k]||"", false)}</select></label>`).join("")}
@@ -8968,7 +9043,8 @@ async function pcGuardarCfg(){
     usuarios: [...(document.getElementById("pc-c-usu")||{}).selectedOptions||[]].map(o=>o.value),
     activa: val("pc-c-activa") || PC_ACTIVA_DEF, marcador: val("pc-c-marc"),
     dias: [...document.querySelectorAll(".pc-c-dia:checked")].map(x=>+x.value).sort(),
-    abre: val("pc-c-abre") || "09:00", cierra: val("pc-c-cierra") || "19:00", festivos: fest,
+    habiles: [...document.querySelectorAll(".pc-c-hab:checked")].map(x=>+x.value).sort(),
+    abre: val("pc-c-abre") || "06:00", cierra: val("pc-c-cierra") || "00:00", festivos: fest,
     smsCuenta: !!(document.getElementById("pc-c-sms")||{}).checked,
     campos5: Object.fromEntries([...document.querySelectorAll(".pc-c-c5")].map(s=>[s.dataset.k, s.value])),
     lp: { motivo: val("pc-c-lpm"), fecha: val("pc-c-lpf") },
@@ -9045,6 +9121,30 @@ async function pcSync(){
     const leads = []; let cur = null;
     do{ const r = await pcFn({ action:"contacts", start:new Date(ini).toISOString(), end:new Date(fin).toISOString(), ...(cur?{searchAfter:cur}:{}) });
       leads.push(...(r.contacts||[])); cur = r.searchAfter; }while(cur);
+    // Leads que regresan (10.4): contactos que ya existían y volvieron a llenar el formulario, por la
+    // "Fecha último formulario" que llena el workflow. Cuentan como lead nuevo desde esa fecha, salvo
+    // que el formulario anterior (o el alta) sea de hace menos de 90 días: candado de duplicidad.
+    let reInfo = null;
+    const fUlt = lqCampoUltimoForm(cat.fields), fAnt = (cat.fields||[]).find(f=>PC_RX_FORM_ANT.test(f.name||""));
+    if(fUlt){
+      lbl.textContent = "Buscando leads que regresan por formulario…";
+      reInfo = { campo: fUlt.name, n:0, dentro90:0, sinHora:0 };
+      try{
+        let sa = null, vueltas = 0;
+        do{
+          const r = await pcFn({ action:"regresan", start:new Date(ini).toISOString(), end:new Date(fin).toISOString(), campo:fUlt.id, ...(sa?{searchAfter:sa}:{}) });
+          (r.contactos||[]).forEach(c=>{
+            const t = pcFechaHora((c.cf||{})[fUlt.id]);
+            if(t===undefined){ reInfo.sinHora++; return; }
+            if(!(t >= ini && t <= fin) || leads.some(x=>x.id===c.id)) return;
+            const ant = (fAnt && pcFechaHora((c.cf||{})[fAnt.id])) || Date.parse(c.c);
+            if(isFinite(ant) && t - ant < PC_REENVIO_DIAS*86400e3){ reInfo.dentro90++; return; }
+            leads.push({ ...c, c:new Date(t).toISOString(), alta:c.c, re:true }); reInfo.n++;
+          });
+          sa = r.searchAfter;
+        }while(sa && ++vueltas < 20);
+      }catch(e){ fallos.push("los leads que regresan por formulario (10.4)"); reInfo = null; }
+    }
     bar.style.width = "6%";
     lbl.textContent = "Trayendo las citas…";
     let citas = [];
@@ -9121,7 +9221,7 @@ async function pcSync(){
       catch(e){ fallos.push("las tareas de Largo plazo"); }
     }
     bar.style.width = "97%"; lbl.textContent = "Calculando…";
-    const D = { per, epc, ensayo, users:cat.users||{}, pipelines:cat.pipelines||[], leads, cts, ev, evErr, opps, citas, fallos,
+    const D = { per, epc, ensayo, users:cat.users||{}, pipelines:cat.pipelines||[], oppFields:cat.oppFields||[], reInfo, leads, cts, ev, evErr, opps, citas, fallos,
       diag:{ convModo:modo, convOrden:orden, convN:convs.length, convTrunc:trunc, cobN, cobOk, cobSoloLlam } };
     const agg = pcBuild(D, pcState.cfg || cfg, now);
     if(pcAggKey() === clave){ pcState.agg = agg; pcRender(); }

@@ -49,6 +49,16 @@ const MSGS = {
 S.ghlFetch = async (path, opts) => {
   let m;
   pedidas.push(path);
+  if (path === "/contacts/search") {
+    // Leads que regresan: actualizados en el rango; el backend filtra por la fecha del último formulario.
+    const vieja = iso(T0 - 300 * 24 * H);
+    return { contacts: [
+      { id: "regresa01", contactName: "Regresa", dateAdded: vieja, customFields: [{ id: "fUlt", value: iso(T0 + 2 * H) }] },
+      { id: "nuevo0001", contactName: "Nuevo del rango", dateAdded: iso(T0 + H), customFields: [{ id: "fUlt", value: iso(T0 + H) }] },
+      { id: "solotag01", contactName: "Solo le cambiaron una etiqueta", dateAdded: vieja, customFields: [] },
+      { id: "regresaV1", contactName: "Regresó hace meses", dateAdded: vieja, customFields: [{ id: "fUlt", value: iso(T0 - 60 * 24 * H) }] },
+    ] };
+  }
   if (path.startsWith("/conversations/search") && /contactId=/.test(path)) {
     m = path.match(/contactId=([^&]+)/);
     return { conversations: decodeURIComponent(m[1]) === "ctAlfa01" ? [{ id: "convA", contactId: "ctAlfa01" }] : [] };
@@ -150,6 +160,12 @@ const call = async (body, t) => { const r = await handler({ httpMethod: "POST", 
   const ci = await call({ action: "citas", start: iso(T0), end: iso(T0 + 7 * 24 * H) });
   ok(ci.status === 200 && ci.d.citas.find((c) => c.id === "e1").cb === "epc1" && ci.d.citas.find((c) => c.id === "e2").cb === "",
     "citas con su creador cuando el API lo trae", ci.d.citas.map((c) => ({ id: c.id, cb: c.cb })));
+
+  const rg = await call({ action: "regresan", start: iso(T0), end: iso(T0 + 7 * 24 * H), campo: "fUlt" });
+  ok(rg.status === 200 && rg.d.contactos.map((c) => c.id).join() === "regresa01" && rg.d.revisados === 4,
+    "regresan: solo contactos que ya existían y cuya fecha de último formulario cae en el rango", { ids: rg.d.contactos && rg.d.contactos.map((c) => c.id), revisados: rg.d.revisados });
+  const rg2 = await call({ action: "regresan", start: iso(T0), end: iso(T0 + 7 * 24 * H) });
+  ok(rg2.status === 400, "regresan sin campo = 400", rg2.status);
 
   // Permisos
   const p1 = await call({ action: "opps", contactIds: ["ctAlfa01"] }, tok(["pc_view"]));

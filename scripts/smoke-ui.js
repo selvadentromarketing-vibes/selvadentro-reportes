@@ -854,11 +854,16 @@ const PORT = process.env.PORT || 8765;
       && A.vel.find(v => v.id === 'lead00010').org === 'automática contestada ≥90 s' && A.vel.find(v => v.id === 'lead00011').dt === 5 * 60e3;
     // Marcó en 60 s: la automática conectó ≥90 s, o remarcación manual en ≤2 min tras la automática fallida
     r.protocolo = Object.entries(E.t1).every(([id, [ok, via, rem]]) => { const v = A.vel.find(x => x.id === id); return v && v.cumple === ok && v.via === via && v.rem === rem; })
-      && A.coh.some(x => x.id === 'lead00010') && A.coh.some(x => x.id === 'lead00009') && A.diag.autoSinU === 2 && A.diag.autoConU === 1;
+      && A.coh.some(x => x.id === 'lead00010') && A.coh.some(x => x.id === 'lead00009') && A.diag.autoSinU === 3 && A.diag.autoConU === 1;
     r.dbg = '';
     r.puntos = A.ptsCerrados === E.puntos && A.habiles.length === E.habiles && Object.entries(E.dia).every(([d, n]) => A.dias[d] && A.dias[d].pts === n)
       && A.dias['2026-10-26'].tope === 1 && A.dias['2026-10-30'].solas === 1 && A.dias['2026-10-30'].linea === 1 && A.fueraPts === E.fueraPts;
     r.conv60 = A.conv60 === E.conv60;
+    // Cómo fue el contacto efectivo, citas sin conversación, lead de madrugada y el que regresa
+    r.via = Object.entries(E.via).every(([k, n]) => A.coh.filter(x => x.via === k).length === n)
+      && JSON.stringify(A.citaSinConv.map(c => c.id)) === JSON.stringify(E.citaSinConv)
+      && (() => { const v = A.vel.find(x => x.id === E.noche.id); return v && !v.vent && v.dtAbre === E.noche.dtAbre && v.autoMsg === E.noche.autoMsg; })()
+      && A.vel.find(x => x.id === 'lead00013').re === true && A.coh.find(x => x.id === 'cart00002').falta === 'intento 2 de 3';
     const den = A.coh.filter(x => A.PC_DEN.includes(x.res));
     r.entrega = den.length === E.entrega.den && den.filter(x => x.res === 'entregado').length === E.entrega.ent
       && Object.entries(E.res).every(([k, n]) => A.coh.filter(x => x.res === k).length === n);
@@ -884,7 +889,8 @@ const PORT = process.env.PORT || 8765;
     pcState.cfg = pcCfgDe(F.cfg); pcState.agg = A; pcRender();
     await new Promise(res => setTimeout(res, 200));
     const t = document.getElementById('pc-content').innerText;
-    r.pantalla = /Indicadores del puesto/.test(t) && /4 de 8 leads en la ventana operativa: la automática conectó/.test(t) && /4\.6/.test(t) && /71%/.test(t) && /4 de 8 cumplieron/.test(t) && /en ≤2 min 1/.test(t) && /primer toque completo/i.test(t) && /Agenda de más|Problema de fondo|Correcto/.test(t)
+    r.pantalla = /Indicadores del puesto/.test(t) && /5 de 10 leads en la ventana operativa: la automática conectó/.test(t) && /5\.2/.test(t) && /70%/.test(t) && /5 de 10 cumplieron/.test(t)
+      && /por registro del ejecutivo 1/.test(t) && /1 cita sin conversación registrada/.test(t) && /marcados en ≤15 min desde la apertura: 1 de 1/.test(t) && /intento 2: 1/.test(t) && /en ≤2 min 1/.test(t) && /primer toque completo/i.test(t) && /Agenda de más|Problema de fondo|Correcto/.test(t)
       && !/undefined|NaN|\[object Object\]/.test(t);
     // Los desplegables abren y cierran
     const b = document.querySelector('#pc-content [data-pc-det]'); b.click();

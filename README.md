@@ -841,9 +841,11 @@ clave `pc:config:v1`; solo `direccion_general` / `direccion_comercial` / admin l
 - **Inicio del puesto**: 26-oct-2026. El reporte real no mide nada anterior.
 - **Marcador automático operando desde**: mientras esté vacío, la velocidad de 60 s es
   **informativa** (3.1: "no se evalúa ni se castiga mientras el marcador no esté operando").
-- **Ventana operativa** y **festivos**: días hábiles = días de la ventana sin festivos
-  (precargados los de ley 2026-27). Los leads que entran fuera de la ventana no cuentan para
-  la meta de 60 s; se reportan aparte.
+- **Ventana operativa**: todos los días de 6:00 a 24:00 (Dirección, 13-oct-2026); de 0:00 a
+  6:00 sale un mensaje automático y se marca a la apertura. Los leads de madrugada no entran al
+  primer toque completo: se reporta si les llegó el mensaje automático en ≤10 min y si se les
+  marcó en ≤15 min desde la apertura. **Días hábiles** (denominador de los puntos) aparte: lunes
+  a viernes sin **festivos** (precargados los de ley 2026-27).
 - **Cinco datos** (6.1), **motivo y fecha estimada de Largo plazo** (10.3) y **marca de cita
   calificada** (12.1, campo o etiqueta): se detectan por nombre y se marcan "detectado" hasta
   que alguien los guarda. Sin la marca de cita calificada la tasa de calificación sale "—".
@@ -872,9 +874,21 @@ entrega cuenta por etapa (el usuario es dueño de sus leads) y la recepción del
   **cerrados** (el día en curso no entra). Fuera de los leads nuevos, solo suman las llamadas
   registradas con el usuario del ejecutivo; el diagnóstico dice cuántas automáticas llegan sin usuario.
 - **Conversaciones ≥60 s** (candado del bono, 120/mes; en una semana, prorrateado por días hábiles).
-- **Contacto efectivo**: llamada de ≥90 s —del ejecutivo o la automática del CRM—, igual que en
-  Desempeño (`PC_EFECTIVO_SEG`); respuesta escrita del prospecto ≤48 h después de un toque suyo;
-  o una sesión que él agendó. Las conversaciones del candado siguen siendo de ≥60 s (7.3).
+- **Contacto efectivo** (Dirección, 13-oct-2026): llamada de ≥90 s —del ejecutivo o la automática
+  del CRM—, igual que en Desempeño (`PC_EFECTIVO_SEG`); respuesta escrita del prospecto a un toque
+  suyo **sin plazo**, mientras el lead siga siendo suyo (deja de contar si otro usuario tomó la
+  conversación); o una sesión que él agendó. **Por registro del ejecutivo**, en línea aparte
+  porque lo declara él y se audita con las grabaciones: la tarjeta movida después de su toque a
+  Contacto establecido o más adelante, a Largo plazo con motivo o a Descalificado por "no
+  alineado", o los cinco datos capturados. Las conversaciones del candado siguen en ≥60 s (7.3).
+- **Cita sin conversación registrada**: cita del ejecutivo sin llamada de ≥90 s ni respuesta
+  escrita en las 72 h previas. Cuenta igual, pero se lista: el manual exige confirmación verbal (6.1).
+- **Pidió otro momento** (4.4): etiqueta `recontacto 1`, `recontacto 2` o `recontacto 3` (el
+  intento en curso). Queda fuera del denominador de la conversión mientras tenga la etiqueta; al
+  tercero sin agendar pasa a Largo plazo con su motivo y se le quita.
+- **Leads que regresan** (10.4): contactos que ya existían y cuya **"Fecha último formulario"**
+  (con hora) cae en el periodo; cuentan como lead nuevo desde esa hora, salvo que el formulario
+  anterior ("Fecha formulario anterior", o el alta) sea de hace menos de 90 días.
 - **Conversión a entrega (10.1, 10.3)**: la tarjeta en Contacto establecido o más adelante,
   movida **después** del contacto y asignada a un asesor. Largo plazo con motivo, fecha y tarea
   abierta con fecha sale del denominador; sin ellos, es fallo. Contactos de <7 días sin cierre
@@ -899,9 +913,9 @@ cuántos aparecen en ese listado: si alguno falta, la cartera puede estar subcon
 curso, modo real) al abrir la pestaña, o con *Generar reporte*. Permiso del canal: `pc_view`
 ("Primer contacto" en Admin) para dárselo al ejecutivo o a Gerencia sin abrir Desempeño.
 
-**No mide todavía** (declarado): leads que regresan por re-envío de formulario (10.4; falta que
-GHL guarde la hora del último formulario), la transferencia en caliente de 15 min (el CRM no la
-distingue), la confirmación de seminarios y el monto del bono (es de Contabilidad).
+**No mide todavía** (declarado): la transferencia en caliente de 15 min (el CRM no la distingue),
+la confirmación de seminarios y el monto del bono (es de Contabilidad). Los leads que regresan
+se miden en cuanto exista el campo "Fecha último formulario" con hora.
 
 Pruebas: `node scripts/test-pc-report.js` (backend con GHL simulado) y el bloque
 `pc:modelo` de `scripts/smoke-ui.js`, con la semana sintética de `scripts/pc-fixture.js`
