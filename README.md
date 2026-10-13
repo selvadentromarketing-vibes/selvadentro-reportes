@@ -216,6 +216,11 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
   CPL · % trabajados · % contactados · CQL · MQL · **SQL+ · Zoom realizado · OPP · WON** · Costo por SQL ·
   Semáforo, y dos totales: **Total pagado** (solo campañas con inversión, con su costo por
   SQL) y todos los leads del rango.
+- **Nombres de los SQL+** (Dirección, 13-oct-2026): al pasar el mouse sobre la cifra de SQL+
+  (subrayado punteado) sale una nota con los nombres de esos leads, SQL Selvadentro primero;
+  en celular se abre al tocar la cifra. Vale en cualquier fila (campaña, conjunto, anuncio,
+  totales) y en la columna SQL+ por conjunto de Datos de campañas. Los nombres solo se
+  pintan en el navegador (`lqSqlpTip` / `lqTip`); no van al análisis con IA.
 - **Embudo canónico** Lead → CQL → MQL → SQL → Zoom realizado → OPP → WON, del cohorte de
   leads del rango y por lead (no por oportunidad). **Zoom realizado** = etapa "Zoom
   realizado" o una posterior del embudo (OPP y WON incluidos); las etapas de tour/visita y

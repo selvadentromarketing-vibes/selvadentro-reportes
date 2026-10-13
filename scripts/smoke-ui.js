@@ -371,6 +371,20 @@ const PORT = process.env.PORT || 8765;
       celda[nombre] = Object.fromEntries(H.map((h, i) => [h, td[i] ? td[i].textContent.trim() : '']));
     });
     r.semaforos = sem;
+    // Nota de SQL+: los nombres de esos leads al pasar el mouse sobre la cifra (Dirección, 13-oct-2026).
+    // Cuenta = la cifra, sin ensuciar el texto de la tabla, y se cierra al salir de la celda.
+    const tipDe = (td) => { td.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })); const b = document.querySelector('.lq-tip');
+      return b && !b.hidden ? b.querySelector('b').textContent + ' | ' + [...b.querySelectorAll('li')].map(li => li.textContent).join(', ') : 'sin nota'; };
+    const iSql = H.indexOf('SQL+');
+    const tr090 = filas('table.lq-combo').find(tr => tr.querySelector('td.name').textContent.includes('INVESTORS_MX_DYNAMIC-TOPLPS_090926'));
+    const td090 = tr090 && tr090.querySelectorAll('td')[iSql];
+    r.tipSql = td090 ? td090.textContent.trim() + ' · ' + tipDe(td090) : 'sin fila';
+    document.querySelector('table.lq-combo td.name').dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    r.tipSqlCierra = !!document.querySelector('.lq-tip') && document.querySelector('.lq-tip').hidden;
+    const trTodo = document.querySelector('table.lq-combo tr.lq-total2');
+    r.tipSqlTotal = trTodo ? trTodo.querySelectorAll('td')[iSql].textContent.trim() + ' · ' + tipDe(trTodo.querySelectorAll('td')[iSql]).split(' | ')[0] : '';
+    r.tipSqlCero = [...document.querySelectorAll('table.lq-combo td[data-lq-tip]')].every(td => Number(td.textContent.replace(/\D/g, '')) > 0)
+      && [...document.querySelectorAll('table.lq-combo tr')].every(tr => { const td = tr.querySelectorAll('td')[iSql]; return !td || td.textContent.trim() === '0' ? !(td && td.dataset.lqTip) : true; });
     // En exploración no hay acciones, ni "Qué hacer", ni alerta ⚠, ni reglas de acción.
     r.explSinAcciones = !document.querySelector('#lq-content .lq-sem-acc, #lq-content [data-pasos-btn], #lq-content .lq-recs, #lq-content .lq-alerta')
       && !/Subir presupuesto diario|Pausar la campaña|Revisar seguimiento antes de pausar|Optimizar (calidad|costo)|Qué hacer ▸/.test(t);
@@ -431,6 +445,7 @@ const PORT = process.env.PORT || 8765;
     const pE2 = pliegue('INVESTORS_US/CA_ESCAPE_100626');
     r.datosCrmCols = pE2 ? [...pE2.querySelectorAll('table.lq-pl-tabla thead th')].map(t => t.textContent.trim()).join('|') : '';
     r.datosCrmE2 = filasPl(pE2); r.datosCuadreE2 = cuadrePl(pE2);
+    r.tipSqlDatos = pE2 ? [...pE2.querySelectorAll('table.lq-pl-tabla td[data-lq-tip]')].map(td => td.textContent.trim() + ' · ' + tipDe(td).split(' | ')[0]).join(' | ') : '';
     const pE9 = pliegue('INVESTORS_US/CA_ESCAPE_090926');
     r.datosCrmE9 = filasPl(pE9); r.datosCuadreE9 = cuadrePl(pE9);
     // Con utm_content={{ad.id}}: el anuncio se identifica por su ID y se llenan sus columnas
@@ -608,6 +623,8 @@ const PORT = process.env.PORT || 8765;
     && lqx.semSeg === 'rojo:revisar rojo:pausar rojo:revisar rojo:mantener rojo:pausar'
     && lqx.sem === 'null gris*:mantener rojo:pausar verde:subir verde:subir amarillo:optimizar amarillo:optimizar rojo:pausar amarillo*:mantener verde*:mantener verde*:mantener rojo*:mantener'
     && lqx.tarjetas && lqx.columnas === 'Campaña|Inversión|Leads CRM|CPL|% trabajados|% contactados|CQL|MQL|SQL+|Zoom realizado|OPP|WON|Costo por SQL|Semáforo histórico'
+    && /^2 · 2 leads SQL\+ \| SQL( SD)?Lead \d+, SQL( SD)?Lead \d+$/.test(lqx.tipSql) && lqx.tipSqlCierra && lqx.tipSqlTotal === '11 · 11 leads SQL+' && lqx.tipSqlCero
+    && lqx.tipSqlDatos === '2 · 2 leads SQL+'
     && Object.entries(semEsp).every(([k, v]) => lqx.semaforos[k] === v)
     && lqx.explSinAcciones && lqx.cplSinAlerta && lqx.lecturaHist && lqx.avisoDatos
     && lqx.avisoExpl === 'Estás viendo 2026-W37–2026-W40 (07 sep – 04 oct 2026). La decisión de hoy está en Conclusiones.'

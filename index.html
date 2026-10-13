@@ -608,6 +608,14 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   .lq-rec-pie{ margin:4px 0 0; font-size:var(--fs-xs); color:var(--neutro); font-style:italic; }
   .lq-cps.verde{ color:#3f7d4e; font-weight:700; } .lq-cps.amarillo{ color:#9a7414; font-weight:700; } .lq-cps.rojo{ color:var(--rojo); font-weight:700; }
   .lq-sqlp{ font-weight:700; color:var(--verde-prof); }
+  td[data-lq-tip]{ cursor:help; text-decoration:underline dotted; text-underline-offset:3px; }
+  .lq-tip{ position:fixed; z-index:9000; max-width:320px; background:#fff; border:1px solid var(--linea); border-radius:var(--r-m);
+    padding:8px 12px; box-shadow:0 6px 20px rgba(46,51,43,.18); font-family:var(--sans); font-size:var(--fs-s); line-height:1.45; color:var(--texto); text-align:left; white-space:normal; pointer-events:none; }
+  .lq-tip ul{ list-style:none; margin:4px 0 0; padding:0; }
+  .lq-tip ul.dos{ column-count:2; column-gap:16px; }
+  .lq-tip li{ break-inside:avoid; }
+  .lq-tip-lv{ display:inline-block; min-width:42px; margin-right:6px; font-size:10px; font-weight:700; letter-spacing:.3px; color:var(--verde-prof); }
+  .lq-tip-lv.sqls{ color:var(--cobre-tx); }
   th.lq-sec, td.lq-sec{ color:var(--neutro); font-weight:400; }
   .lq-alerta{ color:var(--rojo); font-weight:700; cursor:help; }
   .lq-inf{ display:inline-block; font-size:var(--fs-xs); font-weight:600; color:#7a5a12; background:#f3ecd9; border-radius:var(--r-s); padding:1px 6px; margin-left:4px; cursor:help; }
@@ -4487,6 +4495,7 @@ function lqMetricas(arr, inv, res){
   inv = inv || 0;
   const re = arr.filter(l=>l.re).length, nNuevos = n - re;
   return { n, inv, res: res||0, cql:c.cql||0, mql:c.mql||0, sqlp,
+    sqlpL: arr.filter(l=>l.lv==="sql" || l.lv==="sqls"),  // los leads SQL+ (nombres en la nota de la celda)
     zoom: arr.filter(l=>l.zm).length, opp: arr.filter(l=>(l.o||0)>0).length, won: arr.filter(l=>(l.w||0)>0).length,
     tr: arr.filter(l=>l.tr).length, ct: arr.filter(l=>l.ct).length, inf: arr.filter(l=>l.inf).length,
     re, nNuevos,                                         // re-envíos de formulario y leads nuevos
@@ -5202,6 +5211,43 @@ function lqSemCell(sem, vacio, hist){
   if(!sem) return `<td class="lq-semcell"><span class="lq-sub" title="Sin inversión en el rango">—</span></td>`;
   return `<td class="lq-semcell" title="${escAttr(hist ? "Histórico del rango elegido: " + sem.regla : sem.regla)}"><span class="lq-sem ${sem.c}">${sem.txt}</span>${hist ? `<div class="lq-sem-hist">histórico</div>` : ""}</td>`;
 }
+// Nombres de los leads SQL+ de una celda, en una nota al pasar el mouse sobre la cifra (al
+// tocarla en celular) (Dirección, 13-oct-2026). SQL Selvadentro primero. La nota la pinta
+// lqTip; aquí solo va su contenido en data-lq-tip.
+const LQ_TIP_MAX = 30;
+function lqSqlpTip(L){
+  if(!L || !L.length) return "";
+  const ord = L.slice().sort((a,b)=>(LQ_RANK[a.lv]-LQ_RANK[b.lv]) || String(a.n||"").localeCompare(String(b.n||""), "es", { numeric:true }));
+  const li = ord.slice(0, LQ_TIP_MAX).map(l=>`<li><span class="lq-tip-lv ${l.lv}">${LQ_LEVEL_BY_ID[l.lv].short}</span>${escAttr(l.n||"(sin nombre)")}</li>`).join("")
+           + (ord.length > LQ_TIP_MAX ? `<li class="lq-sub">y ${ord.length-LQ_TIP_MAX} más</li>` : "");
+  return ` data-lq-tip="${escAttr(`<b>${lqPl(L.length, "lead")} SQL+</b><ul${ord.length > 12 ? ' class="dos"' : ""}>${li}</ul>`)}"`;
+}
+// La nota flotante de [data-lq-tip]. Va en el body con position:fixed: las tablas viven en
+// .table-scroll (overflow) y una nota dentro de la celda se recortaba. Con mouse aparece al
+// pasar; sin hover (celular) se abre y cierra al tocar la cifra, sin desplegar la fila.
+const lqTip = (()=>{
+  let box = null, ancla = null;
+  const sinHover = ()=> !!(window.matchMedia && matchMedia("(hover: none)").matches);
+  const ocultar = ()=>{ if(box) box.hidden = true; ancla = null; };
+  const mostrar = (el)=>{
+    if(!box){ box = document.createElement("div"); box.className = "lq-tip"; box.setAttribute("role", "tooltip"); document.body.appendChild(box); }
+    box.style.left = box.style.top = "0px";      // medir con todo el ancho disponible
+    box.innerHTML = el.dataset.lqTip; box.hidden = false; ancla = el;
+    const r = el.getBoundingClientRect(), vw = document.documentElement.clientWidth, vh = window.innerHeight;
+    const x = Math.min(Math.max(8, r.left + r.width/2 - box.offsetWidth/2), vw - box.offsetWidth - 8);
+    const y = r.bottom + 6 + box.offsetHeight > vh - 8 ? Math.max(8, r.top - 6 - box.offsetHeight) : r.bottom + 6;
+    box.style.left = x+"px"; box.style.top = y+"px";
+  };
+  const celda = (e)=> e.target.closest ? e.target.closest("[data-lq-tip]") : null;
+  document.addEventListener("mouseover", e=>{ if(sinHover()) return; const el = celda(e); if(el){ if(el !== ancla) mostrar(el); } else if(ancla) ocultar(); });
+  document.addEventListener("click", e=>{
+    if(!sinHover()) return;
+    const el = celda(e);
+    if(el){ e.stopPropagation(); if(el === ancla) ocultar(); else mostrar(el); } else if(ancla) ocultar();
+  }, true);
+  window.addEventListener("scroll", ()=>{ if(ancla) ocultar(); }, true);
+  return { ocultar };
+})();
 // Celdas de una fila. `o.sinSem` deja vacía la celda de semáforo (conjuntos y anuncios: el
 // semáforo es de la campaña); `o.total` pinta el costo por SQL contra la meta.
 function lqCeldas(m, keys, o){
@@ -5219,7 +5265,7 @@ function lqCeldas(m, keys, o){
       case "ct":   return `<td class="pct" title="${escAttr(LQ_CCOLS.ct.t)}">${m.n ? lqPct(m.ct, m.n) : "—"}</td>`;
       case "cql":  return `<td class="lq-sec">${cnt(m.cql)}</td>`;
       case "mql":  return `<td class="lq-sec">${cnt(m.mql)}</td>`;
-      case "sqlp": return `<td class="lq-sqlp">${m.sqlp.toLocaleString()}</td>`;
+      case "sqlp": return `<td class="lq-sqlp"${lqSqlpTip(m.sqlpL)}>${m.sqlp.toLocaleString()}</td>`;
       case "zoom": return `<td>${cnt(m.zoom)}</td>`;
       case "opp":  return `<td>${cnt(m.opp)}</td>`;
       case "won":  return `<td>${cnt(m.won)}</td>`;
@@ -5332,9 +5378,9 @@ function lqQualityTree(agg, leads, rangoSet, rango){
 function lqAdsCrmTabla(C, m, ctr, cpc){
   const meta = C.plat === "Meta";
   const nivel = meta ? "conjunto" : "grupo";
-  const crm = (leads)=>{ const x = lqMetricas(leads, 0, 0); return { n:x.n, sqlp:x.sqlp, zoom:x.zoom }; };
+  const crm = (leads)=>{ const x = lqMetricas(leads, 0, 0); return { n:x.n, sqlp:x.sqlp, sqlpL:x.sqlpL, zoom:x.zoom }; };
   const cplCrm = (sp, n)=> n && sp > 0 ? lqMXN(sp/n) : "—";
-  const celdasCrm = (sp, x)=> `<td>${x.n}</td><td>${x.sqlp}</td><td>${x.zoom}</td><td>${cplCrm(sp, x.n)}</td>`;
+  const celdasCrm = (sp, x)=> `<td>${x.n}</td><td${lqSqlpTip(x.sqlpL)}>${x.sqlp}</td><td>${x.zoom}</td><td>${cplCrm(sp, x.n)}</td>`;
   const sinDato = (t)=> `<td class="lq-nd" title="${escAttr(t)}">—</td>`.repeat(3) + `<td class="lq-nd" title="${escAttr(t)}">—</td>`;
   const plat = (x)=> escAttr(lqPlats([...x.pps]) || "");
   const resTxt = (x)=> x ? (Math.round(x*10)/10).toLocaleString("en-US") : "—";   // Google da conversiones con decimales
@@ -6137,6 +6183,7 @@ function lqRender(){
   }
 
   document.getElementById("lq-content").innerHTML = out;
+  lqTip.ocultar();     // su celda ya no existe
   if(SUB==="combinado") setTimeout(lqDrawCharts, 30);
   const iaBtn=document.getElementById("lq-ia-btn");
   if(iaBtn) iaBtn.onclick=()=>lqAnalizar(!!lqState.ia);   // "Volver a analizar" salta el cache
