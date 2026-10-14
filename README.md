@@ -653,9 +653,9 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
   - **Med. 1er llamada** (`slaCall`): hasta el primer *intento* de llamada, conecte o no.
     Siempre columna aparte de la mediana de 1er toque (con las reglas v1.1, solo leads en
     horario, igual que esa). En las tarjetas de arriba, si en cada lead el 1er toque fue su
-    1er llamada (misma cifra y misma N), van juntas en una sola: "Med. 1er toque manual =
+    1er llamada (misma cifra y misma N), van juntas en una sola: "P80 1er toque manual =
     1er intento de llamada" (Dirección General, 14-oct-2026); se separan en cuanto algún
-    lead recibe primero un WhatsApp, SMS o correo.
+    lead recibe primero un WhatsApp, SMS o correo, o se queda sin toque.
   - **Llamadas por lead · 24 h / total** (`cl.h24`, `cl.n`): el volumen de marcación por
     persona, que antes solo existía agregado.
   - **Duración**: el backend descartaba toda duración igual a 0, así que una llamada que no
@@ -681,6 +681,19 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
     campaña/canal/pipeline y un **"ver leads"** con, por lead: entrada, horario, asesor,
     hora y canal del 1er toque, tiempo, si entra en la mediana (y por qué no) y contacto
     efectivo. "≤15m/≤60m" dicen en su ayuda sobre cuántos leads se calculan.
+  - **P80 en vez de mediana para el 1er toque** (Dirección General, 14-oct-2026: "no lo
+    quiero maquillar, lo quiero exigir"). La mediana garantizaba a la mitad de los leads: un
+    rango salía con "2 min" de mediana y 52% de Velocidad (un 3), porque 6 de 11 leads rápidos
+    bastaban y el resto podía tardar horas. Tarjetas y tabla por asesor muestran ahora el
+    **P80** (`slaPctl`, rango más cercano): el tiempo en que se tocó al 80% de los leads, el
+    mismo 80% que pide el 5 de Velocidad — P80 ≤ 5 min ⇔ al menos el 80% en ≤5 min. Respeta el
+    horario igual que la mediana (con v1.1, solo leads que entraron en horario; fuera de horario
+    sigue su meta de las 11:00 en su propia tarjeta). Diferencia clave: un lead **sin toque ya no
+    sale de la base**, entra como el peor tiempo (`slaTToque` → `Infinity`; si son más del 20%
+    el P80 dice "sin toque"); tocado antes de su alta = 0 min, cumplido como en Velocidad. El P80
+    de 1ª llamada cuenta solo leads marcados (los demás van en "Sin marcar"). La mediana se queda
+    solo en contacto efectivo (depende de que el lead responda) y en días a la cita. No cambia
+    ninguna nota: Velocidad sigue siendo el % que cumplió.
   - **Notas en las tarjetas** (Dirección, 13-oct-2026): al pasar el mouse sobre cada
     tarjeta de Desempeño (o tocarla en celular) sale qué cuenta exactamente, sobre qué base,
     qué queda fuera y por qué, con los números del rango (`lqNota`, misma nota flotante que
