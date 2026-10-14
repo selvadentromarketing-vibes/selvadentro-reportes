@@ -6446,7 +6446,7 @@ async function showLQ(){
 // Reporte de disciplina comercial directo del CRM: SLA de primera respuesta por
 // asesor y canal, leads >7 días sin toque, trabajados vs contactados efectivos,
 // citas y show rate, y OPPs/WONs por asesor. Con nombres, acumulable por semanas.
-const SLA_AGG_KEY = "sla:agg:v16";   // v16: el reloj arranca siempre en el alta del lead (sin traspaso a ventas)   // v15: si el asesor tocó al lead antes del traspaso a ventas, su reloj arranca en el alta   // v14: citas agendadas en el periodo por fecha de agendado; base de agendamiento con quien agendó sin escribir   // v13: citas del periodo por fecha de la cita y su asistencia (show rate)   // v12: telefonía por lead (canal del 1er toque, intentos, desenlace, duración conocida)   // v11: spec v1.1 (filtros de medición: inválidos, brokers, revertidas, horario, sin llamada, contacto efectivo)   // v10: calificación por reglas (la etapa manda), no el campo manual vacío   // v9: razón de descarte por lead   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
+const SLA_AGG_KEY = "sla:agg:v17";   // v17: broker = cualquier etiqueta que empiece con "broker" (R-03)   // v16: el reloj arranca siempre en el alta del lead (sin traspaso a ventas)   // v15: si el asesor tocó al lead antes del traspaso a ventas, su reloj arranca en el alta   // v14: citas agendadas en el periodo por fecha de agendado; base de agendamiento con quien agendó sin escribir   // v13: citas del periodo por fecha de la cita y su asistencia (show rate)   // v12: telefonía por lead (canal del 1er toque, intentos, desenlace, duración conocida)   // v11: spec v1.1 (filtros de medición: inválidos, brokers, revertidas, horario, sin llamada, contacto efectivo)   // v10: calificación por reglas (la etapa manda), no el campo manual vacío   // v9: razón de descarte por lead   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
 const SLA_STALE_MS = 7*86400e3; // "sin toque" = 7 días sin mensaje
 const slaState = { built:false, agg:null, syncing:false, asesor:"", camp:"" };   // asesor/camp "" = sin filtro
 
@@ -6596,7 +6596,8 @@ const SLA_NC_KEY = "sla:nocall:v1";          // primera vez que cada etiqueta "s
 const SLA_V11_PENDIENTE_MS = 24*3600e3;      // Descalificado sin causa o evidencia: activo 24 h
 const slaV11 = (per)=> !!(per && per.fin && per.fin >= SLA_V11_DESDE);
 const slaCompacto = (s)=> slaNorm(s).replace(/[^a-z0-9]/g,"");
-const slaTagTiene = (tags, t)=> (Array.isArray(tags) ? tags : String(tags||"").split(",")).some(x=>String(x).trim()===t);
+const slaTagsArr = (tags)=> Array.isArray(tags) ? tags : String(tags||"").split(",");
+const slaTagTiene = (tags, t)=> slaTagsArr(tags).some(x=>String(x).trim()===t);
 // Campos de la spec §2 detectados por nombre (o por su fieldKey), sin mayúsculas, acentos
 // ni espacios. null = el campo no existe en el CRM y la pantalla lo dice.
 function slaCamposV11(fieldsArr, oppFieldsArr){
@@ -6641,7 +6642,9 @@ function slaDisposiciones(contactsArr, oppsArr, usersMap, pipesArr, C, now){
   const ids = new Set([...Object.keys(tagsDe), ...Object.keys(porCt)]);
   ids.forEach(id=>{
     const tags = tagsDe[id] || [], ops = porCt[id] || [];
-    const tagB = slaTagTiene(tags, SLA_V11_TAGS.broker), pipeB = ops.some(o=>esExp(o.p));
+    // R-03 con cualquier etiqueta que empiece con "broker" (broker, broker-client,
+    // broker-signup-web…), la misma regla de Calidad de Leads (Dirección, 14-oct-2026).
+    const tagB = slaTagsArr(tags).find(lqTagBroker) || "", pipeB = ops.some(o=>esExp(o.p));
     // Oportunidad de la descalificación: la más reciente con fecha, causa o en Descalificado.
     let dq = null;
     ops.forEach(o=>{
@@ -6654,7 +6657,8 @@ function slaDisposiciones(contactsArr, oppsArr, usersMap, pipesArr, C, now){
       const c = { enDesc, causaTxt: causa, evid: val(o,C.evid), asesorTxt: val(o,C.asesor), fecha, fechaOrigen: fCampo ? "campo" : fecha ? "etapa" : "" };
       if(!dq || (fecha||0) > (dq.fecha||0)) dq = c;
     });
-    const d = { tipo:"", brokerPor: tagB&&pipeB ? "etiqueta broker y pipeline de Expansión" : tagB ? "etiqueta broker" : pipeB ? "pipeline Brokers — Expansión y activación" : "",
+    const etqB = tagB ? `etiqueta ${String(tagB).trim()}` : "";
+    const d = { tipo:"", brokerPor: tagB&&pipeB ? `${etqB} y pipeline de Expansión` : tagB ? etqB : pipeB ? "pipeline Brokers — Expansión y activación" : "",
       causa: dq ? (INV.get(slaCompacto(dq.causaTxt)) || REAL.get(slaCompacto(dq.causaTxt)) || dq.causaTxt) : "",
       grupo: dq && dq.causaTxt ? (INV.has(slaCompacto(dq.causaTxt)) ? "invalido" : REAL.has(slaCompacto(dq.causaTxt)) ? "real" : "desconocida") : "",
       evid: dq ? dq.evid : "", fecha: dq ? dq.fecha : null, fechaOrigen: dq ? dq.fechaOrigen : "",
@@ -6946,7 +6950,7 @@ function slaBannerV11(agg){
     ? `<div class="lq-meth">ℹ Este periodo terminó antes del <b>${escAttr(slaFechaCorta(SLA_V11_DESDE))}</b>: se mide con las reglas anteriores. Las <b>Reglas de medición vigentes desde el 1 de octubre de 2026</b> no se aplican hacia atrás.</div>` : "";
   const n = (x,s,p)=> `<b>${x}</b> ${x===1?s:p}`;
   const campo = (k, lbl)=> V.campos[k] ? `<span style="color:var(--verde-ok-tx)">✓ ${escAttr(lbl)}</span>` : `<span style="color:var(--rojo);font-weight:700">✗ ${escAttr(lbl)} — no existe en el CRM</span>`;
-  const tag = (k)=> `<span style="${V.tagsVistos[k]?"color:var(--verde-ok-tx)":"color:var(--neutro)"}">${V.tagsVistos[k]?"✓":"·"} ${escAttr(SLA_V11_TAGS[k])} (${V.tagsVistos[k]})</span>`;
+  const tag = (k)=> `<span style="${V.tagsVistos[k]?"color:var(--verde-ok-tx)":"color:var(--neutro)"}">${V.tagsVistos[k]?"✓":"·"} ${escAttr(k==="broker" ? "broker… (cualquiera que empiece así)" : SLA_V11_TAGS[k])} (${V.tagsVistos[k]})</span>`;
   return `<div class="lq-meth" style="border-color:var(--olivo)"><b style="font-size:var(--fs-md)">Reglas de medición vigentes desde el 1 de octubre de 2026</b>
     <span class="lq-sub">· Change Spec v1.1${V.cruza?` · el rango incluye días anteriores al ${escAttr(slaFechaCorta(SLA_V11_DESDE))} y se mide completo con estas reglas`:""}</span>
     <br>Fuera de la nota: ${n(V.invalidos.length,"lead inválido","leads inválidos")} y ${n(V.brokers.length,"error de asignación","errores de asignación")} — no cuentan ni a favor ni en contra.
@@ -7466,7 +7470,7 @@ function slaResumenV11({ contactsArr, tagged, disp, esTest, rangoSet, per, C11, 
     if(d.fecha ? (d.fecha < t0 || d.fecha > t1) : !enUniverso) return;
     revertidas.push({ id:c.id, n:c.n, u:c.u||"", asesorU:d.asesorU, asesorTxt:d.asesorTxt, causa:d.causa, evid:d.evid, fecha:d.fecha, enUniverso });
   });
-  const tagsVistos = {}; Object.entries(SLA_V11_TAGS).forEach(([k,t])=>{ tagsVistos[k] = enRango.filter(c=>slaTagTiene(c.tags, t)).length; });
+  const tagsVistos = {}; Object.entries(SLA_V11_TAGS).forEach(([k,t])=>{ tagsVistos[k] = enRango.filter(c=> k==="broker" ? slaTagsArr(c.tags).some(lqTagBroker) : slaTagTiene(c.tags, t)).length; });
   return {
     desde: SLA_V11_DESDE, cruza: !!(per.ini && per.ini < SLA_V11_DESDE),
     campos: Object.fromEntries(Object.entries(C11).map(([k,f])=>[k, f ? f.name : null])),

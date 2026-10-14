@@ -292,7 +292,7 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
   teléfono, ahora contados en el rango que se lee y no en las 12 semanas sincronizadas. Al
   pasar el mouse sobre "N leads de brokers" salen sus nombres y cuántos leads tendría cada
   fila con ellos → sin ellos, y "Todos los leads del rango" (`lqNotaBrokers`), para auditar.
-  Desempeño de Ventas tiene su propia regla de brokers (etiqueta exacta `broker`, spec v1.1).
+  Desempeño de Ventas usa la misma regla de etiqueta (R-03, abajo) con su propio pipeline.
 - **Aviso de leads sin campaña**: cuenta exactamente los leads de las filas
   "(sin campaña atribuida)" de la tabla (antes contaba aparte los de Meta/Google con
   utm_campaign vacío y no cuadraba: decía 1 de 60 con 10 en la tabla).
@@ -802,8 +802,10 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
       etiquetados de antes del rango (acción `tagged`). Lo que el asesor hizo antes cuenta
       en su nota (`uNota`); como volumen el lead aparece con su dueño actual (Rescate) en
       "Fuera del equipo de ventas".
-    - **R-03**: etiqueta `broker` o **cualquier** oportunidad en Brokers — Expansión y
-      activación (antes: solo si TODAS vivían ahí) → "Error de asignación", fuera de todo.
+    - **R-03**: **cualquier etiqueta que empiece con "broker"** (`broker`, `broker-client`,
+      `broker-signup-web`…; hasta el 14-oct-2026 solo `broker` exacta, `sla:agg:v17`) o
+      **cualquier** oportunidad en Brokers — Expansión y activación (antes: solo si TODAS
+      vivían ahí) → "Error de asignación", fuera de todo. La lista dice qué etiqueta lo sacó.
     - **R-04**: horario de atención 09:00:00–18:59:59 hora Tulum; SLA 5 min en horario,
       antes de las 11:00 del siguiente día de servicio fuera de horario. Los días de
       servicio son un parámetro en Metas → Rúbrica de desempeño (`selvadentro:rubrica`,

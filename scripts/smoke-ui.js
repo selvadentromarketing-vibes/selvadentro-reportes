@@ -253,6 +253,8 @@ const PORT = process.env.PORT || 8765;
     lead('brk', 'u1', '2026-10-05T13:00:00', { tags: ['broker'] });
     lead('brk2', 'u2', '2026-10-05T13:30:00');
     opp('brk2', 'u2', 'sE', {}, 'p2');
+    // 4c · alta a mano con una etiqueta que EMPIEZA con broker (14-oct-2026): también fuera
+    lead('brk3', 'u3', '2026-10-05T14:00:00', { tags: ['Broker-signup-web'] });
     // 5 · entra 22:10, primer WhatsApp manual 10:40 del día siguiente
     lead('noche', 'u2', '2026-10-05T22:10:00', {}, { foM: Z('2026-10-06T10:40:00') });
     // 6 · entra 18:59, primer toque 19:07
@@ -285,7 +287,8 @@ const PORT = process.env.PORT || 8765;
     r.c2 = !!(L.real && L.real.dq && L.real.dq.tipo === 'real' && disp.real.cut === Z('2026-10-06T16:00:00'));
     r.c3 = !!(L.rev && L.rev.uNota === 'u1' && L.rev.u === 'ces' && V.revertidas.some(x => x.id === 'rev' && x.asesorU === 'u1')) && /Descalificaciones revertidas: 1/.test(txt) && /Incluye 1 descalificación revertida, hoy en Rescate/.test(txt);
     r.c3b = !!(L.pend && L.pend.dq && L.pend.dq.tipo === 'pendiente') && V.pendientes === 1;
-    r.c4 = !L.brk && !L.brk2 && V.brokers.map(x => x.id).sort().join() === 'brk,brk2';
+    r.c4 = !L.brk && !L.brk2 && !L.brk3 && V.brokers.map(x => x.id).sort().join() === 'brk,brk2,brk3'
+      && (V.brokers.find(x => x.id === 'brk3') || {}).por === 'etiqueta Broker-signup-web';
     r.c5 = !!(L.noche && L.noche.fh && L.noche.velOk) && !agg.leads.filter(l => !l.fh).some(l => l.id === 'noche');
     r.c6 = !!(L.tarde && !L.tarde.fh && L.tarde.velOk === false);
     r.c7 = !!(L.ncm && L.ncm.nc && L.ncm.nc[0].estado === 'valida' && L.ncm.breakup === true);
