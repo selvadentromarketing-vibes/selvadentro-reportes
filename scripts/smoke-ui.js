@@ -865,7 +865,7 @@ const PORT = process.env.PORT || 8765;
     r.agendadas = agg.citasP.agendadas.length;
     r.ok = R.tot === 8 && R.asC === 1 && R.asE === 2 && R.ns === 2 && R.can === 1 && R.sinreg === 1 && R.fut === 1
       && r.agendadas === 2 && !!celdas && celdas.slice(1).join('|') === '2|8|1|2|2|60% (3 de 5)|1|1|1' && /3 de 5/.test(txt)
-      && !/CITAS AGENDADAS EN EL PERIODO/i.test(txt);   // la tarjeta salió (14-oct-2026): van en la tabla, columna Agendadas
+      && /2\s*\n?\s*CITAS AGENDADAS EN EL PERIODO/i.test(txt.replace(/\n+/g, '\n'));   // junto a la tasa de agendamiento
     return r;
   });
   console.log('[show rate] citas del periodo', JSON.stringify(show));
@@ -963,7 +963,7 @@ const PORT = process.env.PORT || 8765;
     r.conNota = !r.sinNota.length;
     r.mediana = nota(/^P80 1er toque/);
     r.sla5 = nota(/^Velocidad · cumplieron su SLA/);
-    // Tarjetas (14-oct-2026): 7, en este orden; sin la de 60 s ni la de 1a llamada.
+    // Tarjetas (14-oct-2026): 8, en este orden; sin la de 60 s ni la de 1a llamada; citas agendadas junto a la tasa.
     r.grupos = [...document.querySelectorAll('#view-sla .crm-kpis.k4')].map(g => g.children.length).join('+');
     r.tarjetas = [...document.querySelectorAll('#view-sla .crm-kpis.k4 .crm-kpi')].map(k => k.querySelector('.k-lbl').textContent.split(' · ')[0]).join('|');
     r.det = slaDetalleLeads(agg.leads, agg.v11, (u) => users[u] || '');
@@ -971,7 +971,7 @@ const PORT = process.env.PORT || 8765;
     r.ok = r.antes && r.conNota
       // P80 (14-oct-2026): en horario, 3 · 5 · 122 min y uno sin toque → el 4º de 4 es "sin toque"
       && r.valor === 'sin toque' && /1 sin toque/.test(r.sub) && r.tarjeta60 === ''
-      && r.grupos === '4+3' && r.tarjetas === 'Leads en el rango|Velocidad|P80 1er toque|Fuera de horario atendidos antes de las 11:00|Contactados efectivos|Tasa de agendamiento|Show rate de citas'
+      && r.grupos === '4+4' && r.tarjetas === 'Leads en el rango|Velocidad|P80 1er toque|Fuera de horario atendidos antes de las 11:00|Contactados efectivos|Tasa de agendamiento|Citas agendadas|Show rate de citas'
       && /Base: 4 de 5 leads\. Fuera de horario, 1: no entran .*Sin 1er toque, 1: entran como el peor tiempo/.test(r.mediana)
       && /Sale "sin toque"/.test(r.mediana) && /mismo 80% que pide el 5 de Velocidad/.test(r.mediana)
       && !/traspaso/.test(r.mediana)

@@ -7845,10 +7845,9 @@ function slaRender(){
   const nEf = conDatos.filter(l=>l.fi).length, noAd = conDatos.filter(l=>l.ad).length;
   const verLeads = "Lead por lead: «ver leads» en las tablas de abajo.";
   // Tarjetas (Dirección General, 14-oct-2026): eran 16 y varias no decían nada del asesor. Quedan
-  // 7: volumen, velocidad (la nota, su P80 en horario y fuera de horario) y resultado (contacto
-  // efectivo, agendamiento, show). La meta de velocidad es 5 min: la de 60 s se retiró. Llamada
-  // conectada, ≤15/≤60 min, mediana de efectivo y P80 de 1a llamada siguen en la tabla por asesor;
-  // las citas agendadas, en "Citas del periodo".
+  // 8: volumen, velocidad (la nota, su P80 en horario y fuera de horario) y resultado (contacto
+  // efectivo, tasa de agendamiento con las citas agendadas al lado, show). La meta de velocidad es 5 min: la de 60 s se retiró. Llamada
+  // conectada, ≤15/≤60 min, mediana de efectivo y P80 de 1a llamada siguen en la tabla por asesor.
   res += `<div class="kpi-grupo">Leads y velocidad · meta 5 min</div><div class="crm-kpis k4">
     ${kpi(leads.length.toLocaleString(),"Leads en el rango", lqNota(
       `<b>Leads creados en las semanas del rango</b> (hora Tulum), estén en el pipeline que estén: el universo lo define el dueño, no el pipeline.${fCamp ? " Solo la campaña de origen elegida." : ""}`,
@@ -7875,6 +7874,13 @@ function slaRender(){
     ${kpiND(agN,agB.length,"Tasa de agendamiento · con cita ÷ contactados efectivos o que agendaron",null,null, lqNota(
       `<b>Leads del rango que tuvieron contacto efectivo o agendaron (${agB.length}): cuántos tienen al menos una cita</b> en el CRM, de cualquier estatus (${agN}). Quien agenda por el link sin escribir también cuenta.`,
       noAd ? `No entran los leads cuyas citas no se pudieron leer (${noAd}).` : ""))}
+    ${CP ? kpi(CP.agendadas.length.toLocaleString(), "Citas agendadas en el periodo · por fecha en que se agendaron, de cualquier lead", lqNota(
+      `<b>Citas que se agendaron dentro del rango</b>, por la fecha en que se agendaron (sea cual sea la fecha de la cita) y de cualquier lead, también de los que entraron antes del rango. Las canceladas no cuentan.`,
+      `Junto a la tasa de agendamiento (Dirección General, 14-oct-2026): la tasa dice qué proporción de leads agenda; esta cifra, cuántas citas salieron. Por asesora: tabla "Citas del periodo", columna Agendadas.`,
+      CP.sinFechaAg ? `Citas del CRM sin fecha de agendado (no se pueden ubicar en un periodo): ${CP.sinFechaAg}.` : ""))
+        : kpi(apTot.toLocaleString(), "Citas agendadas · de los leads que entraron en el rango", lqNota(
+      `<b>Citas en el CRM de los leads que entraron en el rango</b>, de cualquier estatus. El CRM no dio las citas del periodo por fecha de agendado.`,
+      sinCitas ? `No entran los leads cuyas citas no se pudieron leer (${sinCitas}).` : ""))}
     ${CPres ? kpiND(CPres.as, CPres.den, `Show rate · citas del periodo por fecha de la cita${CPres.asE||CPres.nsE?` · ${CPres.asE+CPres.nsE} por etapa del pipeline`:""}${CPres.sinreg?` · ${CPres.sinreg} pasada${CPres.sinreg===1?"":"s"} sin registrar asistencia`:""}`, "meta 75%", CPres.den ? CPres.as/CPres.den>=0.75 : null, lqNota(
               `<b>Asistencia a las citas con fecha dentro del rango</b>, de cualquier lead: asistió ÷ (asistió + no show) = ${CPres.as} ÷ ${CPres.den}. Meta 75%.`,
               `Asistió: ${CPres.asC} por el calendario + ${CPres.asE} por la etapa del pipeline (Zoom o Tour realizado, o una etapa posterior). No show: ${CPres.nsC} por el calendario + ${CPres.nsE} por la etapa.`,
@@ -8315,7 +8321,7 @@ function slaRender(){
     <br><b>Riesgo</b> · <b>Lead sin toque:</b> lead activo con más de 7 días sin toque manual del asesor y sin respuesta del lead — la secuencia
     automática no cuenta como toque (si contara, un lead abandonado con drip activo nunca aparecería en la lista) ·
     <b>Tareas programadas · en fecha · vencidas:</b> tareas del CRM del asesor; cerradas en o antes de su fecha; abiertas ya pasada su fecha — el % nunca se lee sin el conteo.
-    <br><b>Embudo y resultado</b> · <b>Agendadas</b> (tabla de citas del periodo): citas que se agendaron en el rango, de cualquier lead, sin canceladas · <b>Tasa de agendamiento:</b> de los leads que entraron en el rango con contacto efectivo o con cita, cuántos tienen cita (quien agenda por el link sin escribir también cuenta) ·
+    <br><b>Embudo y resultado</b> · <b>Citas agendadas en el periodo</b> (tarjeta, y columna Agendadas de la tabla de citas): citas que se agendaron en el rango, de cualquier lead, sin canceladas · <b>Tasa de agendamiento:</b> de los leads que entraron en el rango con contacto efectivo o con cita, cuántos tienen cita (quien agenda por el link sin escribir también cuenta) ·
     <b>Show rate:</b> asistió ÷ (asistió + no show) de las citas con fecha en el rango, de cualquier lead; la asistencia sale del calendario y, si la cita pasó sin estatus final, de la etapa del lead (Zoom/Tour realizado o posterior = asistió; no show / re agendar = no asistió) · meta <b>75%</b> ·
     <b>OPP:</b> registros del pipeline que alcanzaron la etapa "Seguimiento de OPP" o posterior (Seguimiento de OPP, Carta oferta, Apartado, WON), por asesor asignado. Una cotización enviada todavía no cuenta como OPP. Cohorte: creados en el rango, en su etapa de hoy ·
     <b>WONs:</b> ventas cuyo cierre cayó en el rango, aunque la oportunidad se haya creado antes (se buscan hasta ~18 meses atrás) ·

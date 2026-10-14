@@ -692,15 +692,15 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
     de 1ª llamada cuenta solo leads marcados (los demás van en "Sin marcar"). La mediana se queda
     solo en contacto efectivo (depende de que el lead responda) y en días a la cita. No cambia
     ninguna nota: Velocidad sigue siendo el % que cumplió.
-  - **Tarjetas: de 16 a 7** (Dirección General, 14-oct-2026: "son muchas y algunas son
+  - **Tarjetas: de 16 a 8** (Dirección General, 14-oct-2026: "son muchas y algunas son
     irrelevantes"; "la meta de velocidad es 5 min, olvida lo de los 60 s"). Dos grupos de 4
     columnas (`.crm-kpis.k4`, 2 en celular): **Leads y velocidad** — Leads en el rango ·
     Velocidad (% que cumplió su SLA) · P80 1er toque · Fuera de horario antes de las 11:00 — y
-    **Resultado** — Contactados efectivos · Tasa de agendamiento · Show rate. Salieron: 1er
+    **Resultado** — Contactados efectivos · Tasa de agendamiento · Citas agendadas en el periodo
+    (pedida "al lado" de la tasa) · Show rate. Salieron: 1er
     toque ≤60 s (meta retirada), con 1er toque manual, con llamada conectada, contacto efectivo
     ≤15/≤60 min, mediana de contacto efectivo, P80 de 1ª llamada (siguen como columnas de la
-    tabla por asesor), citas agendadas (columna "Agendadas" de Citas del periodo) y días a la
-    cita (ya no se muestra en ninguna parte). La ficha de cada asesora no cambió.
+    tabla por asesor) y días a la cita (ya no se muestra en ninguna parte). La ficha de cada asesora no cambió.
   - **Tres bloques** (Dirección General, 14-oct-2026). La pantalla era una lista de ~20 secciones
     que mezclaba evaluar, actuar y auditar. Ahora: **Resumen** (tarjetas, ranking y ficha, sin
     cambios), **Qué corregir hoy** (solo listas con nombre) y **Detalle** plegado (tablas por
