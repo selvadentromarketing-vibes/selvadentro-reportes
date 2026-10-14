@@ -291,6 +291,8 @@ const PORT = process.env.PORT || 8765;
     lead('brk', 'u1', '2026-10-05T13:00:00', { tags: ['broker'] });
     lead('brk2', 'u2', '2026-10-05T13:30:00');
     opp('brk2', 'u2', 'sE', {}, 'p2');
+    // 4c · alta a mano con una etiqueta que EMPIEZA con broker (14-oct-2026): también fuera
+    lead('brk3', 'u3', '2026-10-05T14:00:00', { tags: ['Broker-signup-web'] });
     // 5 · entra 22:10, primer WhatsApp manual 10:40 del día siguiente
     lead('noche', 'u2', '2026-10-05T22:10:00', {}, { foM: Z('2026-10-06T10:40:00') });
     // 6 · entra 18:59, primer toque 19:07
@@ -323,7 +325,8 @@ const PORT = process.env.PORT || 8765;
     r.c2 = !!(L.real && L.real.dq && L.real.dq.tipo === 'real' && disp.real.cut === Z('2026-10-06T16:00:00'));
     r.c3 = !!(L.rev && L.rev.uNota === 'u1' && L.rev.u === 'ces' && V.revertidas.some(x => x.id === 'rev' && x.asesorU === 'u1')) && /Descalificaciones revertidas: 1/.test(txt) && /Incluye 1 descalificación revertida, hoy en Rescate/.test(txt);
     r.c3b = !!(L.pend && L.pend.dq && L.pend.dq.tipo === 'pendiente') && V.pendientes === 1;
-    r.c4 = !L.brk && !L.brk2 && V.brokers.map(x => x.id).sort().join() === 'brk,brk2';
+    r.c4 = !L.brk && !L.brk2 && !L.brk3 && V.brokers.map(x => x.id).sort().join() === 'brk,brk2,brk3'
+      && (V.brokers.find(x => x.id === 'brk3') || {}).por === 'etiqueta Broker-signup-web';
     r.c5 = !!(L.noche && L.noche.fh && L.noche.velOk) && !agg.leads.filter(l => !l.fh).some(l => l.id === 'noche');
     r.c6 = !!(L.tarde && !L.tarde.fh && L.tarde.velOk === false);
     r.c7 = !!(L.ncm && L.ncm.nc && L.ncm.nc[0].estado === 'valida' && L.ncm.breakup === true);
@@ -409,6 +412,20 @@ const PORT = process.env.PORT || 8765;
       celda[nombre] = Object.fromEntries(H.map((h, i) => [h, td[i] ? td[i].textContent.trim() : '']));
     });
     r.semaforos = sem;
+    // Nota de SQL+: los nombres de esos leads al pasar el mouse sobre la cifra (Dirección, 13-oct-2026).
+    // Cuenta = la cifra, sin ensuciar el texto de la tabla, y se cierra al salir de la celda.
+    const tipDe = (td) => { td.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })); const b = document.querySelector('.lq-tip');
+      return b && !b.hidden ? b.querySelector('b').textContent + ' | ' + [...b.querySelectorAll('li')].map(li => li.textContent).join(', ') : 'sin nota'; };
+    const iSql = H.indexOf('SQL+');
+    const tr090 = filas('table.lq-combo').find(tr => tr.querySelector('td.name').textContent.includes('INVESTORS_MX_DYNAMIC-TOPLPS_090926'));
+    const td090 = tr090 && tr090.querySelectorAll('td')[iSql];
+    r.tipSql = td090 ? td090.textContent.trim() + ' · ' + tipDe(td090) : 'sin fila';
+    document.querySelector('table.lq-combo td.name').dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    r.tipSqlCierra = !!document.querySelector('.lq-tip') && document.querySelector('.lq-tip').hidden;
+    const trTodo = document.querySelector('table.lq-combo tr.lq-total2');
+    r.tipSqlTotal = trTodo ? trTodo.querySelectorAll('td')[iSql].textContent.trim() + ' · ' + tipDe(trTodo.querySelectorAll('td')[iSql]).split(' | ')[0] : '';
+    r.tipSqlCero = [...document.querySelectorAll('table.lq-combo td[data-lq-tip]')].every(td => Number(td.textContent.replace(/\D/g, '')) > 0)
+      && [...document.querySelectorAll('table.lq-combo tr')].every(tr => { const td = tr.querySelectorAll('td')[iSql]; return !td || td.textContent.trim() === '0' ? !(td && td.dataset.lqTip) : true; });
     // En exploración no hay acciones, ni "Qué hacer", ni alerta ⚠, ni reglas de acción.
     r.explSinAcciones = !document.querySelector('#lq-content .lq-sem-acc, #lq-content [data-pasos-btn], #lq-content .lq-recs, #lq-content .lq-alerta')
       && !/Subir presupuesto diario|Pausar la campaña|Revisar seguimiento antes de pausar|Optimizar (calidad|costo)|Qué hacer ▸/.test(t);
@@ -469,6 +486,7 @@ const PORT = process.env.PORT || 8765;
     const pE2 = pliegue('INVESTORS_US/CA_ESCAPE_100626');
     r.datosCrmCols = pE2 ? [...pE2.querySelectorAll('table.lq-pl-tabla thead th')].map(t => t.textContent.trim()).join('|') : '';
     r.datosCrmE2 = filasPl(pE2); r.datosCuadreE2 = cuadrePl(pE2);
+    r.tipSqlDatos = pE2 ? [...pE2.querySelectorAll('table.lq-pl-tabla td[data-lq-tip]')].map(td => td.textContent.trim() + ' · ' + tipDe(td).split(' | ')[0]).join(' | ') : '';
     const pE9 = pliegue('INVESTORS_US/CA_ESCAPE_090926');
     r.datosCrmE9 = filasPl(pE9); r.datosCuadreE9 = cuadrePl(pE9);
     // Con utm_content={{ad.id}}: el anuncio se identifica por su ID y se llenan sus columnas
@@ -646,6 +664,8 @@ const PORT = process.env.PORT || 8765;
     && lqx.semSeg === 'rojo:revisar rojo:pausar rojo:revisar rojo:mantener rojo:pausar'
     && lqx.sem === 'null gris*:mantener rojo:pausar verde:subir verde:subir amarillo:optimizar amarillo:optimizar rojo:pausar amarillo*:mantener verde*:mantener verde*:mantener rojo*:mantener'
     && lqx.tarjetas && lqx.columnas === 'Campaña|Inversión|Leads CRM|CPL|% trabajados|% contactados|CQL|MQL|SQL+|Zoom realizado|OPP|WON|Costo por SQL|Semáforo histórico'
+    && /^2 · 2 leads SQL\+ \| SQL( SD)?Lead \d+, SQL( SD)?Lead \d+$/.test(lqx.tipSql) && lqx.tipSqlCierra && lqx.tipSqlTotal === '11 · 11 leads SQL+' && lqx.tipSqlCero
+    && lqx.tipSqlDatos === '2 · 2 leads SQL+'
     && Object.entries(semEsp).every(([k, v]) => lqx.semaforos[k] === v)
     && lqx.explSinAcciones && lqx.cplSinAlerta && lqx.lecturaHist && lqx.avisoDatos
     && lqx.avisoExpl === 'Estás viendo 2026-W37–2026-W40 (07 sep – 04 oct 2026). La decisión de hoy está en Conclusiones.'
@@ -857,8 +877,103 @@ const PORT = process.env.PORT || 8765;
   if (!auto.ok) hallazgos.push({ vista: 'telefonia:auto', auto });
   if (!tel.ok) hallazgos.push({ vista: 'telefonia:asesora', tel });
   if (!lqx.ok) hallazgos.push({ vista: 'lq:rediseño', lqx });
+  // Brokers por CUALQUIER etiqueta que empiece con "broker" (Dirección, 14-oct-2026): los seis
+  // contactos de W42 que salían en "Otra fuente · (sin campaña atribuida)", dados de alta a mano.
+  // Con ellos en el CRM, Calidad, Combinado y Conclusiones deben verse IGUAL que sin ellos (salvo
+  // la nota de excluidos, que los nombra y dice cuántos leads tendría cada fila con ellos).
+  VISTA = 'lq:brokers';
+  const lqbk = await page.evaluate(async (fx0) => {
+    window.LQ_HOY_FIJO = '2026-10-05';
+    const copia = () => JSON.parse(JSON.stringify(fx0));
+    const arma = (fx) => { const a = buildLqAgg(fx.boot, fx.rawLeads, fx.spendRows, fx.weeks, fx.opps, fx.adRows, fx.adExtra); a.fallos = []; a.monedas = ['MXN']; return a; };
+    const NOM = ['Jorge Vega', 'Cristina Gómez Saucedo', 'Oswaldo Ortega', 'Sarah Rose', 'Marco Gamborino', 'Nicole Ponzos'];
+    const TAGS = [['broker'], ['broker-signup-web'], ['Broker'], [' broker-client '], ['broker', 'cliente'], ['brokers-referido']];
+    const fx1 = copia();
+    NOM.forEach((n, i) => fx1.rawLeads.push({ id: 'bkw' + i, n, em: 'bkw' + i + '@ejemplo.com', ph: String(9980000000 + i), c: `2026-10-0${1 + (i % 3)}T16:00:00.000Z`,
+      src: i === 4 ? 'fb' : '', u: 'u1', tags: TAGS[i], cf: {}, attr: i === 4 ? { src: 'facebook' } : i === 1 ? {} : { src: 'CRM UI' } }));
+    const agg0 = arma(copia()), agg1 = arma(fx1);
+    const r = { marcados: agg1.leads.filter(l => NOM.includes(l.n) && l.bk).length };
+    Object.assign(lqState, { exp: {}, q: '', plat: 'all', level: 'camp', qual: 'auto', diagReglas: false, ia: null, bitacora: [] });
+    const foto = (agg, sub) => {
+      lqState.agg = agg; lqPopulateWeeks();
+      document.getElementById('lq-sem-ini').value = '2026-W37'; document.getElementById('lq-sem-fin').value = '2026-W40';
+      lqState.sub = sub; lqRender();
+      const el = document.getElementById('lq-content'), nota = el.querySelector('.lq-excluidos [data-lq-tip]');
+      const tips = [...el.querySelectorAll('[data-lq-tip]')].filter(x => !x.closest('.lq-excluidos')).map(x => x.dataset.lqTip).join(' ');
+      const c = el.cloneNode(true); c.querySelectorAll('.lq-excluidos').forEach(x => x.remove());
+      const d = document.createElement('div'); d.innerHTML = nota ? nota.dataset.lqTip : '';
+      return { txt: c.textContent.replace(/\s+/g, ' '), tips, nota: d.textContent.replace(/\s+/g, ' '), excl: (el.querySelector('.lq-excluidos') || {}).textContent || '' };
+    };
+    r.iguales = {}; r.aparecen = [];
+    for (const sub of ['calidad', 'combinado', 'conclusiones']) {
+      const a = foto(agg0, sub), b = foto(agg1, sub);
+      r.iguales[sub] = a.txt === b.txt;
+      NOM.forEach(n => { if (b.txt.includes(n) || b.tips.includes(n)) r.aparecen.push(sub + ':' + n); });
+      if (sub === 'calidad') { r.nota = b.nota; r.excl = b.excl.replace(/\s+/g, ' ').trim(); }
+    }
+    r.mesVsMes = /mes/i.test(foto(agg1, 'calidad').txt);
+    lqState.agg = agg0;
+    r.ok = r.marcados === 6 && Object.values(r.iguales).every(Boolean) && !r.aparecen.length
+      && NOM.every(n => r.nota.includes(n)) && /Todos los leads del rango 78 → 69/.test(r.nota) && /Otra fuente · \(sin campaña atribuida\) (\d+) → \1|Otra fuente · \(sin campaña atribuida\) \d+ → \d+/.test(r.nota)
+      && /9 leads de brokers/.test(r.excl) && /etiqueta que empieza con "broker"/.test(r.excl);
+    return r;
+  }, fixture());
+  console.log('[calidad de leads] brokers por etiqueta', JSON.stringify(lqbk).slice(0, 1200));
+  if (!lqbk.ok) hallazgos.push({ vista: 'lq:brokers', lqbk });
   console.log('\n[reglas v1.1] aceptación', JSON.stringify(v11));
   if (!v11.ok) hallazgos.push({ vista: 'reglas:v1.1', v11 });
+  // Notas de las tarjetas de Desempeño (Dirección, 13-oct-2026): "28 leads y solo 4 en la
+  // mediana de 1er toque". El reloj arranca siempre en el alta (14-oct-2026): el toque hecho
+  // antes de crear la oportunidad entra con su tiempo real y crear la oportunidad tarde ya no
+  // esconde el tiempo entre la entrada del lead y su primer toque.
+  VISTA = 'desempeno:notas';
+  const notas = await page.evaluate(() => {
+    const Z = (local) => Date.parse(local + '-05:00'), iso = (t) => new Date(t).toISOString();
+    const users = { u1: 'Daniela Arana' }, pipes = [{ id: 'p1', name: 'Seguimiento de ventas', stages: [{ id: 's1', name: 'Contacto establecido' }] }];
+    const contactos = [], sweeps = {}, opps = [];
+    const lead = (id, local, sw, oppLocal) => {
+      contactos.push({ id, n: 'Lead ' + id, c: iso(Z(local)), src: 'facebook', u: 'u1', tags: [], attr: {}, cf: {} });
+      sweeps[id] = Object.assign({ foM: null, fi: null, fe: null, days: [], calls: 0, chans: [], deliv: { sent: 0, delivered: 0, read: 0, failed: 0 }, ap: { tot: 0, sh: 0, ns: 0, fut: 0 }, tk: { prog: 0, enFecha: 0, venc: 0 } }, sw);
+      opps.push({ id: 'o-' + id, ct: id, u: 'u1', st: 'open', c: iso(Z(oppLocal || local)), p: 'p1', s: 's1', sc: '', cf: {} });
+    };
+    lead('med', '2026-10-05T10:00:00', { foM: Z('2026-10-05T10:03:00'), foMch: 'whatsapp' });                                   // en la mediana: 3 min
+    lead('antes', '2026-10-05T11:00:00', { foM: Z('2026-10-05T11:05:00'), foMch: 'call', calls: 1, chans: ['call'],
+      cl: { n: 1, ok: 0, na: 1, linea: 0, otro: 0, dn: 0, t: [Z('2026-10-05T11:05:00')] } }, '2026-10-05T11:20:00');           // llamó y DESPUÉS se creó la OPP: 5 min desde el alta
+    lead('tarde', '2026-10-05T13:00:00', { foM: Z('2026-10-05T15:02:00'), foMch: 'whatsapp' }, '2026-10-05T15:00:00');       // OPP creada 2 h después: cuenta 122 min, no 2
+    lead('noche', '2026-10-05T22:00:00', { foM: Z('2026-10-06T09:30:00'), foMch: 'whatsapp' });                                 // fuera de horario
+    lead('nada', '2026-10-05T12:00:00', {});                                                                                    // sin toque
+    const now = Z('2026-10-12T12:00:00');
+    const agg = buildSlaAgg(['2026-W41'], contactos, sweeps, opps, users, [], pipes, { oppFields: [], oppFieldsOk: true, ncState: {}, tagged: [], taggedOk: true, now });
+    const aggPrev = slaState.agg, selPrev = slaState.asesor, advPrev = ADVISOR_LIST;
+    ADVISOR_LIST = [{ name: 'Daniela Arana', active: true }]; slaState.asesor = 'u1'; slaState.agg = agg; agg.ts = now;
+    navIr('ventas', 'desempeno'); slaRender();
+    const tarjeta = (rx) => [...document.querySelectorAll('#view-sla .crm-kpi')].find(k => rx.test(k.querySelector('.k-lbl').textContent));
+    const nota = (rx) => { const k = tarjeta(rx); if (!k || !k.dataset.lqTip) return ''; const d = document.createElement('div'); d.innerHTML = k.dataset.lqTip; return d.textContent.replace(/\s+/g, ' '); };
+    const L = {}; agg.leads.forEach(l => { L[l.id] = l; });
+    const r = {};
+    r.antes = !!(L.antes && L.antes.slaAt === 5 * 60e3 && L.antes.slaCall === 5 * 60e3 && !slaAntesReloj(L.antes)
+      && L.tarde && L.tarde.created === L.tarde.alta && L.tarde.slaAt === 122 * 60e3 && L.tarde.velOk === false && !slaAntesReloj(L.nada));
+    r.tarjeta60 = tarjeta(/^1er toque ≤60 s/) ? tarjeta(/^1er toque ≤60 s/).querySelector('.k-lbl').textContent : '';
+    r.valor = tarjeta(/^Med\. 1er toque/).querySelector('.k-val').textContent;
+    r.sinNota = [...document.querySelector('#view-sla .crm-kpis').querySelectorAll('.crm-kpi')].filter(k => !k.dataset.lqTip).map(k => k.querySelector('.k-lbl').textContent);
+    r.conNota = !r.sinNota.length;
+    r.mediana = nota(/^Med\. 1er toque/);
+    r.llamada = nota(/^Med\. 1er intento de llamada/);
+    r.sla5 = nota(/^Cumplieron su SLA/);
+    r.det = slaDetalleLeads(agg.leads, agg.v11, (u) => users[u] || '');
+    ADVISOR_LIST = advPrev; slaState.asesor = selPrev; slaState.agg = aggPrev;
+    r.ok = r.antes && r.conNota
+      && r.valor === '5 min' && !/Ejecutivo/.test(r.tarjeta60) && /desde la entrada del lead/.test(r.tarjeta60)
+      && /Por qué 3 de 5: fuera de horario, 1 \(no entran por regla.*En horario, 4; de ellos no entran: sin 1er toque todavía \(1\) → 3 en la mediana\./.test(r.mediana)
+      && !/traspaso/.test(r.mediana)
+      && /Base: 1 de 4 leads en horario/.test(r.llamada) && !/⚠/.test(r.llamada)
+      && /^Leads cuyo 1er toque llegó a tiempo/.test(r.sla5) && !/antes de que arrancara su reloj/.test(r.sla5)
+      && !/traspaso/.test(r.det) && /no: sin 1er toque/.test(r.det) && !/anterior a su alta/.test(r.det);
+    delete r.det;
+    return r;
+  });
+  console.log('[desempeño] notas de las tarjetas', JSON.stringify(notas).slice(0, 900));
+  if (!notas.ok) hallazgos.push({ vista: 'desempeno:notas', notas });
   // Metas → Rúbrica de desempeño: los dos juegos de Velocidad, con su fecha
   const rbm = await page.evaluate(async () => { navIrLateral('metas'); await new Promise(r => setTimeout(r, 400)); const h = document.getElementById('metas-rubrica'); const t = h ? h.innerText : '';
     return { existe: !!h, viejo: /10 · 20 · 30 · 45%/.test(t), nuevo: /20 · 40 · 60 · 80%/.test(t), fecha: /1-oct-2026/.test(t), form: !!document.getElementById('rb-save') }; });

@@ -221,6 +221,11 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
   CPL · % trabajados · % contactados · CQL · MQL · **SQL+ · Zoom realizado · OPP · WON** · Costo por SQL ·
   Semáforo, y dos totales: **Total pagado** (solo campañas con inversión, con su costo por
   SQL) y todos los leads del rango.
+- **Nombres de los SQL+** (Dirección, 13-oct-2026): al pasar el mouse sobre la cifra de SQL+
+  (subrayado punteado) sale una nota con los nombres de esos leads, SQL Selvadentro primero;
+  en celular se abre al tocar la cifra. Vale en cualquier fila (campaña, conjunto, anuncio,
+  totales) y en la columna SQL+ por conjunto de Datos de campañas. Los nombres solo se
+  pintan en el navegador (`lqSqlpTip` / `lqTip`); no van al análisis con IA.
 - **Embudo canónico** Lead → CQL → MQL → SQL → Zoom realizado → OPP → WON, del cohorte de
   leads del rango y por lead (no por oportunidad). **Zoom realizado** = etapa "Zoom
   realizado" o una posterior del embudo (OPP y WON incluidos); las etapas de tour/visita y
@@ -279,14 +284,20 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
   marca "N con atribución inferida". Desde el 08-oct llegan con UTMs reales y manda el UTM.
 - **Leads de brokers fuera de Calidad de Leads** (Dirección, 9-oct-2026): el contacto con
   una oportunidad en el pipeline **"Brokers - Producción (B2B2C)"** (cualquiera de sus
-  oportunidades) o con el tag **`broker-client`** lo sube el equipo comercial y no viene de
+  oportunidades) o con **cualquier etiqueta que empiece con "broker"** (`broker`,
+  `broker-client`, `broker-signup-web`…, sin importar mayúsculas; antes solo `broker-client`,
+  y los contactos dados de alta a mano con la etiqueta `broker` caían en "Otra fuente ·
+  (sin campaña atribuida)" — Dirección, 14-oct-2026; `lq:agg:v24`) lo sube el equipo comercial y no viene de
   marketing, así que sale de TODOS los cálculos de la sección: leads, SQL+, Zoom, OPP, WON,
   CPL, costo por SQL, semáforo, totales, lectura automática, alertas y la IA (`LQ_BROKER`,
   `lqVista`). El pipeline "Brokers - Expansión y activación" (reclutamiento) no cuenta como
   broker. Siguen en el agregado marcados `bk`, así que **Ventas, Dirección y Diagnóstico los
   siguen contando**. La nota "Excluidos de todos los cálculos en este rango" (Calidad de Lead
   y Reporte Combinado) dice cuántos hay, junto a los registros de prueba y los sin email ni
-  teléfono, ahora contados en el rango que se lee y no en las 12 semanas sincronizadas.
+  teléfono, ahora contados en el rango que se lee y no en las 12 semanas sincronizadas. Al
+  pasar el mouse sobre "N leads de brokers" salen sus nombres y cuántos leads tendría cada
+  fila con ellos → sin ellos, y "Todos los leads del rango" (`lqNotaBrokers`), para auditar.
+  Desempeño de Ventas usa la misma regla de etiqueta (R-03, abajo) con su propio pipeline.
 - **Aviso de leads sin campaña**: cuenta exactamente los leads de las filas
   "(sin campaña atribuida)" de la tabla (antes contaba aparte los de Meta/Google con
   utm_campaign vacío y no cuadraba: decía 1 de 60 con 10 en la tabla).
@@ -667,6 +678,22 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
     campaña/canal/pipeline y un **"ver leads"** con, por lead: entrada, horario, asesor,
     hora y canal del 1er toque, tiempo, si entra en la mediana (y por qué no) y contacto
     efectivo. "≤15m/≤60m" dicen en su ayuda sobre cuántos leads se calculan.
+  - **Notas en las tarjetas** (Dirección, 13-oct-2026): al pasar el mouse sobre cada
+    tarjeta de Desempeño (o tocarla en celular) sale qué cuenta exactamente, sobre qué base,
+    qué queda fuera y por qué, con los números del rango (`lqNota`, misma nota flotante que
+    los nombres de los SQL+). La de "Med. contacto efectivo" ahora también trae su N.
+  - **Reloj desde el alta, siempre** (Dirección General, 14-oct-2026): el reloj del asesor
+    arranca en el alta del lead en el CRM. Desde el 26-ago-2026 arrancaba en el "traspaso a
+    ventas" (la creación de su primera oportunidad), pensado para leads que esperaban en
+    marketing; hoy (hasta el 26-oct-2026) no hay Ejecutivo de Primer Contacto y el CRM asigna el
+    lead al asesor desde que entra, así que no hay traspaso. Desde que arranca el puesto, el lead
+    que él trabajó y entregó se mide desde la entrega (ver "Con el Ejecutivo de Primer Contacto"). Medir desde la oportunidad tenía dos fallas: el toque
+    hecho antes de crearla quedaba "antes del reloj" y cada tarjeta lo contaba distinto (fuera
+    de la mediana de 1er toque y del SLA de 60 s, cumplido en el de 5 min, 0 min en la de 1ª
+    llamada: por eso un rango salía con 28 leads y 4 en la mediana), y crearla tarde escondía
+    el tiempo entre la entrada y el primer toque. `sla:agg:v16` fuerza a regenerar el agregado.
+    `slaAntesReloj` queda solo para un toque anterior al alta (contacto fusionado o importado);
+    "ver leads" ya no lo llama "sin 1er toque".
   - **Campaña de origen = la de Calidad de Leads**: se toma por id de contacto del agregado
     de Calidad de Leads (ID de campaña, alias de UTM, atribución inferida), que ahora guarda
     el `id` de cada lead; si no está en memoria se lee del kv una vez. Sin él, la
@@ -684,7 +711,7 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
     `foA` (`tAuto` marca a quién se le acreditó así). La columna "1er toque manual", los
     intentos y el canal del 1er toque siguen contando solo lo que hizo el asesor.
 - **Los tres parámetros del Anexo 1 que faltaban** (2026-09-11), derivados de lo que el
-  barrido ya lee por contacto: **SLA de 60 segundos** del Ejecutivo de Primer Contacto
+  barrido ya lee por contacto: **SLA de 60 segundos** de 1er toque desde la entrada del lead (la tarjeta decía "del Ejecutivo de Primer Contacto", puesto que hoy no existe —arranca el 26-oct-2026 con su propio reporte—: renombrada el 14-oct-2026)
   (contra el primer toque manual); **integridad del pipeline** (spec B2-2:
   toda OPP abierta —Seguimiento de OPP, Carta oferta, Apartado— debe tener un *next step
   con fecha* = tarea abierta con fecha límite hoy o después, o cita futura; se lista con
@@ -781,8 +808,10 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
       etiquetados de antes del rango (acción `tagged`). Lo que el asesor hizo antes cuenta
       en su nota (`uNota`); como volumen el lead aparece con su dueño actual (Rescate) en
       "Fuera del equipo de ventas".
-    - **R-03**: etiqueta `broker` o **cualquier** oportunidad en Brokers — Expansión y
-      activación (antes: solo si TODAS vivían ahí) → "Error de asignación", fuera de todo.
+    - **R-03**: **cualquier etiqueta que empiece con "broker"** (`broker`, `broker-client`,
+      `broker-signup-web`…; hasta el 14-oct-2026 solo `broker` exacta, `sla:agg:v17`) o
+      **cualquier** oportunidad en Brokers — Expansión y activación (antes: solo si TODAS
+      vivían ahí) → "Error de asignación", fuera de todo. La lista dice qué etiqueta lo sacó.
     - **R-04**: horario de atención 09:00:00–18:59:59 hora Tulum; SLA 5 min en horario,
       antes de las 11:00 del siguiente día de servicio fuera de horario. Los días de
       servicio son un parámetro en Metas → Rúbrica de desempeño (`selvadentro:rubrica`,
