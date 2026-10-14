@@ -613,6 +613,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
     padding:8px 12px; box-shadow:0 6px 20px rgba(46,51,43,.18); font-family:var(--sans); font-size:var(--fs-s); line-height:1.45; color:var(--texto); text-align:left; white-space:normal; pointer-events:none; }
   .lq-tip p{ margin:0 0 6px; } .lq-tip p:last-child{ margin:0; }
   .crm-kpi[data-lq-tip]{ cursor:help; }
+  .lq-excluidos [data-lq-tip]{ cursor:help; text-decoration:underline dotted; text-underline-offset:3px; }
   .lq-tip ul{ list-style:none; margin:4px 0 0; padding:0; }
   .lq-tip ul.dos{ column-count:2; column-gap:16px; }
   .lq-tip li{ break-inside:avoid; }
@@ -3038,7 +3039,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v23";  // v23: re-envíos de formulario (agg.reenvios)  // v22: datos de la decisión de hoy (rango fijo 30 días y 7 contra 7) en `dec`  // v21: el v20 guardado el 9-oct pudo quedar sin detalle por anuncio (la consulta con campos extra se volvía lenta)  // v20: URL de destino por anuncio, gasto por keyword de Google y presupuesto diario (recomendaciones concretas)  // v19: trabajado (tr) y contactado (ct) por etapa, separados  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
+const LQ_AGG_KEY = "lq:agg:v24";  // v24: broker = cualquier etiqueta que empiece con "broker" (no solo broker-client)  // v23: re-envíos de formulario (agg.reenvios)  // v22: datos de la decisión de hoy (rango fijo 30 días y 7 contra 7) en `dec`  // v21: el v20 guardado el 9-oct pudo quedar sin detalle por anuncio (la consulta con campos extra se volvía lenta)  // v20: URL de destino por anuncio, gasto por keyword de Google y presupuesto diario (recomendaciones concretas)  // v19: trabajado (tr) y contactado (ct) por etapa, separados  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 // (LQ_TZ y LQ_TZ_MS ahora viven junto al resto de helpers de fecha, arriba)
@@ -3448,11 +3449,15 @@ function lqStage(level, tagsLower){
 // LEADS DE BROKERS (Dirección, 9-oct-2026): el equipo comercial los sube a mano y no vienen
 // de marketing, así que salen de TODOS los cálculos de Calidad de Leads. Es broker el
 // contacto con una oportunidad en el pipeline "Brokers - Producción (B2B2C)" (cualquiera de
-// sus oportunidades, no solo la más reciente) o con el tag "broker-client". No es el pipeline
-// "Brokers - Expansión y activación", que es el de reclutamiento de los brokers mismos.
+// sus oportunidades, no solo la más reciente) o con CUALQUIER etiqueta que empiece con
+// "broker": broker, broker-client, broker-signup-web… (Dirección, 14-oct-2026; antes solo
+// "broker-client", y los contactos dados de alta a mano con la etiqueta "broker" caían en
+// "Otra fuente · (sin campaña atribuida)"). El pipeline "Brokers - Expansión y activación" (el
+// de reclutamiento de los brokers mismos) no basta por sí solo.
 // Siguen en el agregado marcados `bk`: Ventas, Dirección y Diagnóstico los siguen contando.
-const LQ_BROKER = { pipeline: /brokers?\s*[-–—:]?\s*producci[oó]n/i, tag: "broker-client" };
-const lqEsBroker = (tags, op)=> !!(op && op.bk) || (tags||[]).some(t=>String(t).trim().toLowerCase()===LQ_BROKER.tag);
+const LQ_BROKER = { pipeline: /brokers?\s*[-–—:]?\s*producci[oó]n/i, tag: /^broker/i };
+const lqTagBroker = (t)=> LQ_BROKER.tag.test(String(t).trim());
+const lqEsBroker = (tags, op)=> !!(op && op.bk) || (tags||[]).some(lqTagBroker);
 
 const LQ_SIN_CAMP = "(sin campaña atribuida)";
 const LQ_SIN_GRP  = "(sin conjunto atribuido)";
@@ -4155,14 +4160,27 @@ function lqVista(agg){
 // Excluidos de todos los cálculos, contados en el rango que se está leyendo.
 function lqExcluidosRango(agg, rangoSet){
   const r = { broker:0, prueba:0, sinContacto:0 };
-  (agg && agg.leads || []).forEach(l=>{ if(l.bk && rangoSet.has(l.wk)) r.broker++; });
+  (agg && agg.leads || []).concat(agg && agg.reenvios || []).forEach(l=>{ if(l.bk && rangoSet.has(l.wk)) r.broker++; });
   const w = (agg && agg.exclWk) || {};
   ["prueba","sinContacto"].forEach(k=>Object.entries(w[k]||{}).forEach(([wk,n])=>{ if(rangoSet.has(wk)) r[k] += n; }));
   return r;
 }
+// Para auditar la exclusión: quiénes son y cuántos leads tendría cada fila de la tabla con
+// ellos (el mismo árbol de la tabla, con los brokers dentro), y "Todos los leads del rango".
+const LQ_BK_NOMBRES_MAX = 40;
+function lqNotaBrokers(agg, rangoSet){
+  const todos = (agg.leads||[]).concat(agg.reenvios||[]).filter(l=>rangoSet.has(l.wk)), bk = todos.filter(l=>l.bk);
+  if(!bk.length) return "";
+  const nombres = bk.map(l=>l.n||"(sin nombre)").sort((a,b)=>a.localeCompare(b, "es"));
+  const filas = lqUnionTree(agg, todos, rangoSet, "all").camps.map(C=>({ key:C.key, n:C.leads.length, b:C.leads.filter(l=>l.bk).length }))
+    .filter(x=>x.b).sort((a,b)=>b.b-a.b);
+  return lqNota(
+    `<b>Leads de brokers fuera de Calidad de Leads en este rango (${bk.length}):</b> ${nombres.slice(0, LQ_BK_NOMBRES_MAX).map(escAttr).join(", ")}${nombres.length > LQ_BK_NOMBRES_MAX ? ` y ${nombres.length - LQ_BK_NOMBRES_MAX} más` : ""}.`,
+    `<b>Con ellos → sin ellos</b> (todas las plataformas): Todos los leads del rango ${todos.length} → ${todos.length - bk.length}${filas.map(x=>` · ${escAttr(x.key)} ${x.n} → ${x.n - x.b}`).join("")}.`);
+}
 function lqNotaExcluidos(agg, rangoSet){
   const e = lqExcluidosRango(agg, rangoSet), partes = [];
-  if(e.broker) partes.push(`<b>${e.broker}</b> lead${e.broker!==1?"s":""} de brokers <span class="lq-sub">(pipeline Brokers - Producción (B2B2C) o tag broker-client: los sube el equipo comercial, no vienen de marketing)</span>`);
+  if(e.broker) partes.push(`<span${lqNotaBrokers(agg, rangoSet)}><b>${e.broker}</b> lead${e.broker!==1?"s":""} de brokers</span> <span class="lq-sub">(pipeline Brokers - Producción (B2B2C) o una etiqueta que empieza con "broker": los sube el equipo comercial, no vienen de marketing)</span>`);
   if(e.prueba) partes.push(`<b>${e.prueba}</b> registro${e.prueba!==1?"s":""} de prueba`);
   if(e.sinContacto) partes.push(`<b>${e.sinContacto}</b> sin email ni teléfono`);
   return partes.length ? `<p class="hint pegada lq-excluidos">Excluidos de todos los cálculos en este rango: ${partes.join(" · ")}.</p>` : "";

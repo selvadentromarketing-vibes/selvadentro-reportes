@@ -279,14 +279,20 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
   marca "N con atribución inferida". Desde el 08-oct llegan con UTMs reales y manda el UTM.
 - **Leads de brokers fuera de Calidad de Leads** (Dirección, 9-oct-2026): el contacto con
   una oportunidad en el pipeline **"Brokers - Producción (B2B2C)"** (cualquiera de sus
-  oportunidades) o con el tag **`broker-client`** lo sube el equipo comercial y no viene de
+  oportunidades) o con **cualquier etiqueta que empiece con "broker"** (`broker`,
+  `broker-client`, `broker-signup-web`…, sin importar mayúsculas; antes solo `broker-client`,
+  y los contactos dados de alta a mano con la etiqueta `broker` caían en "Otra fuente ·
+  (sin campaña atribuida)" — Dirección, 14-oct-2026; `lq:agg:v24`) lo sube el equipo comercial y no viene de
   marketing, así que sale de TODOS los cálculos de la sección: leads, SQL+, Zoom, OPP, WON,
   CPL, costo por SQL, semáforo, totales, lectura automática, alertas y la IA (`LQ_BROKER`,
   `lqVista`). El pipeline "Brokers - Expansión y activación" (reclutamiento) no cuenta como
   broker. Siguen en el agregado marcados `bk`, así que **Ventas, Dirección y Diagnóstico los
   siguen contando**. La nota "Excluidos de todos los cálculos en este rango" (Calidad de Lead
   y Reporte Combinado) dice cuántos hay, junto a los registros de prueba y los sin email ni
-  teléfono, ahora contados en el rango que se lee y no en las 12 semanas sincronizadas.
+  teléfono, ahora contados en el rango que se lee y no en las 12 semanas sincronizadas. Al
+  pasar el mouse sobre "N leads de brokers" salen sus nombres y cuántos leads tendría cada
+  fila con ellos → sin ellos, y "Todos los leads del rango" (`lqNotaBrokers`), para auditar.
+  Desempeño de Ventas tiene su propia regla de brokers (etiqueta exacta `broker`, spec v1.1).
 - **Aviso de leads sin campaña**: cuenta exactamente los leads de las filas
   "(sin campaña atribuida)" de la tabla (antes contaba aparte los de Meta/Google con
   utm_campaign vacío y no cuadraba: decía 1 de 60 con 10 en la tabla).

@@ -836,6 +836,49 @@ const PORT = process.env.PORT || 8765;
   if (!auto.ok) hallazgos.push({ vista: 'telefonia:auto', auto });
   if (!tel.ok) hallazgos.push({ vista: 'telefonia:asesora', tel });
   if (!lqx.ok) hallazgos.push({ vista: 'lq:rediseño', lqx });
+  // Brokers por CUALQUIER etiqueta que empiece con "broker" (Dirección, 14-oct-2026): los seis
+  // contactos de W42 que salían en "Otra fuente · (sin campaña atribuida)", dados de alta a mano.
+  // Con ellos en el CRM, Calidad, Combinado y Conclusiones deben verse IGUAL que sin ellos (salvo
+  // la nota de excluidos, que los nombra y dice cuántos leads tendría cada fila con ellos).
+  VISTA = 'lq:brokers';
+  const lqbk = await page.evaluate(async (fx0) => {
+    window.LQ_HOY_FIJO = '2026-10-05';
+    const copia = () => JSON.parse(JSON.stringify(fx0));
+    const arma = (fx) => { const a = buildLqAgg(fx.boot, fx.rawLeads, fx.spendRows, fx.weeks, fx.opps, fx.adRows, fx.adExtra); a.fallos = []; a.monedas = ['MXN']; return a; };
+    const NOM = ['Jorge Vega', 'Cristina Gómez Saucedo', 'Oswaldo Ortega', 'Sarah Rose', 'Marco Gamborino', 'Nicole Ponzos'];
+    const TAGS = [['broker'], ['broker-signup-web'], ['Broker'], [' broker-client '], ['broker', 'cliente'], ['brokers-referido']];
+    const fx1 = copia();
+    NOM.forEach((n, i) => fx1.rawLeads.push({ id: 'bkw' + i, n, em: 'bkw' + i + '@ejemplo.com', ph: String(9980000000 + i), c: `2026-10-0${1 + (i % 3)}T16:00:00.000Z`,
+      src: i === 4 ? 'fb' : '', u: 'u1', tags: TAGS[i], cf: {}, attr: i === 4 ? { src: 'facebook' } : i === 1 ? {} : { src: 'CRM UI' } }));
+    const agg0 = arma(copia()), agg1 = arma(fx1);
+    const r = { marcados: agg1.leads.filter(l => NOM.includes(l.n) && l.bk).length };
+    Object.assign(lqState, { exp: {}, q: '', plat: 'all', level: 'camp', qual: 'auto', diagReglas: false, ia: null, bitacora: [] });
+    const foto = (agg, sub) => {
+      lqState.agg = agg; lqPopulateWeeks();
+      document.getElementById('lq-sem-ini').value = '2026-W37'; document.getElementById('lq-sem-fin').value = '2026-W40';
+      lqState.sub = sub; lqRender();
+      const el = document.getElementById('lq-content'), nota = el.querySelector('.lq-excluidos [data-lq-tip]');
+      const tips = [...el.querySelectorAll('[data-lq-tip]')].filter(x => !x.closest('.lq-excluidos')).map(x => x.dataset.lqTip).join(' ');
+      const c = el.cloneNode(true); c.querySelectorAll('.lq-excluidos').forEach(x => x.remove());
+      const d = document.createElement('div'); d.innerHTML = nota ? nota.dataset.lqTip : '';
+      return { txt: c.textContent.replace(/\s+/g, ' '), tips, nota: d.textContent.replace(/\s+/g, ' '), excl: (el.querySelector('.lq-excluidos') || {}).textContent || '' };
+    };
+    r.iguales = {}; r.aparecen = [];
+    for (const sub of ['calidad', 'combinado', 'conclusiones']) {
+      const a = foto(agg0, sub), b = foto(agg1, sub);
+      r.iguales[sub] = a.txt === b.txt;
+      NOM.forEach(n => { if (b.txt.includes(n) || b.tips.includes(n)) r.aparecen.push(sub + ':' + n); });
+      if (sub === 'calidad') { r.nota = b.nota; r.excl = b.excl.replace(/\s+/g, ' ').trim(); }
+    }
+    r.mesVsMes = /mes/i.test(foto(agg1, 'calidad').txt);
+    lqState.agg = agg0;
+    r.ok = r.marcados === 6 && Object.values(r.iguales).every(Boolean) && !r.aparecen.length
+      && NOM.every(n => r.nota.includes(n)) && /Todos los leads del rango 78 → 69/.test(r.nota) && /Otra fuente · \(sin campaña atribuida\) (\d+) → \1|Otra fuente · \(sin campaña atribuida\) \d+ → \d+/.test(r.nota)
+      && /9 leads de brokers/.test(r.excl) && /etiqueta que empieza con "broker"/.test(r.excl);
+    return r;
+  }, fixture());
+  console.log('[calidad de leads] brokers por etiqueta', JSON.stringify(lqbk).slice(0, 1200));
+  if (!lqbk.ok) hallazgos.push({ vista: 'lq:brokers', lqbk });
   console.log('\n[reglas v1.1] aceptación', JSON.stringify(v11));
   if (!v11.ok) hallazgos.push({ vista: 'reglas:v1.1', v11 });
   // Notas de las tarjetas de Desempeño (Dirección, 13-oct-2026): "28 leads y solo 4 en la
