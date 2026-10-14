@@ -865,7 +865,7 @@ const PORT = process.env.PORT || 8765;
     r.agendadas = agg.citasP.agendadas.length;
     r.ok = R.tot === 8 && R.asC === 1 && R.asE === 2 && R.ns === 2 && R.can === 1 && R.sinreg === 1 && R.fut === 1
       && r.agendadas === 2 && !!celdas && celdas.slice(1).join('|') === '2|8|1|2|2|60% (3 de 5)|1|1|1' && /3 de 5/.test(txt)
-      && /2\s*\n?\s*CITAS AGENDADAS EN EL PERIODO/i.test(txt.replace(/\n+/g, '\n'));   // junto a la tasa de agendamiento
+      && !/CITAS AGENDADAS EN EL PERIODO/i.test(txt);   // al lado de la tasa va la tasa sobre leads, no el conteo (columna Agendadas)
     return r;
   });
   console.log('[show rate] citas del periodo', JSON.stringify(show));
@@ -963,7 +963,7 @@ const PORT = process.env.PORT || 8765;
     r.conNota = !r.sinNota.length;
     r.mediana = nota(/^P80 1er toque/);
     r.sla5 = nota(/^Velocidad · cumplieron su SLA/);
-    // Tarjetas (14-oct-2026): 8, en este orden; sin la de 60 s ni la de 1a llamada; citas agendadas junto a la tasa.
+    // Tarjetas (14-oct-2026): 8, en este orden; sin la de 60 s ni la de 1a llamada; la tasa de agendamiento sobre contactados y sobre leads.
     r.grupos = [...document.querySelectorAll('#view-sla .crm-kpis.k4')].map(g => g.children.length).join('+');
     r.tarjetas = [...document.querySelectorAll('#view-sla .crm-kpis.k4 .crm-kpi')].map(k => k.querySelector('.k-lbl').textContent.split(' · ')[0]).join('|');
     r.det = slaDetalleLeads(agg.leads, agg.v11, (u) => users[u] || '');
@@ -971,7 +971,7 @@ const PORT = process.env.PORT || 8765;
     r.ok = r.antes && r.conNota
       // P80 (14-oct-2026): en horario, 3 · 5 · 122 min y uno sin toque → el 4º de 4 es "sin toque"
       && r.valor === 'sin toque' && /1 sin toque/.test(r.sub) && r.tarjeta60 === ''
-      && r.grupos === '4+4' && r.tarjetas === 'Leads en el rango|Velocidad|P80 1er toque|Fuera de horario atendidos antes de las 11:00|Contactados efectivos|Tasa de agendamiento|Citas agendadas|Show rate de citas'
+      && r.grupos === '4+4' && r.tarjetas === 'Leads en el rango|Velocidad|P80 1er toque|Fuera de horario atendidos antes de las 11:00|Contactados efectivos|Tasa de agendamiento|Tasa de agendamiento sobre leads|Show rate de citas'
       && /Base: 4 de 5 leads\. Fuera de horario, 1: no entran .*Sin 1er toque, 1: entran como el peor tiempo/.test(r.mediana)
       && /Sale "sin toque"/.test(r.mediana) && /mismo 80% que pide el 5 de Velocidad/.test(r.mediana)
       && !/traspaso/.test(r.mediana)
@@ -1058,6 +1058,9 @@ const PORT = process.env.PORT || 8765;
     r.resumen = /Daniela Arana 3 de 4 · 1 sin toque · 2 tarde/.test(txt);
     r.sinToque = /Sin 1er toque · 1/.test(txt) && /Lead nada/.test(txt);
     r.tarde = /Llegaron tarde · 2/.test(txt) && /antes de las 11:00/.test(txt);
+    // Tasa de agendamiento sobre leads: misma cifra que la de al lado, pero entre TODOS los leads (aquí 0 de 4; la de contactados no tiene base)
+    const tl = [...C.querySelectorAll('.crm-kpi')].find(k => /^Tasa de agendamiento sobre leads/.test(k.querySelector('.k-lbl').textContent));
+    r.tasaLeads = tl ? tl.querySelector('.k-val').textContent + ' ' + tl.querySelectorAll('.k-lbl')[1].textContent : '';
     r.detalleOculto = !/Telefonía por asesora/.test(txt) && !!C.querySelector('details[data-sla-pleg="detalle"] h3');
     // Secciones sin nada que corregir: una sola línea, sin su bloque vacío
     r.vacias = (txt.match(/✓ Sin pendientes en: ([^\n]*)/) || ['', ''])[1];
@@ -1073,7 +1076,7 @@ const PORT = process.env.PORT || 8765;
     slaRender(); r.recuerda = !!pleg('detalle') && pleg('detalle').open;
     ADVISOR_LIST = advPrev; slaState.asesor = selPrev; slaState.agg = aggPrev; slaState.abierto = abPrev;
     r.ok = r.reglasCerrado && r.detalleCerrado && r.orden && r.fallas === 'Leads que bajaron la Velocidad · 3 de 4' && r.resumen && r.sinToque && r.tarde
-      && r.detalleOculto && r.sinBloquesVacios && /Leads inválidos \(fuera de la nota\) · Error de asignación · Descalificaciones revertidas/.test(r.vacias) && /Integridad del pipeline/.test(r.vacias)
+      && r.tasaLeads === '0% 0 de 4' && r.detalleOculto && r.sinBloquesVacios && /Leads inválidos \(fuera de la nota\) · Error de asignación · Descalificaciones revertidas/.test(r.vacias) && /Integridad del pipeline/.test(r.vacias)
       && r.colExitosas && r.exitosas === '1 (50%)' && r.recuerda;
     return r;
   });
