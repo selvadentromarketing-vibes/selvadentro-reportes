@@ -974,6 +974,47 @@ const PORT = process.env.PORT || 8765;
   });
   console.log('[desempeño] notas de las tarjetas', JSON.stringify(notas).slice(0, 900));
   if (!notas.ok) hallazgos.push({ vista: 'desempeno:notas', notas });
+  // "Estas dos son lo mismo" (Dirección General, 14-oct-2026): si el 1er toque de cada lead fue
+  // su 1er llamada, Med. 1er toque y Med. 1er intento de llamada son la misma cifra con la misma
+  // N → una sola tarjeta. Con un lead cuyo 1er toque fue WhatsApp, vuelven a ser dos.
+  VISTA = 'desempeno:toque=llamada';
+  const tll = await page.evaluate(() => {
+    const Z = (local) => Date.parse(local + '-05:00'), iso = (t) => new Date(t).toISOString();
+    const users = { u1: 'Daniela Arana' }, pipes = [{ id: 'p1', name: 'Seguimiento de ventas', stages: [{ id: 's1', name: 'Contacto establecido' }] }];
+    const armar = (conWa) => {
+      const contactos = [], sweeps = {}, opps = [];
+      const lead = (id, local, mins, ch) => {
+        const t = Z(local) + mins * 60e3;
+        contactos.push({ id, n: 'Lead ' + id, c: iso(Z(local)), src: 'facebook', u: 'u1', tags: [], attr: {}, cf: {} });
+        sweeps[id] = { foM: t, foMch: ch, fi: null, fe: null, days: [], calls: ch === 'call' ? 1 : 0, chans: [ch], deliv: { sent: 0, delivered: 0, read: 0, failed: 0 },
+          ap: { tot: 0, sh: 0, ns: 0, fut: 0 }, tk: { prog: 0, enFecha: 0, venc: 0 },
+          cl: { n: 1, ok: 0, na: 1, linea: 0, otro: 0, dn: 0, t: [ch === 'call' ? t : t + 90 * 60e3] } };
+        opps.push({ id: 'o-' + id, ct: id, u: 'u1', st: 'open', c: iso(Z(local)), p: 'p1', s: 's1', sc: '', cf: {} });
+      };
+      lead('a', '2026-10-05T10:00:00', 4, 'call');
+      lead('b', '2026-10-05T11:00:00', 20, 'call');
+      lead('c', '2026-10-05T12:00:00', 7, conWa ? 'whatsapp' : 'call');
+      const now = Z('2026-10-12T12:00:00');
+      const agg = buildSlaAgg(['2026-W41'], contactos, sweeps, opps, users, [], pipes, { oppFields: [], oppFieldsOk: true, ncState: {}, tagged: [], taggedOk: true, now });
+      const aggPrev = slaState.agg, selPrev = slaState.asesor, advPrev = ADVISOR_LIST;
+      ADVISOR_LIST = [{ name: 'Daniela Arana', active: true }]; slaState.asesor = 'u1'; slaState.agg = agg; agg.ts = now;
+      navIr('ventas', 'desempeno'); slaRender();
+      const kpis = [...document.querySelectorAll('#view-sla .crm-kpis .crm-kpi')];
+      const lbl = (k) => k.querySelector('.k-lbl').textContent;
+      const de = (rx) => kpis.filter(k => rx.test(lbl(k)));
+      const nota = (k) => { if (!k || !k.dataset.lqTip) return ''; const d = document.createElement('div'); d.innerHTML = k.dataset.lqTip; return d.textContent.replace(/\s+/g, ' '); };
+      const una = de(/^Med\. 1er toque.*= 1er intento de llamada/), toque = de(/^Med\. 1er toque/), llamada = de(/^Med\. 1er intento de llamada/);
+      const r = { una: una.length, toque: toque.length, llamada: llamada.length, valor: una[0] ? una[0].querySelector('.k-val').textContent : '', nota: nota(una[0]) };
+      ADVISOR_LIST = advPrev; slaState.asesor = selPrev; slaState.agg = aggPrev;
+      return r;
+    };
+    const igual = armar(false), distinto = armar(true);
+    return { igual, distinto,
+      ok: igual.una === 1 && igual.toque === 1 && igual.llamada === 0 && igual.valor === '7 min' && /Por qué una sola tarjeta/.test(igual.nota) && /Por qué 3 de 3/.test(igual.nota)
+        && distinto.una === 0 && distinto.toque === 1 && distinto.llamada === 1 };
+  });
+  console.log('[desempeño] 1er toque = 1er llamada', JSON.stringify(tll).slice(0, 900));
+  if (!tll.ok) hallazgos.push({ vista: 'desempeno:toque=llamada', tll });
   // Metas → Rúbrica de desempeño: los dos juegos de Velocidad, con su fecha
   const rbm = await page.evaluate(async () => { navIrLateral('metas'); await new Promise(r => setTimeout(r, 400)); const h = document.getElementById('metas-rubrica'); const t = h ? h.innerText : '';
     return { existe: !!h, viejo: /10 · 20 · 30 · 45%/.test(t), nuevo: /20 · 40 · 60 · 80%/.test(t), fecha: /1-oct-2026/.test(t), form: !!document.getElementById('rb-save') }; });

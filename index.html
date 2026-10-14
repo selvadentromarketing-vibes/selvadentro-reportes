@@ -7768,6 +7768,15 @@ function slaRender(){
   const enH = V11 ? leads.filter(l=>!l.fh) : leads, fueraN = leads.length - enH.length;
   const atNo = enH.filter(l=>l.slaAt == null), atSd = atNo.filter(l=>l.sd).length, atAntes = atNo.filter(slaAntesReloj).length;
   const callCero = enH.filter(l=>l.slaCall === 0).length;
+  // Med. 1er toque y Med. 1er intento de llamada (Dirección General, 14-oct-2026): cuando en
+  // cada lead el 1er toque FUE la 1er llamada, las dos tarjetas daban la misma cifra con la
+  // misma N. Entonces va una sola; se separan en cuanto algún lead recibe antes un WhatsApp,
+  // SMS o correo (o, con v1.1, una llamada automática con contacto).
+  const atEsCall = slasAt.length > 0 && enH.every(l=> (l.slaAt ?? null) === (l.slaCall ?? null));
+  const atPorQue = `<b>Por qué ${slasAt.length} de ${leads.length}:</b> ${V11 ? `fuera de horario, ${fueraN} (no entran por regla: su meta es antes de las 11:00, no minutos; horario: ${horTxt}). En horario, ${enH.length}; de ellos no entran: ` : "no entran: "}${[
+        atAntes ? `1er toque antes de que arrancara su reloj (${atAntes})` : "",
+        atNo.length - atSd - atAntes ? `sin 1er toque todavía (${atNo.length - atSd - atAntes})` : "",
+        atSd ? `sin datos de conversación (${atSd})` : ""].filter(Boolean).join(" · ") || "ninguno"} → <b>${slasAt.length} en la mediana</b>.`;
   const sinEf = leads.filter(l=>!l.fi).length, efAntes = leads.filter(l=>l.fi && l.slaEf == null).length;
   const ef = (mins)=> slasEf.filter(x=>x<=mins*60000).length;
   const efBase = `No entran: sin contacto efectivo (${sinEf})${efAntes ? `; con el contacto efectivo antes de que arrancara su reloj (${efAntes})` : ""}. Reloj de 24 h: aquí no se separa el horario.`;
@@ -7808,17 +7817,17 @@ function slaRender(){
     ${kpiMed(slasEf,"Med. contacto efectivo · desde la entrada del lead", lqNota(
       `<b>Mediana del tiempo entre la entrada del lead y su contacto efectivo</b> (respuesta del lead o llamada ≥90 s). La mediana es el valor de en medio: la mitad tardó menos y la otra mitad más.`,
       `Base: ${slasEf.length} de ${leads.length}. ${efBase}`))}
-    ${kpiMed(slasAt, V11?"Med. 1er toque · cualquier canal o llamada automática con contacto · solo leads que entraron en horario":"Med. 1er toque manual · cualquier canal · desde la entrada del lead", lqNota(
+    ${atEsCall ? kpiMed(slasAt, V11?"Med. 1er toque = 1er intento de llamada · solo leads que entraron en horario":"Med. 1er toque manual = 1er intento de llamada · desde la entrada del lead", lqNota(
+      `<b>Mediana del tiempo entre la entrada del lead y su 1er toque</b>, que en ${slasAt.length===1 ? "este lead" : `los ${slasAt.length}`} fue una llamada del asesor (conecte o no). La mitad tardó menos y la otra mitad más.`,
+      `<b>Por qué una sola tarjeta:</b> como el 1er toque de cada lead fue su 1er llamada, la mediana de 1er toque y la de 1er intento de llamada son la misma cifra. Se separan en dos en cuanto algún lead reciba primero un WhatsApp, SMS o correo.`,
+      atPorQue, atAntes ? reloj : "", verLeads))
+    : `${kpiMed(slasAt, V11?"Med. 1er toque · cualquier canal o llamada automática con contacto · solo leads que entraron en horario":"Med. 1er toque manual · cualquier canal · desde la entrada del lead", lqNota(
       `<b>Mediana del tiempo entre la entrada del lead y su 1er toque</b>: el primer mensaje o llamada manual del asesor${V11 ? ", o una llamada automática que conectó ≥90 s, lo que llegue primero" : ""}. La mitad tardó menos y la otra mitad más.`,
-      `<b>Por qué ${slasAt.length} de ${leads.length}:</b> ${V11 ? `fuera de horario, ${fueraN} (no entran por regla: su meta es antes de las 11:00, no minutos; horario: ${horTxt}). En horario, ${enH.length}; de ellos no entran: ` : "no entran: "}${[
-        atAntes ? `1er toque antes de que arrancara su reloj (${atAntes})` : "",
-        atNo.length - atSd - atAntes ? `sin 1er toque todavía (${atNo.length - atSd - atAntes})` : "",
-        atSd ? `sin datos de conversación (${atSd})` : ""].filter(Boolean).join(" · ") || "ninguno"} → <b>${slasAt.length} en la mediana</b>.`,
-      atAntes ? reloj : "", verLeads))}
+      atPorQue, atAntes ? reloj : "", verLeads))}
     ${kpiMed(slasCall, V11?"Med. 1er intento de llamada · solo leads que entraron en horario":"Med. 1er intento de llamada · desde la entrada del lead", lqNota(
       `<b>Mediana del tiempo entre la entrada del lead y la primera llamada del asesor</b>, conecte o no. Solo llamadas manuales.`,
       `Base: ${slasCall.length} de ${enH.length} leads${V11 ? " en horario" : ""}. Sin ninguna llamada del asesor: ${enH.length - slasCall.length}.${V11 && fueraN ? ` Fuera de horario, no entran: ${fueraN}.` : ""}`,
-      callCero ? `⚠ ${callCero} de ${slasCall.length} cuentan como <b>0 min</b>: su primera llamada fue antes de que arrancara su reloj. En la mediana de 1er toque esos mismos leads no entran, por eso las dos no se parecen. ${reloj}` : ""))}
+      callCero ? `⚠ ${callCero} de ${slasCall.length} cuentan como <b>0 min</b>: su primera llamada fue antes de que arrancara su reloj. En la mediana de 1er toque esos mismos leads no entran, por eso las dos no se parecen. ${reloj}` : ""))}`}
     ${CP ? kpi(CP.agendadas.length.toLocaleString(), "Citas agendadas en el periodo · por fecha en que se agendaron, de cualquier lead", lqNota(
       `<b>Citas que se agendaron dentro del rango</b>, por la fecha en que se agendaron (sea cual sea la fecha de la cita) y de cualquier lead, también de los que entraron antes del rango. Las canceladas no cuentan.`,
       CP.sinFechaAg ? `Citas del CRM sin fecha de agendado (no se pueden ubicar en un periodo): ${CP.sinFechaAg}.` : "")) : ""}

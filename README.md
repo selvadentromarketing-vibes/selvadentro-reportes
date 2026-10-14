@@ -652,7 +652,10 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
     1er toque mezcla canales que no se comparan; se lee con este mix.
   - **Med. 1er llamada** (`slaCall`): hasta el primer *intento* de llamada, conecte o no.
     Siempre columna aparte de la mediana de 1er toque (con las reglas v1.1, solo leads en
-    horario, igual que esa).
+    horario, igual que esa). En las tarjetas de arriba, si en cada lead el 1er toque fue su
+    1er llamada (misma cifra y misma N), van juntas en una sola: "Med. 1er toque manual =
+    1er intento de llamada" (Dirección General, 14-oct-2026); se separan en cuanto algún
+    lead recibe primero un WhatsApp, SMS o correo.
   - **Llamadas por lead · 24 h / total** (`cl.h24`, `cl.n`): el volumen de marcación por
     persona, que antes solo existía agregado.
   - **Duración**: el backend descartaba toda duración igual a 0, así que una llamada que no
