@@ -54,6 +54,16 @@ const CONV = {
   // 2 min, entrega; la asesora (u1) escribe 3 h después y el lead le contesta a las 4 h.
   conEpc: [msg("a", T0 + 30e3, { messageType: "TYPE_CALL", status: "completed", userId: "epc1", callDuration: 120 }),
     msg("b", T0 + 3 * H), msg("c", T0 + 4 * H, { direction: "inbound", userId: null, source: "" })],
+  // Botón de WhatsApp de la página de gracias (14-oct-2026): el prospecto manda el mensaje ya escrito,
+  // la asesora le escribe, llega una respuesta automática de su WhatsApp Business, y 2 h después
+  // contesta de verdad. Solo la última es respuesta.
+  plantillaWA: [
+    msg("a", T0 + 60e3, { direction: "inbound", userId: null, source: "", body: "¡Hola! Soy Ana. Vi la página de Selvadentro en Tulum y quisiera saber más sobre los lotes residenciales. 🌿 (ref: INVESTORS_MX)" }),
+    msg("b", T0 + 5 * 60e3, { body: "Hola Ana, soy Talía de Selvadentro" }),
+    msg("c", T0 + 6 * 60e3, { direction: "inbound", userId: null, source: "", body: "Gracias por comunicarte con nosotros. En breve te atendemos." }),
+    msg("d", T0 + 2 * H, { direction: "inbound", userId: null, source: "", body: "Sí, me interesa. ¿Qué precio tienen?" }),
+  ],
+  soloPlantilla: [msg("a", T0 + 60e3, { direction: "inbound", userId: null, source: "", body: "Hi! I just visited your website and I’d love to know more about Selvadentro — could you tell me about the available lots?" })],
   // Origen de cada llamada: del asesor, automática (workflow / marcador de campaña) o entrante.
   telOrg: [
     msg("a", T0 + 1 * H, { messageType: "TYPE_CALL", status: "busy" }),                                              // asesor: falla de línea
@@ -123,6 +133,11 @@ const call = async (body) => { const r = await handler({ httpMethod: "POST", hea
     "excluir: los toques del ejecutivo no son del asesor; van aparte con su contacto efectivo, y efT trae solo los que no son suyos", EP && { foM: EP.foM && iso(EP.foM), calls: EP.calls, ex: EP.ex, efT: EP.efT });
   const ep2 = await call({ action: "sweep", ids: ["conEpc"] });
   ok(ep2.d.results[0].foM === T0 + 30e3 && !("ex" in ep2.d.results[0]), "sin excluir, el barrido es el de siempre", { foM: iso(ep2.d.results[0].foM) });
+  const pl = await call({ action: "sweep", ids: ["plantillaWA", "soloPlantilla"] });
+  const PL = pl.d.results.find((r) => r.id === "plantillaWA"), SP = pl.d.results.find((r) => r.id === "soloPlantilla");
+  ok(PL.fe === T0 + 2 * H && PL.fi === T0 + 2 * H && PL.plant === 2 && SP.fe === null && SP.fi === null && SP.plant === 1,
+    "el mensaje predeterminado de los botones de WhatsApp y la respuesta automática no son respuesta del prospecto",
+    { fe: PL.fe && iso(PL.fe), fi: PL.fi && iso(PL.fi), plant: PL.plant, solo: { fe: SP.fe, fi: SP.fi, plant: SP.plant } });
   const og = await call({ action: "sweep", ids: ["telOrg"] });
   const P = og.d.results && og.d.results[0] && og.d.results[0].tel.por;
   ok(P && P.manual.tot === 1 && P.manual.linea === 1 && P.auto.tot === 2 && P.auto.linea === 1 && P.auto.ok === 1 && P.auto.c90 === 1 && P.entrante.tot === 1 && P.entrante.c90 === 1,

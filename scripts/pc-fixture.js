@@ -35,7 +35,8 @@ function pcFixture() {
   ];
   const ev = {
     lead00001: [call(T + 30e3, E, "a", "na", 40), call(T + 60e3, E, "m", "ok", 300), msg(T + 40 * M, A1, "whatsapp")],
-    lead00002: [call(L2c + 3 * M, E), call(L2c + 4 * M, E), msg(L2c + 5 * M, E, "whatsapp"),
+    // Lead Dos da clic al botón de WhatsApp de la página de gracias a los 6 min ("p"): no es respuesta.
+    lead00002: [call(L2c + 3 * M, E), call(L2c + 4 * M, E), msg(L2c + 5 * M, E, "whatsapp"), [L2c + 6 * M, "whatsapp", "p", ""],
       call(L2c + 2 * H, E), call(L2c + 2 * H + M, E), msg(L2c + 2 * H + 2 * M, E, "sms"),
       call(L2c + DIA + 5 * H, E), call(L2c + DIA + 5 * H + M, E), msg(L2c + DIA + 5 * H + 2 * M, E, "email"),
       call(L2c + 3 * DIA, E), call(L2c + 3 * DIA + M, E), msg(L2c + 3 * DIA + 2 * M, E, "whatsapp"),

@@ -7413,6 +7413,7 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
            testExcl, callSt, callTot, tel, califCrm,
            exclExpansion: v11 ? 0 : exclExpansion, pipelines: pipesArr||[],
            pc: PCX ? { enEj: pcEnEj.length, ent: pcEnt.length, desde: X.pc.activaYMD || "" } : null,
+           plant: Object.values(sweepMap||{}).reduce((a,r)=>a+((r&&r.plant)||0), 0),
            citasP: slaCitasDelPeriodo(X, contactsArr, oppsArr, ctPipe, v11 ? fueraDeTodo : null, now, per),
            v11: v11 ? slaResumenV11({ contactsArr, tagged: X.tagged||[], disp, esTest, rangoSet, per, C11, H11, X, leads }) : null };
 }
@@ -7713,6 +7714,7 @@ function slaRender(){
   {
     const partes = [];
     if(agg.testExcl) partes.push(`<b>${agg.testExcl}</b> registro${agg.testExcl!==1?"s":""} de prueba excluido${agg.testExcl!==1?"s":""} de todos los cálculos`);
+    if(agg.plant) partes.push(`<b>${agg.plant}</b> mensaje${agg.plant!==1?"s":""} entrante${agg.plant!==1?"s":""} no cuenta${agg.plant!==1?"n":""} como respuesta del lead: el texto predeterminado de los botones de WhatsApp de nuestras páginas o su respuesta automática (14-oct-2026)`);
     if(agg.callTot != null){
       const stStr = Object.entries(agg.callSt||{}).sort((a,b)=>b[1]-a[1]).map(([s,n])=>`${escAttr(s)} ${n}`).join(" · ");
       const contestadas = (agg.callSt&&agg.callSt.completed)||0;
@@ -8813,7 +8815,9 @@ function pcBuild(D, cfg, now){
 
   // 10) Diagnóstico: llamadas automáticas en leads nuevos con y sin el usuario del ejecutivo, y
   //     fallas de línea de las llamadas del puesto.
-  let autoSinU = 0, autoConU = 0, lineaEpc = 0;
+  let autoSinU = 0, autoConU = 0, lineaEpc = 0, plant = 0;
+  // "p" = mensaje predeterminado de nuestros botones de WhatsApp o respuesta automática del prospecto.
+  Object.values(ev).forEach(evs=>evs.forEach(e=>{ if(e[2]==="p" && enPer(e[0])) plant++; }));
   U.forEach(c=>(ev[c.id]||[]).forEach(e=>{ if(e[1]==="call" && e[2]==="a"){ if(esEpc(e)) autoConU++; else autoSinU++; } }));
   Object.entries(ev).forEach(([ct, evs])=>evs.forEach(e=>{ if(llamadaPuesto(e, ct) && e[4]==="linea" && enPer(e[0])) lineaEpc++; }));
 
@@ -8824,7 +8828,7 @@ function pcBuild(D, cfg, now){
     users, excl, nU:U.length, vel, dias, habiles, ptsCerrados, ptsHoy:(dias[hoy]&&!diaCerrado(hoy)) ? dias[hoy].pts : 0,
     conv60, convSinDur, metaConv, fueraPts, coh, PC_DEN, ses, datos, cad, cart, recep, citaSinConv, reInfo: D.reInfo || null,
     citas:{ agendadas:agendadas.length, cbVisto, porToque: mias.filter(c=>c.via==="toque").length, mias: mias.length },
-    diag:{ ...(D.diag||{}), autoSinU, autoConU, lineaEpc, evErr:Object.keys(evErr).length },
+    diag:{ ...(D.diag||{}), autoSinU, autoConU, lineaEpc, plant, evErr:Object.keys(evErr).length },
     fallos: D.fallos||[] };
 }
 
@@ -8954,7 +8958,7 @@ function pcRender(){
     html += `<h3 class="diag-h">Conversión a entrega <span class="lq-sub">manual 10.1 y 10.3 · ${A.coh.length} contacto${A.coh.length===1?"":"s"} efectivo${A.coh.length===1?"":"s"}</span></h3>
       ${pcTabla(["Cómo terminó","Prospectos","¿Entra al %?","Lead nuevo · cartera"], filas, "Sin contactos efectivos del ejecutivo en el periodo.")}
       <div class="hint">${porVia ? `Cómo fue el contacto efectivo: ${porVia}.<br>` : ""}${reco.some(Boolean) ? `Pidieron otro momento (etiqueta recontacto 1/2/3): ${reco.map((n,i)=>`intento ${i+1}: ${n}`).join(" · ")}${reco[2] ? ` — <b>${reco[2]} en el tercer intento</b>: si no agenda, pasa a Largo plazo con su motivo (4.4)` : ""}.<br>` : ""}
-        Contacto efectivo: llamada de ≥90 s —del ejecutivo o la automática del CRM—, respuesta escrita del prospecto a un toque suyo mientras el lead siga siendo suyo (sin plazo), o una sesión que él agendó. <b>Por registro del ejecutivo</b>, aparte porque lo declara él y se audita con las grabaciones: la tarjeta movida después de su toque a Contacto establecido o más adelante, a Largo plazo con motivo o a Descalificado por "no alineado", o los cinco datos capturados. Entrega: la tarjeta en Contacto establecido (o una etapa posterior) movida después de ese contacto y asignada a un asesor. Largo plazo con motivo, fecha estimada y tarea de recontacto sale del denominador; sin ellos, cuenta como fallo (10.3).${A.cfg.lp ? "" : " <b>Configura los campos de motivo y fecha estimada de Largo plazo</b> para poder auditarlo."} ${pcDet("ver contactos", pcTabla(["Prospecto","Contacto efectivo","Cómo","Frente","Etapa actual","Resultado","Asesor"], det))}</div>`;
+        Contacto efectivo: llamada de ≥90 s —del ejecutivo o la automática del CRM—, respuesta escrita del prospecto a un toque suyo mientras el lead siga siendo suyo (sin plazo; no cuentan el mensaje predeterminado de los botones de WhatsApp de nuestras páginas ni las respuestas automáticas), o una sesión que él agendó. <b>Por registro del ejecutivo</b>, aparte porque lo declara él y se audita con las grabaciones: la tarjeta movida después de su toque a Contacto establecido o más adelante, a Largo plazo con motivo o a Descalificado por "no alineado", o los cinco datos capturados. Entrega: la tarjeta en Contacto establecido (o una etapa posterior) movida después de ese contacto y asignada a un asesor. Largo plazo con motivo, fecha estimada y tarea de recontacto sale del denominador; sin ellos, cuenta como fallo (10.3).${A.cfg.lp ? "" : " <b>Configura los campos de motivo y fecha estimada de Largo plazo</b> para poder auditarlo."} ${pcDet("ver contactos", pcTabla(["Prospecto","Contacto efectivo","Cómo","Frente","Etapa actual","Resultado","Asesor"], det))}</div>`;
   }
 
   // --- Sesiones: asistencia, calificación, cinco datos, citas pagables
@@ -9006,6 +9010,7 @@ function pcRender(){
     if(d.cobN) p.push(`<b>Cobertura del listado</b>: ${d.cobOk} de ${d.cobN} leads con acción manual aparecen en el listado de conversaciones con actividad manual (${pcPct(d.cobOk, d.cobN)})${d.cobOk < d.cobN ? ` — <b style="color:var(--rojo)">el listado no ve todo: los puntos de cartera pueden estar subcontados</b>${d.cobSoloLlam ? ` (${d.cobSoloLlam} de los que faltan solo tenían llamadas)` : ""}` : ""}`);
     if(d.autoSinU || d.autoConU) p.push(`<b>Llamadas automáticas en leads nuevos</b>: ${d.autoConU} con el usuario del ejecutivo · ${d.autoSinU} sin usuario o de otro usuario${d.autoSinU ? " — se cuentan como del puesto por ser lead nuevo, pero conviene que el marcador registre al ejecutivo: así el CRM dice quién atendió" : ""}`);
     if(d.lineaEpc) p.push(`<b>Falla de línea</b>: ${d.lineaEpc} llamada${d.lineaEpc===1?"":"s"} del ejecutivo ${d.lineaEpc===1?"volvió":"volvieron"} failed, busy o canceled (telefonía, no desempeño; no suman puntos)`);
+    if(d.plant) p.push(`<b>${d.plant} mensaje${d.plant===1?"":"s"} entrante${d.plant===1?"":"s"} no ${d.plant===1?"es respuesta":"son respuestas"}</b>: el texto predeterminado de los botones de WhatsApp de nuestras páginas o la respuesta automática del prospecto`);
     if(d.evErr) p.push(`<b style="color:var(--rojo)">${d.evErr} conversaci${d.evErr===1?"ón":"ones"} no se pudieron leer</b>`);
     const R = A.reInfo;
     p.push(R && R.campo ? `<b>Leads que regresan (10.4)</b> por "${escAttr(R.campo)}": ${R.n} cuentan como lead nuevo${R.dentro90 ? ` · ${R.dentro90} volvieron dentro de ${PC_REENVIO_DIAS} días (candado de duplicidad: no son lead nuevo)` : ""}${R.sinHora ? ` · <b style="color:var(--rojo)">${R.sinHora} sin hora exacta en el campo</b>: no se pueden medir` : ""}`

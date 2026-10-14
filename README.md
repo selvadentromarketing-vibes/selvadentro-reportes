@@ -888,6 +888,13 @@ entrega cuenta por etapa (el usuario es dueño de sus leads) y la recepción del
   porque lo declara él y se audita con las grabaciones: la tarjeta movida después de su toque a
   Contacto establecido o más adelante, a Largo plazo con motivo o a Descalificado por "no
   alineado", o los cinco datos capturados. Las conversaciones del candado siguen en ≥60 s (7.3).
+- **Lo que NO es respuesta del prospecto** (14-oct-2026), en Primer contacto y en Desempeño: el
+  texto predeterminado de los botones de WhatsApp de nuestras páginas (landings, páginas de
+  gracias, sitio, JJF, evento de Madrid) y las respuestas automáticas de su WhatsApp Business o
+  correo. El prospecto da clic, manda el mensaje ya escrito y muchas veces nunca contesta; el de la
+  página de gracias puede llegar después de la llamada automática. Se reconocen por frase
+  (`PLANTILLAS_ENTRANTES` y `RX_AUTORRESPUESTA` en `sla-report.js`): si una página o un anuncio de
+  Meta que abre WhatsApp cambia su texto, hay que agregarlo ahí. El diagnóstico dice cuántos se descartaron.
 - **Cita sin conversación registrada**: cita del ejecutivo sin llamada de ≥90 s ni respuesta
   escrita en las 72 h previas. Cuenta igual, pero se lista: el manual exige confirmación verbal (6.1).
 - **Pidió otro momento** (4.4): etiqueta `recontacto 1`, `recontacto 2` o `recontacto 3` (el

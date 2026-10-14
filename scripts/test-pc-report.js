@@ -38,6 +38,8 @@ const MSGS = {
     msg(T0 + 2 * M, { messageType: "TYPE_INSTAGRAM", status: "delivered" }),                              // Instagram del ejecutivo
     msg(T0 + 3 * M, { messageType: "TYPE_EMAIL", source: "bulk_actions", status: "delivered" }),          // envío masivo
     msg(T0 + 4 * M, { messageType: "TYPE_WHATSAPP", direction: "inbound", userId: null, source: "" }),    // el prospecto responde
+    msg(T0 + 4 * M + 30e3, { messageType: "TYPE_WHATSAPP", direction: "inbound", userId: null, source: "",
+      body: "Hola! Solicité lotes + precios + plan de pago. ¿Me compartes disponibilidad y próximos pasos?" }),   // botón de la página de gracias
     msg(T0 + 5 * M, { messageType: "TYPE_ACTIVITY_OPPORTUNITY" }),                                        // actividad: no es toque
     msg(T0 + 6 * M, { messageType: "TYPE_FORM_SUBMISSION", direction: "inbound" }),                       // formulario: no es toque
     msg(T0 + 7 * M, { messageType: "TYPE_CALL", status: "busy", userId: "ase1" }),                        // asesor, falla de línea
@@ -132,14 +134,15 @@ const call = async (body, t) => { const r = await handler({ httpMethod: "POST", 
   const E = e1.d.res && e1.d.res[0];
   ok(e1.status === 200 && E && E.ct === "ctAlfa01" && !E.err, "eventos responde por contacto", E && { ct: E.ct, err: E.err });
   const porT = (t) => E.ev.find((x) => x[0] === t);
-  ok(E.ev.length === 6, "6 eventos: sin actividad, sin formulario y sin lo que cae fuera de la ventana", E.ev.map((x) => x.slice(0, 3)));
+  ok(E.ev.length === 7, "7 eventos: sin actividad, sin formulario y sin lo que cae fuera de la ventana", E.ev.map((x) => x.slice(0, 3)));
+  ok(porT(T0 + 4 * M + 30e3)[2] === "p", "el mensaje predeterminado del botón de WhatsApp de la página de gracias es \"p\": no es respuesta", porT(T0 + 4 * M + 30e3));
   ok(JSON.stringify(porT(T0 + 30e3)) === JSON.stringify([T0 + 30e3, "call", "a", "epc1", "na", 40]), "la llamada del marcador es automática aunque traiga el usuario del ejecutivo", porT(T0 + 30e3));
   ok(JSON.stringify(porT(T0 + 60e3)) === JSON.stringify([T0 + 60e3, "call", "m", "epc1", "ok", 75]), "llamada del ejecutivo: manual, conectada, 75 s", porT(T0 + 60e3));
   ok(JSON.stringify(porT(T0 + 2 * M)) === JSON.stringify([T0 + 2 * M, "social", "m", "epc1"]), "Instagram del ejecutivo cuenta como mensaje manual (manual 7.3)", porT(T0 + 2 * M));
   ok(porT(T0 + 3 * M)[2] === "a" && porT(T0 + 4 * M)[2] === "i", "envío masivo = automático; respuesta del prospecto = entrante", [porT(T0 + 3 * M), porT(T0 + 4 * M)]);
   ok(JSON.stringify(porT(T0 + 7 * M)) === JSON.stringify([T0 + 7 * M, "call", "m", "ase1", "linea", null]), "llamada del asesor con falla de línea", porT(T0 + 7 * M));
   const e2 = await call({ action: "eventos", cts: ["ctAlfa01", "ctSinConv"], desde: T0 - H });
-  ok(e2.status === 200 && e2.d.res.length === 2 && e2.d.res[0].ev.length === 7 && e2.d.res[1].ev.length === 0 && !e2.d.res[1].err,
+  ok(e2.status === 200 && e2.d.res.length === 2 && e2.d.res[0].ev.length === 8 && e2.d.res[1].ev.length === 0 && !e2.d.res[1].err,
     "por contacto: busca su conversación; sin conversación = sin eventos, no error", e2.d.res.map((r) => ({ ct: r.ct, n: r.ev.length, err: r.err })));
   pedidas = [];
   const e3 = await call({ action: "eventos", convs: [{ id: "convL", ct: "ctL" }], desde: T0 - 30 * M });

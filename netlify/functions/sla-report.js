@@ -151,6 +151,33 @@ function chanOf(m) {
   if (/INSTAGRAM|FACEBOOK|TIKTOK|WEBCHAT|LIVE_CHAT|GMB|REVIEW/.test(t)) return "social";
   return "otro";
 }
+// Mensaje entrante que NO es una respuesta del prospecto (Dirección General, 14-oct-2026):
+//  · el texto predeterminado de los botones de WhatsApp de nuestras páginas (landings, páginas de
+//    gracias, sitio, JJF, evento de Madrid): el prospecto da clic, manda el mensaje ya escrito y
+//    muchas veces nunca contesta. El de la página de gracias puede llegar DESPUÉS de la llamada
+//    automática y se leía como respuesta.
+//  · la respuesta automática del WhatsApp Business o del correo del prospecto.
+// Se reconocen por una frase característica, sin importar acentos, emojis, el nombre que las
+// páginas le agregan ("¡Hola! Soy Ana.") ni la referencia de campaña. Si un anuncio de Meta que
+// abre WhatsApp trae su propio texto, se agrega aquí.
+const PLANTILLAS_ENTRANTES = [
+  "me gustaria recibir mas informacion de selvadentro", "id like more information about selvadentro",
+  "quiero registrarme al evento", "vi la pagina de selvadentro en tulum y quisiera saber mas sobre los lotes",
+  "i saw the selvadentro tulum page and would like to know more about the residential lots",
+  "me interesa conocer mas sobre selvadentro tulum", "id like to learn more about selvadentro tulum",
+  "solicite lotes precios plan de pago", "i requested lots pricing payment plan",
+  "entre a su pagina y me interesa conocer mas sobre selvadentro", "i just visited your website and id love to know more about selvadentro",
+  "vi el sitio de jjf creando", "i saw the jjf creando website", "nos vimos en el evento de madrid", "we met at the madrid event",
+];
+const RX_AUTORRESPUESTA = /mensaje automatico|respuesta automatica|fuera de (la )?oficina|gracias por (comunicarte|contactarnos|tu mensaje|escribirnos)|en breve (te )?(atendemos|contactamos|respondemos|responderemos)|te responderemos|out of office|auto ?reply|automatic reply|thank you for (contacting|your message|reaching out)|we will (get back|reply)/;
+const normTexto = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  .replace(/[’'`]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+function esPlantillaEntrante(m) {
+  if (m.direction !== "inbound" || chanOf(m) === "call") return false;
+  const t = normTexto(m.body || (m.meta && m.meta.body) || "");
+  if (!t) return false;
+  return PLANTILLAS_ENTRANTES.some((p) => t.includes(p)) || RX_AUTORRESPUESTA.test(t);
+}
 const TZ_MS = 5 * 3600e3;                 // Tulum, UTC-5 sin DST
 const dayKey = (t) => new Date(t - TZ_MS).toISOString().slice(0, 10);
 
@@ -274,6 +301,8 @@ async function sweepOne(id, opt, excl) {
       for (const m of msgs) {
         const t = ts(m.dateAdded); if (!t) continue;
         const esLlamada = chanOf(m) === "call", dur = esLlamada ? callDur(m) : null;
+        // Mensaje predeterminado de nuestras páginas o respuesta automática del prospecto: no es respuesta.
+        if (esPlantillaEntrante(m)) { out.plant = (out.plant || 0) + 1; continue; }
         if (out.nc) {
           if (t < ncD) {
             if (m.direction === "inbound") out.nc.inb = true;
@@ -629,5 +658,5 @@ exports.handler = async (event) => {
 // Piezas que reutiliza el reporte de Primer Contacto (pc-report.js): la MISMA definición de
 // acción manual, canal, desenlace y duración de llamada que Desempeño. Si una cambia aquí,
 // cambia en los dos reportes; duplicarlas era garantizar que algún día dijeran cosas distintas.
-exports.internals = { attrOf, cfMap, mapContact, contacts, users, citas, ts, isManual, chanOf,
+exports.internals = { attrOf, cfMap, mapContact, contacts, users, citas, ts, isManual, chanOf, esPlantillaEntrante,
   callStatus, callDesenlace, callDur, dayKey, TZ_MS, AUTO_SOURCES, CALL_LINEA };

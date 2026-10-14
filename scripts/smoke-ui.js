@@ -888,7 +888,8 @@ const PORT = process.env.PORT || 8765;
     r.via = Object.entries(E.via).every(([k, n]) => A.coh.filter(x => x.via === k).length === n)
       && JSON.stringify(A.citaSinConv.map(c => c.id)) === JSON.stringify(E.citaSinConv)
       && (() => { const v = A.vel.find(x => x.id === E.noche.id); return v && !v.vent && v.dtAbre === E.noche.dtAbre && v.autoMsg === E.noche.autoMsg; })()
-      && A.vel.find(x => x.id === 'lead00013').re === true && A.coh.find(x => x.id === 'cart00002').falta === 'intento 2 de 3';
+      && A.vel.find(x => x.id === 'lead00013').re === true && A.coh.find(x => x.id === 'cart00002').falta === 'intento 2 de 3'
+      && A.diag.plant === 1 && !A.coh.some(x => x.id === 'lead00002') && A.cad.find(x => x.id === 'lead00002').est === 'silencio';
     const den = A.coh.filter(x => A.PC_DEN.includes(x.res));
     r.entrega = den.length === E.entrega.den && den.filter(x => x.res === 'entregado').length === E.entrega.ent
       && Object.entries(E.res).every(([k, n]) => A.coh.filter(x => x.res === k).length === n);

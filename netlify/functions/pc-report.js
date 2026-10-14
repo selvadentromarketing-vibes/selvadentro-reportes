@@ -22,7 +22,8 @@
 //     Un evento por mensaje de la conversación dentro de [desde, hasta]. origen: "m" acción
 //     manual de un usuario, "a" automática (workflow, campaña, envío masivo, API o sin
 //     usuario: el marcador automático cae aquí aunque traiga el usuario del ejecutivo), "i"
-//     entrante del prospecto. canal: call/whatsapp/sms/email/social. Las llamadas traen su
+//     entrante del prospecto, "p" entrante que no es respuesta (mensaje predeterminado de nuestras
+//     páginas o respuesta automática del prospecto). canal: call/whatsapp/sms/email/social. Las llamadas traen su
 //     desenlace (ok/na/linea/otro) y su duración en segundos (null si el CRM no la trae).
 //     Sin cuerpos de mensaje: el reporte cuenta toques, no lee conversaciones.
 //   { action:"contactos", ids:[contactId], tareas? }   (máx 30 por llamada)
@@ -43,7 +44,7 @@ const API_KEY = process.env.GHL_API_KEY;
 const LOCATION_ID = process.env.GHL_LOCATION_ID;
 const json = S.json;
 const ghl = S.ghlFetch;
-const { ts, chanOf, callStatus, callDesenlace, callDur, cfMap, mapContact, AUTO_SOURCES } = SLA;
+const { ts, chanOf, callStatus, callDesenlace, callDur, cfMap, mapContact, AUTO_SOURCES, esPlantillaEntrante } = SLA;
 
 // Cada llamada debe caber en los 10 s de una Netlify Function: 5 páginas de conversaciones
 // (500) y 10 conversaciones con sus mensajes. El front sigue con el cursor / el siguiente lote.
@@ -131,8 +132,10 @@ async function mensajesDesde(convId, desde) {
 // Origen de un mensaje saliente. Es la regla de Desempeño (isManual) con una diferencia que
 // pide el manual (7.3): Instagram y Facebook SÍ son canal del ejecutivo ("mensaje por el
 // canal donde el prospecto se acercó"); en Desempeño quedaban fuera de la acción manual.
+// "p" = entrante que no es respuesta: el mensaje predeterminado de los botones de WhatsApp de
+// nuestras páginas o la respuesta automática del prospecto (ver sla-report.js).
 function origen(m) {
-  if (m.direction === "inbound") return "i";
+  if (m.direction === "inbound") return esPlantillaEntrante(m) ? "p" : "i";
   const tipo = String(m.messageType || m.type || "");
   const src = String(m.source || "").toLowerCase();
   if (/^TYPE_CAMPAIGN/i.test(tipo) || AUTO_SOURCES.has(src) || !m.userId) return "a";
