@@ -839,9 +839,9 @@ const PORT = process.env.PORT || 8765;
   console.log('\n[reglas v1.1] aceptación', JSON.stringify(v11));
   if (!v11.ok) hallazgos.push({ vista: 'reglas:v1.1', v11 });
   // Notas de las tarjetas de Desempeño (Dirección, 13-oct-2026): "28 leads y solo 4 en la
-  // mediana de 1er toque". Regla nueva: si el asesor tocó al lead ANTES de su traspaso a ventas
-  // (la oportunidad se creó después), su reloj arranca en el alta y entra a la mediana con su
-  // tiempo real; el lead que nadie tocó hasta el traspaso se sigue midiendo desde el traspaso.
+  // mediana de 1er toque". El reloj arranca siempre en el alta (14-oct-2026): el toque hecho
+  // antes de crear la oportunidad entra con su tiempo real y crear la oportunidad tarde ya no
+  // esconde el tiempo entre la entrada del lead y su primer toque.
   VISTA = 'desempeno:notas';
   const notas = await page.evaluate(() => {
     const Z = (local) => Date.parse(local + '-05:00'), iso = (t) => new Date(t).toISOString();
@@ -855,7 +855,7 @@ const PORT = process.env.PORT || 8765;
     lead('med', '2026-10-05T10:00:00', { foM: Z('2026-10-05T10:03:00'), foMch: 'whatsapp' });                                   // en la mediana: 3 min
     lead('antes', '2026-10-05T11:00:00', { foM: Z('2026-10-05T11:05:00'), foMch: 'call', calls: 1, chans: ['call'],
       cl: { n: 1, ok: 0, na: 1, linea: 0, otro: 0, dn: 0, t: [Z('2026-10-05T11:05:00')] } }, '2026-10-05T11:20:00');           // llamó y DESPUÉS se creó la OPP: 5 min desde el alta
-    lead('frio', '2026-10-05T13:00:00', { foM: Z('2026-10-05T15:02:00'), foMch: 'whatsapp' }, '2026-10-05T15:00:00');        // nadie lo tocó hasta el traspaso: 2 min
+    lead('tarde', '2026-10-05T13:00:00', { foM: Z('2026-10-05T15:02:00'), foMch: 'whatsapp' }, '2026-10-05T15:00:00');       // OPP creada 2 h después: cuenta 122 min, no 2
     lead('noche', '2026-10-05T22:00:00', { foM: Z('2026-10-06T09:30:00'), foMch: 'whatsapp' });                                 // fuera de horario
     lead('nada', '2026-10-05T12:00:00', {});                                                                                    // sin toque
     const now = Z('2026-10-12T12:00:00');
@@ -867,8 +867,9 @@ const PORT = process.env.PORT || 8765;
     const nota = (rx) => { const k = tarjeta(rx); if (!k || !k.dataset.lqTip) return ''; const d = document.createElement('div'); d.innerHTML = k.dataset.lqTip; return d.textContent.replace(/\s+/g, ' '); };
     const L = {}; agg.leads.forEach(l => { L[l.id] = l; });
     const r = {};
-    r.antes = !!(L.antes && L.antes.hAntes && !L.antes.hand && L.antes.slaAt === 5 * 60e3 && L.antes.slaCall === 5 * 60e3 && !slaAntesReloj(L.antes)
-      && L.frio && L.frio.hand && !L.frio.hAntes && L.frio.slaAt === 2 * 60e3 && !slaAntesReloj(L.nada));
+    r.antes = !!(L.antes && L.antes.slaAt === 5 * 60e3 && L.antes.slaCall === 5 * 60e3 && !slaAntesReloj(L.antes)
+      && L.tarde && L.tarde.created === L.tarde.alta && L.tarde.slaAt === 122 * 60e3 && L.tarde.velOk === false && !slaAntesReloj(L.nada));
+    r.tarjeta60 = tarjeta(/^1er toque ≤60 s/) ? tarjeta(/^1er toque ≤60 s/).querySelector('.k-lbl').textContent : '';
     r.valor = tarjeta(/^Med\. 1er toque/).querySelector('.k-val').textContent;
     r.sinNota = [...document.querySelector('#view-sla .crm-kpis').querySelectorAll('.crm-kpi')].filter(k => !k.dataset.lqTip).map(k => k.querySelector('.k-lbl').textContent);
     r.conNota = !r.sinNota.length;
@@ -878,12 +879,12 @@ const PORT = process.env.PORT || 8765;
     r.det = slaDetalleLeads(agg.leads, agg.v11, (u) => users[u] || '');
     ADVISOR_LIST = advPrev; slaState.asesor = selPrev; slaState.agg = aggPrev;
     r.ok = r.antes && r.conNota
-      && r.valor === '3 min'
+      && r.valor === '5 min' && !/Ejecutivo/.test(r.tarjeta60) && /desde la entrada del lead/.test(r.tarjeta60)
       && /Por qué 3 de 5: fuera de horario, 1 \(no entran por regla.*En horario, 4; de ellos no entran: sin 1er toque todavía \(1\) → 3 en la mediana\./.test(r.mediana)
-      && /Incluye 1 tocado antes de que se creara su oportunidad: cuentan con su tiempo real desde el alta/.test(r.mediana)
+      && !/traspaso/.test(r.mediana)
       && /Base: 1 de 4 leads en horario/.test(r.llamada) && !/⚠/.test(r.llamada)
       && /^Leads cuyo 1er toque llegó a tiempo/.test(r.sla5) && !/antes de que arrancara su reloj/.test(r.sla5)
-      && /alta · tocado antes del traspaso/.test(r.det) && />traspaso</.test(r.det) && /no: sin 1er toque/.test(r.det) && !/anterior a su alta/.test(r.det);
+      && !/traspaso/.test(r.det) && /no: sin 1er toque/.test(r.det) && !/anterior a su alta/.test(r.det);
     delete r.det;
     return r;
   });

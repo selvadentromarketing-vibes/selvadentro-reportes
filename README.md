@@ -671,16 +671,17 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
     tarjeta de Desempeño (o tocarla en celular) sale qué cuenta exactamente, sobre qué base,
     qué queda fuera y por qué, con los números del rango (`lqNota`, misma nota flotante que
     los nombres de los SQL+). La de "Med. contacto efectivo" ahora también trae su N.
-  - **Reloj con traspaso y toque previo** (Dirección General, 13-oct-2026): el reloj arranca
-    en el traspaso a ventas (la creación de la oportunidad) solo si **nadie tocó al lead antes**;
-    si el asesor ya le había llamado o escrito y después le creó la oportunidad, el reloj arranca
-    en el **alta** y el lead entra a las medianas con su tiempo real (`hAntes` guarda la hora del
-    traspaso ignorado; "ver leads" lo marca "alta · tocado antes del traspaso"). Antes ese toque
-    quedaba antes del reloj y se contaba distinto en cada tarjeta: fuera de la mediana de 1er
-    toque y del SLA de 60 s, cumplido en el de 5 min y 0 min en la mediana de 1ª llamada (por
-    eso un rango salía con 28 leads y 4 en la mediana). `sla:agg:v15` fuerza a regenerar el
-    agregado. Queda `slaAntesReloj` solo para un toque anterior al alta del contacto (fusionado
-    o importado); "ver leads" ya no lo llama "sin 1er toque".
+  - **Reloj desde el alta, siempre** (Dirección General, 14-oct-2026): el reloj del asesor
+    arranca en el alta del lead en el CRM. Desde el 26-ago-2026 arrancaba en el "traspaso a
+    ventas" (la creación de su primera oportunidad), pensado para leads que esperaban en
+    marketing; hoy no hay Ejecutivo de Primer Contacto y el CRM asigna el lead al asesor desde
+    que entra, así que no hay traspaso. Medir desde la oportunidad tenía dos fallas: el toque
+    hecho antes de crearla quedaba "antes del reloj" y cada tarjeta lo contaba distinto (fuera
+    de la mediana de 1er toque y del SLA de 60 s, cumplido en el de 5 min, 0 min en la de 1ª
+    llamada: por eso un rango salía con 28 leads y 4 en la mediana), y crearla tarde escondía
+    el tiempo entre la entrada y el primer toque. `sla:agg:v16` fuerza a regenerar el agregado.
+    `slaAntesReloj` queda solo para un toque anterior al alta (contacto fusionado o importado);
+    "ver leads" ya no lo llama "sin 1er toque".
   - **Campaña de origen = la de Calidad de Leads**: se toma por id de contacto del agregado
     de Calidad de Leads (ID de campaña, alias de UTM, atribución inferida), que ahora guarda
     el `id` de cada lead; si no está en memoria se lee del kv una vez. Sin él, la
@@ -698,7 +699,7 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
     `foA` (`tAuto` marca a quién se le acreditó así). La columna "1er toque manual", los
     intentos y el canal del 1er toque siguen contando solo lo que hizo el asesor.
 - **Los tres parámetros del Anexo 1 que faltaban** (2026-09-11), derivados de lo que el
-  barrido ya lee por contacto: **SLA de 60 segundos** del Ejecutivo de Primer Contacto
+  barrido ya lee por contacto: **SLA de 60 segundos** de 1er toque desde la entrada del lead (la tarjeta decía "del Ejecutivo de Primer Contacto", un puesto que ya no existe: renombrada el 14-oct-2026)
   (contra el primer toque manual); **integridad del pipeline** (spec B2-2:
   toda OPP abierta —Seguimiento de OPP, Carta oferta, Apartado— debe tener un *next step
   con fecha* = tarea abierta con fecha límite hoy o después, o cita futura; se lista con
