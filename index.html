@@ -442,6 +442,10 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
 
   /* ---- CRM en vivo (GoHighLevel) ---- */
   .crm-kpis{ display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:14px; margin-bottom:18px; }
+  /* Tarjetas de Desempeño en dos grupos de 4 columnas: las filas alinean y ninguna queda sola */
+  .crm-kpis.k4{ grid-template-columns:repeat(4,minmax(0,1fr)); }
+  @media (max-width:720px){ .crm-kpis.k4{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
+  .kpi-grupo{ font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.8px; color:var(--neutro); font-weight:700; margin:0 0 6px; }
   .crm-kpi{ background:#fff; border:1px solid var(--linea); border-radius:var(--r-l); padding:16px 18px; box-shadow:0 1px 2px rgba(70,82,65,.05); }
   .crm-kpi .k-val{ font-family:var(--serif); font-size:var(--fs-2xl); color:var(--verde-prof); font-weight:700; line-height:1.1; }
   .crm-kpi .k-lbl{ font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.8px; color:var(--neutro); font-weight:600; margin-top:5px; }
@@ -7324,7 +7328,7 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
     const created = entPc ? Math.max(alta, sw.ex.fe || sw.ex.l || alta) : alta;
     if(entPc) pcEnt.push(c.id);
     const fiEf = entPc ? ((sw.efT||[]).find(t=>t >= created) || null) : fiEf0;
-    // Primer toque para la VELOCIDAD y el SLA de 60 s: el toque manual del asesor o, con las
+    // Primer toque para la VELOCIDAD y su P80: el toque manual del asesor o, con las
     // reglas v1.1, una llamada que el CRM marcó solo y que conectó ≥90 s (spec v1.2 §3:
     // "automatización con contacto cuenta a su hora real"; Dirección General, 7-oct-2026) —
     // lo que llegue primero. La columna "1er toque manual" sigue contando solo lo manual.
@@ -7713,23 +7717,15 @@ function slaRender(){
   const name = (u)=> agg.users[u] || (u ? "(sin nombre)" : "(sin asesor)");
   const pcti = (n,d)=> d ? Math.round(n/d*100)+"%" : "—";
 
-  const slasEf = leads.map(l=>l.slaEf).filter(x=>x!=null);   // contacto efectivo (definición del Anexo 1)
   // P80 del 1er toque (14-oct-2026): con las reglas v1.1, solo leads que entraron en horario
   // (R-04); el que no tiene toque entra como el peor tiempo, no sale de la base (slaTToque).
   const p80Base = leads.filter(l=>slaEnP80(l, agg.v11));
   const slasAt = p80Base.map(slaTToque);
-  // Hasta el 1er INTENTO DE LLAMADA, aparte del 1er toque por cualquier canal (7-oct-2026):
-  // solo los leads que el asesor marcó; los que no, van en "sin marcar".
-  const slasCall = p80Base.map(l=>l.slaCall).filter(x=>x!=null);
-  const und = (mins)=> slasEf.length ? Math.round(slasEf.filter(x=>x<=mins*60000).length/slasEf.length*100)+"%" : "—";
   const conCitas = leads.filter(l=>!l.ad);        // solo los que sí se pudieron leer
   const apTot = conCitas.reduce((a,l)=>a+l.ap.tot,0), apSh = conCitas.reduce((a,l)=>a+l.ap.sh,0), apNs = conCitas.reduce((a,l)=>a+l.ap.ns,0);
   const sinCitas = leads.length - conCitas.length;
 
   const kpi = (v,l,t,sub)=>`<div class="crm-kpi"${t||""}><div class="k-val">${v}</div><div class="k-lbl">${l}</div>${sub?`<div class="k-lbl" style="opacity:.7">${sub}</div>`:""}</div>`;
-  // Mediana con su N a la vista (Dirección, 13-oct-2026): "5 min" de Escape US/CA salía de UN
-  // solo lead y se comparaba como si fuera una tendencia. Con menos de SLA_N_MIN leads, gris.
-  const kpiMed = (arr, l, t)=> `<div class="crm-kpi${arr.length && arr.length < SLA_N_MIN ? " sla-chica" : ""}"${t||""}><div class="k-val">${fmtDur(slaMedian(arr))}</div><div class="k-lbl">${l}</div><div class="k-lbl" style="opacity:.7">${slaNTxt(arr.length)}</div></div>`;
   // P80 con su N; con meta (5 min), verde si cumple y rojo si no. Con muestra chica, gris.
   const kpiP80 = (arr, l, t, meta, sub)=>{ const v = slaPctl(arr, SLA_P), chica = arr.length && arr.length < SLA_N_MIN;
     const col = meta && v != null && !chica ? ` style="color:${v <= meta ? "var(--verde-prof)" : "var(--rojo)"}"` : "";
@@ -7776,8 +7772,6 @@ function slaRender(){
   // los leads, que era medir tasa de respuesta y castigar seis veces de más.
   const agB = slaAgBase(conDatos);
   const agN = agB.filter(l=>l.ap && l.ap.tot>0).length;
-  const diasCita = slaMedian(agB.filter(l=>l.fi && l.ap && l.ap.f && l.ap.f>=l.fi).map(l=>(l.ap.f-l.fi)/86400e3));
-  const diasN = agB.filter(l=>l.fi && l.ap && l.ap.f && l.ap.f>=l.fi).length;
   // Notas de las tarjetas (Dirección, 13-oct-2026): qué cuenta cada cifra, sobre qué base, qué
   // queda fuera y por qué, con los números del rango. Al pasar el mouse (o tocar, en celular).
   const H = slaHorarioV11(), DN = ["dom","lun","mar","mié","jue","vie","sáb"];
@@ -7787,76 +7781,44 @@ function slaRender(){
   const reloj = "El reloj arranca en la entrada (alta) del lead en el CRM. Un toque anterior al alta (contacto fusionado o importado con mensajes previos) no tiene tiempo que medir.";
   const antesN = conDatos.filter(slaAntesReloj).length, sinToque = conDatos.filter(l=>!(l.foM || l.tAuto)).length;
   const enH = V11 ? leads.filter(l=>!l.fh) : leads, fueraN = leads.length - enH.length;
-  const callCero = p80Base.filter(l=>l.slaCall === 0).length;
   const p80Sin = p80Base.filter(l=>l.slaAt == null && !slaAntesReloj(l)).length, p80Antes = p80Base.filter(slaAntesReloj).length;
   const p80Sd = enH.filter(l=>l.sd).length, p80V = slaPctl(slasAt, SLA_P);
-  // P80 de 1er toque y de 1er intento de llamada (Dirección General, 14-oct-2026): cuando en
-  // cada lead el 1er toque FUE la 1er llamada, las dos tarjetas daban la misma cifra con la
-  // misma N. Entonces va una sola; se separan en cuanto algún lead recibe antes un WhatsApp,
-  // SMS o correo (o, con v1.1, una llamada automática con contacto), o no tiene toque.
-  const atEsCall = slasAt.length > 0 && p80Base.every(l=> slaTToque(l) === (l.slaCall ?? null));
   const atPorQue = `<b>Base: ${slasAt.length} de ${leads.length} leads.</b> ${V11 && fueraN ? `Fuera de horario, ${fueraN}: no entran (su meta es antes de las 11:00 y va en su propia tarjeta; horario: ${horTxt}). ` : ""}${p80Sd ? `Sin datos de conversación, ${p80Sd}: no entran. ` : ""}${p80Sin ? `<b>Sin 1er toque, ${p80Sin}: entran como el peor tiempo</b> —no salen de la base, como pasaba con la mediana—. ` : ""}${p80Antes ? `Con el 1er toque antes de que arrancara su reloj, ${p80Antes}: entran como 0 min, cumplidos igual que en Velocidad.` : ""}`;
   const p80Meta = `<b>Es el mismo 80% que pide el 5 de Velocidad:</b> si sale en 5 minutos o menos, al menos el 80% de estos leads cumplió su SLA; si sale más, no. A diferencia de la mediana, no se ve bien con la mitad de los leads rápidos y la otra mitad tarde.`;
   const p80Inf = p80V === Infinity ? `<b>Sale "sin toque":</b> más del 20% de estos leads no tiene 1er toque, así que ni el 80% se tocó.` : "";
-  const sinEf = leads.filter(l=>!l.fi).length, efAntes = leads.filter(l=>l.fi && l.slaEf == null).length;
-  const ef = (mins)=> slasEf.filter(x=>x<=mins*60000).length;
-  const efBase = `No entran: sin contacto efectivo (${sinEf})${efAntes ? `; con el contacto efectivo antes de que arrancara su reloj (${efAntes})` : ""}. Reloj de 24 h: aquí no se separa el horario.`;
-  const n60s = conDatos.filter(l=>l.slaAt!=null && l.slaAt<=60000).length, nFoM = conDatos.filter(l=>l.foM).length;
   const nEf = conDatos.filter(l=>l.fi).length, noAd = conDatos.filter(l=>l.ad).length;
   const verLeads = "Lead por lead: «ver leads» en las tablas de abajo.";
-  html += `<div class="crm-kpis">
+  // Tarjetas (Dirección General, 14-oct-2026): eran 16 y varias no decían nada del asesor. Quedan
+  // 7: volumen, velocidad (la nota, su P80 en horario y fuera de horario) y resultado (contacto
+  // efectivo, agendamiento, show). La meta de velocidad es 5 min: la de 60 s se retiró. Llamada
+  // conectada, ≤15/≤60 min, mediana de efectivo y P80 de 1a llamada siguen en la tabla por asesor;
+  // las citas agendadas, en "Citas del periodo".
+  html += `<div class="kpi-grupo">Leads y velocidad · meta 5 min</div><div class="crm-kpis k4">
     ${kpi(leads.length.toLocaleString(),"Leads en el rango", lqNota(
       `<b>Leads creados en las semanas del rango</b> (hora Tulum), estén en el pipeline que estén: el universo lo define el dueño, no el pipeline.${fCamp ? " Solo la campaña de origen elegida." : ""}`,
       `Fuera de todo el reporte: ${V11 ? `${pl(V11.invalidos.length, "lead inválido", "leads inválidos")}, ${pl(V11.brokers.length, "error", "errores")} de asignación (brokers)` : `${pl(agg.exclExpansion||0, "lead")} de Brokers Expansión y activación`} y ${pl(agg.testExcl||0, "registro")} de prueba.`,
       sinDatos ? `Sin datos de conversación (no se pudieron leer): ${sinDatos}. Cuentan aquí, pero no en los porcentajes.` : ""))}
-    ${kpiND(nFoM,cd,"Con 1er toque manual del asesor",null,null, lqNota(
-      `<b>Leads a los que el asesor les hizo al menos una acción manual</b> —llamada, WhatsApp, SMS o correo escrito a mano—, en cualquier momento. No cuentan la secuencia de bienvenida, workflows, campañas ni llamadas automáticas.`,
-      cdTxt, cd - nFoM ? `Sin ninguna acción manual registrada: ${cd - nFoM}.` : ""))}
-    ${kpiND(conDatos.filter(l=>l.foC).length,cd,"Con llamada que sí conectó",null,null, lqNota(
-      `<b>Leads con al menos una llamada del asesor que el CRM marcó como conectada</b> (connected, answered o completed), dure lo que dure. Un intento sin respuesta, a buzón o con falla de línea no cuenta.`, cdTxt))}
+    ${V11 ? kpiND(v5n,cd,`Velocidad · cumplieron su SLA de 1er toque (5 min en horario, antes de las 11:00 fuera)${nAuto?` · ${nAuto} por llamada automática con contacto ≥90 s`:""}`,null,null, lqNota(
+              `<b>Leads cuyo 1er toque llegó a tiempo.</b> Si entró en horario (${horTxt}): en 5 minutos o menos. Si entró fuera de horario: antes de las 11:00 del siguiente día de servicio. 1er toque = manual del asesor o llamada automática que conectó ≥90 s, lo que llegue primero.`,
+              `${cdTxt} No cumplen: los que no tienen 1er toque (${sinToque}) y los que llegaron tarde.`,
+              antesN ? `Incluye ${pl(antesN, "lead")} cuyo 1er toque fue antes de que arrancara su reloj: se dan por cumplidos. ${reloj}` : ""))
+          : kpiND(v5n,cd,"Velocidad · 1er toque manual ≤5 min · desde la entrada del lead","meta 5 min",null, lqNota(
+              `<b>Leads con 1er toque manual en 5 minutos o menos</b> desde su entrada, las 24 horas.`, cdTxt,
+              antesN ? `Incluye ${pl(antesN, "lead")} cuyo 1er toque fue antes de que arrancara su reloj: se dan por cumplidos. ${reloj}` : ""))}
+    ${kpiP80(slasAt, V11?"P80 1er toque · el 80% de los leads en horario se tocó en este tiempo o menos · meta 5 min":"P80 1er toque manual · el 80% de los leads se tocó en este tiempo o menos · desde la entrada · meta 5 min", lqNota(
+      `<b>El 80% de los leads se tocó en este tiempo o menos</b> desde su entrada${V11 ? " (solo los que entraron en horario)" : ""}; solo 1 de cada 5 tardó más. 1er toque = el primer mensaje o llamada manual del asesor${V11 ? ", o una llamada automática que conectó ≥90 s, lo que llegue primero" : ""}.`,
+      p80Meta, p80Inf, atPorQue, p80Antes ? reloj : "", verLeads), 5*60000, p80Sin ? `${p80Sin} sin toque` : "")}
+    ${V11 ? kpiND(fhOk,fhDe,"Fuera de horario atendidos antes de las 11:00",null,null, lqNota(
+              `<b>Leads que entraron fuera de horario (${fhDe}): cuántos tuvieron su 1er toque antes de las 11:00</b> del siguiente día de servicio. Horario de atención: ${horTxt}.`,
+              (()=>{ const a = conDatos.filter(l=>l.fh && slaAntesReloj(l)).length; return a ? `Incluye ${pl(a, "lead")} con el 1er toque antes de que arrancara su reloj (cuentan como cumplidos).` : ""; })())) : ""}
+  </div><div class="kpi-grupo">Resultado</div><div class="crm-kpis k4">
     ${kpiND(nEf,cd,(V11?"Contactados efectivos · respuesta del lead o llamada ≥90 s":"Contactados efectivos")+(telG.efNoMed?` · ${telG.efNoMed} no medible${telG.efNoMed===1?"":"s"}: llamada conectada sin duración`:""),null,null, lqNota(
       V11 ? `<b>Leads con los que sí hubo conversación:</b> el lead respondió (cualquier mensaje suyo o llamada entrante) o hubo una llamada de 90 s o más —del asesor, automática o entrante—. Una acción del asesor sin respuesta no cuenta.`
           : `<b>Leads que respondieron</b> (cualquier mensaje suyo o llamada entrante). Una acción del asesor sin respuesta no cuenta.`,
       cdTxt, telG.efNoMed ? `Sin respuesta escrita y con llamadas conectadas sin duración (no se sabe si llegaron a 90 s): ${telG.efNoMed}.` : ""))}
-    ${V11 ? kpiND(v5n,cd,`Cumplieron su SLA de 1er toque · 5 min en horario, antes de las 11:00 fuera de horario${nAuto?` · ${nAuto} por llamada automática con contacto ≥90 s`:""}`,null,null, lqNota(
-              `<b>Leads cuyo 1er toque llegó a tiempo.</b> Si entró en horario (${horTxt}): en 5 minutos o menos. Si entró fuera de horario: antes de las 11:00 del siguiente día de servicio. 1er toque = manual del asesor o llamada automática que conectó ≥90 s, lo que llegue primero.`,
-              `${cdTxt} No cumplen: los que no tienen 1er toque (${sinToque}) y los que llegaron tarde.`,
-              antesN ? `Incluye ${pl(antesN, "lead")} cuyo 1er toque fue antes de que arrancara su reloj: se dan por cumplidos. ${reloj}` : ""))
-          : kpiND(v5n,cd,"1er toque manual ≤5 min · desde la entrada del lead","meta 5 min",null, lqNota(
-              `<b>Leads con 1er toque manual en 5 minutos o menos</b> desde su entrada, las 24 horas.`, cdTxt,
-              antesN ? `Incluye ${pl(antesN, "lead")} cuyo 1er toque fue antes de que arrancara su reloj: se dan por cumplidos. ${reloj}` : ""))}
-    ${V11 ? kpiND(fhOk,fhDe,"Fuera de horario atendidos antes de las 11:00",null,null, lqNota(
-              `<b>Leads que entraron fuera de horario (${fhDe}): cuántos tuvieron su 1er toque antes de las 11:00</b> del siguiente día de servicio. Horario de atención: ${horTxt}.`,
-              (()=>{ const a = conDatos.filter(l=>l.fh && slaAntesReloj(l)).length; return a ? `Incluye ${pl(a, "lead")} con el 1er toque antes de que arrancara su reloj (cuentan como cumplidos).` : ""; })())) : ""}
-    ${kpi(und(60),"Contacto efectivo ≤60 min (handoff WhatsApp) · desde la entrada", lqNota(
-      `<b>Leads con contacto efectivo medible (${slasEf.length}): cuántos lo tuvieron en 60 minutos o menos</b> desde su entrada (${ef(60)}). Contacto efectivo = respuesta del lead o llamada ≥90 s.`, efBase), slasEf.length ? `${ef(60)} de ${slasEf.length}` : "")}
-    ${kpi(und(15),"Contacto efectivo ≤15 min (transferencia en caliente)", lqNota(
-      `<b>Leads con contacto efectivo medible (${slasEf.length}): cuántos lo tuvieron en 15 minutos o menos</b> desde su entrada (${ef(15)}).`, efBase), slasEf.length ? `${ef(15)} de ${slasEf.length}` : "")}
-    ${kpiND(n60s,cd,V11?"1er toque ≤60 s · desde la entrada del lead · manual o llamada automática con contacto ≥90 s":"1er toque manual ≤60 s · desde la entrada del lead","meta 60 s",null, lqNota(
-      `<b>Leads con 1er toque en 60 segundos o menos</b> desde su entrada.`,
-      `${cdTxt} Esa base <b>incluye</b> ${V11 ? `a los que entraron fuera de horario (${fhDe}), ` : ""}a los que no tienen toque (${sinToque})${antesN ? ` y a los tocados antes de que arrancara su reloj (${antesN}; aquí no cuentan como cumplidos, en el SLA de 5 min sí)` : ""}: por eso sale mucho más bajo que el SLA de 5 minutos.`))}
-    ${kpiMed(slasEf,"Med. contacto efectivo · desde la entrada del lead", lqNota(
-      `<b>Mediana del tiempo entre la entrada del lead y su contacto efectivo</b> (respuesta del lead o llamada ≥90 s). La mediana es el valor de en medio: la mitad tardó menos y la otra mitad más.`,
-      `Base: ${slasEf.length} de ${leads.length}. ${efBase}`))}
-    ${atEsCall ? kpiP80(slasAt, V11?"P80 1er toque = 1er intento de llamada · el 80% de los leads en horario se tocó en este tiempo o menos · meta 5 min":"P80 1er toque manual = 1er intento de llamada · el 80% de los leads se tocó en este tiempo o menos · meta 5 min", lqNota(
-      `<b>El 80% de los leads se tocó en este tiempo o menos</b> desde su entrada${V11 ? " (solo los que entraron en horario)" : ""}; solo 1 de cada 5 tardó más. En ${slasAt.length===1 ? "este lead" : `los ${slasAt.length}`} el 1er toque fue una llamada del asesor (conecte o no).`,
-      `<b>Por qué una sola tarjeta:</b> como el 1er toque de cada lead fue su 1er llamada, el P80 de 1er toque y el de 1er intento de llamada son la misma cifra. Se separan en dos en cuanto algún lead reciba primero un WhatsApp, SMS o correo, o se quede sin toque.`,
-      p80Meta, atPorQue, p80Antes ? reloj : "", verLeads), 5*60000)
-    : `${kpiP80(slasAt, V11?"P80 1er toque · el 80% de los leads en horario se tocó en este tiempo o menos · meta 5 min":"P80 1er toque manual · el 80% de los leads se tocó en este tiempo o menos · desde la entrada · meta 5 min", lqNota(
-      `<b>El 80% de los leads se tocó en este tiempo o menos</b> desde su entrada${V11 ? " (solo los que entraron en horario)" : ""}; solo 1 de cada 5 tardó más. 1er toque = el primer mensaje o llamada manual del asesor${V11 ? ", o una llamada automática que conectó ≥90 s, lo que llegue primero" : ""}.`,
-      p80Meta, p80Inf, atPorQue, p80Antes ? reloj : "", verLeads), 5*60000, p80Sin ? `${p80Sin} sin toque` : "")}
-    ${kpiP80(slasCall, V11?"P80 1er intento de llamada · el 80% de los leads marcados en horario recibió su 1a llamada en este tiempo o menos":"P80 1er intento de llamada · el 80% de los leads marcados recibió su 1a llamada en este tiempo o menos", lqNota(
-      `<b>El 80% de los leads que el asesor marcó recibió su primera llamada en este tiempo o menos</b> desde su entrada, conecte o no. Solo llamadas manuales.`,
-      `Base: ${slasCall.length} de ${p80Base.length} leads${V11 ? " en horario" : ""}. <b>Sin ninguna llamada del asesor: ${p80Base.length - slasCall.length}</b> — aquí no hay tiempo que medir: van en "Sin marcar" y, si tampoco tuvieron otro toque, en contra del P80 de 1er toque.${V11 && fueraN ? ` Fuera de horario, no entran: ${fueraN}.` : ""}`,
-      callCero ? `⚠ ${callCero} de ${slasCall.length} cuentan como <b>0 min</b>: su primera llamada fue antes de que arrancara su reloj. ${reloj}` : ""), null, p80Base.length - slasCall.length ? `${p80Base.length - slasCall.length} sin marcar` : "")}`}
-    ${CP ? kpi(CP.agendadas.length.toLocaleString(), "Citas agendadas en el periodo · por fecha en que se agendaron, de cualquier lead", lqNota(
-      `<b>Citas que se agendaron dentro del rango</b>, por la fecha en que se agendaron (sea cual sea la fecha de la cita) y de cualquier lead, también de los que entraron antes del rango. Las canceladas no cuentan.`,
-      CP.sinFechaAg ? `Citas del CRM sin fecha de agendado (no se pueden ubicar en un periodo): ${CP.sinFechaAg}.` : "")) : ""}
-    ${kpiND(agN,agB.length,"Tasa de agendamiento · leads del rango con cita ÷ los que tuvieron contacto efectivo o agendaron",null,null, lqNota(
+    ${kpiND(agN,agB.length,"Tasa de agendamiento · con cita ÷ contactados efectivos o que agendaron",null,null, lqNota(
       `<b>Leads del rango que tuvieron contacto efectivo o agendaron (${agB.length}): cuántos tienen al menos una cita</b> en el CRM, de cualquier estatus (${agN}). Quien agenda por el link sin escribir también cuenta.`,
       noAd ? `No entran los leads cuyas citas no se pudieron leer (${noAd}).` : ""))}
-    ${kpi(diasCita==null?"—":(Math.round(diasCita*10)/10)+" d","Días a la cita (mediana, efectivo → fecha de cita) · estándar 1 semana", lqNota(
-      `<b>Mediana de días entre el contacto efectivo y la fecha de la cita.</b> Base: leads con contacto efectivo y una cita posterior (${diasN}). El CRM no da la fecha en que se agendó, así que se mide a la fecha de la cita. Estándar: 1 semana.`), slaNTxt(diasN))}
     ${CPres ? kpiND(CPres.as, CPres.den, `Show rate · citas del periodo por fecha de la cita${CPres.asE||CPres.nsE?` · ${CPres.asE+CPres.nsE} por etapa del pipeline`:""}${CPres.sinreg?` · ${CPres.sinreg} pasada${CPres.sinreg===1?"":"s"} sin registrar asistencia`:""}`, "meta 75%", CPres.den ? CPres.as/CPres.den>=0.75 : null, lqNota(
               `<b>Asistencia a las citas con fecha dentro del rango</b>, de cualquier lead: asistió ÷ (asistió + no show) = ${CPres.as} ÷ ${CPres.den}. Meta 75%.`,
               `Asistió: ${CPres.asC} por el calendario + ${CPres.asE} por la etapa del pipeline (Zoom o Tour realizado, o una etapa posterior). No show: ${CPres.nsC} por el calendario + ${CPres.nsE} por la etapa.`,
@@ -8295,19 +8257,18 @@ function slaRender(){
     <br><b>Riesgo</b> · <b>Lead sin toque:</b> lead activo con más de 7 días sin toque manual del asesor y sin respuesta del lead — la secuencia
     automática no cuenta como toque (si contara, un lead abandonado con drip activo nunca aparecería en la lista) ·
     <b>Tareas programadas · en fecha · vencidas:</b> tareas del CRM del asesor; cerradas en o antes de su fecha; abiertas ya pasada su fecha — el % nunca se lee sin el conteo.
-    <br><b>Embudo y resultado</b> · <b>Citas agendadas en el periodo:</b> citas que se agendaron en el rango, de cualquier lead, sin canceladas · <b>Tasa de agendamiento:</b> de los leads que entraron en el rango con contacto efectivo o con cita, cuántos tienen cita (quien agenda por el link sin escribir también cuenta) ·
-    <b>Días a la cita:</b> mediana de días del contacto efectivo a la cita (medida a la fecha de la cita; el CRM no expone la fecha de agendado) ·
+    <br><b>Embudo y resultado</b> · <b>Agendadas</b> (tabla de citas del periodo): citas que se agendaron en el rango, de cualquier lead, sin canceladas · <b>Tasa de agendamiento:</b> de los leads que entraron en el rango con contacto efectivo o con cita, cuántos tienen cita (quien agenda por el link sin escribir también cuenta) ·
     <b>Show rate:</b> asistió ÷ (asistió + no show) de las citas con fecha en el rango, de cualquier lead; la asistencia sale del calendario y, si la cita pasó sin estatus final, de la etapa del lead (Zoom/Tour realizado o posterior = asistió; no show / re agendar = no asistió) · meta <b>75%</b> ·
     <b>OPP:</b> registros del pipeline que alcanzaron la etapa "Seguimiento de OPP" o posterior (Seguimiento de OPP, Carta oferta, Apartado, WON), por asesor asignado. Una cotización enviada todavía no cuenta como OPP. Cohorte: creados en el rango, en su etapa de hoy ·
     <b>WONs:</b> ventas cuyo cierre cayó en el rango, aunque la oportunidad se haya creado antes (se buscan hasta ~18 meses atrás) ·
     <b>OPP→Apartado · 30%</b> y <b>Apartado→WON · 80%</b>: pendientes de que Apartado y Cotización enviada existan como etapas en el CRM (spec B1/D2).</div>
     <div class="lq-meth"><b>SLAs contra los que se mide</b> (spec F1) —
-    1er toque en <b>60 segundos</b> desde la entrada del lead · primer contacto <b>≤5 minutos</b> · transferencia en caliente <b>15 minutos</b> · handoff por WhatsApp <b>60 minutos</b> ·
+    primer contacto <b>≤5 minutos</b> en horario y <b>antes de las 11:00</b> del siguiente día de servicio fuera de horario (la meta de 60 s se retiró el 14-oct-2026) · transferencia en caliente <b>15 minutos</b> · handoff por WhatsApp <b>60 minutos</b> ·
     show rate <b>75%</b> · OPP→Apartado <b>30%</b> · Apartado→WON <b>80%</b> ·
     seguimiento: <b>ningún lead vivo más de 7 días</b> sin un toque registrado.
-    El SLA anterior de "40% a una cita en 48 h" queda retirado: lo sustituyen la tasa de agendamiento y los días a la cita (spec D3), con meta por fijarse del primer mes limpio.
+    El SLA anterior de "40% a una cita en 48 h" queda retirado: lo sustituye la tasa de agendamiento (spec D3), con meta por fijarse del primer mes limpio.
     Acumulable dentro del mes seleccionando desde la primera semana.
-    <br><b>Ya se miden</b> (antes pendientes): integridad de pipeline —OPP abiertas sin next step con fecha, con nombres— y confirmación de Zoom el mismo día, ambas en su sección; el SLA de 60 segundos, arriba en los KPIs.
+    <br><b>Ya se miden</b> (antes pendientes): integridad de pipeline —OPP abiertas sin next step con fecha, con nombres— y confirmación de Zoom el mismo día, ambas en su sección.
     <b>Con reserva:</b> la confirmación el mismo día es una aproximación (GHL no guarda la hora de confirmación).</div>`;
 
   document.getElementById("sla-content").innerHTML = html;

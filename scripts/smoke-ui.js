@@ -791,7 +791,7 @@ const PORT = process.env.PORT || 8765;
     const r = { g, t, auditoria, efec: { nuevo, viejo }, sinGris: !/1er msj \(autom\.\)/i.test(txt) && !/Cualquier salida ≤60 s/i.test(txt),
       duracion: /conocida en 5 de 6 \(83%\)/.test(txt) && /1 conectaron sin duración legible/.test(txt) && /meta\.call\.recordingUrl/.test(txt),
       origen: /6 del asesor — 3 con falla de línea \(50%\), 2 conectadas, 1 sin duración · 4 automáticas \(workflow, campaña, envío masivo, API o sin usuario\) — 4 con falla de línea \(100%\)/.test(txt) && /2 entrantes del lead/.test(txt),
-      kpi: /P80 1er intento de llamada/i.test(txt) && /1 no medible: llamada conectada sin duración/i.test(txt), ficha: /Llamadas: 6 intentos \(5 en las primeras 24 h\)/.test(txt) && /falla de línea 3/.test(txt) };
+      kpi: !/P80 1er intento de llamada/i.test(txt) && /P80 1er llamada/i.test(txt) && /1 no medible: llamada conectada sin duración/i.test(txt), ficha: /Llamadas: 6 intentos \(5 en las primeras 24 h\)/.test(txt) && /falla de línea 3/.test(txt) };
     // groupTbl: [nombre, leads, en horario, 1er toque, canal, conectada, efectivos, P80 toque, P80 1er llamada, llamadas/lead, sin marcar, solo línea, ...]
     // (los P80 traen su N debajo y "chica" con menos de 5 leads; 1a llamada en 10, 3 y 4 min → P80 = 10 min)
     r.ok = !!g && g[0] === 'Daniela Arana ver leads ▸' && g[2] === '4 de 4 (100%)' && g[4] === 'Llamada 50% · WhatsApp 25% SMS 0% · Correo 25%' && g[7] === '2 min 4 leads · chica' && g[8] === '10 min 3 leads · chica'
@@ -862,7 +862,7 @@ const PORT = process.env.PORT || 8765;
     r.agendadas = agg.citasP.agendadas.length;
     r.ok = R.tot === 8 && R.asC === 1 && R.asE === 2 && R.ns === 2 && R.can === 1 && R.sinreg === 1 && R.fut === 1
       && r.agendadas === 2 && !!celdas && celdas.slice(1).join('|') === '2|8|1|2|2|60% (3 de 5)|1|1|1' && /3 de 5/.test(txt)
-      && /2\s*\n?\s*CITAS AGENDADAS EN EL PERIODO/i.test(txt.replace(/\n+/g, '\n'));
+      && !/CITAS AGENDADAS EN EL PERIODO/i.test(txt);   // la tarjeta salió (14-oct-2026): van en la tabla, columna Agendadas
     return r;
   });
   console.log('[show rate] citas del periodo', JSON.stringify(show));
@@ -956,20 +956,22 @@ const PORT = process.env.PORT || 8765;
     r.tarjeta60 = tarjeta(/^1er toque ≤60 s/) ? tarjeta(/^1er toque ≤60 s/).querySelector('.k-lbl').textContent : '';
     r.valor = tarjeta(/^P80 1er toque/).querySelector('.k-val').textContent;
     r.sub = tarjeta(/^P80 1er toque/).querySelectorAll('.k-lbl')[1].textContent;
-    r.sinNota = [...document.querySelector('#view-sla .crm-kpis').querySelectorAll('.crm-kpi')].filter(k => !k.dataset.lqTip).map(k => k.querySelector('.k-lbl').textContent);
+    r.sinNota = [...document.querySelectorAll('#view-sla .crm-kpis.k4 .crm-kpi')].filter(k => !k.dataset.lqTip).map(k => k.querySelector('.k-lbl').textContent);
     r.conNota = !r.sinNota.length;
     r.mediana = nota(/^P80 1er toque/);
-    r.llamada = nota(/^P80 1er intento de llamada/);
-    r.sla5 = nota(/^Cumplieron su SLA/);
+    r.sla5 = nota(/^Velocidad · cumplieron su SLA/);
+    // Tarjetas (14-oct-2026): 7, en este orden; sin la de 60 s ni la de 1a llamada.
+    r.grupos = [...document.querySelectorAll('#view-sla .crm-kpis.k4')].map(g => g.children.length).join('+');
+    r.tarjetas = [...document.querySelectorAll('#view-sla .crm-kpis.k4 .crm-kpi')].map(k => k.querySelector('.k-lbl').textContent.split(' · ')[0]).join('|');
     r.det = slaDetalleLeads(agg.leads, agg.v11, (u) => users[u] || '');
     ADVISOR_LIST = advPrev; slaState.asesor = selPrev; slaState.agg = aggPrev;
     r.ok = r.antes && r.conNota
       // P80 (14-oct-2026): en horario, 3 · 5 · 122 min y uno sin toque → el 4º de 4 es "sin toque"
-      && r.valor === 'sin toque' && /1 sin toque/.test(r.sub) && !/Ejecutivo/.test(r.tarjeta60) && /desde la entrada del lead/.test(r.tarjeta60)
+      && r.valor === 'sin toque' && /1 sin toque/.test(r.sub) && r.tarjeta60 === ''
+      && r.grupos === '4+3' && r.tarjetas === 'Leads en el rango|Velocidad|P80 1er toque|Fuera de horario atendidos antes de las 11:00|Contactados efectivos|Tasa de agendamiento|Show rate de citas'
       && /Base: 4 de 5 leads\. Fuera de horario, 1: no entran .*Sin 1er toque, 1: entran como el peor tiempo/.test(r.mediana)
       && /Sale "sin toque"/.test(r.mediana) && /mismo 80% que pide el 5 de Velocidad/.test(r.mediana)
       && !/traspaso/.test(r.mediana)
-      && /Base: 1 de 4 leads en horario/.test(r.llamada) && !/⚠/.test(r.llamada)
       && /^Leads cuyo 1er toque llegó a tiempo/.test(r.sla5) && !/antes de que arrancara su reloj/.test(r.sla5)
       && !/traspaso/.test(r.det) && /sí, como sin toque: cuenta en contra/.test(r.det) && /no: entró fuera de horario/.test(r.det) && !/anterior a su alta/.test(r.det);
     delete r.det;
@@ -977,9 +979,9 @@ const PORT = process.env.PORT || 8765;
   });
   console.log('[desempeño] notas de las tarjetas', JSON.stringify(notas).slice(0, 900));
   if (!notas.ok) hallazgos.push({ vista: 'desempeno:notas', notas });
-  // "Estas dos son lo mismo" (Dirección General, 14-oct-2026): si el 1er toque de cada lead fue
-  // su 1er llamada, el P80 de 1er toque y el de 1er intento de llamada son la misma cifra con la
-  // misma N → una sola tarjeta (4, 7 y 20 min → P80 = 20 min). Con un WhatsApp primero, dos.
+  // "Estas dos son lo mismo" (Dirección General, 14-oct-2026): la tarjeta de 1er intento de llamada
+  // salió de arriba; queda una sola de tiempo, el P80 de 1er toque (4, 7 y 20 min → 20 min), sea el
+  // 1er toque una llamada o un WhatsApp. La 1a llamada sigue en la tabla por asesor.
   VISTA = 'desempeno:toque=llamada';
   const tll = await page.evaluate(() => {
     const Z = (local) => Date.parse(local + '-05:00'), iso = (t) => new Date(t).toISOString();
@@ -1006,15 +1008,15 @@ const PORT = process.env.PORT || 8765;
       const lbl = (k) => k.querySelector('.k-lbl').textContent;
       const de = (rx) => kpis.filter(k => rx.test(lbl(k)));
       const nota = (k) => { if (!k || !k.dataset.lqTip) return ''; const d = document.createElement('div'); d.innerHTML = k.dataset.lqTip; return d.textContent.replace(/\s+/g, ' '); };
-      const una = de(/^P80 1er toque.*= 1er intento de llamada/), toque = de(/^P80 1er toque/), llamada = de(/^P80 1er intento de llamada/);
-      const r = { una: una.length, toque: toque.length, llamada: llamada.length, valor: una[0] ? una[0].querySelector('.k-val').textContent : '', nota: nota(una[0]) };
+      const toque = de(/^P80 1er toque/), llamada = de(/intento de llamada/);
+      const r = { toque: toque.length, llamada: llamada.length, valor: toque[0] ? toque[0].querySelector('.k-val').textContent : '', nota: nota(toque[0]) };
       ADVISOR_LIST = advPrev; slaState.asesor = selPrev; slaState.agg = aggPrev;
       return r;
     };
     const igual = armar(false), distinto = armar(true);
     return { igual, distinto,
-      ok: igual.una === 1 && igual.toque === 1 && igual.llamada === 0 && igual.valor === '20 min' && /Por qué una sola tarjeta/.test(igual.nota) && /Base: 3 de 3 leads/.test(igual.nota)
-        && distinto.una === 0 && distinto.toque === 1 && distinto.llamada === 1 };
+      ok: igual.toque === 1 && igual.llamada === 0 && igual.valor === '20 min' && /Base: 3 de 3 leads/.test(igual.nota)
+        && distinto.toque === 1 && distinto.llamada === 0 && distinto.valor === '20 min' };
   });
   console.log('[desempeño] 1er toque = 1er llamada', JSON.stringify(tll).slice(0, 900));
   if (!tll.ok) hallazgos.push({ vista: 'desempeno:toque=llamada', tll });
