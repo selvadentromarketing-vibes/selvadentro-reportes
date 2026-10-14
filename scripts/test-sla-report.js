@@ -111,6 +111,7 @@ const call = async (body) => { const r = await handler({ httpMethod: "POST", hea
   const T = tl.d.results && tl.d.results[0];
   ok(T && T.foMch === "email", "canal del primer toque manual", T && T.foMch);
   ok(T && T.cl.n === 6 && T.cl.ok === 3 && T.cl.na === 1 && T.cl.linea === 2 && T.cl.otro === 0 && T.cl.dn === 1, "intentos de llamada por desenlace: 3 conectadas, 1 sin respuesta, 2 fallas de línea, 1 conectada sin duración", T && T.cl);
+  ok(T && T.cl.c90 === 1, "exitosas del asesor: 1 llamada de ≥90 s", T && T.cl);
   ok(T && T.cl.t.length === 6 && T.cl.t[0] === T0 + 10 * 60e3, "momentos de cada intento, el primero a los 10 min", T && T.cl.t.map(iso));
   ok(T && T.tel.tot === 6 && T.tel.dExp === 2 && T.tel.d0 === 3 && T.tel.dNo === 1 && T.tel.c90 === 1, "duración: 2 la traen (una es 0), 3 no conectaron (0 s), 1 conectó sin duración; 1 de ≥90 s", T && T.tel);
   ok(T && T.tel.noSt.completed === 1 && T.tel.llaves.includes("meta.call.recordingUrl"), "la llamada sin duración se diagnostica por status y por las llaves que sí trae", T && { noSt: T.tel.noSt, llaves: T.tel.llaves });

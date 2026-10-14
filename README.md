@@ -701,6 +701,22 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
     ≤15/≤60 min, mediana de contacto efectivo, P80 de 1ª llamada (siguen como columnas de la
     tabla por asesor), citas agendadas (columna "Agendadas" de Citas del periodo) y días a la
     cita (ya no se muestra en ninguna parte). La ficha de cada asesora no cambió.
+  - **Tres bloques** (Dirección General, 14-oct-2026). La pantalla era una lista de ~20 secciones
+    que mezclaba evaluar, actuar y auditar. Ahora: **Resumen** (tarjetas, ranking y ficha, sin
+    cambios), **Qué corregir hoy** (solo listas con nombre) y **Detalle** plegado (tablas por
+    asesor, canal, pipeline y campaña, citas, telefonía, embudo, etapas, diagnóstico de datos,
+    definiciones). Las reglas v1.1 y el alcance van en una línea plegable que avisa "⚠ hay
+    entradas del CRM por revisar" si falta alguna; el aviso de periodo anterior a la v1.1 queda a
+    la vista. Los plegables recuerdan si se abrieron (`slaState.abierto`) aunque se vuelva a
+    pintar. En "Qué corregir hoy", una sección sin nada que corregir no se pinta: su rótulo va a
+    la línea "✓ Sin pendientes en: …" (`vacias`).
+  - **Leads que bajaron la Velocidad** (`slaFallasVel`, primera lista de "Qué corregir hoy"):
+    mismo criterio que la sub-nota, con un resumen por asesora ("3 de 7 · 1 sin toque · 2 tarde")
+    y dos tablas: **Sin 1er toque** (con etapa y cuánto lleva sin toque: todavía se pueden tocar)
+    y **Llegaron tarde** (hora del 1er toque, cuánto tardó y su meta: 5 min o antes de las 11:00).
+  - **Exitosas ≥90 s** en Telefonía por asesora, después de Conectadas: llamadas manuales del
+    asesor de 90 s o más (`cl.c90`, nuevo en el backend), con su % sobre los intentos y, al pasar
+    el mouse, sobre las conectadas. `sla:agg:v18` fuerza a regenerar el agregado.
   - **Notas en las tarjetas** (Dirección, 13-oct-2026): al pasar el mouse sobre cada
     tarjeta de Desempeño (o tocarla en celular) sale qué cuenta exactamente, sobre qué base,
     qué queda fuera y por qué, con los números del rango (`lqNota`, misma nota flotante que

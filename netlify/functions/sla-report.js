@@ -14,7 +14,7 @@
 //     efectivo que no son suyos, para que el front mida al asesor desde la entrega.
 //     → { results:[{id, fo, fi, fe, lm, foM, foMch, foC, days[], calls, callsOk, chans[], deliv{}, users[], cerr, aerr, ap{}, cl{}, tel{}, nc?, cortados}] }
 //     cl = llamadas manuales del asesor: intentos, desenlace (ok/na/linea/otro), conectadas sin
-//     duración (dn) y el momento de cada intento (t) · tel = diagnóstico de duración de TODAS
+//     duración (dn), exitosas de ≥90 s (c90) y el momento de cada intento (t) · tel = diagnóstico de duración de TODAS
 //     las llamadas (con duración, 0 s por no conectar, sin duración) · foMch = canal del 1er toque ·
 //     foA / nA = primera llamada AUTOMÁTICA con contacto (≥90 s) y cuántas hubo
 //     Change Spec v1.1 (1-oct-2026): cut = fecha de entrada a Descalificado de un lead real
@@ -262,7 +262,7 @@ async function sweepOne(id, opt, excl) {
              entrante: { tot: 0, ok: 0, na: 0, linea: 0, otro: 0, c90: 0, dNo: 0 } } },
     // Llamadas MANUALES del asesor a este lead: intentos y su desenlace, y los momentos de
     // cada intento (para el primero y los de las primeras 24 h). dn = conectadas sin duración.
-    cl: { n: 0, ok: 0, na: 0, linea: 0, otro: 0, dn: 0, t: [] },
+    cl: { n: 0, ok: 0, na: 0, linea: 0, otro: 0, dn: 0, c90: 0, t: [] },
     foMch: null,                          // canal del primer toque manual (call/whatsapp/sms/email)
     // Llamada AUTOMÁTICA con contacto (spec v1.2 §3; Dirección General, 7-oct-2026): el CRM
     // marcó solo —workflow, campaña, marcador— y la llamada duró ≥90 s. Cuenta como contacto
@@ -362,6 +362,7 @@ async function sweepOne(id, opt, excl) {
             const des = callDesenlace(callStatus(m));
             out.cl.n++; out.cl[des]++;
             if (des === "ok" && dur == null) out.cl.dn++;
+            if (dur != null && dur >= 90) out.cl.c90++;   // exitosa: conversación de ≥90 s (R-06)
             if (out.cl.t.length < 80) out.cl.t.push(t);
           }
           const loc = new Date(t - TZ_MS);

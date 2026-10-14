@@ -86,6 +86,9 @@ const PORT = process.env.PORT || 8765;
     console.log(`\n[${vista}] vistas=${r.activas.join(',')} texto=${r.chars}c` + (r.malos.length ? `  ⚠ ${r.malos.join(' · ')}` : '') + (r.tablas.length ? `\n   tablas desalineadas: ${r.tablas.join(' | ')}` : ''));
     if (r.malos.length || r.tablas.length) hallazgos.push({ vista, ...r });
   };
+  // Desempeño trae "Reglas" y "Detalle" plegados (14-oct-2026): las pruebas los abren para leer y
+  // escanear todo; 'desempeno:bloques' revisa cómo se ve al entrar.
+  await page.evaluate(() => { slaState.abierto = { reglas: true, detalle: true }; });
   await escanear('boot');
   const grupos = [['direccion', 'general'], ['direccion', 'comercial'], ['ventas', 'ingreso'], ['ventas', 'reporte'], ['ventas', 'analitica'], ['ventas', 'desempeno'], ['ventas', 'primer'], ['ventas', 'crm'], ['marketing', 'calidad'], ['marketing', 'ingreso']];
   for (const [g, s] of grupos) { const ok = await page.evaluate(([g, s]) => { try { return navIr(g, s); } catch (e) { return 'ERR ' + e.message; } }, [g, s]); if (ok !== true) console.log(`  navIr(${g},${s}) →`, ok); await escanear(`${g}/${s}`); }
@@ -748,7 +751,7 @@ const PORT = process.env.PORT || 8765;
     const sw = (i, o) => Object.assign({ foM: base(i) + 2 * M, fi: null, fe: null, days: ['2026-10-06'], calls: 0, chans: [], deliv: { sent: 0, delivered: 0, read: 0, failed: 0, linea: 0 }, ap: { tot: 0, sh: 0, ns: 0, fut: 0 }, tk: { prog: 0, enFecha: 0, venc: 0 },
       tel: { tot: 0, dExp: 0, d0: 0, dNo: 0, c90: 0, noSt: {}, llaves: [] } }, o);
     const sweeps = {
-      t1: sw(1, { foMch: 'whatsapp', calls: 3, cl: { n: 3, ok: 1, na: 1, linea: 1, otro: 0, dn: 0, t: [base(1) + 10 * M, base(1) + 2 * H, base(1) + 30 * H] }, deliv: { sent: 0, delivered: 1, read: 1, failed: 1, linea: 1 },
+      t1: sw(1, { foMch: 'whatsapp', calls: 3, cl: { n: 3, ok: 1, na: 1, linea: 1, otro: 0, dn: 0, c90: 1, t: [base(1) + 10 * M, base(1) + 2 * H, base(1) + 30 * H] }, deliv: { sent: 0, delivered: 1, read: 1, failed: 1, linea: 1 },
         tel: { tot: 3, dExp: 1, d0: 2, dNo: 0, c90: 1, noSt: {}, llaves: [] } }),
       t2: sw(2, { foMch: 'call', calls: 2, cl: { n: 2, ok: 0, na: 0, linea: 2, otro: 0, dn: 0, t: [base(2) + 3 * M, base(2) + 5 * H] }, deliv: { sent: 0, delivered: 0, read: 0, failed: 0, linea: 2 },
         tel: { tot: 2, dExp: 0, d0: 2, dNo: 0, c90: 0, noSt: {}, llaves: [] } }),
@@ -799,7 +802,7 @@ const PORT = process.env.PORT || 8765;
       && /^2 min P80 1ER TOQUE .* 4 LEADS · MUESTRA CHICA, NO COMPARAR$/i.test(auditoria.kpi) && auditoria.abierto
       && auditoria.cols === 'LEAD|ENTRADA|HORARIO|ASESOR|1ER TOQUE|CANAL|TIEMPO|¿EN EL P80?|CONTACTO EFECTIVO' && auditoria.filas === 'sí|sí|sí|sí'
       && auditoria.campLq === '(sin campaña atribuida)=3|CAMPANA_DE_LQ=1' && auditoria.notaLq
-      && !!t && t.slice(1).join('|') === '4|1|3|5|6|2 (33%)|1 (17%)|3 (50%)|·|1|1|1'
+      && !!t && t.slice(1).join('|') === '4|1|3|5|6|2 (33%)|1 (17%)|1 (17%)|3 (50%)|·|1|1|1'   // exitosas ≥90 s después de conectadas
       && nuevo[0] === 2 && nuevo[1] === 3 && viejo[1] === 6 && r.sinGris && r.duracion && r.kpi && r.ficha && r.origen;
     return r;
   });
@@ -1020,6 +1023,62 @@ const PORT = process.env.PORT || 8765;
   });
   console.log('[desempeño] 1er toque = 1er llamada', JSON.stringify(tll).slice(0, 900));
   if (!tll.ok) hallazgos.push({ vista: 'desempeno:toque=llamada', tll });
+  // Tres bloques (Dirección General, 14-oct-2026): Resumen, Qué corregir hoy (con los leads que bajaron
+  // la Velocidad, por nombre) y Detalle plegado; reglas plegadas; el plegable recuerda si se abrió.
+  VISTA = 'desempeno:bloques';
+  const blq = await page.evaluate(async () => {
+    const Z = (local) => Date.parse(local + '-05:00'), iso = (t) => new Date(t).toISOString(), M = 60e3;
+    const users = { u1: 'Daniela Arana' }, pipes = [{ id: 'p1', name: 'Seguimiento de ventas', stages: [{ id: 's1', name: 'Contacto establecido' }] }];
+    const contactos = [], sweeps = {}, opps = [];
+    const lead = (id, local, foM, cl) => {
+      contactos.push({ id, n: 'Lead ' + id, c: iso(Z(local)), src: 'facebook', u: 'u1', tags: [], attr: {}, cf: {} });
+      sweeps[id] = { foM, foMch: foM ? 'call' : null, fi: null, fe: null, days: [], calls: 0, chans: [], deliv: { sent: 0, delivered: 0, read: 0, failed: 0 },
+        ap: { tot: 0, sh: 0, ns: 0, fut: 0 }, tk: { prog: 0, enFecha: 0, venc: 0 }, cl: cl || { n: 0, ok: 0, na: 0, linea: 0, otro: 0, dn: 0, c90: 0, t: [] } };
+      opps.push({ id: 'o-' + id, ct: id, u: 'u1', st: 'open', c: iso(Z(local)), p: 'p1', s: 's1', sc: '', cf: {} });
+    };
+    lead('ok', '2026-10-05T10:00:00', Z('2026-10-05T10:04:00'), { n: 2, ok: 2, na: 0, linea: 0, otro: 0, dn: 0, c90: 1, t: [Z('2026-10-05T10:04:00'), Z('2026-10-05T12:00:00')] });
+    lead('tarde', '2026-10-05T11:00:00', Z('2026-10-05T11:20:00'));          // en horario, 20 min
+    lead('nada', '2026-10-05T12:00:00', null);                                // sin toque
+    lead('noche', '2026-10-05T22:00:00', Z('2026-10-06T12:00:00'));          // fuera de horario, después de las 11:00
+    const now = Z('2026-10-12T12:00:00');
+    const agg = buildSlaAgg(['2026-W41'], contactos, sweeps, opps, users, [], pipes, { oppFields: [], oppFieldsOk: true, ncState: {}, tagged: [], taggedOk: true, now });
+    const aggPrev = slaState.agg, selPrev = slaState.asesor, advPrev = ADVISOR_LIST, abPrev = slaState.abierto;
+    ADVISOR_LIST = [{ name: 'Daniela Arana', active: true }]; slaState.asesor = ''; slaState.agg = agg; agg.ts = now; slaState.abierto = {};
+    navIr('ventas', 'desempeno'); slaRender();
+    const C = document.getElementById('sla-content'), txt = C.innerText;
+    const pleg = (k) => C.querySelector(`details[data-sla-pleg="${k}"]`);
+    const r = { reglasCerrado: !!pleg('reglas') && !pleg('reglas').open, detalleCerrado: !!pleg('detalle') && !pleg('detalle').open };
+    // Orden: tarjetas → ranking → "Qué corregir hoy" → Detalle
+    const pos = (el) => el ? [...C.querySelectorAll('*')].indexOf(el) : -1;
+    const h2 = [...C.querySelectorAll('h2.sla-bloque')].find(h => /Qué corregir hoy/.test(h.textContent));
+    const rank = [...C.querySelectorAll('h3')].find(h => /Desempeño del asesor/.test(h.textContent));
+    r.orden = pos(C.querySelector('.kpi-grupo')) < pos(rank) && pos(rank) < pos(h2) && pos(h2) < pos(pleg('detalle'));
+    // "Qué corregir hoy" se lee sin abrir nada; el Detalle no
+    r.fallas = (txt.match(/Leads que bajaron la Velocidad · \d+ de \d+/) || [''])[0];
+    r.resumen = /Daniela Arana 3 de 4 · 1 sin toque · 2 tarde/.test(txt);
+    r.sinToque = /Sin 1er toque · 1/.test(txt) && /Lead nada/.test(txt);
+    r.tarde = /Llegaron tarde · 2/.test(txt) && /antes de las 11:00/.test(txt);
+    r.detalleOculto = !/Telefonía por asesora/.test(txt) && !!C.querySelector('details[data-sla-pleg="detalle"] h3');
+    // Secciones sin nada que corregir: una sola línea, sin su bloque vacío
+    r.vacias = (txt.match(/✓ Sin pendientes en: ([^\n]*)/) || ['', ''])[1];
+    r.sinBloquesVacios = !/Leads inválidos \(fuera de la nota\) · 0/.test(txt) && !/Error de asignación · 0/.test(txt) && /Más de 7 días sin toque · 4/.test(txt);
+    // Telefonía (dentro del Detalle): exitosas ≥90 s justo después de conectadas
+    const tt = [...C.querySelectorAll('table')].find(t => /Exitosas ≥90 s/.test(t.querySelector('tr').textContent));
+    const ths = tt ? [...tt.querySelector('tr').children].map(th => th.textContent.trim()) : [];
+    r.colExitosas = ths.indexOf('Exitosas ≥90 s') === ths.indexOf('Conectadas') + 1;
+    const fila = tt && [...tt.querySelectorAll('tr')].find(tr => tr.querySelector('td') && tr.querySelector('td').textContent.trim() === 'Daniela Arana');
+    r.exitosas = fila ? fila.children[ths.indexOf('Exitosas ≥90 s')].textContent.replace(/\s+/g, ' ').trim() : '';
+    // Abrir el Detalle y volver a pintar: sigue abierto
+    pleg('detalle').open = true; await new Promise(res => setTimeout(res, 50));
+    slaRender(); r.recuerda = !!pleg('detalle') && pleg('detalle').open;
+    ADVISOR_LIST = advPrev; slaState.asesor = selPrev; slaState.agg = aggPrev; slaState.abierto = abPrev;
+    r.ok = r.reglasCerrado && r.detalleCerrado && r.orden && r.fallas === 'Leads que bajaron la Velocidad · 3 de 4' && r.resumen && r.sinToque && r.tarde
+      && r.detalleOculto && r.sinBloquesVacios && /Leads inválidos \(fuera de la nota\) · Error de asignación · Descalificaciones revertidas/.test(r.vacias) && /Integridad del pipeline/.test(r.vacias)
+      && r.colExitosas && r.exitosas === '1 (50%)' && r.recuerda;
+    return r;
+  });
+  console.log('[desempeño] tres bloques', JSON.stringify(blq));
+  if (!blq.ok) hallazgos.push({ vista: 'desempeno:bloques', blq });
   // Metas → Rúbrica de desempeño: los dos juegos de Velocidad, con su fecha
   const rbm = await page.evaluate(async () => { navIrLateral('metas'); await new Promise(r => setTimeout(r, 400)); const h = document.getElementById('metas-rubrica'); const t = h ? h.innerText : '';
     return { existe: !!h, viejo: /10 · 20 · 30 · 45%/.test(t), nuevo: /20 · 40 · 60 · 80%/.test(t), fecha: /1-oct-2026/.test(t), form: !!document.getElementById('rb-save') }; });
