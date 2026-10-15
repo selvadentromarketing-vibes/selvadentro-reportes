@@ -618,6 +618,19 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   li.lq-rec-alerta > b{ color:#9a5a14; }
   .lq-rec-esperar{ margin:4px 0 0; font-size:var(--fs-xs); font-weight:600; color:#6b5a1c; }
   .lq-rec-pie{ margin:4px 0 0; font-size:var(--fs-xs); color:var(--neutro); font-style:italic; }
+  /* ✓ hecho / ✗ ignorar de cada recomendación (Dirección General, 15-oct-2026) */
+  .lq-rec-acc{ margin:4px 0 2px; display:flex; gap:6px; flex-wrap:wrap; font-style:normal; }
+  .lq-rec-btn{ font:inherit; font-size:11px; font-weight:700; border-radius:999px; padding:2px 10px; cursor:pointer; border:1px solid var(--linea); background:#fff; }
+  .lq-rec-btn.ok{ color:var(--verde-prof); border-color:#9bb59a; }
+  .lq-rec-btn.no{ color:var(--rojo); border-color:#e2b4ab; }
+  .lq-rec-btn:disabled{ opacity:.5; cursor:wait; }
+  li.lq-rec-hecho > b{ color:var(--neutro); text-decoration:line-through; font-weight:600; }
+  .lq-rec-estado{ font-size:11px; font-weight:700; color:var(--verde-prof); font-style:normal; }
+  .lq-rec-verif{ font-size:11px; font-weight:700; color:#9a5a14; font-style:normal; }
+  details.lq-rec-ign{ margin:4px 0 0; font-size:var(--fs-xs); color:var(--neutro); font-style:normal; }
+  details.lq-rec-ign > summary{ cursor:pointer; font-weight:600; }
+  details.lq-rec-ign ul{ margin:4px 0 0; padding-left:16px; }
+  .lq-rec-link{ background:none; border:none; padding:0; margin-left:4px; color:var(--verde-prof); text-decoration:underline; cursor:pointer; font:inherit; font-size:11px; }
   .lq-cps.verde{ color:#3f7d4e; font-weight:700; } .lq-cps.amarillo{ color:#9a7414; font-weight:700; } .lq-cps.rojo{ color:var(--rojo); font-weight:700; }
   .lq-sqlp{ font-weight:700; color:var(--verde-prof); }
   td[data-lq-tip]{ cursor:help; text-decoration:underline dotted; text-underline-offset:3px; }
@@ -4794,13 +4807,118 @@ function lqRecTexto(r, corto){
   if(!corto && r.nota) sigue(r.nota);
   return t;
 }
+/* ✓ Hecho / ✗ Ignorar de cada recomendación (Dirección General, 15-oct-2026). Solo las que son un
+   cambio de campaña llevan los botones; los avisos (capacidad del telemarketer, revisar, trabajar
+   leads, "en 7 días…") no van a la bitácora. ✓ registra el cambio en la bitácora —y con eso la
+   campaña espera 7 días antes del siguiente— y se puede deshacer el mismo día. ✗ la oculta 7 días o
+   hasta que cambie el semáforo: las recomendaciones salen de los últimos 30 días y, sin cambio,
+   mañana volvería a salir igual. La clave es plataforma + campaña + tipo de recomendación (sin
+   números): tras subir el presupuesto, la misma recomendación sale con montos nuevos y sigue
+   siendo la misma. El estado es compartido (lq:recs:v1, kv de Selvadentro). */
+const LQ_REC_CAMBIO = /^(Subir el presupuesto|Pausar |Agregar preguntas|Quitar Audience Network|Agregar palabras negativas|Probar 2 creativos|Renovar el creativo)/;
+const lqRecKey = (ctx, r)=> [ctx.plat, lqNormCamp(ctx.camp), String(r.txt||"").replace(/\d+/g, "#")].join("|");
+// Estado actual de la campaña, para revisar las palomitas: activa, presupuesto diario, y qué
+// conjuntos y anuncios siguen con algo activo.
+function lqRecCtx(m){
+  const grps = {}, ads = {};
+  ((m.C && m.C.grps) || []).forEach(G=>{ grps[G.name] = (G.ads||[]).some(A=>lqIsOn(A.status));
+    (G.ads||[]).forEach(A=>{ ads[A.name] = !!ads[A.name] || lqIsOn(A.status); }); });
+  return { camp:m.camp, plat:m.plat, semK:m.sem ? m.sem.k : "", acc:m.sem ? m.sem.acc : "", activa:!!m.activa,
+           cb:m.dc && m.dc.cb > 0 ? m.dc.cb : null, grps, ads };
+}
+// Lo que se puede comprobar después en Windsor, guardado al marcar ✓.
+function lqRecVerif(r){
+  const t = String(r.txt||"");
+  if(/^Pausar la campaña/.test(t)) return { t:"camp" };
+  if(/^Subir el presupuesto diario/.test(t) && r.presu && !r.presu.total && r.presu.de > 0) return { t:"presu", de:r.presu.de };
+  if(/^Pausar el conjunto/.test(t) && r.objs && r.objs[0]) return { t:"grp", n:String(r.objs[0].txt) };
+  if(/^Pausar (el anuncio|los \d+ anuncios)/.test(t)) return { t:"ads", ns:(r.objs||[]).map(o=>String(o.txt).split(" en ")[0]) };
+  return null;
+}
+// Desde el día siguiente (Windsor tarda en reflejar el cambio): ¿la plataforma dice que se hizo?
+function lqRecVerifTxt(st, ctx, hoy){
+  const v = st.verif; if(!v || !(st.fecha < hoy)) return "";
+  const p = ctx.plat || "la plataforma";
+  if(v.t === "camp" && ctx.activa) return `marcada como hecha, pero en ${p} la campaña sigue activa`;
+  if(v.t === "presu" && ctx.cb != null && Math.abs(ctx.cb - v.de) < 1) return `marcada como hecha, pero en ${p} el presupuesto sigue en ${lqMXN(v.de)} al día`;
+  if(v.t === "grp" && ctx.grps[v.n]) return `marcada como hecha, pero en ${p} el conjunto ${v.n} sigue con anuncios activos`;
+  if(v.t === "ads"){ const vivos = (v.ns||[]).filter(n=>ctx.ads[n]);
+    if(vivos.length) return `marcada como hecha, pero en ${p} sigue${vivos.length > 1 ? "n" : ""} activo${vivos.length > 1 ? "s" : ""}: ${vivos.join(", ")}`; }
+  return "";
+}
+// Estado vigente de una recomendación: ✓ dura los días de reevaluación; ✗ hasta su fecha o hasta
+// que el semáforo de la campaña cambie.
+function lqRecEstado(ctx, r, hoy){
+  const st = (lqState.recsEst || {})[lqRecKey(ctx, r)];
+  if(!st) return null;
+  if(st.e === "hecho") return lqDifDias(st.fecha, hoy) < LQ_SEMAFORO.reevaluarDias ? st : null;
+  if(st.e === "ignorada") return hoy < st.hasta && (!st.semK || st.semK === ctx.semK) ? st : null;
+  return null;
+}
+const lqQuien = (email)=> String(email||"").split("@")[0] || "—";
+
 function lqRecsHtml(R){
   if(!R || (!(R.items||[]).length && !R.sinMuestra && !R.gastoNA)) return "";
+  const ctx = R.ctx || null, hoy = lqHoyTulum(), reg = lqState._recIdx || (lqState._recIdx = []);
   const obj = (o)=> `${escAttr(o.txt)}${o.ev ? ` <span class="lq-rec-ev">— ${escAttr(o.ev)}</span>` : ""}${o.ruta ? `\n<div class="lq-rec-ruta">${escAttr(o.ruta)}</div>` : ""}`;
-  const li = (r)=> `<li${r.alerta ? ' class="lq-rec-alerta"' : ""}><b>${r.alerta ? "⚠ " : ""}${escAttr(r.txt)}</b>${r.objs.length === 1 ? " "+obj(r.objs[0]) : `\n<ul>${r.objs.map(o=>`<li>${obj(o)}</li>`).join("\n")}</ul>`}`
-    + `${r.donde ? `\n<div class="lq-rec-donde">${escAttr(r.donde)}</div>` : ""}${r.nota ? `\n<div class="lq-rec-nota">${escAttr(r.nota)}</div>` : ""}</li>`;
-  return `${(R.items||[]).length ? `<ol class="lq-pasos lq-recs">${R.items.map(li).join("\n")}</ol>` : ""}`
+  const ign = [];
+  const li = (r)=>{
+    const cambio = ctx && LQ_REC_CAMBIO.test(r.txt||"");
+    const st = cambio ? lqRecEstado(ctx, r, hoy) : null;
+    const i = cambio ? reg.push({ key:lqRecKey(ctx, r), r, ctx }) - 1 : -1;
+    if(st && st.e === "ignorada"){ ign.push({ st, i }); return ""; }
+    if(st && st.e === "hecho"){
+      const aviso = lqRecVerifTxt(st, ctx, hoy);
+      return `<li class="lq-rec-hecho"><div class="lq-rec-estado">✓ Hecho el ${lqFechaCorta(st.fecha)} · ${escAttr(lqQuien(st.por))} · en la bitácora${st.fecha === hoy ? ` <button type="button" class="lq-rec-link" data-rec-undo="${i}">deshacer</button>` : ""}</div><b>${escAttr(st.txt||r.txt)}</b>`
+        + `${aviso ? `\n<div class="lq-rec-verif">⚠ ${escAttr(aviso)}</div>` : ""}</li>`;
+    }
+    return `<li${r.alerta ? ' class="lq-rec-alerta"' : ""}><b>${r.alerta ? "⚠ " : ""}${escAttr(r.txt)}</b>${r.objs.length === 1 ? " "+obj(r.objs[0]) : `\n<ul>${r.objs.map(o=>`<li>${obj(o)}</li>`).join("\n")}</ul>`}`
+      + `${r.donde ? `\n<div class="lq-rec-donde">${escAttr(r.donde)}</div>` : ""}${r.nota ? `\n<div class="lq-rec-nota">${escAttr(r.nota)}</div>` : ""}`
+      + `${cambio ? `\n<div class="lq-rec-acc"><button type="button" class="lq-rec-btn ok" data-rec-ok="${i}" title="Ya se hizo: se registra en la bitácora y la campaña espera ${LQ_SEMAFORO.reevaluarDias} días antes del siguiente cambio">✓ Hecho</button><button type="button" class="lq-rec-btn no" data-rec-ig="${i}" title="No se va a hacer: se oculta ${LQ_SEMAFORO.reevaluarDias} días o hasta que cambie el semáforo">✗ Ignorar</button></div>` : ""}</li>`;
+  };
+  const items = (R.items||[]).map(li).filter(Boolean);
+  return `${items.length ? `<ol class="lq-pasos lq-recs">${items.join("\n")}</ol>` : ""}`
+    + `${ign.length ? `\n<details class="lq-rec-ign"><summary>Ignoradas (${ign.length})</summary><ul>${ign.map(({st,i})=>`<li>${escAttr(st.txt||"")} <span class="lq-sub">— hasta el ${lqFechaCorta(st.hasta)}${st.motivo ? ` · ${escAttr(st.motivo)}` : ""} · ${escAttr(lqQuien(st.por))}</span> <button type="button" class="lq-rec-link" data-rec-restore="${i}">volver a mostrar</button></li>`).join("")}</ul></details>` : ""}`
     + `${R.sinMuestra ? `\n<p class="lq-rec-esperar">${escAttr(R.sinMuestra)}</p>` : ""}${R.gastoNA ? `\n<p class="lq-rec-esperar lq-rec-na">${escAttr(R.gastoNA)}</p>` : ""}${R.pie ? `\n<p class="lq-rec-pie">${escAttr(R.pie)}</p>` : ""}`;
+}
+// Guarda el estado de las recomendaciones sobre lo más reciente del servidor (otra persona pudo
+// marcar algo mientras tanto); lo vencido hace más de 30 días se descarta.
+async function lqRecsGuardar(fn){
+  const v = await sGet(LQ_RECS_KEY);
+  const est = v && typeof v === "object" && !Array.isArray(v) ? { ...v } : {};
+  fn(est);
+  const hoy = lqHoyTulum();
+  Object.keys(est).forEach(k=>{ const x = est[k]; if(!x || lqDifDias(x.fecha || hoy, hoy) > 30) delete est[k]; });
+  await sSet(LQ_RECS_KEY, est);
+  lqState.recsEst = est;
+}
+async function lqRecAccion(tipo, i){
+  const it = (lqState._recIdx || [])[i]; if(!it) return;
+  const { key, r, ctx } = it, hoy = lqHoyTulum(), por = (typeof SESSION !== "undefined" && SESSION && SESSION.email) || "";
+  const txt = lqRecTexto({ ...r, objs:(r.objs||[]).map(o=>({ txt:o.txt })) }, true);
+  if(tipo === "ok"){
+    const ev = (r.objs||[]).map(o=>o.ev).filter(Boolean).join("; ");
+    const e = { id:"b-rec-"+Date.now()+"-"+Math.random().toString(36).slice(2,7), fecha:hoy, camp:ctx.camp, cambio:txt,
+                motivo:`✓ Recomendación del reporte${ctx.acc ? ` (${ctx.acc})` : ""}${ev ? ` — ${ev}` : ""}`.slice(0, 400), por, ts:Date.now(), rec:key };
+    await lqGuardarBitacora(e);
+    try{ await lqRecsGuardar(est=>{ est[key] = { e:"hecho", fecha:hoy, ts:Date.now(), por, txt, bitId:e.id, verif:lqRecVerif(r), semK:ctx.semK, camp:ctx.camp, plat:ctx.plat }; }); }
+    catch(err){ await lqBorrarBitacora(e.id).catch(()=>{}); throw err; }   // sin estado, tampoco queda en la bitácora
+    lqState.bitAbierta = true;
+    toast(`Registrado en la bitácora ✓ — ${ctx.camp} espera ${LQ_SEMAFORO.reevaluarDias} días antes del siguiente cambio`);
+  } else if(tipo === "ig"){
+    const motivo = window.prompt("¿Por qué no se hace? (opcional)", "");
+    if(motivo === null) return;
+    await lqRecsGuardar(est=>{ est[key] = { e:"ignorada", fecha:hoy, hasta:lqSumaDias(hoy, LQ_SEMAFORO.reevaluarDias), ts:Date.now(), por, txt, motivo:String(motivo).trim().slice(0, 200), semK:ctx.semK, camp:ctx.camp, plat:ctx.plat }; });
+    toast(`Ignorada hasta el ${lqFechaCorta(lqSumaDias(hoy, LQ_SEMAFORO.reevaluarDias))} (o hasta que cambie el semáforo)`);
+  } else if(tipo === "undo"){
+    const st = (lqState.recsEst || {})[key];
+    if(st && st.bitId) await lqBorrarBitacora(st.bitId);
+    await lqRecsGuardar(est=>{ delete est[key]; });
+    toast("Deshecho: se quitó de la bitácora");
+  } else if(tipo === "restore"){
+    await lqRecsGuardar(est=>{ delete est[key]; });
+  }
+  lqRender();
 }
 
 // Sin la consulta de 30 días de Meta (anuncios, gasto por conjunto, URL, frecuencia) solo quedan
@@ -5179,6 +5297,8 @@ function lqDecVentana(hoy){
    decisión usa el cambio más reciente entre esta bitácora y Meta. Google no expone su historial
    de cambios en Windsor, así que para Google solo cuenta lo que se registre aquí. */
 const LQ_BITACORA_KEY = "lq:bitacora:v1";
+const LQ_CAMBIOS_KEY = "lq:cambios:v1";   // los escribe la foto diaria de Meta y Google (netlify/functions/lq-foto.js, 7:00)
+const LQ_RECS_KEY = "lq:recs:v1";         // ✓ hecho / ✗ ignorada de cada recomendación de Conclusiones
 const LQ_BITACORA_BASE = [
   { id:"b-2026-10-09-escape", fecha:"2026-10-09", camp:"INVESTORS_US/CA_ESCAPE_090926",
     cambio:"2 anuncios nuevos con copy limpio (EN_LLAMADA_PREMIUMLOTS-SUSPIRO-CLEAN_091026 y EN_LLAMADA_PREMIUMLOTS-SUSPIRO-SELVA-CLEAN_091026)",
@@ -5187,12 +5307,26 @@ const LQ_BITACORA_BASE = [
 function lqBitacora(){
   const guardadas = Array.isArray(lqState.bitacora) ? lqState.bitacora : [];
   const ids = new Set(guardadas.map(e=>e.id));
-  return LQ_BITACORA_BASE.filter(e=>!ids.has(e.id)).concat(guardadas)
+  // Lo que la foto diaria detectó en Meta y Google (presupuestos, pausas, anuncios rechazados, URLs).
+  // cuenta:false (keywords que empiezan o dejan de gastar) se anota pero no reinicia la espera.
+  const auto = (Array.isArray(lqState.cambiosAuto) ? lqState.cambiosAuto : []).map(c=>({ id:c.id, fecha:c.fecha, desde:c.desde, camp:c.camp, cambio:c.que, motivo:"",
+    por:`Detectado en ${c.plat} (foto diaria)`, fuente:`${c.plat} · foto diaria`, cuenta:c.cuenta !== false, auto:true }));
+  return LQ_BITACORA_BASE.filter(e=>!ids.has(e.id)).concat(guardadas, auto)
     .sort((a,b)=>String(b.fecha||"").localeCompare(String(a.fecha||"")) || (b.ts||0)-(a.ts||0));
 }
 async function lqCargarBitacora(){
   try{ const v = await sGet(LQ_BITACORA_KEY); lqState.bitacora = Array.isArray(v) ? v : []; }
   catch(e){ lqState.bitacora = lqState.bitacora || []; }
+  try{ const c = await sGet(LQ_CAMBIOS_KEY); lqState.cambiosAuto = Array.isArray(c) ? c : []; }
+  catch(e){ lqState.cambiosAuto = lqState.cambiosAuto || []; }
+  try{ const r = await sGet(LQ_RECS_KEY); lqState.recsEst = r && typeof r === "object" && !Array.isArray(r) ? r : {}; }
+  catch(e){ lqState.recsEst = lqState.recsEst || {}; }
+}
+async function lqBorrarBitacora(id){
+  const v = await sGet(LQ_BITACORA_KEY);
+  const arr = (Array.isArray(v) ? v : []).filter(e=>e && e.id !== id);
+  await sSet(LQ_BITACORA_KEY, arr);
+  lqState.bitacora = arr;
 }
 async function lqGuardarBitacora(e){
   const v = await sGet(LQ_BITACORA_KEY);                   // lo más reciente del servidor, no la copia local
@@ -5225,9 +5359,9 @@ function lqTendencia7(C, V){
    Si ya llegó: "Decidir hoy". Si no, la acción es preliminar y se dice cuándo y por qué. */
 function lqFechaDecision(m, C, dc, bit, V, primerDia){
   const P = LQ_SEMAFORO, hoy = V.hoy, cand = [];
-  const bc = bit.filter(e=>lqNormCamp(e.camp) === lqNormCamp(m.camp) && e.fecha && e.fecha <= hoy).sort((a,b)=>b.fecha.localeCompare(a.fecha))[0];
+  const bc = bit.filter(e=>e.cuenta !== false && lqNormCamp(e.camp) === lqNormCamp(m.camp) && e.fecha && e.fecha <= hoy).sort((a,b)=>b.fecha.localeCompare(a.fecha))[0];
   let cambio = dc && dc.cambio && dc.cambio.fecha ? { fecha:dc.cambio.fecha, que:dc.cambio.que, fuente:"Meta" } : null;
-  if(bc && (!cambio || bc.fecha >= cambio.fecha)) cambio = { fecha:bc.fecha, que:bc.cambio, motivo:bc.motivo, fuente:"bitácora" };
+  if(bc && (!cambio || bc.fecha >= cambio.fecha)) cambio = { fecha:bc.fecha, que:bc.cambio, motivo:bc.motivo, fuente:bc.fuente || "bitácora" };
   if(cambio) cand.push({ fecha:lqSumaDias(cambio.fecha, P.reevaluarDias), motivo:`esperando ${P.reevaluarDias} días tras el cambio del ${lqFechaCorta(cambio.fecha)}` });
   if(m.inv < P.umbralEval){
     // La ventana de 30 días es móvil: cada día entra uno nuevo (al ritmo de los últimos 7) y
@@ -5393,6 +5527,7 @@ function lqModeloDecision(agg){
     m.tend = lqTendencia7(C, V);
     m.alerta = m.tend.alerta ? m.tend : null;
     m.recs = m.sem ? lqRecomendar(m, ctx) : null;
+    if(m.recs) m.recs.ctx = lqRecCtx(m);
     if(m.sem && m.recs) m.sem.recs = m.recs;
     m.decision = lqFechaDecision(m, C, dc, bit, V, primerDia);
     m.atender = lqAtenderHoy(m, C, decP, V);
@@ -5930,6 +6065,7 @@ const LQ_ACC_TXT = { subir:`subir presupuesto diario ${LQ_SEMAFORO.subirPct}%`, 
    Orden: Atender hoy → Decidir hoy → Preliminares (fecha más cercana primero) → Pausadas
    recientemente; abajo, la bitácora de cambios y el análisis con IA. */
 function lqConclusionesSection(){
+  lqState._recIdx = [];                      // botones ✓ / ✗ de este pintado
   const a = lqState.ia, P = LQ_SEMAFORO;
   const M = lqModeloDecision(lqVista(lqState.agg));
   lqState._decision = M;
@@ -6005,7 +6141,7 @@ function lqBitacoraHtml(M){
   const B = lqBitacora();
   const nombres = [...new Set([...M.activas, ...M.pausadas].map(m=>m.camp))];
   return `<details class="lq-bitacora" id="lq-bitacora"${lqState.bitAbierta?" open":""}><summary><b>Bitácora de cambios</b> <span class="lq-sub">(${B.length})</span></summary>
-    <p class="hint pegada">La fecha de decisión usa el cambio más reciente entre esta bitácora y Meta (anuncio o conjunto creado o editado). De Google solo cuenta lo que se registre aquí.</p>
+    <p class="hint pegada">La fecha de decisión usa el cambio más reciente entre esta bitácora y Meta (anuncio o conjunto creado o editado). Se registran solos: las recomendaciones marcadas <b>✓ Hecho</b> y lo que la <b>foto diaria</b> (7:00) detecta en Meta y Google —presupuestos, pausas, anuncios rechazados, URLs de destino—; las keywords que empiezan o dejan de gastar se anotan, pero no reinician la espera. A mano, solo lo demás (por ejemplo, el texto editado de un anuncio).</p>
     <form class="lq-bit-form" id="lq-bit-form" autocomplete="off">
       <label>Fecha<input type="date" name="fecha" value="${lqHoyTulum()}" max="${lqHoyTulum()}" required></label>
       <label>Campaña<input name="camp" list="lq-bit-camps" required placeholder="nombre exacto de la campaña"></label>
@@ -6015,7 +6151,7 @@ function lqBitacoraHtml(M){
       <datalist id="lq-bit-camps">${nombres.map(n=>`<option value="${escAttr(n)}">`).join("")}</datalist>
     </form>
     <div class="table-scroll"><table class="rep"><thead><tr><th class="lft">Fecha</th><th class="lft">Campaña</th><th class="lft">Cambio</th><th class="lft">Motivo</th><th class="lft">Registró</th></tr></thead>
-      <tbody>${B.map(e=>`<tr><td class="lft">${lqFechaLarga(e.fecha)}</td><td class="lft">${escAttr(e.camp)}</td><td class="lft">${escAttr(e.cambio)}</td><td class="lft">${escAttr(e.motivo||"")}</td><td class="lft lq-sub">${escAttr(e.por||"")}</td></tr>`).join("")
+      <tbody>${B.map(e=>`<tr${e.auto ? ' class="lq-bit-auto"' : ""}><td class="lft">${e.desde && e.desde < e.fecha ? `entre ${lqFechaCorta(e.desde)} y ${lqFechaLarga(e.fecha)}` : lqFechaLarga(e.fecha)}</td><td class="lft">${escAttr(e.camp)}</td><td class="lft">${escAttr(e.cambio)}</td><td class="lft">${escAttr(e.motivo||"")}</td><td class="lft lq-sub">${escAttr(e.por||"")}</td></tr>`).join("")
         || `<tr><td colspan="5" class="lft txt-nota">Sin cambios registrados.</td></tr>`}</tbody></table></div>
   </details>`;
 }
@@ -6466,6 +6602,15 @@ function lqRender(){
     try{ await lqGuardarBitacora(e); lqState.bitAbierta = true; toast("Cambio registrado ✓"); lqRender(); }
     catch(err){ toast("No se pudo guardar: "+(err.message||err)); if(btn){ btn.disabled = false; btn.textContent = "Registrar"; } }
   };
+  // ✓ / ✗ / deshacer / volver a mostrar de las recomendaciones de Conclusiones
+  [["ok","recOk"],["ig","recIg"],["undo","recUndo"],["restore","recRestore"]].forEach(([tipo, ds])=>{
+    document.querySelectorAll(`[data-${ds.replace(/[A-Z]/g, c=>"-"+c.toLowerCase())}]`).forEach(b=>b.onclick=async (ev)=>{
+      ev.preventDefault(); ev.stopPropagation();
+      document.querySelectorAll(".lq-rec-btn, .lq-rec-link").forEach(x=>{ x.disabled = true; });
+      try{ await lqRecAccion(tipo, +b.dataset[ds]); }
+      catch(err){ toast("No se pudo guardar: "+(err.message||err)); lqRender(); }
+    });
+  });
   document.querySelectorAll("[data-lq-sub]").forEach(el=>el.onclick=()=>{ lqState.sub=el.dataset.lqSub; lqRender(); });
   document.querySelectorAll("[data-lq-level]").forEach(b=>b.onclick=()=>{ lqState.level=b.dataset.lqLevel; lqRender(); });
   document.querySelectorAll("[data-lq-plat]").forEach(b=>b.onclick=()=>{ lqState.plat=b.dataset.lqPlat; lqRender(); });
