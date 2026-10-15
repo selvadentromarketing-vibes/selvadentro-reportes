@@ -151,14 +151,23 @@ const PORT = process.env.PORT || 8765;
     const r = {
       oppSinForm: q({ o: 1, pstage: 'Seguimiento de OPP' }).lv,                       // sqls: la etapa manda
       wonFormBajo: q({ o: 1, w: 1, pstage: 'WON', pres: '$50,000 USD', hor: '12 meses' }).lv, // sqls: la venta manda
-      oppPerdida: q({ o: 1, ost: 'lost', pstage: 'Seguimiento de OPP' }).lv,           // desc: perdida sigue mandando
+      oppPerdida: q({ o: 1, ost: 'lost', pstage: 'Seguimiento de OPP' }).lv,           // sqls: OPP generada (15-oct-2026), antes desc
+      // OPP generada caída (Dirección General, 15-oct-2026): sigue en SQL Selvadentro salvo causa inválida
+      caidaLargo: q({ og: 1, pstage: 'Largo plazo' }).lv,                               // sqls
+      caidaDescTag: q({ tags: 'squeeze, opp-generada', pstage: 'Descalificado' }).lv,   // sqls: la etiqueta basta
+      caidaInvalida: q({ og: 1, inv: 'Número equivocado', pstage: 'Descalificado' }).lv, // desc: causa del grupo inválido
+      caidaSpam: q({ tags: 'opp-generada, spam', pstage: 'Descalificado' }).lv,          // desc: tag inválido
+      sinOppDesc: q({ pstage: 'Descalificado' }).lv,                                     // desc: sin OPP, igual que antes
+      whyCaida: q({ og: 1, pstage: 'Largo plazo' }).why[0] || '',
       fuerteSinForm: q({ pstage: 'Interés identificado' }).lv,                         // sql
       fuerteConPerfil: q({ pstage: 'Tour realizado', pres: '$150,000 USD', hor: '3 meses' }).lv, // sqls
       soloFormulario: q({ tags: 'replied', pres: '$150,000 USD', hor: '3 meses' }).lv, // sql (antes sqls)
       soloRespondio: q({ tags: 'replied' }).lv,                                        // mql
       why: q({ o: 1, pstage: 'Carta oferta', pres: '$50,000 USD' }).why.join(' · '),
     };
-    r.ok = r.oppSinForm === 'sqls' && r.wonFormBajo === 'sqls' && r.oppPerdida === 'desc' && r.fuerteSinForm === 'sql' && r.fuerteConPerfil === 'sqls' && r.soloFormulario === 'sql' && r.soloRespondio === 'mql' && /etapa del pipeline manda/.test(r.why);
+    r.ok = r.oppSinForm === 'sqls' && r.wonFormBajo === 'sqls' && r.oppPerdida === 'sqls'
+      && r.caidaLargo === 'sqls' && r.caidaDescTag === 'sqls' && r.caidaInvalida === 'desc' && r.caidaSpam === 'desc' && r.sinOppDesc === 'desc'
+      && r.whyCaida === 'llegó a OPP (etiqueta opp-generada); hoy en "Largo plazo": cuenta como OPP generada' && r.fuerteSinForm === 'sql' && r.fuerteConPerfil === 'sqls' && r.soloFormulario === 'sql' && r.soloRespondio === 'mql' && /etapa del pipeline manda/.test(r.why);
     return r;
   });
   console.log('\n[lqAutoQualify] etapa > formulario', JSON.stringify(lq));
@@ -771,6 +780,10 @@ const PORT = process.env.PORT || 8765;
     const filas = [...document.querySelectorAll('table.lq-tree tr')].filter(tr => tr.querySelectorAll('td').length > iS);
     r.filas = filas.length;
     r.geVig = filas.every(tr => { const td = tr.querySelectorAll('td'); return num(td[iG]) >= num(td[iO]); });
+    // Una OPP caída NO cuenta como Zoom (puede venir directo de un recorrido): en MX_DYNAMIC_090926
+    // hay 3 OPP generadas y el Zoom solo cuenta la vigente.
+    const iZ = H.indexOf('Zoom realizado');
+    r.zoom090 = filas.find(tr => tr.querySelector('td').textContent.includes('INVESTORS_MX_DYNAMIC-TOPLPS_090926')).querySelectorAll('td')[iZ].textContent.trim();
     r.formato = filas.every(tr => /^\d[\d,]* de \d[\d,]* · (\d+\.\d%|—)$/.test(tr.querySelectorAll('td')[iS].textContent.trim()));
     const celdas = (tr) => [iQ, iV, iO, iG, iS].map(i => tr.querySelectorAll('td')[i].textContent.replace(/\s+/g, ' ').trim()).join(' ¦ ');
     r.fila090 = celdas(filas.find(tr => tr.querySelector('td').textContent.includes('INVESTORS_MX_DYNAMIC-TOPLPS_090926')));
@@ -801,7 +814,8 @@ const PORT = process.env.PORT || 8765;
     r.sinCampo = /No se encontró el campo Lead to Watch/.test(document.getElementById('lq-content').textContent);
     return r;
   }, fixture());
-  opg.ok = opg.flags === 'og-o ogvv- og--' && opg.campo === 'Lead to Watch' && opg.geVig && opg.formato && opg.filas > 5
+  opg.ok = opg.flags === 'og-o ogvv- og--' && opg.campo === 'Lead to Watch' && opg.geVig && opg.zoom090 === '1' && opg.formato && opg.filas > 5
+    && opg.fila090 === '3 ¦ 1 ¦ 1 ¦ 32 caídas ¦ 3 de 3 · 100.0%'
     && opg.columnas === 'SQL+|Verificado por ventas|Zoom realizado|OPP vigentes|OPP generadas|SQL+ → OPP generadas'
     && opg.aviso && opg.nombres === 'ok' && opg.avisoCombo && opg.sinCampo && opg.siglas && opg.mes === 'OPP vigentes|OPP generadas';
   console.log('\n[calidad de leads] OPP generadas', JSON.stringify(opg));
