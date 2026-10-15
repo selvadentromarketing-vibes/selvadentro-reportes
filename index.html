@@ -1883,6 +1883,20 @@ function ingRevisarCoherencia(form){
     const seg = Number(v[f.k]||0), tot = Number(v[base]||0);
     if(seg > tot){ bloqueo.push(`"${etiquetaCampo(f.k)}" (${seg}) no puede ser mayor que "${etiquetaCampo(base)}" (${tot})`); campos.add(f.k); campos.add(base); }
   });
+  // Partes de un total (15-oct-2026): OPP de zooms/tours/1:1/externas ≤ OPP total; OPP con next
+  // step y OPP >14 días ≤ OPP activas. Mismo criterio: imposible por definición, bloquea.
+  const fk = new Set(allFields().map(f=>f.k));
+  paresParteTotal(CH).forEach(([pk, tk])=>{
+    if(!fk.has(pk) || !fk.has(tk) || !(pk in v) || !(tk in v)) return;
+    const pv = Number(v[pk]||0), tv = Number(v[tk]||0);
+    if(pv > tv){ bloqueo.push(`"${etiquetaCampo(pk)}" (${pv}) no puede ser mayor que "${etiquetaCampo(tk)}" (${tv})`); campos.add(pk); campos.add(tk); }
+  });
+  // Zooms + tours por encima del total: posible si una OPP tuvo zoom Y tour y se contó en las dos.
+  const oppK = (METRIC_MAP[CH]||{}).opp || "opp_total";
+  if(["opp_zooms","opp_tours",oppK].every(k=>fk.has(k) && (k in v))){
+    const z = Number(v.opp_zooms||0), t = Number(v.opp_tours||0), tot = Number(v[oppK]||0);
+    if(z + t > tot && z <= tot && t <= tot){ problemas.push(`OPP de zooms + OPP de tours (${z+t}) es mayor que "${etiquetaCampo(oppK)}" (${tot}): si una OPP tuvo zoom y tour, cuéntala solo en una`); campos.add("opp_zooms"); campos.add("opp_tours"); }
+  }
   return { mensaje: problemas.length ? "· " + problemas.join("\n· ") : "", campos:[...campos], bloqueo };
 }
 const etiquetaCampo = (k)=> (allFields().find(f=>f.k===k)||{}).l || k;
@@ -1905,6 +1919,19 @@ function ingMarcarErrores(campos){
 // el motivo, y lo limpia cuando cualquiera de los dos vuelve a ser coherente.
 function ingVigilarSeg(el){
   const k = (el.id||"").replace(/^in_/,"");
+  // Parte de un total (OPP de zooms vs OPP total, next step vs activas…): misma marca en vivo.
+  paresParteTotal(CH).filter(([pk, tk])=>pk===k || tk===k).forEach(([pk, tk])=>{
+    const pEl = document.getElementById("in_"+pk), tEl = document.getElementById("in_"+tk);
+    if(!pEl || !tEl) return;
+    const pv = numCampo(pEl.value), tv = numCampo(tEl.value), prevP = pEl.parentElement.querySelector(".campo-aviso.parte");
+    if((pEl.value||"").trim() && pv > tv){
+      pEl.classList.add("campo-error"); pEl.setAttribute("aria-invalid","true");
+      if(!prevP){ const n=document.createElement("span"); n.className="campo-aviso parte"; n.textContent=`No puede ser mayor que "${etiquetaCampo(tk)}" (${tv}).`; pEl.parentElement.appendChild(n); }
+    } else if(prevP){
+      prevP.remove();
+      if(numCampoLegible(pEl.value) || !(pEl.value||"").trim()){ pEl.classList.remove("campo-error"); pEl.removeAttribute("aria-invalid"); }
+    }
+  });
   const segK = /_seg$/.test(k) ? k : (allFields().some(f=>f.k===k+"_seg") ? k+"_seg" : null);
   if(!segK) return;
   const segEl = document.getElementById("in_"+segK), totEl = document.getElementById("in_"+segK.replace(/_seg$/,""));
@@ -2102,10 +2129,23 @@ async function generarReporte(){
   }
   recs.sort((a,b)=> a.w<b.w?-1:a.w>b.w?1:(a.combo.join()<b.combo.join()?-1:1));
   for(const {w, combo, rec} of recs){
-    if(rec.valores) flds.forEach(f=>sum[f.k]+=Number(rec.valores[f.k]||0));
+    if(rec.valores) flds.forEach(f=>{ if(!CAMPOS_SALDO.has(f.k)) sum[f.k]+=Number(rec.valores[f.k]||0); });
     if(rec.notas||rec.aprendizajes||rec.cambios) textos.push({semana:w,dims:combo.join(" · "),inicio:rec.inicio,fin:rec.fin,notas:rec.notas,aprendizajes:rec.aprendizajes,cambios:rec.cambios});
   }
 
+  // Saldos del pipeline: el corte más reciente del rango (por asesor/ciudad), no la suma.
+  const saldos = saldosDelRango(recs);
+  flds.forEach(f=>{ if(CAMPOS_SALDO.has(f.k)) sum[f.k] = saldos[f.k] ? saldos[f.k].v : 0; });
+  const corteTxt = (k)=>{ const x = saldos[k]; if(!x) return `<div class="lq-sub">sin captura en el rango</div>`;
+    return `<div class="lq-sub" title="Foto del pipeline: se toma la última semana capturada de cada ${dims.length ? escAttr(dims.map(d=>d.label.toLowerCase()).join("/")) : "registro"} dentro del rango, no la suma de las semanas">corte ${x.semanas.length===1 ? escAttr(x.semanas[0]) : escAttr(x.semanas[0]+"–"+x.semanas[x.semanas.length-1])}</div>`; };
+  // Capturas que ya existen con una parte mayor que su total (no pasaban por ninguna validación).
+  const fkSet = new Set(flds.map(f=>f.k));
+  const incoh = [];
+  recs.forEach(({w, combo, rec})=>{ const v = rec.valores||{};
+    paresParteTotal(CH).forEach(([pk, tk])=>{ if(!fkSet.has(pk) || !fkSet.has(tk) || v[pk]==null || v[pk]==="") return;
+      const pv = Number(v[pk]||0), tv = Number(v[tk]||0);
+      if(pv > tv) incoh.push(`${escAttr(w)}${combo.length?` · ${escAttr(combo.join(" · "))}`:""}: ${escAttr(etiquetaCampo(pk))} (${pv}) mayor que ${escAttr(etiquetaCampo(tk))} (${tv})`); }); });
+  const avisoIncoh = incoh.length ? `<div class="lq-meth" style="border-color:var(--rojo);background:#F9E9E6">⚠ <b>Captura incoherente en el rango</b> — una parte no puede ser mayor que su total, y las conversiones que la usan salen infladas. Corregir en <b>Ingreso de datos</b>:<br>${incoh.map(x=>"· "+x).join("<br>")}</div>` : "";
   const hasMetas=flds.some(f=>f.meta!=null);
   const metaPeriodo=meta=>meta==null?null:(meta/SEMANAS_MES*nWeeks);
   const cumpCell=(val,meta)=>{ const mp=metaPeriodo(meta); if(mp==null) return '<td></td><td></td><td></td>'; if(mp===0) return `<td>${rMeta(meta)}</td><td>0</td><td><span class="cump no">Sin Datos</span></td>`; const pct=val/mp,cls=pct>=1?"ok":"no"; return `<td>${rMeta(meta)}</td><td>${(+mp.toFixed(2))}</td><td><span class="cump ${cls}">${fmtPct(pct)}</span></td>`; };
@@ -2124,11 +2164,11 @@ async function generarReporte(){
   // Las metas se guardan sin historial: un periodo pasado se colorea contra la meta de HOY.
   const notaMetas = sections().some(s=>s.conv && s.conv.length)
     ? `<p class="hint pegada">Metas de conversión: las vigentes hoy en <b>Metas</b> (las mismas que Dirección General y Comercial). Los periodos pasados se colorean contra la meta actual, no contra la que regía entonces.</p>` : "";
-  const sectionsHtml=avisoSeg+notaMetas+sections().map(s=>`
+  const sectionsHtml=avisoIncoh+avisoSeg+notaMetas+sections().map(s=>`
     <div class="rep-section"><h3>${escAttr(s.title)}</h3><div class="layout">
       <div class="metrics"><table class="rep">
         <thead><tr><th class="lft">Métrica</th><th>Valor</th>${thMeta}</tr></thead>
-        <tbody>${s.fields.map(f=>`<tr><td class="lft">${escAttr(f.l)}</td><td class="val">${f.money?fmtMoney(sum[f.k]):sum[f.k]}</td>${hasMetas?cumpCell(sum[f.k],f.meta):''}</tr>`).join("")}${
+        <tbody>${s.fields.map(f=>`<tr><td class="lft">${escAttr(f.l)}${CAMPOS_SALDO.has(f.k)?' <span class="lq-sub">(saldo)</span>':""}</td><td class="val">${f.money?fmtMoney(sum[f.k]):sum[f.k]}${CAMPOS_SALDO.has(f.k)&&nWeeks>1?corteTxt(f.k):""}</td>${hasMetas?cumpCell(sum[f.k],f.meta):''}</tr>`).join("")}${
           // Derivado, no capturado: nuevos = total − seguimiento, así las partes siempre suman el total
           s.fields.filter(f=>/_seg$/.test(f.k) && s.fields.some(g=>g.k===f.k.replace(/_seg$/,""))).map(f=>{ const base=s.fields.find(g=>g.k===f.k.replace(/_seg$/,"")); const v=(sum[base.k]||0)-(sum[f.k]||0);
             return `<tr class="fila-derivada"><td class="lft"><b>${escAttr(base.l)} nuevos</b> <span class="lq-sub">= total − seguimiento</span></td><td class="val"><b>${v}</b></td>${hasMetas?'<td></td><td></td><td></td>':''}</tr>`; }).join("")}</tbody>
@@ -2622,15 +2662,48 @@ function derivarNuevos(m){
   return m;
 }
 
+// Saldos del pipeline (Dirección General, 15-oct-2026): OPP activas, OPP con next step y OPP
+// >14 días son una FOTO de cómo quedó el pipeline esa semana, no algo que pasó en la semana. Una
+// OPP vive varias semanas y se reporta en cada una: sumarlas en un rango la contaba una vez por
+// semana (26 "activas" en un mes con 6). En un rango vale el corte más reciente: por cada asesor
+// o ciudad, su última semana capturada dentro del rango; y esos cortes sí se suman entre asesores.
+const CAMPOS_SALDO = new Set(["opp_activas","opp_next_step","opp_14dias"]);
+// recs = [{ w, combo:[...dims], rec }] → { campo: { v, semanas:[...] } } solo de los saldos capturados.
+function saldosDelRango(recs){
+  const out = {};
+  CAMPOS_SALDO.forEach(k=>{
+    const ult = {};
+    (recs||[]).forEach(r=>{
+      const val = r.rec && r.rec.valores ? r.rec.valores[k] : null;
+      if(val==null || val==="") return;
+      const c = (r.combo||[]).join("|");
+      if(!ult[c] || r.w > ult[c].w) ult[c] = { w:r.w, v:Number(val)||0 };
+    });
+    const xs = Object.values(ult);
+    if(xs.length) out[k] = { v: xs.reduce((a,x)=>a+x.v, 0), semanas: [...new Set(xs.map(x=>x.w))].sort() };
+  });
+  return out;
+}
+// Partes que no pueden superar a su total (Dirección General, 15-oct-2026: "OPP de zooms" 5 con
+// "OPP (total)" 4 en Paid Orgánico). [parte, total]; el total de OPP es el del canal (brokers usa
+// opp_brokers). Se valida al capturar y el reporte señala las semanas ya capturadas que no cumplen.
+function paresParteTotal(chKey){
+  const opp = (METRIC_MAP[chKey]||{}).opp || "opp_total";
+  return [["opp_zooms",opp],["opp_tours",opp],["opp_1a1",opp],["opp_externas",opp],["opp_next_step","opp_activas"],["opp_14dias","opp_activas"]];
+}
 function chPrefix(chKey){ const c=CHANNELS[chKey]; return (c.advisors||c.cities)?`${chKey}:rec:`:`${chKey}:week:`; }
 function allWeeksAll(){ const set=new Set(); for(const k of Object.keys(CHANNELS)){ const p=chPrefix(k); recList(p).forEach(x=>set.add(x.slice(p.length).split("__")[0])); } return [...set].filter(Boolean).sort(); }
 function channelMetrics(chKey, weekSet){
   const map=METRIC_MAP[chKey]; const out={}; METRIC_KEYS.forEach(m=>out[m]=0);
   out.registros=0; out.sinSeg=0;   // sinSeg = capturados antes de separar nuevo/seguimiento
-  const p=chPrefix(chKey); const keys=recList(p);
-  for(const k of keys){ const wk=k.slice(p.length).split("__")[0]; if(weekSet && !weekSet.has(wk)) continue; const rec=recGet(k); if(!rec||!rec.valores) continue;
+  const p=chPrefix(chKey); const keys=recList(p); const recs=[];
+  for(const k of keys){ const partes=k.slice(p.length).split("__"), wk=partes[0]; if(weekSet && !weekSet.has(wk)) continue; const rec=recGet(k); if(!rec||!rec.valores) continue;
     out.registros++; if(map.zooms_seg && !(map.zooms_seg in rec.valores)) out.sinSeg++;
-    METRIC_KEYS.forEach(m=>{ const fk=map[m]; if(fk) out[m]+=Number(rec.valores[fk]||0); }); }
+    recs.push({ w:wk, combo:partes.slice(1), rec });
+    METRIC_KEYS.forEach(m=>{ const fk=map[m]; if(fk && !CAMPOS_SALDO.has(fk)) out[m]+=Number(rec.valores[fk]||0); }); }
+  // Saldos (OPP >14 días): el corte más reciente del rango, no la suma de las semanas.
+  const sal = saldosDelRango(recs);
+  METRIC_KEYS.forEach(m=>{ const fk=map[m]; if(fk && CAMPOS_SALDO.has(fk)) out[m] = sal[fk] ? sal[fk].v : 0; });
   return derivarNuevos(out);
 }
 function pctTxt(num,den){ if(!den) return 'Sin Datos'; return (num/den*100).toFixed(2)+'%'; }
@@ -9534,7 +9607,8 @@ function renderDirAnalitica(prefix, chsSel, weekSet, tabName){
   const html = [`<h3 style="font-family:var(--serif);color:var(--verde-prof);font-size:var(--fs-xl);margin:24px 0 6px">Analítica del embudo</h3><p class="hint" style="margin-top:0">Serie semanal agregada de los canales seleccionados. Clic para expandir y pedir conclusión con IA.</p><div class="anal-grid">`];
   ANAL_KEYS.forEach((m, i) => {
     const values = byMetric[m];
-    const total = values.reduce((a,b)=>a+b,0);
+    const saldoM = m === "opp_14";   // saldo del pipeline: la última semana, no la suma
+    const total = saldoM ? (values.length ? values[values.length-1] : 0) : values.reduce((a,b)=>a+b,0);
     const canvasId = `${prefix}-anc-${m}`;
     const expanded = state.expanded === m;
     const isMoney = m === "ingresos";
@@ -9542,7 +9616,7 @@ function renderDirAnalitica(prefix, chsSel, weekSet, tabName){
     const conc = state.cache[m];
     html.push(`<div class="anal-card${expanded?' expanded':''}" data-metric="${m}">
       <div class="ac-title">${METRIC_LABELS[m]}</div>
-      <div class="ac-total">Total: <b>${totalTxt}</b> · ${weeks.length} sem.</div>
+      <div class="ac-total">${saldoM ? `Última semana (${escAttr(weeks[weeks.length-1]||"—")})` : "Total"}: <b>${totalTxt}</b> · ${weeks.length} sem.</div>
       <canvas id="${canvasId}"></canvas>
       ${expanded ? `<div class="anal-actions"><button class="btn btn-olive" data-analyze="${m}">Analizar con IA</button></div>${conc?`<div class="anal-conc">${escAttr(conc)}</div>`:''}` : ''}
     </div>`);
@@ -9751,14 +9825,15 @@ function renderAnalitica(){
   if(semBadge) semBadge.textContent = weeks.length;
   const cards = fields.map((f, i) => {
     const values = byField[f.k] || [];
-    const total = values.reduce((a,b)=>a+b,0);
+    const saldo = CAMPOS_SALDO.has(f.k);   // foto del pipeline: la última semana, no la suma
+    const total = saldo ? (values.length ? values[values.length-1] : 0) : values.reduce((a,b)=>a+b,0);
     const canvasId = `anal-c-${chKey}-${f.k}`;
     const expanded = ANAL_STATE.expanded === f.k;
     const totalTxt = f.money ? fmtMoney(total) : total;
     const conc = ANAL_STATE.cache[chKey+":"+f.k+":"+ANAL_STATE.ini+":"+ANAL_STATE.fin];   // la conclusión IA es del rango con que se generó
     return `<div class="anal-card${expanded?' expanded':''}" data-fk="${f.k}">
       <div class="ac-title">${escAttr(f.l)}</div>
-      <div class="ac-total">Total del rango: <b>${totalTxt}</b> · ${weeks.length} sem.</div>
+      <div class="ac-total">${saldo ? `Última semana (${escAttr(weeks[weeks.length-1]||"—")})` : "Total del rango"}: <b>${totalTxt}</b> · ${weeks.length} sem.</div>
       <canvas id="${canvasId}"></canvas>
       ${expanded ? `<div class="anal-actions"><button class="btn btn-olive" data-analyze="${f.k}">Analizar con IA</button>${f.meta!=null?`<span style="font-size:var(--fs-s);color:var(--neutro)">Meta mensual: <b>${f.meta}</b></span>`:''}</div>${conc?`<div class="anal-conc">${escAttr(conc)}</div>`:''}` : ''}
     </div>`;

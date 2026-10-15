@@ -619,6 +619,20 @@ llaman distinto y el glosario completo vive en la pestaña **Diagnóstico**:
 noche caían en semanas distintas según la pestaña. El agregado del CRM subió a
 `crm:agg:v2` para forzar la reconstrucción del cache que quedó agrupado con el reloj viejo.
 
+## Ventas → Reporte: saldos del pipeline y partes de un total (15-oct-2026)
+
+- **Saldos** (`CAMPOS_SALDO`: OPP activas, OPP con next step + fecha, OPP >14 días): son una
+  foto del pipeline, no algo que pasó en la semana; una OPP vive varias semanas y se reporta en
+  cada una. En un rango ya no se suman: vale el **corte más reciente** de cada asesor/ciudad
+  (su última semana capturada dentro del rango), y esos cortes sí se suman entre asesores. La
+  celda dice de qué semana es el corte. Igual en Dirección (OPP >14 días) y en las Analíticas
+  ("Última semana" en vez de "Total").
+- **Partes de un total** (`paresParteTotal`): OPP de zooms / de tours / de 1:1 / externas no
+  pueden superar a OPP (total) del canal, ni OPP con next step u OPP >14 días a OPP activas. La
+  captura lo bloquea (como seguimiento > total) y el reporte lista las semanas ya capturadas que
+  no cumplen, para corregirlas en Ingreso de datos. Zooms + tours por encima del total solo avisa
+  (una OPP con zoom y tour debe contarse en una sola).
+
 ## Desempeño de Ventas (Anexo 1 del proceso comercial)
 
 Pestaña **Desempeño de Ventas** en la barra principal (antes "SLA y Seguimiento", y

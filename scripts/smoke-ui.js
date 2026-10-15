@@ -1162,6 +1162,44 @@ const PORT = process.env.PORT || 8765;
   console.log('\n[primer contacto] modelo y pantalla', JSON.stringify(pcx));
   if (!pcx.ok) hallazgos.push({ vista: 'pc:modelo', pcx });
   await escanear('ventas/primer (con datos)');
+  // Ventas → Reporte, Pipeline/OPP (Dirección General, 15-oct-2026): los saldos (OPP activas, con
+  // next step, >14 días) son el corte de la última semana de cada asesor, no la suma; una parte
+  // mayor que su total se bloquea al capturar y el reporte señala las semanas ya capturadas así.
+  VISTA = 'reporte:saldosOpp';
+  const saldos = await page.evaluate(async () => {
+    navIr('ventas', 'reporte');
+    const sel = document.getElementById('canal-select'); sel.value = 'paid_organico'; sel.dispatchEvent(new Event('change'));
+    await new Promise(r => setTimeout(r, 400));
+    const W = ['2026-W40', '2026-W41', '2026-W42'], A = 'Asesor Prueba A', B = 'Asesor Prueba B';
+    const mk = (w, a, v) => { const k = `paid_organico:rec:${w}__${a}`; recSet(k, { semana: w, dimVals: [a], valores: v, notas: '' }); return k; };
+    const claves = [
+      mk(W[0], A, { opp_total: 1, opp_zooms: 1, opp_activas: 5, opp_next_step: 3, opp_14dias: 2 }),
+      mk(W[1], A, { opp_total: 1, opp_zooms: 2, opp_activas: 6, opp_next_step: 4 }),          // zooms > total: mal capturada
+      mk(W[2], A, { opp_total: 2, opp_zooms: 2, opp_activas: 7, opp_next_step: 5, opp_14dias: 1 }),
+      mk(W[0], B, { opp_total: 0, opp_activas: 3 }),
+      mk(W[1], B, { opp_total: 1, opp_zooms: 1, opp_activas: 4, opp_14dias: 3 }),              // B no capturó la W42
+    ];
+    const si = document.getElementById('rep-semana-ini'), sf = document.getElementById('rep-semana-fin');
+    si.innerHTML = sf.innerHTML = W.map(w => `<option value="${w}">${w}</option>`).join(''); si.value = W[0]; sf.value = W[2];
+    await generarReporte();
+    const filas = {}; document.querySelectorAll('#rep-output table.rep tbody tr').forEach(tr => { const td = tr.querySelectorAll('td'); if (td.length > 1) filas[td[0].innerText.replace(/\s+/g, ' ').trim()] = td[1].innerText.replace(/\s+/g, ' ').trim(); });
+    const t = document.getElementById('rep-output').innerText;
+    const r = { activas: filas['OPP activas (saldo)'], nextStep: filas['OPP con next step + fecha (saldo)'], total: filas['OPP (total)'], zooms: filas['OPP de zooms'],
+      aviso: /Captura incoherente en el rango/.test(t) && /2026-W41 · Asesor Prueba A: OPP de zooms \(2\) mayor que OPP \(total\) \(1\)/.test(t) };
+    // Dirección: OPP >14 días = 1 (A, W42) + 3 (B, W41), no 6
+    r.dir14 = channelMetrics('paid_organico', new Set(W)).opp_14;
+    // Captura: parte > total bloquea; zooms + tours > total solo avisa
+    const c1 = ingRevisarCoherencia({ valores: { opp_total: 1, opp_zooms: 2, opp_tours: 0 } });
+    const c2 = ingRevisarCoherencia({ valores: { opp_activas: 3, opp_next_step: 4, opp_14dias: 1 } });
+    const c3 = ingRevisarCoherencia({ valores: { opp_total: 2, opp_zooms: 2, opp_tours: 1 } });
+    r.bloqueo = c1.bloqueo.some(x => /OPP de zooms/.test(x)) && c2.bloqueo.some(x => /next step/.test(x)) && !c2.bloqueo.some(x => />14/.test(x))
+      && !c3.bloqueo.length && /cuéntala solo en una/.test(c3.mensaje);
+    claves.forEach(k => recDel(k));
+    r.ok = r.activas === '11 corte 2026-W41–2026-W42' && r.nextStep === '5 corte 2026-W42' && r.total === '5' && r.zooms === '6' && r.aviso && r.dir14 === 4 && r.bloqueo;
+    return r;
+  });
+  console.log('\n[reporte] saldos de OPP y capturas incoherentes', JSON.stringify(saldos));
+  if (!saldos.ok) hallazgos.push({ vista: 'reporte:saldosOpp', saldos });
   console.log('\n=== RESUMEN ===');
   console.log('errores de página:', errores.length); errores.slice(0, 15).forEach(e => console.log('  ✗', e.vista, '·', e.msg));
   console.log('errores de consola:', consola.length); [...new Set(consola.map(c => c.vista + ' · ' + c.msg))].slice(0, 15).forEach(c => console.log('  ·', c));
