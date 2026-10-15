@@ -152,9 +152,13 @@ const PORT = process.env.PORT || 8765;
       oppSinForm: q({ o: 1, pstage: 'Seguimiento de OPP' }).lv,                       // sqls: la etapa manda
       wonFormBajo: q({ o: 1, w: 1, pstage: 'WON', pres: '$50,000 USD', hor: '12 meses' }).lv, // sqls: la venta manda
       oppPerdida: q({ o: 1, ost: 'lost', pstage: 'Seguimiento de OPP' }).lv,           // sqls: OPP generada (15-oct-2026), antes desc
-      // OPP generada caída (Dirección General, 15-oct-2026): sigue en SQL Selvadentro salvo causa inválida
-      caidaLargo: q({ og: 1, pstage: 'Largo plazo' }).lv,                               // sqls
-      caidaDescTag: q({ tags: 'squeeze, opp-generada', pstage: 'Descalificado' }).lv,   // sqls: la etiqueta basta
+      // OPP generada caída (Dirección General, 15-oct-2026): su nivel sale de dónde cayó
+      caidaLargo: q({ og: 1, pstage: 'Largo plazo' }).lv,                               // sql: horizonte fuera del perfil
+      caidaRescate: q({ og: 1, pstage: 'Rescate' }).lv,                                 // sqls: tenía perfil, no se cerró
+      caidaDescTag: q({ tags: 'squeeze, opp-generada', pstage: 'Descalificado' }).lv,   // sqls: sin causa (la etiqueta basta)
+      caidaYaNo: q({ og: 1, pstage: 'Descalificado', dqc: 'Ya no interesado' }).lv,     // sqls
+      caidaNoAlineado: q({ og: 1, pstage: 'Descalificado', dqc: 'No alineado' }).lv,    // sql
+      caidaMalint: q({ og: 1, pstage: 'Descalificado', dqc: 'Malinterpreto la campana' }).lv, // mql (sin acentos: se compara compacto)
       caidaInvalida: q({ og: 1, inv: 'Número equivocado', pstage: 'Descalificado' }).lv, // desc: causa del grupo inválido
       caidaSpam: q({ tags: 'opp-generada, spam', pstage: 'Descalificado' }).lv,          // desc: tag inválido
       sinOppDesc: q({ pstage: 'Descalificado' }).lv,                                     // desc: sin OPP, igual que antes
@@ -166,8 +170,9 @@ const PORT = process.env.PORT || 8765;
       why: q({ o: 1, pstage: 'Carta oferta', pres: '$50,000 USD' }).why.join(' · '),
     };
     r.ok = r.oppSinForm === 'sqls' && r.wonFormBajo === 'sqls' && r.oppPerdida === 'sqls'
-      && r.caidaLargo === 'sqls' && r.caidaDescTag === 'sqls' && r.caidaInvalida === 'desc' && r.caidaSpam === 'desc' && r.sinOppDesc === 'desc'
-      && r.whyCaida === 'llegó a OPP (etiqueta opp-generada); hoy en "Largo plazo": cuenta como OPP generada' && r.fuerteSinForm === 'sql' && r.fuerteConPerfil === 'sqls' && r.soloFormulario === 'sql' && r.soloRespondio === 'mql' && /etapa del pipeline manda/.test(r.why);
+      && r.caidaLargo === 'sql' && r.caidaRescate === 'sqls' && r.caidaDescTag === 'sqls' && r.caidaYaNo === 'sqls' && r.caidaNoAlineado === 'sql'
+      && r.caidaMalint === 'mql' && r.caidaInvalida === 'desc' && r.caidaSpam === 'desc' && r.sinOppDesc === 'desc'
+      && r.whyCaida === 'llegó a OPP (etiqueta opp-generada); hoy en "Largo plazo": el horizonte ya no es el del perfil' && r.fuerteSinForm === 'sql' && r.fuerteConPerfil === 'sqls' && r.soloFormulario === 'sql' && r.soloRespondio === 'mql' && /etapa del pipeline manda/.test(r.why);
     return r;
   });
   console.log('\n[lqAutoQualify] etapa > formulario', JSON.stringify(lq));
@@ -855,6 +860,8 @@ const PORT = process.env.PORT || 8765;
       && lqAvisoOppGen(agg, [], ['2026-W43'], true) === '';
     r.caidas = (t.match(/(\d+) OPP caídas que sí cuentan como generadas: ([^.]*)\./) || []).slice(1).join(' : ');
     r.sinVerif = (t.match(/(\d+) OPP vigentes? sin verificación de ventas/) || [])[1] || '0';
+    r.sinCausa = (t.match(/(\d+) OPP caídas? a Descalificado sin causa capturada \(cuentan? como SQL Selvadentro hasta que ventas la capture\): ([^.]*)\./) || []).slice(1).join(' : ');
+    r.niveles = [zr, ce].map(l => agg.leads.find(x => x.id === l.id).alv).join(' ');
     const card = (k) => { const c = [...document.querySelectorAll('#lq-content .crm-kpi')].find(e => e.querySelector('.k-lbl').textContent.trim() === k); return c ? c.querySelector('.k-val').textContent.trim() : ''; };
     r.tarjetas = ['Verificados por ventas · Lead to Watch', 'OPP vigentes · hoy en OPP', 'OPP generadas · llegaron alguna vez', 'SQL+ → OPP generadas'].map(card).join(' | ');
     r.mes = [...document.querySelectorAll('#lq-content table.cons tr')].map(tr => (tr.querySelector('td.name') || {}).textContent || '').filter(x => /^OPP /.test(x)).join('|');
@@ -870,7 +877,7 @@ const PORT = process.env.PORT || 8765;
     return r;
   }, fixture());
   opg.ok = opg.flags === 'og-o ogvv- og--' && opg.campo === 'Lead to Watch' && opg.geVig && opg.zoom090 === '1' && opg.formato && opg.filas > 5
-    && opg.fila090 === '3 ¦ 1 ¦ 1 ¦ 32 caídas ¦ 3 de 3 · 100.0%'
+    && opg.fila090 === '3 ¦ 1 ¦ 1 ¦ 32 caídas ¦ 3 de 3 · 100.0%' && opg.niveles === 'sql sqls' && /^1 : /.test(opg.sinCausa)
     && opg.columnas === 'SQL+|Verificado por ventas|Zoom realizado|OPP vigentes|OPP generadas|SQL+ → OPP generadas'
     && opg.aviso && opg.nombres === 'ok' && opg.avisoCombo && opg.sinCampo && opg.siglas && opg.mes === 'OPP vigentes|OPP generadas';
   console.log('\n[calidad de leads] OPP generadas', JSON.stringify(opg));

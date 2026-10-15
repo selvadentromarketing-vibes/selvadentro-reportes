@@ -3181,7 +3181,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v26";  // v26: OPP generada = SQL Selvadentro (salvo causa inválida) y cuenta como contactado y trabajado (no como Zoom)  // v25: OPP generadas (etiqueta opp-generada del CRM) y verificado por ventas (Lead to Watch)  // v24: broker = cualquier etiqueta que empiece con "broker" (no solo broker-client)  // v23: re-envíos de formulario (agg.reenvios)  // v22: datos de la decisión de hoy (rango fijo 30 días y 7 contra 7) en `dec`  // v21: el v20 guardado el 9-oct pudo quedar sin detalle por anuncio (la consulta con campos extra se volvía lenta)  // v20: URL de destino por anuncio, gasto por keyword de Google y presupuesto diario (recomendaciones concretas)  // v19: trabajado (tr) y contactado (ct) por etapa, separados  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
+const LQ_AGG_KEY = "lq:agg:v27";  // v27: nivel de la OPP caída según dónde cayó (Largo plazo → SQL, Rescate → SQL Selvadentro, Descalificado por causa)  // v26: OPP generada = SQL Selvadentro (salvo causa inválida) y cuenta como contactado y trabajado (no como Zoom)  // v25: OPP generadas (etiqueta opp-generada del CRM) y verificado por ventas (Lead to Watch)  // v24: broker = cualquier etiqueta que empiece con "broker" (no solo broker-client)  // v23: re-envíos de formulario (agg.reenvios)  // v22: datos de la decisión de hoy (rango fijo 30 días y 7 contra 7) en `dec`  // v21: el v20 guardado el 9-oct pudo quedar sin detalle por anuncio (la consulta con campos extra se volvía lenta)  // v20: URL de destino por anuncio, gasto por keyword de Google y presupuesto diario (recomendaciones concretas)  // v19: trabajado (tr) y contactado (ct) por etapa, separados  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 // (LQ_TZ y LQ_TZ_MS ahora viven junto al resto de helpers de fecha, arriba)
@@ -3476,6 +3476,27 @@ const LQ_TAGS_RESP = /respondi|replied|another-device-replied|contest|interesad/
 // OPP generada, junto con una causa de descalificación del grupo inválido (l.inv).
 const LQ_TAGS_INVALIDO = /spam|duplicad|numero-?(equivocado|invalido)|wrong-?number/i;
 
+// Nivel de una OPP generada que hoy está caída (Dirección General, 15-oct-2026). La pregunta
+// es si el LEAD era bueno, no si ventas lo cerró:
+//   · Largo plazo / Nurturing → SQL: el horizonte ya no es el del perfil Selvadentro.
+//   · Descalificado → según la causa capturada: "No alineado" → SQL (interés sin perfil);
+//     "Malinterpretó la campaña" → MQL (falla del mensaje de la campaña); "Ya no interesado"
+//     o sin causa → SQL Selvadentro. Las causas del grupo inválido ya salieron en la regla 1.
+//   · Rescate, perdida o cualquier otra etapa → SQL Selvadentro: tenía perfil y la venta no se
+//     cerró, y eso mide a ventas, no a la campaña.
+const LQ_RX_CAIDA_SQL = /largo\s*plazo|long\s*term|nurtur/i;
+function lqNivelOppCaida(l, stage){
+  if(LQ_RX.desc.test(stage)){
+    const c = slaCompacto(l.dqc || (l.dq && l.dq.causa) || "");
+    if(c && c === slaCompacto("No alineado")) return { lv:"sql", txt:'descalificada por "No alineado": interés real sin el perfil' };
+    if(c && c === slaCompacto("Malinterpretó la campaña")) return { lv:"mql", txt:'descalificada por "Malinterpretó la campaña"' };
+    if(c && c === slaCompacto("Ya no interesado")) return { lv:"sqls", txt:'descalificada por "Ya no interesado": tenía perfil y no se cerró' };
+    return { lv:"sqls", txt:"descalificada sin causa capturada" };
+  }
+  if(LQ_RX_CAIDA_SQL.test(stage)) return { lv:"sql", txt:`hoy en "${stage}": el horizonte ya no es el del perfil` };
+  return { lv:"sqls", txt: stage ? `hoy en "${stage}": tenía perfil y no se cerró` : "tenía perfil y no se cerró" };
+}
+
 // Devuelve { lv, why[] } — why enumera la evidencia que disparó la regla.
 function lqAutoQualify(l){
   const why = [];
@@ -3535,8 +3556,12 @@ function lqAutoQualify(l){
   // atendiera (y la mitad los deja vacíos). Con la regla anterior una venta cerrada sin
   // formulario, o con "$50K" tecleado el primer día, se quedaba en SQL debajo de un lead
   // que solo contestó un mensaje pero llenó bien el formulario.
-  if(l.w>0 || enOpp || ogen){
-    if(!(l.w>0) && !enOpp) why.unshift(`llegó a OPP (etiqueta opp-generada)${stage ? `; hoy en "${stage}"` : ""}: cuenta como OPP generada`);
+  // OPP generada que hoy está caída: su nivel sale de dónde cayó (lqNivelOppCaida)
+  if(ogen && !enOpp && !(l.w>0)){
+    const k = lqNivelOppCaida(l, stage);
+    return { lv:k.lv, why:[`llegó a OPP (etiqueta opp-generada); ${k.txt}`] };
+  }
+  if(l.w>0 || enOpp){
     if(presupuesto==null && hor==null) why.push("sin formulario: la etapa del pipeline manda");
     else if(perfilBajo) why.push("formulario por debajo del perfil: la etapa del pipeline manda");
     return {lv:"sqls", why};
@@ -4283,6 +4308,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
       // OPP generada: vigente, venta o etiqueta "opp-generada" del CRM (se lee antes de truncar tags)
       ...((op && ((op.o||0) > 0 || (op.w||0) > 0)) || lqTagOppGen(l.tags) ? { og:1 } : {}),
       ...(F.verif && lqSi(l.cf[F.verif.id]) ? { vv:1 } : {}),   // verificado por ventas (Lead to Watch)
+      ...(op && op.dq && op.dq.causa ? { dqc:String(op.dq.causa).slice(0,60) } : {}),   // causa de descalificación (nivel de una OPP caída)
       ...(l.attr && l.attr.inf ? { inf:1 } : {}),   // atribución inferida (LQ_INFERIDA)
       ...(l.attr && l.attr.pid ? { pid:1, cid:l.attr.cidOk } : {}),   // campaña resuelta por su ID (y cuál), no por nombre
       ...(l.attr && l.attr.kw ? { kw:String(l.attr.kw).slice(0,80) } : {}),   // palabra clave de Google (utm_term={keyword})
@@ -4389,6 +4415,8 @@ function lqAvisoOppGen(agg, leads, rango, corto){
     const lista = (arr, txt)=> arr.slice(0, 15).map(l=>`${escAttr(l.n||"(sin nombre)")} <span class="lq-sub">${escAttr(txt(l))}</span>`).join(" · ") + (arr.length > 15 ? ` · y ${arr.length-15} más` : "");
     const caidas = leads.filter(l=>lqEsOppGen(l) && !((l.o||0) > 0 || (l.w||0) > 0));
     if(caidas.length) p.push(`<b>${lqPl(caidas.length, "OPP caída", "OPP caídas")} que sí cuentan como generadas</b>: ${lista(caidas, l=>"hoy en "+(l.pstage||"sin etapa"))}.`);
+    const sinCausa = caidas.filter(l=>LQ_RX.desc.test(l.pstage||"") && !l.dqc && !l.inv);
+    if(sinCausa.length) p.push(`<b>${lqPl(sinCausa.length, "OPP caída", "OPP caídas")} a Descalificado sin causa capturada</b> (cuenta${sinCausa.length===1?"":"n"} como SQL Selvadentro hasta que ventas la capture): ${lista(sinCausa, ()=>"")}.`);
     if(!agg.verifField) p.push(`⚠ No se encontró el campo <b>Lead to Watch</b> en GoHighLevel: "Verificado por ventas" sale en 0.`);
     else {
       const sinVerif = leads.filter(l=>(l.o||0) > 0 && !l.vv);
@@ -4433,7 +4461,7 @@ function lqLeyenda(){
   return `<details class="lq-leyenda">
     <summary>Qué significa cada sigla</summary>
     <div class="lq-leyenda-cuerpo">
-      <span><b>SQL Selvadentro</b> oportunidad real de cierre o venta cerrada en el pipeline (manda sobre el formulario), también una OPP generada que hoy esté caída (salvo causa inválida); o cita asistida/etapa avanzada <i>y</i> perfil de ≥100,000 USD con horizonte ≤6 meses</span>
+      <span><b>SQL Selvadentro</b> oportunidad real de cierre o venta cerrada en el pipeline (manda sobre el formulario), también una OPP generada que cayó a Rescate o se descalificó por "Ya no interesado" (tenía perfil y no se cerró); o cita asistida/etapa avanzada <i>y</i> perfil de ≥100,000 USD con horizonte ≤6 meses. Una OPP caída a Largo plazo o descalificada por "No alineado" es SQL; por "Malinterpretó la campaña", MQL; por causa inválida, Descalificado</span>
       <span><b>SQL</b> señal fuerte sin ese perfil, o perfil del formulario sin etapa que lo respalde</span>
       <span><b>MQL</b> respondió o mostró interés</span>
       <span><b>CQL</b> capturado, sin respuesta aún</span>
@@ -6545,7 +6573,7 @@ function lqRender(){
     <div class="lq-meth"><b>Reglas de calificación automática</b> — se evalúan en orden y la primera que se cumple manda. Umbral de producto
     <b>${lqUSD(LQ_UMBRAL_USD)}</b>, horizonte del perfil <b>≤${LQ_HORIZONTE_M} meses</b>.
     <br>1 · <b>Descalificado</b>: oportunidad perdida en el CRM, etapa de descalificación, o tag de descalificación (número equivocado, spam, duplicado, sin interés). A una <b>OPP generada</b> solo la descalifica una causa del grupo inválido (número equivocado, registro de prueba, spam, duplicado).
-    <br>2 · <b>SQL Selvadentro</b>: oportunidad real de cierre (Seguimiento de OPP, Carta oferta, Apartado), venta cerrada, o <b>OPP generada</b> aunque hoy esté caída (Dirección, 15-oct-2026) — <b>la etapa del pipeline manda</b>, aunque el
+    <br>2 · <b>SQL Selvadentro</b>: oportunidad real de cierre (Seguimiento de OPP, Carta oferta, Apartado), venta cerrada, o <b>OPP generada</b> que cayó a Rescate o a otra etapa viva, o se descalificó por "Ya no interesado" o sin causa (Dirección, 15-oct-2026: tenía perfil y no se cerró). Si cayó a Largo plazo o Nurturing, o se descalificó por "No alineado", es <b>SQL</b>; por "Malinterpretó la campaña", <b>MQL</b> — <b>la etapa del pipeline manda</b>, aunque el
     formulario esté vacío o por debajo del perfil, porque es el veredicto del asesor tras hablar con el prospecto. También: cita asistida o etapa avanzada
     (interés identificado, cotización, tour/zoom realizado) <b>y</b> perfil confirmado (presupuesto ≥ umbral y horizonte dentro del perfil).
     <br>3 · <b>SQL</b>: interés real y activo (cita asistida, etapa avanzada o cita agendada) sin presupuesto/horizonte que confirmen el perfil; o perfil declarado en el
@@ -11981,7 +12009,7 @@ function diagSeccionGlosario(){
       ${fila("Verificado por ventas", "Calidad de Leads",
              "Contactos con <b>Lead to Watch</b> = Sí: la verificación de ventas de que el lead está calificado. Se muestra aparte; no cambia la calificación SQL+.")}
       ${fila("SQL Selvadentro", "Calidad de Leads",
-             "Oportunidad real de cierre o venta cerrada en el pipeline (la etapa manda sobre el formulario), también una <b>OPP generada</b> que hoy esté caída, salvo causa del grupo inválido; o cita asistida/etapa avanzada <b>y</b> perfil de ≥$100K USD con horizonte ≤6 meses.")}
+             "Oportunidad real de cierre o venta cerrada en el pipeline (la etapa manda sobre el formulario), también una <b>OPP generada</b> que cayó a Rescate o se descalificó por \"Ya no interesado\" o sin causa (tenía perfil; la venta no se cerró). Caída a Largo plazo o \"No alineado\" → SQL; \"Malinterpretó la campaña\" → MQL; causa inválida → Descalificado. O cita asistida/etapa avanzada <b>y</b> perfil de ≥$100K USD con horizonte ≤6 meses.")}
       ${fila("SQL", "Calidad de Leads", "Señal fuerte de interés sin el perfil de presupuesto y horizonte, o perfil del formulario sin etapa del pipeline que lo respalde.")}
       ${fila("MQL", "Calidad de Leads", "Respondió o mostró interés, sin señal fuerte todavía.")}
       ${fila("CQL", "Calidad de Leads", "Capturado: el lead entró y quedó registrado, sin respuesta aún.")}

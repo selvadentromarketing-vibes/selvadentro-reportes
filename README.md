@@ -351,11 +351,15 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
     63.6%" (`lqDeDen`), siempre con conteo y denominador; con 0 SQL+ dice "0 de 0 · —". Las
     OPP generadas que no son SQL+ (causa inválida, o el campo del CRM las califica distinto)
     quedan fuera del numerador y la celda lo dice.
-  - **OPP generada = SQL Selvadentro** (Dirección General, 15-oct-2026; `lq:agg:v26`): un lead
-    que llegó alguna vez a OPP queda en SQL Selvadentro igual que una vigente, aunque hoy esté
-    en Largo plazo, Rescate, Descalificado o perdida: el asesor ya lo validó y la caída es del
-    cierre, no de la calidad del lead. Solo lo saca una causa del grupo inválido (`l.inv`) o un
-    tag inválido (`LQ_TAGS_INVALIDO`: número equivocado, spam, duplicado). Cuenta también como
+  - **Nivel de una OPP generada** (Dirección General, 15-oct-2026; `lq:agg:v27`,
+    `lqNivelOppCaida`). La pregunta es si el lead era bueno, no si ventas lo cerró:
+    vigente o WON → SQL Selvadentro; caída a **Rescate**, perdida u otra etapa viva → **SQL
+    Selvadentro** (tenía perfil y no se cerró); caída a **Largo plazo o Nurturing** → **SQL**
+    (el horizonte ya no es el del perfil); **Descalificado** según la causa capturada: "Ya no
+    interesado" o sin causa → SQL Selvadentro (sin causa sale en el aviso para que ventas la
+    capture), "No alineado" → SQL, "Malinterpretó la campaña" → MQL, causa del grupo inválido
+    (`l.inv`) o tag inválido (`LQ_TAGS_INVALIDO`: número equivocado, spam, duplicado) →
+    Descalificado. Cuenta también como
     contactado y trabajado, pero **no como Zoom realizado**: el cliente puede llegar a OPP
     directo de un recorrido sin Zoom, así que puede haber más OPP generadas que Zooms.
   - **Verificado por ventas** = el campo del contacto **"Lead to Watch"** en Sí: la
@@ -457,7 +461,7 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
   (Meta + Google) y se muestra inversión, CPL y **costo por SQL** por campaña (cruce por
   ID de campaña y, de respaldo, por nombre) y por plataforma (siempre calculable). Todo
   en **MXN** ("12,345 MXN", nunca "$").
-- **Cache compartido**: agregado en el kv (`lq:agg:v26`), staleness de 30 min, igual
+- **Cache compartido**: agregado en el kv (`lq:agg:v27`), staleness de 30 min, igual
   que CRM en vivo.
 - **Permisos**: canal `mkt_lq` (o `marketing`, o admin). El módulo manual de
   Calidad de Leads dentro de Marketing **se retiró el 2026-08-26** junto con PPC Ads
