@@ -7,7 +7,7 @@
 // Body (POST JSON + Authorization: Bearer <token>):
 //   { rango, moneda:"MXN", parametros:{metaCostoSql,minSqlVerde,subirPct,topeAmarillo,umbralEval,alertaCpl},
 //     totales:{inv,leads,sqlPlus,invPagada,sqlPlusPagado,costoSql,won,sinCampania:{leads,sqlPlus}},
-//     campanias:[{nombre,plataforma,inv,leadsPlataforma,leads,sqlPlus,costoSql,cpl,zoom,opp,won,
+//     campanias:[{nombre,plataforma,inv,leadsPlataforma,leads,sqlPlus,costoSql,cpl,zoom,opp,oppGen,won,
 //       trabajadosPct,contactadosPct,semaforo,accion,accionTexto,regla,nota,decision,atenderHoy,recomendaciones,esperar,gastoNoDisponible,muestraChica,alertaCpl,inferidos}],
 //     pausadas:[{nombre,plataforma,inv,leads,sqlPlus,costoSql,pausada}],
 //     anuncios:[{nombre,conjunto,campania,estado,inv,leadsPlataforma,leads,sqlPlus,frecuencia}], integridad:{fuente,asesor,calificacion,duplicados} }
@@ -55,7 +55,7 @@ exports.handler = async (event) => {
   const camps = (d.campanias || []).slice(0, 20).map((c) =>
     `- ${c.nombre} [${c.plataforma || "?"}]: inversión ${money(c.inv)} · ${c.leadsPlataforma ?? "—"} leads en plataforma · ${c.leads} leads en CRM${c.reenvios ? ` (incluye ${c.reenvios} re-envío${c.reenvios === 1 ? "" : "s"}: contactos que ya existían y volvieron a llenar un formulario; CPL solo de nuevos ${c.cplNuevos != null ? money(c.cplNuevos) : "—"})` : ""} · ` +
     `${c.sqlPlus} SQL+ · costo por SQL ${c.costoSql != null ? money(c.costoSql) : "sin SQL+"} · CPL ${money(c.cpl)} · ` +
-    `${c.zoom} Zoom realizado · ${c.opp} OPP · ${c.won} WON · ${c.trabajadosPct ?? "—"}% trabajados · ${c.contactadosPct ?? "—"}% contactados · ` +
+    `${c.zoom} Zoom realizado · ${c.opp} OPP vigentes${c.oppGen != null ? ` · ${c.oppGen} OPP generadas (alguna vez en OPP, también las caídas)` : ""} · ${c.won} WON · ${c.trabajadosPct ?? "—"}% trabajados · ${c.contactadosPct ?? "—"}% contactados · ` +
     `SEMÁFORO ${c.semaforo}${c.muestraChica ? " (muestra chica)" : ""} → acción "${c.accion}" porque ${c.regla}` +
     (c.accionTexto && c.accionTexto.toLowerCase() !== String(c.accion || "").toLowerCase() ? ` (${c.accionTexto})` : "") +
     (c.decision ? `\n    DECISIÓN: ${corta(c.decision)}` : "") +

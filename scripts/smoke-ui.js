@@ -436,7 +436,7 @@ const PORT = process.env.PORT || 8765;
     const lect = [...document.querySelectorAll('#lq-content .lq-lectura p')].map(p => p.textContent.replace(/\s+/g, ' ').trim());
     r.lecturaHist = lect.some(x => /^Color histórico del periodo \(referencia, no es la decisión de hoy\): VERDE .* ROJO .*US\+CAN/.test(x)) && lect.some(x => /está en Conclusiones, siempre con los últimos 30 días cerrados/.test(x));
     const d090 = celda['INVESTORS_MX_DYNAMIC-TOPLPS_090926'] || {};
-    r.embudo090 = [d090['SQL+'], d090['Zoom realizado'], d090['OPP'], d090['WON'], d090['% contactados'], d090['Costo por SQL']].join(' ');
+    r.embudo090 = [d090['SQL+'], d090['Zoom realizado'], d090['OPP vigentes'], d090['WON'], d090['% contactados'], d090['Costo por SQL']].join(' ');
     r.cplSinAlerta = !Object.values(celda).some(v => /⚠/.test(v['CPL'] || ''));
     const tot = [...document.querySelectorAll('table.lq-combo tr.total')][0];
     r.totalPagado = tot ? tot.textContent.replace(/\s+/g, ' ') : '';
@@ -666,7 +666,7 @@ const PORT = process.env.PORT || 8765;
     && lqx.sinDetalleGoogle === '3,600 MXN 3 1 | 13,600 MXN 5 0 |  | false' && lqx.sinIds && lqx.sinDec
     && lqx.semSeg === 'rojo:revisar rojo:pausar rojo:revisar rojo:mantener rojo:pausar'
     && lqx.sem === 'null gris*:mantener rojo:pausar verde:subir verde:subir amarillo:optimizar amarillo:optimizar rojo:pausar amarillo*:mantener verde*:mantener verde*:mantener rojo*:mantener'
-    && lqx.tarjetas && lqx.columnas === 'Campaña|Inversión|Leads CRM|CPL|% trabajados|% contactados|CQL|MQL|SQL+|Zoom realizado|OPP|WON|Costo por SQL|Semáforo histórico'
+    && lqx.tarjetas && lqx.columnas === 'Campaña|Inversión|Leads CRM|CPL|% trabajados|% contactados|CQL|MQL|SQL+|Verificado por ventas|Zoom realizado|OPP vigentes|OPP generadas|SQL+ → OPP generadas|WON|Costo por SQL|Semáforo histórico'
     && /^2 · 2 leads SQL\+ \| SQL( SD)?Lead \d+, SQL( SD)?Lead \d+$/.test(lqx.tipSql) && lqx.tipSqlCierra && lqx.tipSqlTotal === '11 · 11 leads SQL+' && lqx.tipSqlCero
     && lqx.tipSqlDatos === '2 · 2 leads SQL+'
     && Object.entries(semEsp).every(([k, v]) => lqx.semaforos[k] === v)
@@ -740,6 +740,68 @@ const PORT = process.env.PORT || 8765;
     await page.evaluate((sub) => { lqState.sub = sub; lqRender(); }, sub);
     await escanear('lq:' + sub);
   }
+  // OPP generadas y verificación de ventas (Dirección General, 15-oct-2026). Sobre el mismo
+  // fixture: en MX_DYNAMIC_090926 el lead en "Zoom realizado" pasa a una OPP caída a Largo plazo
+  // con la etiqueta del workflow, y el de "Contacto establecido" a una OPP caída a Descalificado
+  // etiquetada a mano (otra grafía). El primero tiene Lead to Watch = Sí; el lead que sigue en
+  // Seguimiento de OPP no lo tiene. OPP generadas nunca queda por debajo de OPP vigentes.
+  VISTA = 'lq:oppGeneradas';
+  const opg = await page.evaluate((fx0) => {
+    const fx = JSON.parse(JSON.stringify(fx0));
+    fx.boot.fields = fx.boot.fields.concat([{ id: 'f_ltw', name: 'Lead to Watch' }]);
+    const st = (nombre) => Object.keys(fx.boot.stages).find(k => fx.boot.stages[k].s === nombre && fx.boot.stages[k].p === 'Seguimiento de ventas');
+    const dyn = fx.rawLeads.filter(l => l.src === 'landing-seguridad');
+    const porEtapa = (e) => dyn.find(l => fx.opps[l.id] && fx.boot.stages[fx.opps[l.id].s].s === e);
+    const vig = porEtapa('Seguimiento de OPP'), zr = porEtapa('Zoom realizado'), ce = porEtapa('Contacto establecido');
+    Object.assign(fx.opps[zr.id], { s: st('Largo Plazo'), o: 0 }); zr.tags = zr.tags.concat(['opp-generada']); zr.cf.f_ltw = 'Sí';
+    Object.assign(fx.opps[ce.id], { s: st('Descalificado'), o: 0 }); ce.tags = ce.tags.concat(['OPP-Generada']); ce.cf.f_ltw = 'No';
+    const agg = buildLqAgg(fx.boot, fx.rawLeads, fx.spendRows, fx.weeks, fx.opps, fx.adRows, fx.adExtra);
+    agg.fallos = []; agg.monedas = ['MXN'];
+    Object.assign(lqState, { agg, exp: {}, q: '', plat: 'all', level: 'camp', qual: 'auto' });
+    document.getElementById('lq-sem-ini').value = '2026-W37'; document.getElementById('lq-sem-fin').value = '2026-W40';
+    const r = {};
+    r.flags = [vig, zr, ce].map(l => { const a = agg.leads.find(x => x.id === l.id); return (a.og ? 'og' : '-') + (a.vv ? 'vv' : '-') + (a.o ? 'o' : '-'); }).join(' ');
+    r.campo = agg.verifField ? agg.verifField.name : '';
+    const nombres = [zr.n, ce.n].join(' | ');
+    lqState.sub = 'calidad'; lqRender();
+    const H = [...document.querySelector('table.lq-tree tr').querySelectorAll('th')].map(th => th.textContent.trim());
+    const iO = H.indexOf('OPP vigentes'), iG = H.indexOf('OPP generadas'), iS = H.indexOf('SQL+ → OPP generadas'), iV = H.indexOf('Verificado por ventas'), iQ = H.indexOf('SQL+');
+    r.columnas = H.slice(iQ, iS + 1).join('|');
+    const num = (td) => Number(td.textContent.trim().split(/\s/)[0].replace(/,/g, ''));
+    const filas = [...document.querySelectorAll('table.lq-tree tr')].filter(tr => tr.querySelectorAll('td').length > iS);
+    r.filas = filas.length;
+    r.geVig = filas.every(tr => { const td = tr.querySelectorAll('td'); return num(td[iG]) >= num(td[iO]); });
+    r.formato = filas.every(tr => /^\d[\d,]* de \d[\d,]* · (\d+\.\d%|—)$/.test(tr.querySelectorAll('td')[iS].textContent.trim()));
+    const celdas = (tr) => [iQ, iV, iO, iG, iS].map(i => tr.querySelectorAll('td')[i].textContent.replace(/\s+/g, ' ').trim()).join(' ¦ ');
+    r.fila090 = celdas(filas.find(tr => tr.querySelector('td').textContent.includes('INVESTORS_MX_DYNAMIC-TOPLPS_090926')));
+    r.total = celdas(document.querySelector('table.lq-tree tr.lq-total2'));
+    const tdG = filas.find(tr => tr.querySelector('td').textContent.includes('INVESTORS_MX_DYNAMIC-TOPLPS_090926')).querySelectorAll('td')[iG];
+    const tip = document.createElement('div'); tip.innerHTML = tdG.dataset.lqTip || '';
+    r.tipOg = tip.textContent.replace(/\s+/g, ' ').trim();
+    const t = document.getElementById('lq-content').textContent.replace(/\s+/g, ' ');
+    r.aviso = /Histórico incompleto\. GoHighLevel no guarda el historial de etapas/.test(t) && /workflow que pone esa etiqueta todavía no está activo/.test(t);
+    r.caidas = (t.match(/(\d+) OPP caídas que sí cuentan como generadas: ([^.]*)\./) || []).slice(1).join(' : ');
+    r.sinVerif = (t.match(/(\d+) OPP vigentes? sin verificación de ventas/) || [])[1] || '0';
+    const card = (k) => { const c = [...document.querySelectorAll('#lq-content .crm-kpi')].find(e => e.querySelector('.k-lbl').textContent.trim() === k); return c ? c.querySelector('.k-val').textContent.trim() : ''; };
+    r.tarjetas = ['Verificados por ventas · Lead to Watch', 'OPP vigentes · hoy en OPP', 'OPP generadas · llegaron alguna vez', 'SQL+ → OPP generadas'].map(card).join(' | ');
+    r.mes = [...document.querySelectorAll('#lq-content table.cons tr')].map(tr => (tr.querySelector('td.name') || {}).textContent || '').filter(x => /^OPP /.test(x)).join('|');
+    r.siglas = /OPP generadas leads del cohorte que llegaron ALGUNA VEZ/.test(t) && /Verificado por ventas el lead tiene Lead to Watch = Sí/.test(t);
+    r.nombres = r.caidas.includes(zr.n) && r.caidas.includes(ce.n) ? 'ok' : nombres;
+    lqState.sub = 'combinado'; lqRender();
+    r.avisoCombo = /Histórico incompleto/.test(document.getElementById('lq-content').textContent) && !/OPP caídas que sí cuentan/.test(document.getElementById('lq-content').textContent);
+    // Sin el campo Lead to Watch en GHL: se avisa y la columna sale en 0
+    const fx2 = JSON.parse(JSON.stringify(fx0));
+    const agg2 = buildLqAgg(fx2.boot, fx2.rawLeads, fx2.spendRows, fx2.weeks, fx2.opps, fx2.adRows, fx2.adExtra);
+    agg2.fallos = []; agg2.monedas = ['MXN']; lqState.agg = agg2; lqState.sub = 'calidad'; lqRender();
+    r.sinCampo = /No se encontró el campo Lead to Watch/.test(document.getElementById('lq-content').textContent);
+    return r;
+  }, fixture());
+  opg.ok = opg.flags === 'og-o ogvv- og--' && opg.campo === 'Lead to Watch' && opg.geVig && opg.formato && opg.filas > 5
+    && opg.columnas === 'SQL+|Verificado por ventas|Zoom realizado|OPP vigentes|OPP generadas|SQL+ → OPP generadas'
+    && opg.aviso && opg.nombres === 'ok' && opg.avisoCombo && opg.sinCampo && opg.siglas && opg.mes === 'OPP vigentes|OPP generadas';
+  console.log('\n[calidad de leads] OPP generadas', JSON.stringify(opg));
+  if (!opg.ok) hallazgos.push({ vista: 'lq:oppGeneradas', opg });
+  await escanear('lq:oppGeneradas');
   // Telefonía por asesora (Dirección General, 7-oct-2026): canal del 1er toque, mediana del
   // 1er intento de llamada, intentos en 24 h y en total, sin marcar vs falla de línea,
   // duración conocida, y la actividad efectiva sin fallas de línea desde el 7-oct.

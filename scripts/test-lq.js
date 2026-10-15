@@ -240,7 +240,7 @@ S.ghlFetch = (path, opt) => ghlSim(path, opt);
       { nombre: "INVESTORS_US/CA_ESCAPE_090926", plataforma: "Meta", inv: 11360, leadsPlataforma: 13, leads: 9, sqlPlus: 0, costoSql: null, cpl: 1262, zoom: 0, opp: 0, won: 0,
         trabajadosPct: 100, contactadosPct: 30, semaforo: "ROJO", accion: "pausar", regla: "inversión 11,360 MXN ≥ 8,000 MXN con 0 SQL+", muestraChica: false, alertaCpl: "", inferidos: 0,
         recomendaciones: ["Pausar la campaña INVESTORS_US/CA_ESCAPE_090926 — gasto 11,360 MXN, 9 leads, 0 SQL+, CPL 1,262 MXN"], esperar: "", reenvios: 2, cplNuevos: 1623 },
-      { nombre: "INVESTORS_MX_DYNAMIC-TOPLPS_090926", plataforma: "Meta", inv: 9230, leadsPlataforma: 51, leads: 10, sqlPlus: 2, costoSql: 4615, cpl: 923, zoom: 1, opp: 1, won: 0,
+      { nombre: "INVESTORS_MX_DYNAMIC-TOPLPS_090926", plataforma: "Meta", inv: 9230, leadsPlataforma: 51, leads: 10, sqlPlus: 2, costoSql: 4615, cpl: 923, zoom: 1, opp: 1, oppGen: 3, won: 0,
         trabajadosPct: 90, contactadosPct: 40, semaforo: "AMARILLO", accion: "optimizar", accionTexto: "Optimizar costo", regla: "costo por SQL 4,615 MXN", muestraChica: false, alertaCpl: "", inferidos: 8,
         recomendaciones: ["Probar 2 creativos nuevos junto a ES_LLAMADA_NUEVO6-ESCAPE_CENOTES (conjunto ES_LLAMADA_NUEVO6-SEGURIDAD_PATRIMONIO), que hoy lleva a https://seguridad.selvadentrotulum.com/seguridadpatrimonio/ — gasto 3,965 MXN"],
         esperar: "Sin muestra suficiente para pausar; esperar. Ningún anuncio con CPL arriba de 400 MXN llega a 800 MXN de gasto." },
@@ -260,6 +260,8 @@ S.ghlFetch = (path, opt) => ghlSim(path, opt);
      && /si ya están trabajados y no contestan, se pausa/.test(prompt), "ROJO: revisar seguimiento solo si menos del 50% está trabajado; trabajados que no contestan, pausar");
   ok(/% trabajados = leads que ya salieron de "Nuevo lead/.test(prompt) && /Sin respuesta y toques no cuentan/.test(prompt), "define trabajados y contactados por separado");
   ok(/meta de costo por SQL 4,000 MXN/.test(prompt) && /costo por SQL 6,000 MXN/.test(prompt), "cifras en MXN");
+  ok(/1 OPP vigentes · 3 OPP generadas \(alguna vez en OPP, también las caídas\)/.test(prompt) && /0 OPP vigentes · 0 WON/.test(prompt),
+     "OPP vigentes y OPP generadas llegan al prompt (sin oppGen, solo vigentes)");
   ok(!/\$\d/.test(prompt), "ningún monto con $ en el prompt");
   ok(/MUESTRA CHICA = inversión < 8,000 MXN: el color se calcula igual, pero la acción SIEMPRE es mantener/.test(prompt), "muestra chica: la acción siempre es mantener, nunca subir");
   ok(/subir presupuesto diario 20% \(máx\. 1 vez por semana/.test(prompt) && /tasa SQL \(SQL\+ ÷ leads\) < 10% = optimizar calidad, CPL > 400 MXN = optimizar costo/.test(prompt), "verde con su nota y amarillo con su diagnóstico en el prompt");

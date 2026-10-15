@@ -677,13 +677,19 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   /* Tablas por campaña: 13-14 columnas. Los nombres de campaña (sin espacios) y los
      encabezados se parten para que el semáforo, a la derecha, quepa en pantalla, y la
      columna del semáforo queda fija al borde derecho cuando la tabla se desplaza. */
-  table.lq-tree th, table.lq-combo th{ white-space:normal; vertical-align:bottom; line-height:1.25; padding:8px 6px; }
-  table.lq-tree td, table.lq-combo td{ padding:7px 6px; }
+  table.lq-tree th, table.lq-combo th{ white-space:normal; vertical-align:bottom; line-height:1.25; padding:8px 5px; }
+  table.lq-tree td, table.lq-combo td{ padding:7px 5px; }
   table.lq-tree td.name, table.lq-combo td.name{ white-space:normal; overflow-wrap:anywhere; min-width:170px; max-width:250px; }
   .lq-semcell{ min-width:118px; white-space:normal; }
   table.lq-tree tr.total td:first-child, table.lq-combo tr.total td:first-child{ white-space:normal; min-width:170px; max-width:250px; }
   table.lq-tree.lq-datos td.name, table.lq-tree.lq-datos tr.total td:first-child{ max-width:none; }
   table.lq-tree th:last-child, table.lq-combo th:last-child{ position:sticky; right:0; z-index:1; }
+  /* 16 columnas desde OPP vigentes / OPP generadas / SQL+ → OPP generadas / Verificado por
+     ventas (15-oct-2026): en pantallas anchas Calidad de Leads usa más ancho para que quepan
+     sin scroll horizontal, y los encabezados de estas tablas van sin espaciado extra. */
+  .wrap:has(#view-lq.active){ max-width:1480px; }
+  table.lq-tree th, table.lq-combo th{ letter-spacing:0; }
+  table.lq-tree td.lq-deden, table.lq-combo td.lq-deden{ white-space:normal; min-width:64px; }
   table.lq-tree td.lq-semcell, table.lq-combo td.lq-semcell{ position:sticky; right:0; background:#fff; box-shadow:-6px 0 6px -6px rgba(70,82,65,.25); }
   /* ---- Acciones de la IA ---- */
   .lq-actions{ display:flex; flex-direction:column; gap:10px; margin-bottom:18px; }
@@ -3162,7 +3168,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v24";  // v24: broker = cualquier etiqueta que empiece con "broker" (no solo broker-client)  // v23: re-envíos de formulario (agg.reenvios)  // v22: datos de la decisión de hoy (rango fijo 30 días y 7 contra 7) en `dec`  // v21: el v20 guardado el 9-oct pudo quedar sin detalle por anuncio (la consulta con campos extra se volvía lenta)  // v20: URL de destino por anuncio, gasto por keyword de Google y presupuesto diario (recomendaciones concretas)  // v19: trabajado (tr) y contactado (ct) por etapa, separados  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
+const LQ_AGG_KEY = "lq:agg:v25";  // v25: OPP generadas (etiqueta opp-generada del CRM) y verificado por ventas (Lead to Watch)  // v24: broker = cualquier etiqueta que empiece con "broker" (no solo broker-client)  // v23: re-envíos de formulario (agg.reenvios)  // v22: datos de la decisión de hoy (rango fijo 30 días y 7 contra 7) en `dec`  // v21: el v20 guardado el 9-oct pudo quedar sin detalle por anuncio (la consulta con campos extra se volvía lenta)  // v20: URL de destino por anuncio, gasto por keyword de Google y presupuesto diario (recomendaciones concretas)  // v19: trabajado (tr) y contactado (ct) por etapa, separados  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 // (LQ_TZ y LQ_TZ_MS ahora viven junto al resto de helpers de fecha, arriba)
@@ -3383,6 +3389,8 @@ function lqDetectFields(fields, llenos){
     desc:  find(/raz[oó]n de descarte|motivo.*descalific|descalificaci[oó]n/i),
     segSem: find(/semanas con seguimiento|seguimiento[_ ]semanal/i),
     segMes: find(/meses con seguimiento|seguimiento[_ ]mensual/i),
+    // "Lead to Watch" (Sí/No): ventas lo marca al verificar que el lead está calificado.
+    verif: find(/lead\s*to\s*watch/i) || find(/hot\s*lead/i),
   };
 }
 
@@ -3704,6 +3712,27 @@ function lqEtiquetaEtapa(st, th){
 function lqIsOppStage(stageId, stages, th){
   return lqIsOppStage2((stages||{})[stageId], th);
 }
+
+// OPP generada (Dirección General, 15-oct-2026): el lead llegó ALGUNA VEZ a OPP, esté donde
+// esté hoy. La columna OPP leía solo la etapa actual, así que una OPP que se caía a Largo
+// plazo, Rescate o Descalificado dejaba de contarse y la campaña aparecía con menos OPP de las
+// que generó (W32–W41: 5 en Calidad de Leads contra 9 en el reporte de Ventas). GoHighLevel no
+// guarda el historial de etapas (solo la actual y la fecha del último cambio), así que la
+// marca la pone el CRM: un workflow agrega la etiqueta "opp-generada" al contacto cuando su
+// oportunidad entra a Seguimiento de OPP, Carta oferta, Apartado o WON, y nadie la quita.
+// Las OPP que se cayeron antes de activar el workflow solo cuentan si ventas las etiquetó a mano.
+const LQ_TAG_OPP_GEN = /^opp[-_ ]?generada$/i;
+// Fecha (YYYY-MM-DD, hora Tulum) en que quedó activo ese workflow en GHL. Vacía = todavía no:
+// el reporte avisa que el histórico está incompleto en cualquier rango.
+const LQ_OPP_REGISTRO_DESDE = "";
+// OPP generada = vigente hoy, venta cerrada o etiqueta del CRM. Las vigentes y las ventas
+// entran siempre, así que OPP generadas nunca queda por debajo de OPP vigentes.
+const lqEsOppGen = (l)=> !!(l && (l.og || (l.o||0) > 0 || (l.w||0) > 0));
+const lqTagOppGen = (tags)=> (tags||[]).some(t=>LQ_TAG_OPP_GEN.test(String(t).trim()));
+// Verificado por ventas: el campo "Lead to Watch" del contacto en Sí. Es la verificación de
+// ventas de que el lead está calificado; se muestra aparte y NO cambia la calificación.
+// (Sin \b: después de "í" no hay límite de palabra en JS y "Sí" no pasaba.)
+const lqSi = (v)=> /^(s[ií]|yes|true|1|checked)(?![a-z0-9])/i.test(String(v||"").trim());
 
 function lqMonthOf(iso){ const d = iso ? new Date(new Date(iso).getTime() - LQ_TZ_MS) : null; return (d && !isNaN(d)) ? `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}` : null; }
 
@@ -4220,6 +4249,9 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
       ch: cn.ch, chVia: cn.via,          // canal de negocio deducido del CRM (o null)
       inv: lqInvalido(op, l.tags),       // causa del grupo inválido (spec v1.1 R-01), o ""
       ...(lqEsBroker(l.tags, op) ? { bk:1 } : {}),  // lead de brokers: fuera de Calidad de Leads
+      // OPP generada: vigente, venta o etiqueta "opp-generada" del CRM (se lee antes de truncar tags)
+      ...((op && ((op.o||0) > 0 || (op.w||0) > 0)) || lqTagOppGen(l.tags) ? { og:1 } : {}),
+      ...(F.verif && lqSi(l.cf[F.verif.id]) ? { vv:1 } : {}),   // verificado por ventas (Lead to Watch)
       ...(l.attr && l.attr.inf ? { inf:1 } : {}),   // atribución inferida (LQ_INFERIDA)
       ...(l.attr && l.attr.pid ? { pid:1, cid:l.attr.cidOk } : {}),   // campaña resuelta por su ID (y cuál), no por nombre
       ...(l.attr && l.attr.kw ? { kw:String(l.attr.kw).slice(0,80) } : {}),   // palabra clave de Google (utm_term={keyword})
@@ -4256,7 +4288,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
     const ini = (l.cid && iniC["id:"+l.cid]) || iniC["n:"+lqNormCamp(l.camp)];
     return !!ini && ini >= primerDia && diaT(l.alta) < ini && diaT(l.c) >= ini;
   });
-  return { ts:Date.now(), users:boot.users||{}, califField:F.calif, fuenteField:F.fuente, presField:F.pres, horField:F.hor, windsor:!!boot.windsor, excl, exclWk,
+  return { ts:Date.now(), users:boot.users||{}, califField:F.calif, fuenteField:F.fuente, presField:F.pres, horField:F.hor, verifField:F.verif, windsor:!!boot.windsor, excl, exclWk,
            oppStages: lqOppStageNames(boot.stages, lqOppThresholds(boot.stages)),
            zoomStages: [...new Set(Object.values(boot.stages||{}).filter(st=>LQ_RX_ZOOM_OK.test(st.s||"")).map(st=>(st.p?st.p+" › ":"")+st.s))].sort(),
            stages: boot.stages||{},
@@ -4308,6 +4340,32 @@ function lqNotaExcluidos(agg, rangoSet){
   if(e.sinContacto) partes.push(`<b>${e.sinContacto}</b> sin email ni teléfono`);
   return partes.length ? `<p class="hint pegada lq-excluidos">Excluidos de todos los cálculos en este rango: ${partes.join(" · ")}.</p>` : "";
 }
+// Aviso de OPP generadas. GoHighLevel no guarda el historial de etapas, así que antes de que
+// el workflow de la etiqueta "opp-generada" quedara activo una OPP caída solo cuenta si ventas
+// la etiquetó a mano: se dice en pantalla en vez de mostrar un número que parezca completo.
+// Además nombra las OPP caídas que sí cuentan y las vigentes sin la verificación de ventas.
+// `corto` = solo el aviso de histórico (Reporte Combinado).
+function lqAvisoOppGen(agg, leads, rango, corto){
+  const ini = rango && rango.length ? lqWeekBounds(rango[0]).startYMD : "";
+  const desde = LQ_OPP_REGISTRO_DESDE;
+  const p = [];
+  if(!desde || (ini && ini < desde)){
+    p.push(`⚠ <b>Histórico incompleto${desde ? ` antes del ${lqFechaLarga(desde)}` : ""}.</b> GoHighLevel no guarda el historial de etapas: "OPP generadas" cuenta las OPP vigentes, las ventas y los leads con la etiqueta <b>opp-generada</b>. `
+      + (desde ? `Antes del ${lqFechaLarga(desde)}, una OPP que se cayó solo cuenta si ventas le puso la etiqueta a mano.`
+               : `El workflow que pone esa etiqueta todavía no está activo en el CRM: una OPP que se cayó solo cuenta si ventas la etiquetó a mano.`));
+  }
+  if(!corto){
+    const lista = (arr, txt)=> arr.slice(0, 15).map(l=>`${escAttr(l.n||"(sin nombre)")} <span class="lq-sub">${escAttr(txt(l))}</span>`).join(" · ") + (arr.length > 15 ? ` · y ${arr.length-15} más` : "");
+    const caidas = leads.filter(l=>lqEsOppGen(l) && !((l.o||0) > 0 || (l.w||0) > 0));
+    if(caidas.length) p.push(`<b>${lqPl(caidas.length, "OPP caída", "OPP caídas")} que sí cuentan como generadas</b>: ${lista(caidas, l=>"hoy en "+(l.pstage||"sin etapa"))}.`);
+    if(!agg.verifField) p.push(`⚠ No se encontró el campo <b>Lead to Watch</b> en GoHighLevel: "Verificado por ventas" sale en 0.`);
+    else {
+      const sinVerif = leads.filter(l=>(l.o||0) > 0 && !l.vv);
+      if(sinVerif.length) p.push(`<b>${lqPl(sinVerif.length, "OPP vigente", "OPP vigentes")} sin verificación de ventas</b> (Lead to Watch vacío): ${lista(sinVerif, l=>l.pstage||"")}. Si son OPP, ventas debería marcarlas.`);
+    }
+  }
+  return p.length ? `<div class="lq-meth lq-aviso-opp" style="border-color:var(--cobre)">${p.join("<br>")}</div>` : "";
+}
 
 function lqWeeks(){
   // Eje de semanas = ventana sincronizada ∪ semanas con leads, para que la inversión
@@ -4348,7 +4406,10 @@ function lqLeyenda(){
       <span><b>SQL</b> señal fuerte sin ese perfil, o perfil del formulario sin etapa que lo respalde</span>
       <span><b>MQL</b> respondió o mostró interés</span>
       <span><b>CQL</b> capturado, sin respuesta aún</span>
-      <span><b>OPP</b> oportunidad real de cierre: Seguimiento de OPP, Carta oferta, Apartado o posterior. Una cotización enviada todavía no cuenta</span>
+      <span><b>OPP vigentes</b> leads del cohorte cuya oportunidad está HOY en Seguimiento de OPP, Carta oferta, Apartado o WON. Una cotización enviada todavía no cuenta; si la OPP se cae (Largo plazo, Rescate, Descalificado…) deja de contar aquí</span>
+      <span><b>OPP generadas</b> leads del cohorte que llegaron ALGUNA VEZ a Seguimiento de OPP, Carta oferta, Apartado o WON, sin importar su etapa de hoy: las vigentes, las ventas y las que tienen la etiqueta opp-generada en el CRM. Una OPP caída se sigue contando y cada lead cuenta una sola vez</span>
+      <span><b>SQL+ → OPP generadas</b> de los SQL+ del rango, cuántos generaron OPP: "7 de 11 · 63.6%". Mismos leads arriba y abajo</span>
+      <span><b>Verificado por ventas</b> el lead tiene Lead to Watch = Sí en el CRM: ventas verificó que está calificado. No cambia la calificación del reporte</span>
       <span><b>WON</b> leads del cohorte con venta cerrada, sin importar cuándo se cerró. Todo el dinero en MXN</span>
       <span><b>SQL+</b> SQL + SQL Selvadentro: la única definición de lead bueno. CQL y MQL son volumen</span>
       <span><b>Costo por SQL</b> inversión de la campaña en el rango ÷ sus SQL+ · meta ${lqMXN(LQ_SEMAFORO.metaCostoSql)}</span>
@@ -4637,9 +4698,14 @@ function lqMetricas(arr, inv, res){
   const c = lqCount(arr), n = arr.length, sqlp = lqSqlPlus(c);
   inv = inv || 0;
   const re = arr.filter(l=>l.re).length, nNuevos = n - re;
+  const ogL = arr.filter(lqEsOppGen);
   return { n, inv, res: res||0, cql:c.cql||0, mql:c.mql||0, sqlp,
     sqlpL: arr.filter(l=>l.lv==="sql" || l.lv==="sqls"),  // los leads SQL+ (nombres en la nota de la celda)
     zoom: arr.filter(l=>l.zm).length, opp: arr.filter(l=>(l.o||0)>0).length, won: arr.filter(l=>(l.w||0)>0).length,
+    // OPP generadas (vigentes + ventas + etiqueta opp-generada), verificados por ventas (Lead to
+    // Watch) y SQL+ → OPP generadas: numerador = los SQL+ de ESTOS leads que generaron OPP.
+    og: ogL.length, ogL, vv: arr.filter(l=>l.vv).length,
+    sqlpOg: ogL.filter(l=>l.lv==="sql" || l.lv==="sqls").length,
     tr: arr.filter(l=>l.tr).length, ct: arr.filter(l=>l.ct).length, inf: arr.filter(l=>l.inf).length,
     re, nNuevos,                                         // re-envíos de formulario y leads nuevos
     cpl: inv>0 && n ? inv/n : null, cplNuevos: inv>0 && nNuevos ? inv/nNuevos : null, cps: inv>0 && sqlp ? inv/sqlp : null };
@@ -5335,12 +5401,15 @@ const LQ_CCOLS = {
   mql:  { th:"MQL",              t:"Volumen: respondió o mostró interés", sec:true },
   sqlp: { th:"SQL+",             t:"SQL + SQL Selvadentro: la métrica principal" },
   zoom: { th:"Zoom realizado",   t:"Leads del cohorte con Zoom realizado o una etapa posterior (OPP, WON). Una cita o visita de sitio NO cuenta" },
-  opp:  { th:"OPP",              t:"Leads del cohorte con oportunidad real de cierre: Seguimiento de OPP, Carta oferta, Apartado o posterior" },
+  vv:   { th:"Verificado por ventas", t:"Leads del cohorte que ventas marcó con Lead to Watch = Sí en el CRM: su verificación de que el lead está calificado. Es informativo: no cambia la calificación SQL+ del reporte" },
+  opp:  { th:"OPP vigentes",     t:"Leads del cohorte cuya oportunidad está HOY en Seguimiento de OPP, Carta oferta, Apartado o WON. Si la OPP se cae (Largo plazo, Rescate, Descalificado…) deja de contar aquí" },
+  og:   { th:"OPP generadas",    t:"Leads del cohorte que llegaron ALGUNA VEZ a Seguimiento de OPP, Carta oferta, Apartado o WON, estén donde estén hoy: las vigentes, las ventas y las que tienen la etiqueta opp-generada en el CRM. Cada lead cuenta una vez. Debajo, cuántas se cayeron" },
+  sqlog:{ th:"SQL+ → OPP generadas", t:"De los SQL+ de la fila, cuántos generaron OPP: conteo, denominador y porcentaje, con los mismos leads del rango" },
   won:  { th:"WON",              t:"Leads del cohorte con venta cerrada" },
   cps:  { th:"Costo por SQL",    t:"Inversión de la campaña en el rango ÷ SQL+ de esa campaña" },
   sem:  { th:"Semáforo histórico", t:"Color del semáforo con las cifras del rango elegido, solo como referencia histórica: aquí no hay acciones. La decisión de hoy (acción, fecha y qué hacer) está en Conclusiones, con los últimos 30 días cerrados" },
 };
-const LQ_KEYS_CALIDAD = ["inv","n","cpl","tr","ct","cql","mql","sqlp","zoom","opp","won","cps","sem"];
+const LQ_KEYS_CALIDAD = ["inv","n","cpl","tr","ct","cql","mql","sqlp","vv","zoom","opp","og","sqlog","won","cps","sem"];
 const LQ_KEYS_COMBO   = LQ_KEYS_CALIDAD;     // "Leads plataforma" vive en Datos de campañas
 const lqThs = (keys)=> keys.map(k=>`<th${LQ_CCOLS[k].sec?' class="lq-sec"':""} title="${escAttr(LQ_CCOLS[k].t)}">${LQ_CCOLS[k].th}</th>`).join("");
 const lqPct = (n,d)=> d ? Math.round(n/d*100)+"%" : "—";
@@ -5365,6 +5434,19 @@ function lqSqlpTip(L){
            + (ord.length > LQ_TIP_MAX ? `<li class="lq-sub">y ${ord.length-LQ_TIP_MAX} más</li>` : "");
   return ` data-lq-tip="${escAttr(`<b>${lqPl(L.length, "lead")} SQL+</b><ul${ord.length > 12 ? ' class="dos"' : ""}>${li}</ul>`)}"`;
 }
+// Nota de OPP generadas: quiénes son y en qué etapa están hoy, las caídas primero.
+function lqOgTip(L){
+  if(!L || !L.length) return "";
+  const caida = (l)=> !((l.o||0) > 0 || (l.w||0) > 0);
+  const ord = L.slice().sort((a,b)=>(caida(b)-caida(a)) || String(a.n||"").localeCompare(String(b.n||""), "es", { numeric:true }));
+  const li = ord.slice(0, LQ_TIP_MAX).map(l=>`<li>${escAttr(l.n||"(sin nombre)")} <span class="lq-sub">${caida(l) ? "cayó · hoy en "+escAttr(l.pstage||"sin etapa") : (l.w||0) > 0 ? "venta cerrada" : "vigente"}</span></li>`).join("")
+           + (ord.length > LQ_TIP_MAX ? `<li class="lq-sub">y ${ord.length-LQ_TIP_MAX} más</li>` : "");
+  const nc = L.filter(caida).length;
+  return ` data-lq-tip="${escAttr(`<b>${lqPl(L.length, "OPP generada", "OPP generadas")}${nc ? ` · ${nc} caída${nc===1?"":"s"}` : ""}</b><ul${ord.length > 12 ? ' class="dos"' : ""}>${li}</ul>`)}"`;
+}
+// "7 de 11 · 63.6%": conteo, denominador y porcentaje con un decimal. Con denominador 0 no
+// hay porcentaje, pero el conteo y el denominador se muestran igual (nada se suprime).
+const lqDeDen = (n, d)=> `${n.toLocaleString()} de ${d.toLocaleString()} · ${d ? (Math.round(n/d*1000)/10).toFixed(1)+"%" : "—"}`;
 // La nota flotante de [data-lq-tip]. Va en el body con position:fixed: las tablas viven en
 // .table-scroll (overflow) y una nota dentro de la celda se recortaba. Con mouse aparece al
 // pasar; sin hover (celular) se abre y cierra al tocar la cifra, sin desplegar la fila.
@@ -5412,7 +5494,21 @@ function lqCeldas(m, keys, o){
       case "mql":  return `<td class="lq-sec">${cnt(m.mql)}</td>`;
       case "sqlp": return `<td class="lq-sqlp"${lqSqlpTip(m.sqlpL)}>${m.sqlp.toLocaleString()}</td>`;
       case "zoom": return `<td>${cnt(m.zoom)}</td>`;
-      case "opp":  return `<td>${cnt(m.opp)}</td>`;
+      // Las tres columnas de OPP y la verificación de ventas muestran el 0 como 0 (no "·"):
+      // un cero de OPP es un dato, no una celda vacía.
+      case "vv":   return `<td>${(m.vv||0).toLocaleString()}</td>`;
+      case "opp":  return `<td>${(m.opp||0).toLocaleString()}</td>`;
+      case "og": {
+        const caidas = (m.og||0) - (m.ogL||[]).filter(l=>(l.o||0)>0 || (l.w||0)>0).length;
+        return `<td${lqOgTip(m.ogL)}><b>${(m.og||0).toLocaleString()}</b>${caidas>0 ? `<div class="lq-sub">${caidas} caída${caidas===1?"":"s"}</div>` : ""}</td>`;
+      }
+      case "sqlog": {
+        const fuera = (m.og||0) - (m.sqlpOg||0);
+        const tit = fuera>0 ? ` title="${escAttr(`${lqPl(fuera, "OPP generada", "OPP generadas")} de esta fila ${fuera===1?"no es":"no son"} SQL+ hoy (su etapa actual les bajó el nivel): cuentan en OPP generadas, no en este porcentaje.`)}"` : "";
+        // Se parte en el "·" si no cabe: "4 de 10 ·" arriba y "40.0%" abajo.
+        const [cd, pc] = lqDeDen(m.sqlpOg||0, m.sqlp||0).split(" · ");
+        return `<td class="pct lq-deden"${tit}><span style="white-space:nowrap">${cd} ·</span> <span style="white-space:nowrap">${pc}</span></td>`;
+      }
       case "won":  return `<td>${cnt(m.won)}</td>`;
       case "cps": {
         const col = (o.total || m.sem) ? lqColorCps(m.cps) : "";
@@ -5663,7 +5759,7 @@ function lqLevelSection(agg, leadsAll, rango, rangoSet){
   }
 
   const noAd = leads.filter(l=>!l.ad).length;
-  const hint = `<p class="hint" style="margin-top:-4px">SQL+ = SQL + SQL Selvadentro · Costo por SQL = inversión ÷ SQL+ · Zoom realizado, OPP y WON = leads del cohorte del rango según su etapa en el CRM · ${level==="camp"?"la inversión se cruza por ID de campaña cuando el lead lo trae y, si no, por nombre":"la inversión se empareja por nombre con Windsor (— = sin empate)"}.
+  const hint = `<p class="hint" style="margin-top:-4px">SQL+ = SQL + SQL Selvadentro · Costo por SQL = inversión ÷ SQL+ · Zoom realizado, OPP vigentes y WON = leads del cohorte del rango según su etapa de hoy en el CRM · OPP generadas = las que llegaron alguna vez a OPP, también las caídas · ${level==="camp"?"la inversión se cruza por ID de campaña cuando el lead lo trae y, si no, por nombre":"la inversión se empareja por nombre con Windsor (— = sin empate)"}.
     ${level!=="camp"&&noAd?` <b>${noAd}</b> de ${leads.length} leads no traen anuncio en su atribución (UTM) y caen en "(sin anuncio atribuido)".`:""}</p>`;
 
   const tree = level==="camp" ? lqQualityTree(agg, leads, rangoSet, rango) : "";
@@ -5754,7 +5850,7 @@ function lqComboSection(agg, leadsAll, rango, rangoSet){
   const keys = LQ_KEYS_COMBO;
   const origen = (p)=> p==="Meta"||p==="Google" ? `<span class="lq-orig ${p==="Meta"?"meta":"google"}">${p==="Meta"?"META":"GOOGLE"}</span> ` : "";
   const filas = rows.map(m=>`<tr><td class="name">${origen(m.plat)}${escAttr(m.sinCamp && m.plat!=="Meta" && m.plat!=="Google" ? (m.plat||"Otra fuente")+" · "+LQ_SIN_CAMP : m.camp)}${lqInfBadge(m.inf)}</td>${lqCeldas(m, keys)}</tr>`).join("");
-  html += lqAvisoIdsSinCruce(M) + `<div class="table-scroll" style="margin-bottom:8px"><table class="cons lq-combo">
+  html += lqAvisoIdsSinCruce(M) + lqAvisoOppGen(agg, leads, rango, true) + `<div class="table-scroll" style="margin-bottom:8px"><table class="cons lq-combo">
     <tr><th class="lft">Campaña</th>${lqThs(keys)}</tr>
     ${filas || `<tr><td colspan="${keys.length+1}" class="lft txt-nota">Sin datos en el rango.</td></tr>`}
     <tr class="total"><td class="lft">Total pagado <span class="lq-sub">(solo campañas con inversión)</span></td>${lqCeldas(pag, keys, { total:true })}</tr>
@@ -5949,7 +6045,7 @@ async function lqAnalizar(forzar){
     const r0 = (v)=> v==null ? null : Math.round(v);
     const campanias = M.activas.filter(m=>m.sem).slice(0,20).map(m=>({
       nombre:m.camp, plataforma:m.plat, inv:r0(m.inv), leadsPlataforma:m.res||0, leads:m.n, reenvios:m.re||0, cplNuevos:r0(m.cplNuevos), sqlPlus:m.sqlp,
-      costoSql:r0(m.cps), cpl:r0(m.cpl), zoom:m.zoom, opp:m.opp, won:m.won,
+      costoSql:r0(m.cps), cpl:r0(m.cpl), zoom:m.zoom, opp:m.opp, oppGen:m.og, won:m.won,
       trabajadosPct: m.n ? Math.round(m.tr/m.n*100) : null,
       contactadosPct: m.n ? Math.round(m.ct/m.n*100) : null,
       semaforo:m.sem.txt, accion:LQ_ACC_TXT[m.sem.k], accionTexto:m.sem.acc, regla:m.sem.regla, nota:m.sem.nota||"", muestraChica:!!m.sem.chica,
@@ -6065,10 +6161,14 @@ function lqRender(){
     ${kpi(fm.sqlp.toLocaleString(),"SQL+ · SQL + SQL Selvadentro")}
     ${["cql","mql","nuevo","desc"].concat(tot.nc?["nc"]:[]).map(id=>kpi((tot[id]||0).toLocaleString(), LQ_LEVEL_BY_ID[id].name)).join("")}
     ${kpi(fm.zoom.toLocaleString(),"Zoom realizado")}
-    ${kpi(fm.opp.toLocaleString(),"OPP · oportunidad real de cierre")}
+    ${kpi(fm.vv.toLocaleString(),"Verificados por ventas · Lead to Watch")}
+    ${kpi(fm.opp.toLocaleString(),"OPP vigentes · hoy en OPP")}
+    ${kpi(fm.og.toLocaleString(),"OPP generadas · llegaron alguna vez")}
+    ${kpi(lqDeDen(fm.sqlpOg, fm.sqlp),"SQL+ → OPP generadas")}
     ${kpi(fm.won.toLocaleString(),"WON")}
   </div>`;
   html += lqNotaExcluidos(lqState.agg, rangoSet);
+  html += lqAvisoOppGen(agg, leads, rango);
   if(!agg.califField){
     html += `<div class="lq-meth">⚠ No se encontró el campo <b>"Calificación del lead"</b> en GoHighLevel; todos los leads aparecen como "Sin calificar". Verifica que el campo exista y que el token tenga el scope de campos personalizados.</div>`;
   }
@@ -6125,7 +6225,7 @@ function lqRender(){
     const moMin = agg.leads.reduce((m,l)=>(l.mo && (!m || l.mo<m)) ? l.mo : m, null);
     const stats=(mo)=>{ const arr=moL(mo); const c=lqCount(arr); const paid=arr.filter(l=>l.fuente==="Meta"||l.fuente==="Google");
       const sp=moS(mo); const hi=lqSqlPlus(c); const paidHi=lqSqlPlus(lqCount(paid));
-      return { n:arr.length, hi, desc:c.desc||0, o:arr.filter(l=>(l.o||0)>0).length, w:arr.filter(l=>(l.w||0)>0).length,
+      return { n:arr.length, hi, desc:c.desc||0, o:arr.filter(l=>(l.o||0)>0).length, og:arr.filter(lqEsOppGen).length, w:arr.filter(l=>(l.w||0)>0).length,
                sp, cpl: paid.length?sp/paid.length:null, cph: paidHi?sp/paidHi:null, arr }; };
     const A=stats(prevMo), B=stats(curMo);
     const d=(a,b,money)=>{ if(a==null||b==null) return "—"; const x=b-a; const s=x>0?"+":x<0?"−":""; return money?`${s}${lqMXN(Math.abs(x))}`:`${s}${Math.abs(Math.round(x*10)/10)}`; };
@@ -6143,7 +6243,7 @@ function lqRender(){
         <div class="table-scroll" style="border:none;box-shadow:none"><table class="cons">
           <tr><th class="lft">Métrica</th><th>${prevMo}</th><th>${curMo}</th><th>Δ</th></tr>
           ${mrow("Leads",A.n,B.n)}${mrow("SQL+",A.hi,B.hi)}${mrow("Descalificados",A.desc,B.desc)}
-          ${mrow("OPP",A.o,B.o)}${mrow("WON",A.w,B.w)}
+          ${mrow("OPP vigentes",A.o,B.o)}${mrow("OPP generadas",A.og,B.og)}${mrow("WON",A.w,B.w)}
           ${mrow("Inversión",A.sp||null,B.sp||null,true)}${mrow("CPL (pago)",A.cpl,B.cpl,true)}${mrow("Costo por SQL (pago)",A.cph,B.cph,true)}
         </table></div>
         <p class="hint">Mes calendario en hora Tulum, tomado del final del rango seleccionado (${rango.length?rango[rango.length-1]:"—"}), no de la fecha de hoy.${parcialMo?` <b>${curMo} aún no cierra</b>: los dos meses se cortan al día ${corte} para comparar el mismo tramo.`:""}${moMin && prevMo<moMin?` ⚠ El histórico sincronizado empieza en ${moMin}, así que ${prevMo} sale incompleto.`:""}</p></div>
@@ -6282,7 +6382,9 @@ function lqRender(){
     <b>Campo del CRM</b> se lee tal cual el campo "${escAttr(agg.califField?.name||"Calificación del lead")}" (vacío = "Sin calificar", nunca se adivina).
     La <b>etapa</b> es la etapa real de la oportunidad en el pipeline; si el lead todavía no tiene oportunidad, se muestra en gris una señal derivada de tags.
     <b>OPP</b> = oportunidad real de cierre: la cotización ya está entregada y en seguimiento activo. <b>"Cotización enviada" no cuenta</b>; cuentan
-    "Seguimiento de OPP", "Carta oferta", "Apartado" y cualquier etapa posterior. No es cualquier registro del pipeline. <b>WON</b> = venta cerrada.
+    "Seguimiento de OPP", "Carta oferta", "Apartado" y cualquier etapa posterior. No es cualquier registro del pipeline. <b>OPP vigentes</b> lee la etapa de hoy;
+    <b>OPP generadas</b> cuenta también las que se cayeron: GoHighLevel no guarda el historial de etapas, así que la marca es la etiqueta <b>opp-generada</b>
+    que un workflow del CRM pone al entrar a OPP y nadie quita. <b>Verificado por ventas</b> = Lead to Watch en Sí (informativo, no cambia la calificación). <b>WON</b> = venta cerrada.
     ${(agg.oppStages||[]).length ? `<br><span style="color:var(--neutro)">Etapas que hoy cuentan como OPP en tu CRM: <b>${escAttr((agg.oppStages||[]).join(" · "))}</b>.</span>` : ""}
     La <b>inversión</b> viene de Windsor.ai (Meta + Google).
     Los datos se refrescan solos cada 30 minutos; para verlos al instante usa <b>Actualizar desde el CRM</b>.</div>
@@ -11710,7 +11812,11 @@ function diagSeccionGlosario(){
       ${fila(WON_DEFS.cohorte.n, "Calidad de Leads",
              "Ventas que produjeron los leads que <b>entraron</b> en la semana, sin importar cuándo se cerraron. Una venta de la semana 34, de un lead de la 28, cuenta en la 28.")}
       ${fila("OPP", "Calidad de Leads y SLA",
-             "Oportunidad real de cierre: <b>Seguimiento de OPP</b>, <b>Carta oferta</b>, <b>Apartado</b> o cualquier etapa posterior. Una cotización enviada todavía <b>no</b> cuenta (confirmado con el cliente el 2026-08-26).")}
+             "Oportunidad real de cierre: <b>Seguimiento de OPP</b>, <b>Carta oferta</b>, <b>Apartado</b> o cualquier etapa posterior. Una cotización enviada todavía <b>no</b> cuenta (confirmado con el cliente el 2026-08-26). En Calidad de Leads, <b>OPP vigentes</b> lee la etapa de hoy.")}
+      ${fila("OPP generadas", "Calidad de Leads",
+             "Leads del cohorte que llegaron <b>alguna vez</b> a OPP, estén donde estén hoy: las vigentes, las ventas y los contactos con la etiqueta <b>opp-generada</b> (la pone un workflow del CRM al entrar a OPP y nadie la quita). Una OPP caída se sigue contando; cada lead cuenta una vez. Antes de activar el workflow, las caídas solo cuentan si ventas las etiquetó a mano: el reporte avisa \"histórico incompleto\".")}
+      ${fila("Verificado por ventas", "Calidad de Leads",
+             "Contactos con <b>Lead to Watch</b> = Sí: la verificación de ventas de que el lead está calificado. Se muestra aparte; no cambia la calificación SQL+.")}
       ${fila("SQL Selvadentro", "Calidad de Leads",
              "Oportunidad real de cierre o venta cerrada en el pipeline (la etapa manda sobre el formulario); o cita asistida/etapa avanzada <b>y</b> perfil de ≥$100K USD con horizonte ≤6 meses.")}
       ${fila("SQL", "Calidad de Leads", "Señal fuerte de interés sin el perfil de presupuesto y horizonte, o perfil del formulario sin etapa del pipeline que lo respalde.")}
