@@ -325,6 +325,43 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
   pasar el mouse sobre "N leads de brokers" salen sus nombres y cuántos leads tendría cada
   fila con ellos → sin ellos, y "Todos los leads del rango" (`lqNotaBrokers`), para auditar.
   Desempeño de Ventas usa la misma regla de etiqueta (R-03, abajo) con su propio pipeline.
+- **OPP vigentes, OPP generadas y Verificado por ventas** (Dirección General, 15-oct-2026;
+  `lq:agg:v25`). La columna OPP leía solo la etapa **de hoy**: una OPP que se caía a Largo
+  plazo, Rescate o Descalificado dejaba de contar y la campaña aparecía con menos OPP de las
+  que generó (W32–W41: 5 en Calidad de Leads contra 9 en el reporte de Ventas de Paid
+  Orgánico).
+  - **No hay historial de etapas**: GoHighLevel (API v2) y Windsor solo dan la etapa actual de
+    cada oportunidad y la fecha de su último cambio (`lastStageChangeAt`); el sistema no tenía
+    tabla, webhook ni fotos de etapas por oportunidad. Orden real del pipeline "Seguimiento
+    de ventas" (leído de GHL el 15-oct-2026): 0 Nuevo lead … 15 Cotización enviada, **16
+    Seguimiento de OPP, 17 Carta oferta, 18 Apartado, 19 WON**, 20 Largo plazo, 21 Rescate,
+    22 Corretaje, 23 Nurturing, 24 Descalificado, 25 Redes sociales. No existe "Venta
+    cerrada": el cierre es WON. La regla de OPP de siempre (`lqOppThresholds`) da justo 16–19.
+  - **Lo más simple**: la marca la pone el CRM. Un workflow de GHL agrega la etiqueta
+    **`opp-generada`** al contacto cuando su oportunidad entra (o se crea) en Seguimiento de
+    OPP, Carta oferta, Apartado o WON, y nadie la quita. Backfill de una vez en el CRM: las
+    OPP vigentes se etiquetan en bloque y las caídas anteriores a mano, desde las notas de
+    ventas. Cuando el workflow quede activo, su fecha va en `LQ_OPP_REGISTRO_DESDE`.
+  - **OPP vigentes** (`l.o`) = etapa de hoy, igual que antes. **OPP generadas** (`lqEsOppGen`)
+    = vigente, venta (`l.w`) o etiqueta `opp-generada` (`LQ_TAG_OPP_GEN`, sin importar
+    mayúsculas); por construcción nunca es menor que las vigentes. Debajo de la cifra, "N
+    caídas"; al pasar el mouse, quiénes y en qué etapa están hoy (`lqOgTip`).
+  - **SQL+ → OPP generadas** = de los SQL+ de la fila, cuántos generaron OPP: "7 de 11 ·
+    63.6%" (`lqDeDen`), siempre con conteo y denominador; con 0 SQL+ dice "0 de 0 · —". Las
+    OPP generadas que hoy no son SQL+ (su etapa actual les bajó el nivel) quedan fuera del
+    numerador y la celda lo dice. La lógica de SQL+ no cambió.
+  - **Verificado por ventas** = el campo del contacto **"Lead to Watch"** en Sí: la
+    verificación de ventas de que el lead está calificado. Es informativo, no cambia la
+    calificación. Si el campo no existe en GHL, el reporte lo avisa.
+  - Columnas en todas las tablas de calidad (campaña, conjunto, anuncio, plataforma, Reporte
+    Combinado y totales), tarjetas de Calidad de Lead, Mes contra mes, leyenda de siglas,
+    metodología, glosario de Diagnóstico y prompt de la IA (`oppGen`).
+  - **Aviso "Histórico incompleto"** (`lqAvisoOppGen`): mientras `LQ_OPP_REGISTRO_DESDE`
+    esté vacío dice que el workflow aún no está activo; con la fecha de activación, sale solo
+    si el rango empieza antes ("Histórico incompleto antes del …"), porque antes de esa fecha
+    una OPP caída solo cuenta si ventas la etiquetó a mano. En Calidad de Lead además nombra
+    las OPP caídas que sí cuentan y las OPP vigentes sin Lead to Watch, para que ventas las
+    verifique.
 - **Aviso de leads sin campaña**: cuenta exactamente los leads de las filas
   "(sin campaña atribuida)" de la tabla (antes contaba aparte los de Meta/Google con
   utm_campaign vacío y no cuadraba: decía 1 de 60 con 10 en la tabla).
@@ -412,7 +449,7 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
   (Meta + Google) y se muestra inversión, CPL y **costo por SQL** por campaña (cruce por
   ID de campaña y, de respaldo, por nombre) y por plataforma (siempre calculable). Todo
   en **MXN** ("12,345 MXN", nunca "$").
-- **Cache compartido**: agregado en el kv (`lq:agg:v22`), staleness de 30 min, igual
+- **Cache compartido**: agregado en el kv (`lq:agg:v25`), staleness de 30 min, igual
   que CRM en vivo.
 - **Permisos**: canal `mkt_lq` (o `marketing`, o admin). El módulo manual de
   Calidad de Leads dentro de Marketing **se retiró el 2026-08-26** junto con PPC Ads
@@ -645,6 +682,20 @@ llaman distinto y el glosario completo vive en la pestaña **Diagnóstico**:
 `crmWeekOf` leía en UTC y `lqWeekOf` en hora Tulum, así que los leads del domingo por la
 noche caían en semanas distintas según la pestaña. El agregado del CRM subió a
 `crm:agg:v2` para forzar la reconstrucción del cache que quedó agrupado con el reloj viejo.
+
+## Ventas → Reporte: saldos del pipeline y partes de un total (15-oct-2026)
+
+- **Saldos** (`CAMPOS_SALDO`: OPP activas, OPP con next step + fecha, OPP >14 días): son una
+  foto del pipeline, no algo que pasó en la semana; una OPP vive varias semanas y se reporta en
+  cada una. En un rango ya no se suman: vale el **corte más reciente** de cada asesor/ciudad
+  (su última semana capturada dentro del rango), y esos cortes sí se suman entre asesores. La
+  celda dice de qué semana es el corte. Igual en Dirección (OPP >14 días) y en las Analíticas
+  ("Última semana" en vez de "Total").
+- **Partes de un total** (`paresParteTotal`): OPP de zooms / de tours / de 1:1 / externas no
+  pueden superar a OPP (total) del canal, ni OPP con next step u OPP >14 días a OPP activas. La
+  captura lo bloquea (como seguimiento > total) y el reporte lista las semanas ya capturadas que
+  no cumplen, para corregirlas en Ingreso de datos. Zooms + tours por encima del total solo avisa
+  (una OPP con zoom y tour debe contarse en una sola).
 
 ## Desempeño de Ventas (Anexo 1 del proceso comercial)
 
