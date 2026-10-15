@@ -5,3 +5,7 @@
 
 [functions]
   node_bundler = "esbuild"
+
+# Foto diaria de Meta y Google (Calidad de Leads → bitácora): 7:00 hora Tulum = 12:00 UTC.
+[functions."lq-foto"]
+  schedule = "0 12 * * *"

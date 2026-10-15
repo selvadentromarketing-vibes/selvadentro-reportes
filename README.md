@@ -183,6 +183,33 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
     manda también la **bitácora** (fecha, campaña, cambio, motivo; kv `lq:bitacora:v1`,
     formulario al pie de Conclusiones; quien registra queda guardado) y se toma lo más
     reciente de ambas fuentes.
+  - **✓ Hecho / ✗ Ignorar** (Dirección General, 15-oct-2026). Cada recomendación que es un
+    cambio de campaña (subir presupuesto, pausar conjunto/anuncio/keyword/campaña, preguntas en
+    el formulario, quitar Audience Network, negativas, creativos nuevos o renovados) trae dos
+    botones; los avisos (capacidad del telemarketer, revisar, trabajar leads, "en 7 días…") no.
+    **✓** la registra sola en la bitácora (fecha de hoy, cambio = la recomendación, motivo = su
+    evidencia, quién) y con eso la campaña entra en "esperando 7 días"; se puede **deshacer** el
+    mismo día (quita la entrada). Desde el día siguiente se **verifica** contra Windsor: si se
+    marcó subir el presupuesto y sigue igual, o pausar algo que sigue activo, sale "⚠ marcada
+    como hecha, pero en Meta…". **✗** pide un motivo opcional y la oculta 7 días o hasta que
+    cambie el semáforo de la campaña (las recomendaciones salen de 30 días: sin cambio, mañana
+    saldría igual); van en "Ignoradas (N)" con "volver a mostrar". Clave = plataforma + campaña +
+    tipo de recomendación sin números, así que la misma recomendación con montos nuevos (tras
+    subir el presupuesto) sigue siendo la misma. Estado compartido en kv `lq:recs:v1`.
+  - **Foto diaria de Meta y Google** (`netlify/functions/lq-foto.js`, función programada de
+    Netlify a las 12:00 UTC = 7:00 hora Tulum, `netlify.toml`). Windsor no trae historial de
+    cambios, así que cada mañana se guarda el estado de los últimos 7 días (`lq:foto:v1`:
+    campañas con estado y presupuesto; conjuntos con presupuesto; anuncios con estado, URL y, en
+    Google, aprobación; keywords de Google con gasto) y se compara con la foto anterior. Lo que
+    cambió va a `lq:cambios:v1` y la bitácora lo muestra como "Detectado en Meta/Google (foto
+    diaria)", con fecha = el día anterior a la foto ("entre el X y el Y" si faltó alguna).
+    Cuenta para la fecha de decisión salvo las keywords que empiezan o dejan de gastar
+    (`cuenta:false`: puede ser solo volumen). Pausar una campaña o un conjunto no se anota
+    anuncio por anuncio (CAMPAIGN_PAUSED / ADSET_PAUSED); el conjunto pausado se anota una vez.
+    Lo que dejó de salir en Windsor no se da por pausado. No detecta textos o creativos editados
+    dentro de un anuncio que ya existía. Sin env vars nuevas (usa `WINDSOR_API_KEY` y el kv);
+    la corre el programador de Netlify (`next_run`) o un admin con su sesión. Prueba:
+    `node scripts/test-lq-foto.js`.
   - **Atender hoy** (arriba de todo, ignora la fecha): anuncio rechazado (Meta
     DISAPPROVED/WITH_ISSUES, Google DISAPPROVED), gasto detenido (0 MXN ayer con gasto los 7
     días previos) y medición rota (la plataforma reporta 2+ leads en 3 días y al CRM no llegó

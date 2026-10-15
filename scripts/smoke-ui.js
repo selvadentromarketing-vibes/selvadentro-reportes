@@ -740,6 +740,61 @@ const PORT = process.env.PORT || 8765;
     await page.evaluate((sub) => { lqState.sub = sub; lqRender(); }, sub);
     await escanear('lq:' + sub);
   }
+  // ✓ Hecho / ✗ Ignorar de las recomendaciones y bitácora con la foto diaria (Dirección General,
+  // 15-oct-2026): ✓ registra en la bitácora y arranca la espera de 7 días; al día siguiente avisa si
+  // la plataforma no refleja el cambio; deshacer el mismo día; ✗ oculta con motivo hasta 7 días;
+  // los cambios que la foto detecta entran a la bitácora y solo los que cuentan reinician la espera.
+  VISTA = 'lq:recomendaciones';
+  const lqrec = await page.evaluate(async () => {
+    const esperar = () => new Promise(res => setTimeout(res, 400));
+    const prompt0 = window.prompt; window.prompt = () => 'temporada alta';
+    window.LQ_HOY_FIJO = '2026-10-05';
+    lqState.recsEst = {}; lqState.bitacora = []; lqState.cambiosAuto = []; lqState.sub = 'conclusiones'; lqRender();
+    const fila = (n) => [...document.querySelectorAll('#lq-content table.lq-concl tr[data-dec-camp]')].find(tr => tr.dataset.decCamp === n);
+    const celda = (n, i) => { const f = fila(n); return f ? f.querySelectorAll('td')[i].textContent.replace(/\s+/g, ' ').trim() : ''; };
+    const VERDE = 'INVESTORS_MX_DYNAMIC-TOPLPS_150726', ESC = 'INVESTORS_US/CA_ESCAPE_100626';
+    const r = {};
+    r.botones = fila(VERDE).querySelectorAll('[data-rec-ok]').length + '/' + fila(VERDE).querySelectorAll('ol.lq-recs > li').length;   // solo el cambio, no el aviso del telemarketer
+    fila(VERDE).querySelector('[data-rec-ok]').click(); await esperar();
+    r.hecho = (fila(VERDE).querySelector('li.lq-rec-hecho') || {}).textContent || '';
+    r.bit = lqBitacora().filter(e => e.rec).map(e => `${e.fecha} | ${e.camp} | ${e.cambio}`).join(' || ');
+    r.espera = celda(VERDE, 2);
+    window.LQ_HOY_FIJO = '2026-10-06'; lqRender();
+    r.verif = ((fila(VERDE).querySelector('.lq-rec-verif') || {}).textContent || '').trim();
+    r.sinDeshacer = !fila(VERDE).querySelector('[data-rec-undo]');
+    window.LQ_HOY_FIJO = '2026-10-05'; lqRender();
+    fila(VERDE).querySelector('[data-rec-undo]').click(); await esperar();
+    r.deshecho = !!fila(VERDE).querySelector('[data-rec-ok]') && !lqBitacora().some(e => e.rec) && !/esperando 7 días tras el cambio del 05 oct/.test(celda(VERDE, 2));
+    const antes = fila(ESC).querySelectorAll('ol.lq-recs > li').length;
+    [...fila(ESC).querySelectorAll('[data-rec-ig]')].find(b => /^Pausar el conjunto/.test(b.closest('li').textContent.trim())).click(); await esperar();
+    r.ignorada = fila(ESC).querySelectorAll('ol.lq-recs > li').length === antes - 1 && /Ignoradas \(1\)/.test(celda(ESC, 4)) && /temporada alta/.test(celda(ESC, 4)) && !lqBitacora().some(e => e.rec);
+    window.LQ_HOY_FIJO = '2026-10-12'; lqRender();
+    r.vence = !/Ignoradas/.test(celda(ESC, 4));
+    window.LQ_HOY_FIJO = '2026-10-05'; lqRender();
+    fila(ESC).querySelector('[data-rec-restore]').click(); await esperar();
+    r.restaurada = !/Ignoradas/.test(celda(ESC, 4)) && fila(ESC).querySelectorAll('ol.lq-recs > li').length === antes;
+    // La foto diaria: un presupuesto de Meta reinicia la espera; las keywords de Google no
+    lqState.cambiosAuto = [
+      { id: 'auto-1', fecha: '2026-10-04', desde: '2026-10-02', plat: 'Meta', cid: 'x', camp: 'INVESTORS_US/CA_ESCAPE_090926', que: 'presupuesto diario de la campaña de 300 MXN a 360 MXN', cuenta: true },
+      { id: 'auto-2', fecha: '2026-10-04', desde: '2026-10-04', plat: 'Google', cid: 'y', camp: 'INVESTORS - GOOGLE SEARCH -- MX', que: 'keywords sin gasto en los últimos 7 días: "x" (g)', cuenta: false }];
+    lqRender();
+    r.auto090 = celda('INVESTORS_US/CA_ESCAPE_090926', 2);
+    r.autoMX = celda('INVESTORS - GOOGLE SEARCH -- MX', 2);
+    r.tabla = [...document.querySelectorAll('#lq-bitacora tbody tr.lq-bit-auto')].map(tr => [...tr.cells].map(td => td.textContent.replace(/\s+/g, ' ').trim()).join(' | ')).join(' || ');
+    lqState.cambiosAuto = []; lqState.recsEst = {}; lqState.bitacora = []; window.prompt = prompt0; lqRender();
+    r.ok = r.botones === '1/2' && /^✓ Hecho el 05 oct · smoke · en la bitácora deshacer ?Subir el presupuesto diario 20%: INVESTORS_MX_DYNAMIC-TOPLPS_150726, de 360 MXN a 432 MXN al día$/.test(r.hecho.replace(/\s+/g, ' ').trim())
+      && r.bit === '2026-10-05 | INVESTORS_MX_DYNAMIC-TOPLPS_150726 | Subir el presupuesto diario 20%: INVESTORS_MX_DYNAMIC-TOPLPS_150726, de 360 MXN a 432 MXN al día'
+      && /esperando 7 días tras el cambio del 05 oct/.test(r.espera) && /Último cambio \(bitácora\): 05 oct · Subir el presupuesto diario 20%/.test(r.espera)
+      && r.verif === '⚠ marcada como hecha, pero en Meta el presupuesto sigue en 360 MXN al día' && r.sinDeshacer
+      && r.deshecho && r.ignorada && r.vence && r.restaurada
+      && /Último cambio \(Meta · foto diaria\): 04 oct · presupuesto diario de la campaña de 300 MXN a 360 MXN/.test(r.auto090) && /esperando 7 días tras el cambio del 04 oct/.test(r.auto090)
+      && !/foto diaria/.test(r.autoMX)
+      && /^entre 02 oct y 04 oct 2026 \| INVESTORS_US\/CA_ESCAPE_090926 \| presupuesto diario de la campaña de 300 MXN a 360 MXN \|\s+\| Detectado en Meta \(foto diaria\) \|\| 04 oct 2026 \| INVESTORS - GOOGLE SEARCH -- MX \| keywords sin gasto/.test(r.tabla);
+    return r;
+  });
+  console.log('[calidad de leads] ✓ / ✗ y foto diaria', JSON.stringify(lqrec).slice(0, 1500));
+  console.log('[calidad de leads] bitácora con la foto:', lqrec.tabla);
+  if (!lqrec.ok) hallazgos.push({ vista: 'lq:recomendaciones', lqrec });
   // Telefonía por asesora (Dirección General, 7-oct-2026): canal del 1er toque, mediana del
   // 1er intento de llamada, intentos en 24 h y en total, sin marcar vs falla de línea,
   // duración conocida, y la actividad efectiva sin fallas de línea desde el 7-oct.

@@ -567,6 +567,157 @@ async function decision(p) {
   return { configured: true, plat: "Google", detalle30: a30 !== null, camps, ads: Object.values(ads), kw: Object.values(kw).filter((k) => k.sp || k.cl || k.cv || k.sp7 || k.spP), dias, faltan };
 }
 
+// --- Foto diaria de Meta y Google (Dirección General, 15-oct-2026) ---
+// Windsor no trae el historial de cambios: ni cuándo se subió el presupuesto de una campaña ni
+// cuándo se pausó algo (Meta solo da la fecha de anuncios y conjuntos creados o editados). Cada
+// mañana (lq-foto, 7:00 hora Tulum) se guarda el estado actual —campañas, conjuntos, anuncios y
+// keywords con gasto en los últimos 7 días— y se compara con la foto anterior: lo que cambió entra
+// a la bitácora como "detectado". Solo se compara lo que sale en las dos fotos: algo que dejó de
+// gastar y ya no aparece en Windsor NO se da por pausado.
+const FOTO_KEY = "lq:foto:v1", CAMBIOS_KEY = "lq:cambios:v1", CAMBIOS_MAX = 600;
+const hoyTulum = (t = Date.now()) => new Date(t - 5 * 3600e3).toISOString().slice(0, 10);
+const sumaDias = (ymd, n) => new Date(Date.parse(ymd + "T12:00:00Z") + n * 86400e3).toISOString().slice(0, 10);
+const urlPrimera = (v) => { const t = String(v || "").trim(); if (!t) return ""; try { const a = JSON.parse(t); if (Array.isArray(a) && a.length) return String(a[0]); } catch (e) { /* texto */ } return t.replace(/^[\[\s"']+|[\]\s"']+$/g, "").split(",")[0].trim(); };
+
+async function tomarFoto(hoy = hoyTulum()) {
+  if (!WINDSOR_KEY) return null;
+  const R = `date_from=${sumaDias(hoy, -7)}&date_to=${hoy}`;
+  const num = (x) => Number(x) || 0, r2 = (x) => Math.round(num(x) * 100) / 100;
+  const TOPE = Number(process.env.LQ_FOTO_TOPE_MS) || 20000;   // la función programada tiene 30 s
+  const [fb, gA, gB, gK] = await Promise.all([
+    conTope(windsorGet("facebook", `${R}&fields=campaign_id,campaign,campaign_effective_status,campaign_daily_budget,campaign_lifetime_budget,adset_id,adset_name,adset_daily_budget,adset_lifetime_budget,ad_id,ad_name,effective_status,website_destination_url,spend`), TOPE),
+    conTope(windsorGet("google_ads", `${R}&fields=campaign_id,campaign,campaign_status,ad_group_name,ad_group_id,ad_id,ad_name,ad_group_ad_status,ad_group_ad_policy_summary_approval_status,ad_final_urls,spend`), TOPE),
+    conTope(windsorGet("google_ads", `${R}&fields=date,campaign_id,campaign,budget_amount`), TOPE),
+    conTope(windsorGet("google_ads", `${R}&fields=campaign_id,ad_group_name,ad_group_id,keyword_text,spend`), TOPE),
+  ]);
+  let meta = null;
+  if (fb) {
+    meta = { f: hoy, c: {}, g: {}, a: {} };
+    fb.forEach((r) => {
+      const cid = String(r.campaign_id || ""); if (!cid) return;
+      const C = meta.c[cid] = meta.c[cid] || { n: r.campaign || "", e: "", cb: null, lb: null };
+      if (r.campaign_effective_status) C.e = String(r.campaign_effective_status);
+      if (num(r.campaign_daily_budget) > 0) C.cb = r2(num(r.campaign_daily_budget) / 100);   // centavos
+      if (num(r.campaign_lifetime_budget) > 0) C.lb = r2(r.campaign_lifetime_budget);          // unidades
+      const gid = String(r.adset_id || "");
+      if (gid) {
+        const G = meta.g[gid] = meta.g[gid] || { c: cid, n: r.adset_name || "", gb: null, glb: null };
+        if (num(r.adset_daily_budget) > 0) G.gb = r2(num(r.adset_daily_budget) / 100);
+        if (num(r.adset_lifetime_budget) > 0) G.glb = r2(num(r.adset_lifetime_budget) / 100);
+      }
+      const id = String(r.ad_id || ""); if (!id) return;
+      const A = meta.a[id] = meta.a[id] || { c: cid, g: gid, n: r.ad_name || "", e: "", u: "" };
+      if (r.effective_status) A.e = String(r.effective_status);
+      const u = String(r.website_destination_url || "").trim(); if (u) A.u = u.slice(0, 200);
+    });
+  }
+  let google = null;
+  if (gA || gB || gK) {
+    google = { f: hoy, okA: !!gA, okB: !!gB, okK: !!gK, c: {}, a: {}, k: {} };
+    const camp = (r) => { const cid = String(r.campaign_id || ""); if (!cid) return null;
+      const C = google.c[cid] = google.c[cid] || { n: r.campaign || "", e: "", cb: null }; if (r.campaign && !C.n) C.n = r.campaign; return C; };
+    (gA || []).forEach((r) => {
+      const C = camp(r); if (!C) return;
+      if (r.campaign_status) C.e = String(r.campaign_status);
+      const id = String(r.ad_id || ""); if (!id) return;
+      const A = google.a[id] = google.a[id] || { c: String(r.campaign_id), g: r.ad_group_name || "", n: r.ad_name || "", e: "", ap: "", u: "" };
+      if (r.ad_group_ad_status) A.e = String(r.ad_group_ad_status);
+      if (r.ad_group_ad_policy_summary_approval_status) A.ap = String(r.ad_group_ad_policy_summary_approval_status);
+      A.u = urlPrimera(r.ad_final_urls).slice(0, 200) || A.u;
+    });
+    const ult = {};                                   // presupuesto: el del día más reciente
+    (gB || []).forEach((r) => {
+      const C = camp(r); if (!C) return; const cid = String(r.campaign_id), d = String(r.date || "");
+      if (num(r.budget_amount) > 0 && d >= (ult[cid] || "")) { ult[cid] = d; C.cb = r2(r.budget_amount); }
+    });
+    (gK || []).forEach((r) => {
+      const t = String(r.keyword_text || "").trim(); if (!t || !(num(r.spend) > 0)) return;
+      const cid = String(r.campaign_id || ""), k = [cid, r.ad_group_id, t.toLowerCase()].join("|");
+      google.k[k] = { c: cid, g: r.ad_group_name || "", kw: t };
+    });
+  }
+  return { fecha: hoy, ts: Date.now(), meta, google };
+}
+
+// Qué cambió entre dos fotos de una plataforma. Fecha = el día anterior a la foto nueva (el cambio
+// pasó después de la foto anterior, a las 7:00, y antes de la nueva); desde = la foto anterior,
+// para decir "entre el 12 y el 14" cuando faltó alguna. `cuenta:false` = se anota en la bitácora
+// pero no reinicia la espera de 7 días (keywords que empiezan o dejan de gastar: puede ser solo volumen).
+function diffFotos(prev, cur) {
+  const out = [];
+  const est = (e) => ({ ACTIVE: "activo", ENABLED: "activo", PAUSED: "pausado", CAMPAIGN_PAUSED: "pausado (por la campaña)", ADSET_PAUSED: "pausado (por el conjunto)",
+    REMOVED: "eliminado", DELETED: "eliminado", ARCHIVED: "archivado", DISAPPROVED: "rechazado", WITH_ISSUES: "con problemas", IN_PROCESS: "en revisión", PENDING_REVIEW: "en revisión",
+    APPROVED: "aprobado", APPROVED_LIMITED: "aprobado con límites", UNDER_REVIEW: "en revisión" }[e] || String(e || "").toLowerCase());
+  const mxn = (x) => `${Math.round(x).toLocaleString("es-MX")} MXN`;
+  const cambio = (a, b) => a != null && b != null && Math.abs(a - b) >= 1;
+  const plat = (P, C, nombre, fn) => {
+    if (!P || !C || !P.f || !C.f || P.f >= C.f) return;
+    const fecha = sumaDias(C.f, -1), desde = P.f;
+    const add = (cid, camp, que, cuenta = true) => out.push({ id: `auto-${C.f}-${nombre}-${out.length}`, fecha, desde, plat: nombre, cid, camp, que, cuenta });
+    fn(P, C, add);
+  };
+  plat(prev && prev.meta, cur && cur.meta, "Meta", (P, C, add) => {
+    const nc = (cid) => (C.c[cid] || P.c[cid] || {}).n || "";
+    Object.entries(C.c).forEach(([cid, c]) => { const p = P.c[cid]; if (!p) return;
+      if (p.e && c.e && p.e !== c.e) add(cid, c.n, `campaña ${est(p.e)} → ${est(c.e)}`);
+      if (cambio(p.cb, c.cb)) add(cid, c.n, `presupuesto diario de la campaña de ${mxn(p.cb)} a ${mxn(c.cb)}`);
+      if (cambio(p.lb, c.lb)) add(cid, c.n, `presupuesto total de la campaña de ${mxn(p.lb)} a ${mxn(c.lb)}`);
+    });
+    Object.entries(C.g).forEach(([gid, g]) => { const p = P.g[gid]; if (!p) return;
+      if (cambio(p.gb, g.gb)) add(g.c, nc(g.c), `conjunto ${g.n}: presupuesto diario de ${mxn(p.gb)} a ${mxn(g.gb)}`);
+      if (cambio(p.glb, g.glb)) add(g.c, nc(g.c), `conjunto ${g.n}: presupuesto total de ${mxn(p.glb)} a ${mxn(g.glb)}`);
+    });
+    // Estado del anuncio. Pausar una campaña o un conjunto cambia el de todos sus anuncios a
+    // CAMPAIGN_PAUSED / ADSET_PAUSED: eso no es un cambio de cada anuncio. La campaña ya se anota
+    // arriba; el conjunto (Windsor no trae su estado) se anota una vez, por sus anuncios.
+    const grpPaus = {};
+    Object.entries(C.a).forEach(([id, a]) => { const p = P.a[id]; if (!p) return;
+      if (p.e && a.e && p.e !== a.e) {
+        if (a.e === "ADSET_PAUSED" || p.e === "ADSET_PAUSED") { const G = C.g[a.g] || P.g[a.g] || {}; grpPaus[a.g] = { cid: a.c, n: G.n || a.g, on: p.e === "ADSET_PAUSED" }; }
+        else if (a.e !== "CAMPAIGN_PAUSED" && p.e !== "CAMPAIGN_PAUSED") add(a.c, nc(a.c), `anuncio ${a.n}: ${est(p.e)} → ${est(a.e)}`);
+      }
+      if (p.u && a.u && p.u !== a.u) add(a.c, nc(a.c), `anuncio ${a.n}: cambió la URL de destino`);
+    });
+    Object.values(grpPaus).forEach((x) => add(x.cid, nc(x.cid), `conjunto ${x.n} ${x.on ? "activado" : "pausado"}`));
+  });
+  plat(prev && prev.google, cur && cur.google, "Google", (P, C, add) => {
+    const nc = (cid) => (C.c[cid] || P.c[cid] || {}).n || "";
+    Object.entries(C.c).forEach(([cid, c]) => { const p = P.c[cid]; if (!p) return;
+      if (P.okA && C.okA && p.e && c.e && p.e !== c.e) add(cid, c.n || nc(cid), `campaña ${est(p.e)} → ${est(c.e)}`);
+      if (P.okB && C.okB && cambio(p.cb, c.cb)) add(cid, c.n || nc(cid), `presupuesto diario de la campaña de ${mxn(p.cb)} a ${mxn(c.cb)}`);
+    });
+    if (P.okA && C.okA) Object.entries(C.a).forEach(([id, a]) => { const p = P.a[id]; if (!p) return;
+      if (p.e && a.e && p.e !== a.e) add(a.c, nc(a.c), `anuncio ${a.n || id} (${a.g}): ${est(p.e)} → ${est(a.e)}`);
+      if (p.ap && a.ap && p.ap !== a.ap) add(a.c, nc(a.c), `anuncio ${a.n || id} (${a.g}): aprobación ${est(p.ap)} → ${est(a.ap)}`);
+      if (p.u && a.u && p.u !== a.u) add(a.c, nc(a.c), `anuncio ${a.n || id} (${a.g}): cambió la URL de destino`);
+    });
+    if (P.okK && C.okK) {
+      const nuevas = Object.keys(C.k).filter((k) => !P.k[k]), fuera = Object.keys(P.k).filter((k) => !C.k[k]);
+      const lista = (keys, F) => { const por = {}; keys.forEach((k) => { const x = F[k]; (por[x.c] = por[x.c] || []).push(`"${x.kw}" (${x.g})`); }); return por; };
+      Object.entries(lista(nuevas, C.k)).forEach(([cid, xs]) => add(cid, nc(cid), `keywords con gasto que no tenían en 7 días: ${xs.slice(0, 8).join(", ")}${xs.length > 8 ? ` y ${xs.length - 8} más` : ""}`, false));
+      Object.entries(lista(fuera, P.k)).forEach(([cid, xs]) => add(cid, nc(cid), `keywords sin gasto en los últimos 7 días: ${xs.slice(0, 8).join(", ")}${xs.length > 8 ? ` y ${xs.length - 8} más` : ""}`, false));
+    }
+  });
+  return out;
+}
+
+// Toma la foto del día, la compara con la anterior y guarda los cambios. Una plataforma que hoy
+// no respondió conserva su foto anterior (con su fecha), para comparar contra ella mañana.
+async function fotoDiaria({ forzar = false, hoy = hoyTulum() } = {}) {
+  const prev = await S.kvGetJSON(FOTO_KEY).catch(() => null);
+  if (prev && prev.fecha === hoy && !forzar) return { ok: true, saltada: true, fecha: hoy };
+  const cur = await tomarFoto(hoy);
+  if (!cur || (!cur.meta && !cur.google)) return { ok: false, fecha: hoy, error: WINDSOR_KEY ? "Windsor no respondió" : "WINDSOR_API_KEY no configurada" };
+  const nuevos = prev && prev.fecha < hoy ? diffFotos(prev, cur) : [];
+  const guardar = { fecha: hoy, ts: cur.ts, meta: cur.meta || (prev && prev.meta) || null, google: cur.google || (prev && prev.google) || null };
+  if (nuevos.length) {
+    const lista = (await S.kvGetJSON(CAMBIOS_KEY).catch(() => null)) || [];
+    await S.kvSetJSON(CAMBIOS_KEY, lista.concat(nuevos).slice(-CAMBIOS_MAX));
+  }
+  await S.kvSetJSON(FOTO_KEY, guardar);
+  return { ok: true, fecha: hoy, cambios: nuevos.length, meta: !!cur.meta, google: !!cur.google, base: prev ? prev.fecha : null };
+}
+
 // --- Diagnóstico: la app se responde a sí misma ---
 // Varias "preguntas al cliente" (¿existe el campo de presupuesto?, ¿qué etapas tiene
 // el pipeline?, ¿el token tiene permiso de mensajes?) no eran preguntas: eran datos
@@ -730,6 +881,10 @@ async function diag() {
 
   return { pruebas: [pContactos, pCampos, pUsuarios, pPipelines, pOpps, pConv, pMsgs, pCitas], cuentas };
 }
+
+exports.fotoDiaria = fotoDiaria;
+exports.diffFotos = diffFotos;
+exports.tomarFoto = tomarFoto;
 
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return S.corsPreflight();
