@@ -3723,8 +3723,9 @@ function lqIsOppStage(stageId, stages, th){
 // Las OPP que se cayeron antes de activar el workflow solo cuentan si ventas las etiquetó a mano.
 const LQ_TAG_OPP_GEN = /^opp[-_ ]?generada$/i;
 // Fecha (YYYY-MM-DD, hora Tulum) en que quedó activo ese workflow en GHL. Vacía = todavía no:
-// el reporte avisa que el histórico está incompleto en cualquier rango.
-const LQ_OPP_REGISTRO_DESDE = "";
+// el reporte avisa que el histórico está incompleto en cualquier rango. Activo desde el
+// 15-oct-2026 (etiquetado en bloque de vigentes y WON a las 13:13 y caídas a mano 13:56–14:00).
+const LQ_OPP_REGISTRO_DESDE = "2026-10-15";
 // OPP generada = vigente hoy, venta cerrada o etiqueta del CRM. Las vigentes y las ventas
 // entran siempre, así que OPP generadas nunca queda por debajo de OPP vigentes.
 const lqEsOppGen = (l)=> !!(l && (l.og || (l.o||0) > 0 || (l.w||0) > 0));

@@ -314,7 +314,8 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
     **`opp-generada`** al contacto cuando su oportunidad entra (o se crea) en Seguimiento de
     OPP, Carta oferta, Apartado o WON, y nadie la quita. Backfill de una vez en el CRM: las
     OPP vigentes se etiquetan en bloque y las caídas anteriores a mano, desde las notas de
-    ventas. Cuando el workflow quede activo, su fecha va en `LQ_OPP_REGISTRO_DESDE`.
+    ventas. Workflow activo desde el **15-oct-2026** (`LQ_OPP_REGISTRO_DESDE`): ese día se
+    etiquetaron 8 OPP vigentes, 11 WON y 11 OPP caídas a mano (3 del rango W32–W41).
   - **OPP vigentes** (`l.o`) = etapa de hoy, igual que antes. **OPP generadas** (`lqEsOppGen`)
     = vigente, venta (`l.w`) o etiqueta `opp-generada` (`LQ_TAG_OPP_GEN`, sin importar
     mayúsculas); por construcción nunca es menor que las vigentes. Debajo de la cifra, "N

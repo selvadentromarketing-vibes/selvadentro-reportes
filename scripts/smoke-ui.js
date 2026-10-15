@@ -779,7 +779,12 @@ const PORT = process.env.PORT || 8765;
     const tip = document.createElement('div'); tip.innerHTML = tdG.dataset.lqTip || '';
     r.tipOg = tip.textContent.replace(/\s+/g, ' ').trim();
     const t = document.getElementById('lq-content').textContent.replace(/\s+/g, ' ');
-    r.aviso = /Histórico incompleto\. GoHighLevel no guarda el historial de etapas/.test(t) && /workflow que pone esa etiqueta todavía no está activo/.test(t);
+    // Workflow activo desde LQ_OPP_REGISTRO_DESDE (15-oct-2026): W37–W40 empieza antes, así que
+    // avisa con la fecha; un rango que empieza ese día o después no avisa.
+    r.aviso = /Histórico incompleto antes del \d{2} [a-z]{3} \d{4}\. GoHighLevel no guarda el historial de etapas/.test(t)
+      && /Antes del \d{2} [a-z]{3} \d{4}, una OPP que se cayó solo cuenta si ventas le puso la etiqueta a mano/.test(t)
+      && lqAvisoOppGen(agg, [], ['2026-W42'], true) !== ''       // W42 empieza el 12-oct, antes del 15
+      && lqAvisoOppGen(agg, [], ['2026-W43'], true) === '';
     r.caidas = (t.match(/(\d+) OPP caídas que sí cuentan como generadas: ([^.]*)\./) || []).slice(1).join(' : ');
     r.sinVerif = (t.match(/(\d+) OPP vigentes? sin verificación de ventas/) || [])[1] || '0';
     const card = (k) => { const c = [...document.querySelectorAll('#lq-content .crm-kpi')].find(e => e.querySelector('.k-lbl').textContent.trim() === k); return c ? c.querySelector('.k-val').textContent.trim() : ''; };
