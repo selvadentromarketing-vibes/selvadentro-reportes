@@ -3478,13 +3478,14 @@ const LQ_TAGS_INVALIDO = /spam|duplicad|numero-?(equivocado|invalido)|wrong-?num
 
 // Nivel de una OPP generada que hoy está caída (Dirección General, 15-oct-2026). La pregunta
 // es si el LEAD era bueno, no si ventas lo cerró:
-//   · Largo plazo / Nurturing → SQL: el horizonte ya no es el del perfil Selvadentro.
+//   · Largo plazo → SQL: el horizonte ya no es el del perfil Selvadentro. (Nurturing no: solo
+//     dice que pasó a seguimiento automático, no que le falte perfil → SQL Selvadentro.)
 //   · Descalificado → según la causa capturada: "No alineado" → SQL (interés sin perfil);
 //     "Malinterpretó la campaña" → MQL (falla del mensaje de la campaña); "Ya no interesado"
 //     o sin causa → SQL Selvadentro. Las causas del grupo inválido ya salieron en la regla 1.
-//   · Rescate, perdida o cualquier otra etapa → SQL Selvadentro: tenía perfil y la venta no se
+//   · Rescate, Nurturing, perdida o cualquier otra etapa → SQL Selvadentro: tenía perfil y la venta no se
 //     cerró, y eso mide a ventas, no a la campaña.
-const LQ_RX_CAIDA_SQL = /largo\s*plazo|long\s*term|nurtur/i;
+const LQ_RX_CAIDA_SQL = /largo\s*plazo|long\s*term/i;
 function lqNivelOppCaida(l, stage){
   if(LQ_RX.desc.test(stage)){
     const c = slaCompacto(l.dqc || (l.dq && l.dq.causa) || "");
@@ -4461,7 +4462,7 @@ function lqLeyenda(){
   return `<details class="lq-leyenda">
     <summary>Qué significa cada sigla</summary>
     <div class="lq-leyenda-cuerpo">
-      <span><b>SQL Selvadentro</b> oportunidad real de cierre o venta cerrada en el pipeline (manda sobre el formulario), también una OPP generada que cayó a Rescate o se descalificó por "Ya no interesado" (tenía perfil y no se cerró); o cita asistida/etapa avanzada <i>y</i> perfil de ≥100,000 USD con horizonte ≤6 meses. Una OPP caída a Largo plazo o descalificada por "No alineado" es SQL; por "Malinterpretó la campaña", MQL; por causa inválida, Descalificado</span>
+      <span><b>SQL Selvadentro</b> oportunidad real de cierre o venta cerrada en el pipeline (manda sobre el formulario), también una OPP generada que cayó a Rescate o Nurturing o se descalificó por "Ya no interesado" (tenía perfil y no se cerró); o cita asistida/etapa avanzada <i>y</i> perfil de ≥100,000 USD con horizonte ≤6 meses. Una OPP caída a Largo plazo o descalificada por "No alineado" es SQL; por "Malinterpretó la campaña", MQL; por causa inválida, Descalificado</span>
       <span><b>SQL</b> señal fuerte sin ese perfil, o perfil del formulario sin etapa que lo respalde</span>
       <span><b>MQL</b> respondió o mostró interés</span>
       <span><b>CQL</b> capturado, sin respuesta aún</span>
@@ -6573,7 +6574,7 @@ function lqRender(){
     <div class="lq-meth"><b>Reglas de calificación automática</b> — se evalúan en orden y la primera que se cumple manda. Umbral de producto
     <b>${lqUSD(LQ_UMBRAL_USD)}</b>, horizonte del perfil <b>≤${LQ_HORIZONTE_M} meses</b>.
     <br>1 · <b>Descalificado</b>: oportunidad perdida en el CRM, etapa de descalificación, o tag de descalificación (número equivocado, spam, duplicado, sin interés). A una <b>OPP generada</b> solo la descalifica una causa del grupo inválido (número equivocado, registro de prueba, spam, duplicado).
-    <br>2 · <b>SQL Selvadentro</b>: oportunidad real de cierre (Seguimiento de OPP, Carta oferta, Apartado), venta cerrada, o <b>OPP generada</b> que cayó a Rescate o a otra etapa viva, o se descalificó por "Ya no interesado" o sin causa (Dirección, 15-oct-2026: tenía perfil y no se cerró). Si cayó a Largo plazo o Nurturing, o se descalificó por "No alineado", es <b>SQL</b>; por "Malinterpretó la campaña", <b>MQL</b> — <b>la etapa del pipeline manda</b>, aunque el
+    <br>2 · <b>SQL Selvadentro</b>: oportunidad real de cierre (Seguimiento de OPP, Carta oferta, Apartado), venta cerrada, o <b>OPP generada</b> que cayó a Rescate, Nurturing u otra etapa viva, o se descalificó por "Ya no interesado" o sin causa (Dirección, 15-oct-2026: tenía perfil y no se cerró). Si cayó a Largo plazo, o se descalificó por "No alineado", es <b>SQL</b>; por "Malinterpretó la campaña", <b>MQL</b> — <b>la etapa del pipeline manda</b>, aunque el
     formulario esté vacío o por debajo del perfil, porque es el veredicto del asesor tras hablar con el prospecto. También: cita asistida o etapa avanzada
     (interés identificado, cotización, tour/zoom realizado) <b>y</b> perfil confirmado (presupuesto ≥ umbral y horizonte dentro del perfil).
     <br>3 · <b>SQL</b>: interés real y activo (cita asistida, etapa avanzada o cita agendada) sin presupuesto/horizonte que confirmen el perfil; o perfil declarado en el
@@ -12009,7 +12010,7 @@ function diagSeccionGlosario(){
       ${fila("Verificado por ventas", "Calidad de Leads",
              "Contactos con <b>Lead to Watch</b> = Sí: la verificación de ventas de que el lead está calificado. Se muestra aparte; no cambia la calificación SQL+.")}
       ${fila("SQL Selvadentro", "Calidad de Leads",
-             "Oportunidad real de cierre o venta cerrada en el pipeline (la etapa manda sobre el formulario), también una <b>OPP generada</b> que cayó a Rescate o se descalificó por \"Ya no interesado\" o sin causa (tenía perfil; la venta no se cerró). Caída a Largo plazo o \"No alineado\" → SQL; \"Malinterpretó la campaña\" → MQL; causa inválida → Descalificado. O cita asistida/etapa avanzada <b>y</b> perfil de ≥$100K USD con horizonte ≤6 meses.")}
+             "Oportunidad real de cierre o venta cerrada en el pipeline (la etapa manda sobre el formulario), también una <b>OPP generada</b> que cayó a Rescate o Nurturing, o se descalificó por \"Ya no interesado\" o sin causa (tenía perfil; la venta no se cerró). Caída a Largo plazo o \"No alineado\" → SQL; \"Malinterpretó la campaña\" → MQL; causa inválida → Descalificado. O cita asistida/etapa avanzada <b>y</b> perfil de ≥$100K USD con horizonte ≤6 meses.")}
       ${fila("SQL", "Calidad de Leads", "Señal fuerte de interés sin el perfil de presupuesto y horizonte, o perfil del formulario sin etapa del pipeline que lo respalde.")}
       ${fila("MQL", "Calidad de Leads", "Respondió o mostró interés, sin señal fuerte todavía.")}
       ${fila("CQL", "Calidad de Leads", "Capturado: el lead entró y quedó registrado, sin respuesta aún.")}

@@ -155,6 +155,7 @@ const PORT = process.env.PORT || 8765;
       // OPP generada caída (Dirección General, 15-oct-2026): su nivel sale de dónde cayó
       caidaLargo: q({ og: 1, pstage: 'Largo plazo' }).lv,                               // sql: horizonte fuera del perfil
       caidaRescate: q({ og: 1, pstage: 'Rescate' }).lv,                                 // sqls: tenía perfil, no se cerró
+      caidaNurturing: q({ og: 1, pstage: 'Nurturing' }).lv,                             // sqls: Nurturing no dice que le falte perfil
       caidaDescTag: q({ tags: 'squeeze, opp-generada', pstage: 'Descalificado' }).lv,   // sqls: sin causa (la etiqueta basta)
       caidaYaNo: q({ og: 1, pstage: 'Descalificado', dqc: 'Ya no interesado' }).lv,     // sqls
       caidaNoAlineado: q({ og: 1, pstage: 'Descalificado', dqc: 'No alineado' }).lv,    // sql
@@ -170,7 +171,7 @@ const PORT = process.env.PORT || 8765;
       why: q({ o: 1, pstage: 'Carta oferta', pres: '$50,000 USD' }).why.join(' · '),
     };
     r.ok = r.oppSinForm === 'sqls' && r.wonFormBajo === 'sqls' && r.oppPerdida === 'sqls'
-      && r.caidaLargo === 'sql' && r.caidaRescate === 'sqls' && r.caidaDescTag === 'sqls' && r.caidaYaNo === 'sqls' && r.caidaNoAlineado === 'sql'
+      && r.caidaLargo === 'sql' && r.caidaRescate === 'sqls' && r.caidaNurturing === 'sqls' && r.caidaDescTag === 'sqls' && r.caidaYaNo === 'sqls' && r.caidaNoAlineado === 'sql'
       && r.caidaMalint === 'mql' && r.caidaInvalida === 'desc' && r.caidaSpam === 'desc' && r.sinOppDesc === 'desc'
       && r.whyCaida === 'llegó a OPP (etiqueta opp-generada); hoy en "Largo plazo": el horizonte ya no es el del perfil' && r.fuerteSinForm === 'sql' && r.fuerteConPerfil === 'sqls' && r.soloFormulario === 'sql' && r.soloRespondio === 'mql' && /etapa del pipeline manda/.test(r.why);
     return r;

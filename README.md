@@ -353,9 +353,10 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
     quedan fuera del numerador y la celda lo dice.
   - **Nivel de una OPP generada** (Dirección General, 15-oct-2026; `lq:agg:v27`,
     `lqNivelOppCaida`). La pregunta es si el lead era bueno, no si ventas lo cerró:
-    vigente o WON → SQL Selvadentro; caída a **Rescate**, perdida u otra etapa viva → **SQL
-    Selvadentro** (tenía perfil y no se cerró); caída a **Largo plazo o Nurturing** → **SQL**
-    (el horizonte ya no es el del perfil); **Descalificado** según la causa capturada: "Ya no
+    vigente o WON → SQL Selvadentro; caída a **Rescate**, **Nurturing**, perdida u otra etapa
+    viva → **SQL Selvadentro** (tenía perfil y no se cerró; Nurturing solo dice que pasó a
+    seguimiento automático); caída a **Largo plazo** → **SQL** (el horizonte ya no es el del
+    perfil); **Descalificado** según la causa capturada: "Ya no
     interesado" o sin causa → SQL Selvadentro (sin causa sale en el aviso para que ventas la
     capture), "No alineado" → SQL, "Malinterpretó la campaña" → MQL, causa del grupo inválido
     (`l.inv`) o tag inválido (`LQ_TAGS_INVALIDO`: número equivocado, spam, duplicado) →
