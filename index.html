@@ -3477,12 +3477,12 @@ const LQ_TAGS_RESP = /respondi|replied|another-device-replied|contest|interesad/
 // mandamos un mensaje desde el celular de la línea: el reporte contaba nuestros mensajes como
 // respuestas del prospecto. Con LQ_RESP_V2 "respondió" = mensaje entrante del contacto en la
 // conversación, llamada contestada de más de 30 s, cita asistida o una etapa que ya dice que
-// contestó (Contacto establecido o posterior) o una nota del asesor que dice que habló con él por
-// otro lado (acción `respuestas` de lead-quality, guardada en el kv `lq:resp:v2`). Sin respuesta,
+// contestó (Contacto establecido o posterior) (acción `respuestas` de lead-quality, guardada en
+// el kv `lq:resp:v2`). Todo contacto tiene que quedar en el CRM: lo que se habla por fuera no se ve. Sin respuesta,
 // el lead es CQL solo si ventas completó la escalera; si no, MQL (16-oct-2026). En Nurturing, Largo plazo, Rescate o Sin respuesta el formulario ya
 // no sube a SQL a un lead que nunca llegó a OPP. Activa desde el 16-oct-2026 (Dirección General).
 const LQ_RESP_V2 = true;
-const LQ_RESP_KEY = "lq:resp:v2";   // v2: escalera (intentos manuales) y nota del asesor
+const LQ_RESP_KEY = "lq:resp:v2";   // v2: escalera (intentos manuales)
 const LQ_RX_CUBETA_FORM = /nurtur|largo\s*plazo|rescate|sin\s*respuesta/i;
 // Tags de lead inválido (no de un prospecto que se enfrió): son lo único que saca de SQL+ a una
 // OPP generada, junto con una causa de descalificación del grupo inválido (l.inv).
@@ -3531,7 +3531,7 @@ function lqAutoQualify(l, opt){
   // Zoom, Tour, Cotización…: es el registro del asesor, Dirección General 16-oct-2026). Ya no
   // cuentan las etiquetas: "another-device-replied-whatsapp" es un mensaje NUESTRO.
   const respEtapa = LQ_RX.contacto.test(stage) || LQ_RX.fuerte.test(stage);
-  const respondio = v2 ? (l.rsp === "i" || l.rsp === "c" || l.rsp === "n" || ap.sh>0 || respEtapa)
+  const respondio = v2 ? (l.rsp === "i" || l.rsp === "c" || ap.sh>0 || respEtapa)
                        : (LQ_TAGS_RESP.test(tags) || ap.sh>0 || respEtapa);
 
   // OPP generada (Dirección General, 15-oct-2026): si el lead llegó alguna vez a OPP es SQL
@@ -3605,7 +3605,6 @@ function lqAutoQualify(l, opt){
   const cuando = ()=> l.rspT ? " el "+lqFechaCorta(lqDiaTulum(new Date(l.rspT).toISOString())) : "";
   const evid = ()=> l.rsp === "c" ? `llamada contestada de ${Math.round(l.rspD||0)} s${cuando()}`
                   : l.rsp === "i" ? `mensaje entrante del lead${l.rspCh ? " ("+l.rspCh+")" : ""}${cuando()}`
-                  : l.rsp === "n" ? `nota del asesor${cuando()}: "${l.rspNt||""}"`
                   : ap.sh>0 ? "asistió a una cita"
                   : `etapa "${stage}": el asesor registró que contestó`;
   if(perfilF && respondio){ why.push(v2 ? `perfil declarado en el formulario y respondió (${evid()}), sin etapa del pipeline que lo confirme` : "perfil declarado en el formulario y respuesta activa, sin etapa del pipeline que lo confirme"); return {lv:"sql", why}; }
@@ -4453,7 +4452,7 @@ function lqNotaExcluidos(agg, rangoSet){
 // `lq:resp:v1` ({r, t, ch, d, k}). Sin entrada (no se pudo leer) el lead queda sin rsp.
 function lqRspCampos(x){
   if(!x) return {};
-  if(x.r) return { rsp:x.r, rspT:x.t||0, rspCh:x.ch||"", ...(x.d != null ? { rspD:x.d } : {}), ...(x.nt ? { rspNt:String(x.nt).slice(0,160) } : {}) };
+  if(x.r) return { rsp:x.r, rspT:x.t||0, rspCh:x.ch||"", ...(x.d != null ? { rspD:x.d } : {}) };
   return { rsp:"", ...(x.e ? { rspE:x.e } : {}) };                 // sin respuesta: intentos de la escalera
 }
 // Lee la respuesta de cada lead: primero el caché del kv; se consulta al CRM (acción
@@ -4471,7 +4470,7 @@ async function lqRespuestas(ids, onProg){
     const grupo = lotes.slice(i, i+3);
     const rs = await Promise.all(grupo.map(ids=>lqFn({ action:"respuestas", ids }).catch(()=>({ res: ids.map(ct=>({ ct, err:true })) }))));
     rs.forEach(r=>(r.res||[]).forEach(x=>{ if(x.err){ errores++; return; }
-      nuevos[x.ct] = { r:x.r||"", t:x.t||0, ch:x.ch||"", d:x.d ?? null, ...(x.nt ? { nt:x.nt } : {}), ...(!x.r && x.e ? { e:x.e } : {}), k:ahora }; }));
+      nuevos[x.ct] = { r:x.r||"", t:x.t||0, ch:x.ch||"", d:x.d ?? null, ...(!x.r && x.e ? { e:x.e } : {}), k:ahora }; }));
     hechos += grupo.reduce((a,g)=>a+g.length, 0);
     onProg && onProg(hechos, pend.length);
   }

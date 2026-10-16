@@ -377,10 +377,9 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
        `lead-quality` en cada sincronización (10 contactos por llamada, del mensaje más nuevo al
        más viejo, para en la primera evidencia) y se guarda en el kv `lq:resp:v2`: una
        respuesta encontrada no se vuelve a pedir; sin respuesta se revisa de nuevo a las 6 h.
-       También cuenta una **nota del asesor** que dice que sí habló con el lead por otro lado
-       ("hablé con él", "platicamos", "me dijo que…"; "no contestó" o "buzón" no cuentan, ni las
-       notas de un workflow sin usuario): se lee de `/contacts/{id}/notes` cuando la
-       conversación no trae respuesta.
+       **Todo contacto tiene que quedar en el CRM** (llamadas desde la línea del CRM, WhatsApp
+       por la línea conectada, email desde el CRM): lo que se habla por fuera no se ve, y las
+       notas no se leen (Dirección General, 16-oct-2026: interpretarlas complicaba la regla).
     3. **CQL solo con escalera completa** (16-oct-2026): un lead que no contestó es CQL solo si
        ventas completó la escalera de Desempeño (5 llamadas manuales + WhatsApp o SMS + email;
        con "sin llamada", 1 mensaje + 1 email). La acción `respuestas` cuenta esos intentos en

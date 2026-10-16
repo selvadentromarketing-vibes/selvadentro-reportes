@@ -301,21 +301,10 @@ S.ghlFetch = (path, opt) => ghlSim(path, opt);
       .concat([M({ direction: "outbound", messageType: "TYPE_WHATSAPP", body: "Sent from another device (+5219843175710)" }),
         M({ direction: "outbound", messageType: "TYPE_EMAIL", userId: "u1", body: "Hola" }),
         M({ direction: "outbound", messageType: "TYPE_WHATSAPP", source: "workflow", body: "Recordatorio" })]),
-    // Sin respuesta en la conversación, pero el asesor anotó que habló con él por su celular
-    notaContacto0000001: [M({ direction: "outbound", messageType: "TYPE_CALL", status: "no-answer", userId: "u1" })],
-    notaNegativa0000001: [M({ direction: "outbound", messageType: "TYPE_CALL", status: "no-answer", userId: "u1" })],
-  };
-  const NOTAS = {
-    notaContacto0000001: [{ body: "Le marqué 3 veces y no contestó", userId: "u1", dateAdded: "2026-10-01T15:00:00Z" },
-      { body: "Hablé con él por WhatsApp personal, le interesa el lote 12", userId: "u1", dateAdded: "2026-10-05T15:00:00Z" }],
-    notaNegativa0000001: [{ body: "No contestó, buzón", userId: "u1", dateAdded: "2026-10-01T15:00:00Z" },
-      { body: "Hablamos con el lead (nota automática del workflow)", dateAdded: "2026-10-02T15:00:00Z" }],
   };
   const pedidasR = [];
   ghlSim = async (path) => {
     pedidasR.push(path);
-    const mn = path.match(/\/contacts\/([^/]+)\/notes/);
-    if (mn) { if (NOTAS[mn[1]]) return { notes: NOTAS[mn[1]] }; throw Object.assign(new Error("sin notas"), { status: 404 }); }
     const mc = path.match(/\/conversations\/search\?.*contactId=([^&]+)/);
     if (mc) return { conversations: CONV[mc[1]] === undefined ? [] : [{ id: "cv-" + mc[1] }] };
     const mm = path.match(/\/conversations\/cv-([^/]+)\/messages\?(.*)/);
@@ -343,14 +332,11 @@ S.ghlFetch = (path, opt) => ghlSim(path, opt);
     "busca en páginas más viejas; sin conversación = sin respuesta (no error)", { p: R.paginado000000000001, s: R.sinConversacion0001 });
   ok(R.falla0000000000001 && R.falla0000000000001.err === true && !R.x && rr.res.length === 7,
     "si no se puede leer la conversación lo marca como error; descarta ids inválidos", { f: R.falla0000000000001, n: rr.res.length });
-  const rr2 = JSON.parse((await LQ.handler(ev({ action: "respuestas", ids: ["escalera00000000001", "notaContacto0000001", "notaNegativa0000001"] }))).body);
+  const rr2 = JSON.parse((await LQ.handler(ev({ action: "respuestas", ids: ["escalera00000000001"] }))).body);
   const R2 = Object.fromEntries((rr2.res || []).map((x) => [x.ct, x]));
   ok(R2.escalera00000000001 && R2.escalera00000000001.r === "" && JSON.stringify(R2.escalera00000000001.e) === JSON.stringify({ ll: 5, msg: 1, em: 1 }),
     "sin respuesta: cuenta la escalera (llamadas y email manuales, WhatsApp desde el celular de la línea; el automático no)", R2.escalera00000000001);
-  ok(R2.notaContacto0000001 && R2.notaContacto0000001.r === "n" && /Hablé con él por WhatsApp personal/.test(R2.notaContacto0000001.nt) && R2.notaContacto0000001.t === Date.parse("2026-10-05T15:00:00Z"),
-    "una nota del asesor que dice que habló con él cuenta como respuesta (la más reciente)", R2.notaContacto0000001);
-  ok(R2.notaNegativa0000001 && R2.notaNegativa0000001.r === "" && R2.notaNegativa0000001.e.ll === 1,
-    "\"no contestó, buzón\" y una nota sin usuario (workflow) no cuentan", R2.notaNegativa0000001);
+  ok(!pedidasR.some((p) => /\/notes/.test(p)), "no lee notas: todo contacto tiene que quedar en la conversación del CRM");
   const r11 = await LQ.handler(ev({ action: "respuestas", ids: Array.from({ length: 12 }, (_, i) => "contacto" + String(i).padStart(12, "0")) }));
   ok(JSON.parse(r11.body).res.length === 10, "máximo 10 contactos por llamada");
 

@@ -196,7 +196,6 @@ const PORT = process.env.PORT || 8765;
       toqueV2: q({ pstage: '2do toque', pr: 1, rsp: '', rspE: { ll: 5, msg: 1, em: 1 } }, true).lv, // cql: escalera completa sin respuesta
       toqueSinEsc: q({ pstage: '2do toque', pr: 1, rsp: '', rspE: { ll: 2, msg: 1, em: 0 } }, true),  // mql: ventas no completó la escalera
       sinLlamada: q({ pstage: 'Break up', pr: 1, tags: 'sin llamada - numero invalido', rsp: '', rspE: { ll: 0, msg: 1, em: 1 } }, true).lv, // cql
-      notaV2: q({ pstage: 'Sin respuesta', pr: 1, rsp: 'n', rspNt: 'Hablé con él por su celular' }, true),               // mql: nota del asesor
       escDesempeno: q({ pstage: 'Ultimátum', pr: 1, rsp: '', escOk: true }, true).lv,      // cql: escalera de Desempeño
       contactoV2: q({ pstage: 'Interés identificado', pr: 1, rsp: 'i', rspCh: 'whatsapp' }, true),
       contactoEtapaV2: q({ pstage: 'Contacto establecido', pr: 1, rsp: '' }, true),       // mql: la etapa dice que contestó
@@ -212,13 +211,13 @@ const PORT = process.env.PORT || 8765;
     };
     r.ok = r.flag === true && r.tagV1 === 'mql' && r.tagV2 === 'nuevo' && r.toqueV1 === 'mql' && r.toqueV2 === 'cql'
       && r.toqueSinEsc.lv === 'mql' && r.toqueSinEsc.sinEsc === true && /escalera incompleta \(2 llamadas, 1 WhatsApp\/SMS, 0 emails\)/.test(r.toqueSinEsc.why.join(' '))
-      && r.sinLlamada === 'cql' && r.notaV2.lv === 'mql' && /nota del asesor: "Hablé con él por su celular"/.test(r.notaV2.why.join(' ')) && r.escDesempeno === 'cql'
+      && r.sinLlamada === 'cql' && r.escDesempeno === 'cql'
       && r.contactoEtapaV2.lv === 'mql' && /respondió: etapa "Contacto establecido": el asesor registró que contestó/.test(r.contactoEtapaV2.why.join(' '))
       && r.nurtFormV1 === 'sql' && r.nurtFormRespV2.lv === 'mql' && /en "Nurturing" sin haber llegado a OPP: el formulario ya no lo sube a SQL/.test(r.nurtFormRespV2.why.join(' '))
       && r.nurtFormSinV2 === 'cql' && r.largoCitaV1 === 'sqls' && r.largoCitaV2 === 'sql'
       && r.contactoFormV2.lv === 'sql' && /llamada contestada de 45 s/.test(r.contactoFormV2.why.join(' '))
       && r.oppCaidaV2 === 'sql' && r.citaV2 === 'sql' && /respuesta sin verificar/.test(r.sinVerif);
-    r.toqueSinEsc = r.toqueSinEsc.lv + (r.toqueSinEsc.sinEsc ? '·sinEsc' : ''); r.notaV2 = r.notaV2.lv;
+    r.toqueSinEsc = r.toqueSinEsc.lv + (r.toqueSinEsc.sinEsc ? '·sinEsc' : '');
     r.contactoV2 = r.contactoV2.lv; r.contactoEtapaV2 = r.contactoEtapaV2.lv; r.nurtFormRespV2 = r.nurtFormRespV2.lv; r.contactoFormV2 = r.contactoFormV2.lv;
     return r;
   });
