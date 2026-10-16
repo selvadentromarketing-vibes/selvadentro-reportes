@@ -370,11 +370,15 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
     `LQ_TAGS_RESP` la contaba como respuesta del prospecto. Con la regla nueva:
     1. "Respondió" = un **mensaje entrante** del contacto en la conversación (WhatsApp, SMS,
        email o redes; sin el texto predeterminado de nuestros botones ni respuestas
-       automáticas, `esPlantillaEntrante`) o una **llamada contestada de más de 30 s**. Lo lee
+       automáticas, `esPlantillaEntrante`), una **llamada contestada de más de 30 s**, una cita
+       asistida o una **etapa que ya dice que contestó** (Contacto establecido, Interés
+       identificado, Zoom, Tour, Cotización…: el registro del asesor). Las etiquetas ya no
+       cuentan. La evidencia de la conversación la lee
        la acción `respuestas` de `lead-quality` (10 contactos por llamada, del mensaje más nuevo
        al más viejo, para en la primera evidencia) y se guarda en el kv `lq:resp:v1`: una
        respuesta encontrada no se vuelve a pedir; sin respuesta se revisa de nuevo a las 6 h.
-       Sin evidencia no hay MQL: "oportunidad creada y movida del arranque" ya no basta.
+       Sin respuesta no hay MQL: "oportunidad creada y movida del arranque" ya no basta (2do
+       toque, 3er toque, Ultimátum o Break up sin respuesta quedan en CQL).
     2. **Regla hacia abajo**: en Nurturing, Largo plazo, Rescate o Sin respuesta, un lead que
        nunca llegó a OPP no sube a SQL por el formulario; queda en MQL si respondió y en CQL si
        no. Una cita asistida o agendada lo sigue haciendo SQL (no es el formulario).

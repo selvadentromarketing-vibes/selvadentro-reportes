@@ -195,7 +195,8 @@ const PORT = process.env.PORT || 8765;
       tagV2: q({ tags: 'squeeze, another-device-replied-whatsapp', rsp: '' }, true).lv,   // nuevo: no es del lead
       toqueV1: q({ pstage: '2do toque', pr: 1 }, false).lv,                                 // mql: oportunidad movida
       toqueV2: q({ pstage: '2do toque', pr: 1, rsp: '' }, true).lv,                         // cql: sin respuesta
-      contactoV2: q({ pstage: 'Contacto establecido', pr: 1, rsp: 'i', rspCh: 'whatsapp' }, true),
+      contactoV2: q({ pstage: 'Interés identificado', pr: 1, rsp: 'i', rspCh: 'whatsapp' }, true),
+      contactoEtapaV2: q({ pstage: 'Contacto establecido', pr: 1, rsp: '' }, true),       // mql: la etapa dice que contestó
       nurtFormV1: q({ pstage: 'Nurturing', pr: 1, tags: 'another-device-replied-whatsapp', ...form }, false).lv, // sql
       nurtFormRespV2: q({ pstage: 'Nurturing', pr: 1, rsp: 'i', ...form }, true),            // mql: el formulario ya no sube
       nurtFormSinV2: q({ pstage: 'Nurturing', pr: 1, rsp: '', ...form }, true).lv,           // cql
@@ -207,12 +208,12 @@ const PORT = process.env.PORT || 8765;
       sinVerif: q({ pstage: '2do toque', pr: 1 }, true).why.join(' · '),
     };
     r.ok = r.flag === false && r.tagV1 === 'mql' && r.tagV2 === 'nuevo' && r.toqueV1 === 'mql' && r.toqueV2 === 'cql'
-      && r.contactoV2.lv === 'mql' && /respondió: mensaje entrante del lead \(whatsapp\)/.test(r.contactoV2.why.join(' '))
+      && r.contactoEtapaV2.lv === 'mql' && /respondió: etapa "Contacto establecido": el asesor registró que contestó/.test(r.contactoEtapaV2.why.join(' '))
       && r.nurtFormV1 === 'sql' && r.nurtFormRespV2.lv === 'mql' && /en "Nurturing" sin haber llegado a OPP: el formulario ya no lo sube a SQL/.test(r.nurtFormRespV2.why.join(' '))
       && r.nurtFormSinV2 === 'cql' && r.largoCitaV1 === 'sqls' && r.largoCitaV2 === 'sql'
       && r.contactoFormV2.lv === 'sql' && /llamada contestada de 45 s/.test(r.contactoFormV2.why.join(' '))
       && r.oppCaidaV2 === 'sql' && r.citaV2 === 'sql' && /respuesta sin verificar/.test(r.sinVerif);
-    r.contactoV2 = r.contactoV2.lv; r.nurtFormRespV2 = r.nurtFormRespV2.lv; r.contactoFormV2 = r.contactoFormV2.lv;
+    r.contactoV2 = r.contactoV2.lv; r.contactoEtapaV2 = r.contactoEtapaV2.lv; r.nurtFormRespV2 = r.nurtFormRespV2.lv; r.contactoFormV2 = r.contactoFormV2.lv;
     return r;
   });
   console.log('\n[lqAutoQualify] respuesta real (v2)', JSON.stringify(lqr));

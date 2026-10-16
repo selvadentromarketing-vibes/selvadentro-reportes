@@ -3476,7 +3476,8 @@ const LQ_TAGS_RESP = /respondi|replied|another-device-replied|contest|interesad/
 // "another-device-replied", y esa etiqueta la pone la integración de WhatsApp cuando NOSOTROS
 // mandamos un mensaje desde el celular de la línea: el reporte contaba nuestros mensajes como
 // respuestas del prospecto. Con LQ_RESP_V2 "respondió" = mensaje entrante del contacto en la
-// conversación o llamada contestada de más de 30 s (acción `respuestas` de lead-quality, guardada
+// conversación, llamada contestada de más de 30 s, cita asistida o una etapa que ya dice que
+// contestó (Contacto establecido o posterior) (acción `respuestas` de lead-quality, guardada
 // en el kv `lq:resp:v1`), y en Nurturing, Largo plazo, Rescate o Sin respuesta el formulario ya
 // no sube a SQL a un lead que nunca llegó a OPP. Apagada hasta que Dirección vea la vista previa
 // "Regla nueva de respuesta" (antes / después por campaña, últimos 30 días).
@@ -3525,9 +3526,13 @@ function lqAutoQualify(l, opt){
   // cualquier oportunidad supera los 100k y todas parecían de alto presupuesto.
   const presupuesto = pres;
   const noAns = (tags.match(/d\d+-no-a?n?swer/g)||[]).length;
-  // v2: solo la evidencia de la conversación (l.rsp: "i" entrante, "c" llamada > 30 s).
-  const respondio = v2 ? (l.rsp === "i" || l.rsp === "c")
-                       : (LQ_TAGS_RESP.test(tags) || ap.sh>0 || LQ_RX.contacto.test(stage) || LQ_RX.fuerte.test(stage));
+  // v2: la evidencia de la conversación (l.rsp: "i" entrante, "c" llamada > 30 s), una cita
+  // asistida o una etapa que ya dice que contestó (Contacto establecido, Interés identificado,
+  // Zoom, Tour, Cotización…: es el registro del asesor, Dirección General 16-oct-2026). Ya no
+  // cuentan las etiquetas: "another-device-replied-whatsapp" es un mensaje NUESTRO.
+  const respEtapa = LQ_RX.contacto.test(stage) || LQ_RX.fuerte.test(stage);
+  const respondio = v2 ? (l.rsp === "i" || l.rsp === "c" || ap.sh>0 || respEtapa)
+                       : (LQ_TAGS_RESP.test(tags) || ap.sh>0 || respEtapa);
 
   // OPP generada (Dirección General, 15-oct-2026): si el lead llegó alguna vez a OPP es SQL
   // Selvadentro igual que una OPP vigente, aunque hoy esté en Largo plazo, Rescate,
@@ -3597,14 +3602,17 @@ function lqAutoQualify(l, opt){
     if(presupuesto==null && hor==null) why.push("sin presupuesto ni horizonte capturados: no alcanza perfil Selvadentro");
     return {lv:"sql", why};
   }
-  const evid = ()=> l.rsp === "c" ? `llamada contestada de ${Math.round(l.rspD||0)} s` : `mensaje entrante del lead${l.rspCh ? " ("+l.rspCh+")" : ""}`;
   const cuando = ()=> l.rspT ? " el "+lqFechaCorta(lqDiaTulum(new Date(l.rspT).toISOString())) : "";
-  if(perfilF && respondio){ why.push(v2 ? `perfil declarado en el formulario y ${evid()}${cuando()}, sin etapa del pipeline que lo confirme` : "perfil declarado en el formulario y respuesta activa, sin etapa del pipeline que lo confirme"); return {lv:"sql", why}; }
+  const evid = ()=> l.rsp === "c" ? `llamada contestada de ${Math.round(l.rspD||0)} s${cuando()}`
+                  : l.rsp === "i" ? `mensaje entrante del lead${l.rspCh ? " ("+l.rspCh+")" : ""}${cuando()}`
+                  : ap.sh>0 ? "asistió a una cita"
+                  : `etapa "${stage}": el asesor registró que contestó`;
+  if(perfilF && respondio){ why.push(v2 ? `perfil declarado en el formulario y respondió (${evid()}), sin etapa del pipeline que lo confirme` : "perfil declarado en el formulario y respuesta activa, sin etapa del pipeline que lo confirme"); return {lv:"sql", why}; }
   if(ap.tot>0){ why.push("tiene cita agendada"); return {lv:"sql", why}; }
 
   // 5) MQL — respondió o mostró interés, aún sin calificar a fondo
   if(respondio){
-    if(v2) why.push(`respondió: ${evid()}${cuando()}`);
+    if(v2) why.push(`respondió: ${evid()}`);
     else if(!why.length || !why.some(w=>/respuesta|etapa|asisti/.test(w))) why.push("respuesta o interés registrado en el CRM");
     return {lv:"mql", why};
   }
@@ -4520,7 +4528,7 @@ function lqSimRespHtml(){
   }
   return `<div class="rep-section mb-sec" id="lq-sim-resp"><h3>Vista previa · regla nueva de respuesta del lead</h3>
     <p class="hint pegada"><b>No cambia ninguna cifra del reporte</b>: compara la calificación de hoy contra la que tendría cada lead con las dos reglas nuevas.
-      (1) "Respondió" = un mensaje entrante del lead en la conversación o una llamada contestada de más de 30 s; la etiqueta another-device-replied-whatsapp es de un mensaje nuestro y deja de contar.
+      (1) "Respondió" = un mensaje entrante del lead en la conversación, una llamada contestada de más de 30 s, una cita asistida o una etapa que ya dice que contestó (Contacto establecido o posterior); la etiqueta another-device-replied-whatsapp es de un mensaje nuestro y deja de contar.
       (2) En Nurturing, Largo plazo, Rescate o Sin respuesta, sin haber llegado a OPP, el formulario ya no lo sube a SQL: queda en MQL si respondió y en CQL si no.</p>
     ${S.corriendo ? "" : `<button class="lt-btn" id="lq-sim-btn">${S.res ? "Volver a calcular" : "Calcular antes / después · últimos 30 días"}</button>`}
     ${cuerpo}</div>`;
