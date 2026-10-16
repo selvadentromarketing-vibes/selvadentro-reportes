@@ -28,9 +28,11 @@
 //   { action:"spend", start, end }   (fechas YYYY-MM-DD)
 //     → { configured:bool, rows:[{d,src,camp,cid,spend,clicks,impr,cur}], monedas }
 //   { action:"respuestas", ids:[...] }   (máx. 10 contactos por llamada)
-//     → { res:[{ct, r:"i"|"c"|"", t, ch, d, err}] }  Respuesta REAL del lead en sus
-//     conversaciones: "i" = mensaje entrante suyo (no el predeterminado de nuestros botones de
-//     WhatsApp ni una respuesta automática), "c" = llamada contestada de más de 30 s.
+//     → { res:[{ct, r:"i"|"c"|"n"|"", t, ch, d, nt, e:{ll,msg,em}, err}] }  Respuesta REAL del
+//     lead: "i" = mensaje entrante suyo (no el predeterminado de nuestros botones de WhatsApp ni
+//     una respuesta automática), "c" = llamada contestada de más de 30 s, "n" = nota del asesor
+//     que dice que sí se habló con él por otro lado (nt = el texto). Sin respuesta, `e` cuenta
+//     nuestros intentos manuales (escalera): llamadas, WhatsApp/SMS y emails.
 //   { action:"ads", start, end }     (fechas YYYY-MM-DD)
 //     → { configured:bool, ads:[...] }  Detalle por anuncio (Meta + Google) vía
 //     Windsor: estado activo/pausado, link de preview, resultados.
@@ -898,8 +900,25 @@ async function diag() {
 // en la primera evidencia: basta una.
 const RESP_MAX = 10;
 const RESP_SEG = 30;
+// Intento manual nuestro (escalera, la misma de Desempeño): saliente de un asesor, o un WhatsApp
+// que salió del celular de la línea ("Sent from another device": lo mandó una persona, aunque
+// GHL no sepa cuál).
+const esIntento = (m) => m.direction === "outbound" && (SLA.isManual(m) || /sent from another device/i.test(String(m.body || "")));
+// Nota del asesor que dice que SÍ se habló con el lead por otro lado (teléfono personal, en
+// persona…). "No contestó", "buzón" no cuentan: la palabra negada no se lee como contacto.
+const normNota = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
+const RX_NOTA_CONTACTO = /(?<!no )(?<!no me )(?<!nunca )\b(hable|hablamos|platique|platicamos|converse|conversamos|me dijo|me comento|comento que|dijo que|me escribio|contesto|respondio|le interesa|esta interesad[oa]|agendamos|agende|quedamos en|nos vimos|en persona)\b/;
+async function notaDeContacto(ct) {
+  try {
+    const d = await ghl(`/contacts/${encodeURIComponent(ct)}/notes`);
+    const notas = (d && Array.isArray(d.notes) ? d.notes : []).filter((n) => n && n.userId && RX_NOTA_CONTACTO.test(normNota(n.body)));
+    if (!notas.length) return null;
+    notas.sort((a, b) => (SLA.ts(b.dateAdded) || 0) - (SLA.ts(a.dateAdded) || 0));
+    return { t: SLA.ts(notas[0].dateAdded) || 0, nt: String(notas[0].body || "").replace(/\s+/g, " ").trim().slice(0, 160) };
+  } catch (e) { return null; }    // sin permiso de notas: se queda sin esa evidencia
+}
 async function respuestaDe(ct) {
-  const r = { ct, r: "", t: 0, ch: "", d: null, err: false };
+  const r = { ct, r: "", t: 0, ch: "", d: null, err: false, e: { ll: 0, msg: 0, em: 0 } };
   try {
     const cs = await ghl(`/conversations/search?locationId=${LOCATION_ID}&contactId=${encodeURIComponent(ct)}&limit=20`);
     const convIds = (cs.conversations || []).map((c) => c.id).filter(Boolean);
@@ -916,6 +935,7 @@ async function respuestaDe(ct) {
           for (const m of list) {
             if (!m || /^TYPE_ACTIVITY/.test(m.messageType || "")) continue;
             const ch = SLA.chanOf(m), t = SLA.ts(m.dateAdded) || 0;
+            if (esIntento(m)) { if (ch === "call") r.e.ll++; else if (ch === "whatsapp" || ch === "sms") r.e.msg++; else if (ch === "email") r.e.em++; }
             if (ch === "call") {
               const d = SLA.callDur(m);
               if (SLA.callDesenlace(SLA.callStatus(m)) === "ok" && d != null && d > RESP_SEG) return Object.assign(r, { r: "c", t, ch, d });
@@ -929,6 +949,8 @@ async function respuestaDe(ct) {
       } catch (e) { fallidas++; }
     }
     if (convIds.length && fallidas === convIds.length) r.err = true;
+    // Sin respuesta en la conversación: ¿el asesor anotó que sí habló con él por otro lado?
+    if (!r.err) { const n = await notaDeContacto(ct); if (n) Object.assign(r, { r: "n", t: n.t, nt: n.nt }); }
   } catch (e) { r.err = true; }
   return r;
 }

@@ -3181,7 +3181,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v28";  // v28: respuesta real del lead (mensaje entrante, llamada > 30 s o etapa de contacto) y el formulario ya no sube a SQL en Nurturing/Largo plazo/Rescate/Sin respuesta  // v27: nivel de la OPP caída según dónde cayó (Largo plazo → SQL, Rescate → SQL Selvadentro, Descalificado por causa)  // v26: OPP generada = SQL Selvadentro (salvo causa inválida) y cuenta como contactado y trabajado (no como Zoom)  // v25: OPP generadas (etiqueta opp-generada del CRM) y verificado por ventas (Lead to Watch)  // v24: broker = cualquier etiqueta que empiece con "broker" (no solo broker-client)  // v23: re-envíos de formulario (agg.reenvios)  // v22: datos de la decisión de hoy (rango fijo 30 días y 7 contra 7) en `dec`  // v21: el v20 guardado el 9-oct pudo quedar sin detalle por anuncio (la consulta con campos extra se volvía lenta)  // v20: URL de destino por anuncio, gasto por keyword de Google y presupuesto diario (recomendaciones concretas)  // v19: trabajado (tr) y contactado (ct) por etapa, separados  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
+const LQ_AGG_KEY = "lq:agg:v29";  // v29: sin respuesta → CQL solo con escalera completa (si no, MQL); nota del asesor como respuesta  // v28: respuesta real del lead (mensaje entrante, llamada > 30 s o etapa de contacto) y el formulario ya no sube a SQL en Nurturing/Largo plazo/Rescate/Sin respuesta  // v27: nivel de la OPP caída según dónde cayó (Largo plazo → SQL, Rescate → SQL Selvadentro, Descalificado por causa)  // v26: OPP generada = SQL Selvadentro (salvo causa inválida) y cuenta como contactado y trabajado (no como Zoom)  // v25: OPP generadas (etiqueta opp-generada del CRM) y verificado por ventas (Lead to Watch)  // v24: broker = cualquier etiqueta que empiece con "broker" (no solo broker-client)  // v23: re-envíos de formulario (agg.reenvios)  // v22: datos de la decisión de hoy (rango fijo 30 días y 7 contra 7) en `dec`  // v21: el v20 guardado el 9-oct pudo quedar sin detalle por anuncio (la consulta con campos extra se volvía lenta)  // v20: URL de destino por anuncio, gasto por keyword de Google y presupuesto diario (recomendaciones concretas)  // v19: trabajado (tr) y contactado (ct) por etapa, separados  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 // (LQ_TZ y LQ_TZ_MS ahora viven junto al resto de helpers de fecha, arriba)
@@ -3477,11 +3477,12 @@ const LQ_TAGS_RESP = /respondi|replied|another-device-replied|contest|interesad/
 // mandamos un mensaje desde el celular de la línea: el reporte contaba nuestros mensajes como
 // respuestas del prospecto. Con LQ_RESP_V2 "respondió" = mensaje entrante del contacto en la
 // conversación, llamada contestada de más de 30 s, cita asistida o una etapa que ya dice que
-// contestó (Contacto establecido o posterior) (acción `respuestas` de lead-quality, guardada
-// en el kv `lq:resp:v1`), y en Nurturing, Largo plazo, Rescate o Sin respuesta el formulario ya
+// contestó (Contacto establecido o posterior) o una nota del asesor que dice que habló con él por
+// otro lado (acción `respuestas` de lead-quality, guardada en el kv `lq:resp:v2`). Sin respuesta,
+// el lead es CQL solo si ventas completó la escalera; si no, MQL (16-oct-2026). En Nurturing, Largo plazo, Rescate o Sin respuesta el formulario ya
 // no sube a SQL a un lead que nunca llegó a OPP. Activa desde el 16-oct-2026 (Dirección General).
 const LQ_RESP_V2 = true;
-const LQ_RESP_KEY = "lq:resp:v1";
+const LQ_RESP_KEY = "lq:resp:v2";   // v2: escalera (intentos manuales) y nota del asesor
 const LQ_RX_CUBETA_FORM = /nurtur|largo\s*plazo|rescate|sin\s*respuesta/i;
 // Tags de lead inválido (no de un prospecto que se enfrió): son lo único que saca de SQL+ a una
 // OPP generada, junto con una causa de descalificación del grupo inválido (l.inv).
@@ -3530,7 +3531,7 @@ function lqAutoQualify(l, opt){
   // Zoom, Tour, Cotización…: es el registro del asesor, Dirección General 16-oct-2026). Ya no
   // cuentan las etiquetas: "another-device-replied-whatsapp" es un mensaje NUESTRO.
   const respEtapa = LQ_RX.contacto.test(stage) || LQ_RX.fuerte.test(stage);
-  const respondio = v2 ? (l.rsp === "i" || l.rsp === "c" || ap.sh>0 || respEtapa)
+  const respondio = v2 ? (l.rsp === "i" || l.rsp === "c" || l.rsp === "n" || ap.sh>0 || respEtapa)
                        : (LQ_TAGS_RESP.test(tags) || ap.sh>0 || respEtapa);
 
   // OPP generada (Dirección General, 15-oct-2026): si el lead llegó alguna vez a OPP es SQL
@@ -3604,6 +3605,7 @@ function lqAutoQualify(l, opt){
   const cuando = ()=> l.rspT ? " el "+lqFechaCorta(lqDiaTulum(new Date(l.rspT).toISOString())) : "";
   const evid = ()=> l.rsp === "c" ? `llamada contestada de ${Math.round(l.rspD||0)} s${cuando()}`
                   : l.rsp === "i" ? `mensaje entrante del lead${l.rspCh ? " ("+l.rspCh+")" : ""}${cuando()}`
+                  : l.rsp === "n" ? `nota del asesor${cuando()}: "${l.rspNt||""}"`
                   : ap.sh>0 ? "asistió a una cita"
                   : `etapa "${stage}": el asesor registró que contestó`;
   if(perfilF && respondio){ why.push(v2 ? `perfil declarado en el formulario y respondió (${evid()}), sin etapa del pipeline que lo confirme` : "perfil declarado en el formulario y respuesta activa, sin etapa del pipeline que lo confirme"); return {lv:"sql", why}; }
@@ -3623,6 +3625,20 @@ function lqAutoQualify(l, opt){
   if(!noAns && (LQ_RX.nuevo.test(stage) || (!stage && !l.o))){
     why.push(stage ? `etapa: "${stage}"` : "capturado; sin toque registrado todavía");
     return {lv:"nuevo", why};
+  }
+  // CQL vs MQL sin respuesta (Dirección General, 16-oct-2026): un lead que no contestó es CQL
+  // solo si ventas completó la escalera (la de Desempeño: 5 llamadas manuales + WhatsApp o SMS +
+  // email; con "sin llamada", 1 mensaje + 1 email). Si no la completó, no sabemos si el lead es
+  // malo: se queda en MQL (sinEsc) y la falta de atención se le marca al asesor en Desempeño.
+  if(v2){
+    const sinLl = /sin llamada - (numero invalido|solo mensaje)/.test(tags);
+    const e = l.rspE;
+    const completa = typeof l.escOk === "boolean" ? l.escOk : !!(e && (e.ll >= 5 || sinLl) && e.msg >= 1 && e.em >= 1);
+    if(!completa){
+      why.push(e ? `escalera incompleta (${e.ll} llamada${e.ll===1?"":"s"}, ${e.msg} WhatsApp/SMS, ${e.em} email${e.em===1?"":"s"}): ventas aún no termina de intentarlo` : "escalera sin verificar: ventas aún no termina de intentarlo");
+      return {lv:"mql", why, sinEsc:true};
+    }
+    why.push("escalera completa sin respuesta");
   }
   // 7) CQL — capturado, con alcance enviado o sin respuesta sustancial
   if(noAns) why.push(`${noAns} intento${noAns>1?"s":""} sin respuesta`);
@@ -4359,6 +4375,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
   const zIdx = lqEtapaIdx(boot.stages, LQ_RX_ZOOM_OK), cIdx = lqEtapaIdx(boot.stages, /contacto\s*establecid/i);
   leads.forEach(l=>{
     const a = lqAutoQualify(l); l.alv = a.lv; l.awhy = a.why.join(" · ").slice(0,180);
+    if(a.sinEsc) l.mse = 1;                 // MQL solo porque ventas no completó la escalera
     if(lqZoomRealizado(l, zIdx)) l.zm = 1;
     const ct = lqContactado(l, cIdx);
     if(ct) l.ct = 1;
@@ -4436,7 +4453,8 @@ function lqNotaExcluidos(agg, rangoSet){
 // `lq:resp:v1` ({r, t, ch, d, k}). Sin entrada (no se pudo leer) el lead queda sin rsp.
 function lqRspCampos(x){
   if(!x) return {};
-  return x.r ? { rsp:x.r, rspT:x.t||0, rspCh:x.ch||"", ...(x.d != null ? { rspD:x.d } : {}) } : { rsp:"" };
+  if(x.r) return { rsp:x.r, rspT:x.t||0, rspCh:x.ch||"", ...(x.d != null ? { rspD:x.d } : {}), ...(x.nt ? { rspNt:String(x.nt).slice(0,160) } : {}) };
+  return { rsp:"", ...(x.e ? { rspE:x.e } : {}) };                 // sin respuesta: intentos de la escalera
 }
 // Lee la respuesta de cada lead: primero el caché del kv; se consulta al CRM (acción
 // `respuestas`, 10 por llamada, 3 en paralelo) lo que no está o lo que hace más de 6 h no
@@ -4452,7 +4470,8 @@ async function lqRespuestas(ids, onProg){
   for(let i = 0; i < lotes.length; i += 3){
     const grupo = lotes.slice(i, i+3);
     const rs = await Promise.all(grupo.map(ids=>lqFn({ action:"respuestas", ids }).catch(()=>({ res: ids.map(ct=>({ ct, err:true })) }))));
-    rs.forEach(r=>(r.res||[]).forEach(x=>{ if(x.err){ errores++; return; } nuevos[x.ct] = { r:x.r||"", t:x.t||0, ch:x.ch||"", d:x.d ?? null, k:ahora }; }));
+    rs.forEach(r=>(r.res||[]).forEach(x=>{ if(x.err){ errores++; return; }
+      nuevos[x.ct] = { r:x.r||"", t:x.t||0, ch:x.ch||"", d:x.d ?? null, ...(x.nt ? { nt:x.nt } : {}), ...(!x.r && x.e ? { e:x.e } : {}), k:ahora }; }));
     hechos += grupo.reduce((a,g)=>a+g.length, 0);
     onProg && onProg(hechos, pend.length);
   }
@@ -4832,6 +4851,7 @@ function lqMetricas(arr, inv, res){
     og: ogL.length, ogL, vv: arr.filter(l=>l.vv).length,
     sqlpOg: ogL.filter(l=>l.lv==="sql" || l.lv==="sqls").length,
     tr: arr.filter(l=>l.tr).length, ct: arr.filter(l=>l.ct).length, inf: arr.filter(l=>l.inf).length,
+    mqlSE: arr.filter(l=>l.lv==="mql" && l.mse && l.alv==="mql").length,   // MQL por escalera incompleta
     re, nNuevos,                                         // re-envíos de formulario y leads nuevos
     cpl: inv>0 && n ? inv/n : null, cplNuevos: inv>0 && nNuevos ? inv/nNuevos : null, cps: inv>0 && sqlp ? inv/sqlp : null };
 }
@@ -5738,7 +5758,7 @@ function lqCeldas(m, keys, o){
       case "tr":   return `<td class="pct" title="${escAttr(LQ_CCOLS.tr.t)}">${m.n ? lqPct(m.tr, m.n) : "—"}</td>`;
       case "ct":   return `<td class="pct" title="${escAttr(LQ_CCOLS.ct.t)}">${m.n ? lqPct(m.ct, m.n) : "—"}</td>`;
       case "cql":  return `<td class="lq-sec">${cnt(m.cql)}</td>`;
-      case "mql":  return `<td class="lq-sec">${cnt(m.mql)}</td>`;
+      case "mql":  return `<td class="lq-sec"${m.mqlSE ? ` title="${escAttr(`${m.mqlSE} de estos MQL no contestaron, pero ventas no completó la escalera (5 llamadas + WhatsApp o SMS + email): no se pueden dar por leads que no responden.`)}"` : ""}>${cnt(m.mql)}${m.mqlSE ? `<div class="lq-sub">${m.mqlSE} sin escalera</div>` : ""}</td>`;
       case "sqlp": return `<td class="lq-sqlp"${lqSqlpTip(m.sqlpL)}>${m.sqlp.toLocaleString()}</td>`;
       case "zoom": return `<td>${cnt(m.zoom)}</td>`;
       // Las tres columnas de OPP y la verificación de ventas muestran el 0 como 0 (no "·"):
@@ -6943,7 +6963,7 @@ async function showLQ(){
 // Reporte de disciplina comercial directo del CRM: SLA de primera respuesta por
 // asesor y canal, leads >7 días sin toque, trabajados vs contactados efectivos,
 // citas y show rate, y OPPs/WONs por asesor. Con nombres, acumulable por semanas.
-const SLA_AGG_KEY = "sla:agg:v18";   // v18: llamadas exitosas del asesor (≥90 s) en telefonía   // v17: broker = cualquier etiqueta que empiece con "broker" (R-03)   // v16: el reloj arranca siempre en el alta del lead (sin traspaso a ventas)   // v15: si el asesor tocó al lead antes del traspaso a ventas, su reloj arranca en el alta   // v14: citas agendadas en el periodo por fecha de agendado; base de agendamiento con quien agendó sin escribir   // v13: citas del periodo por fecha de la cita y su asistencia (show rate)   // v12: telefonía por lead (canal del 1er toque, intentos, desenlace, duración conocida)   // v11: spec v1.1 (filtros de medición: inválidos, brokers, revertidas, horario, sin llamada, contacto efectivo)   // v10: calificación por reglas (la etapa manda), no el campo manual vacío   // v9: razón de descarte por lead   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
+const SLA_AGG_KEY = "sla:agg:v19";   // v19: calificación con respuesta real y escalera (MQL sin escalera completa por asesor)   // v18: llamadas exitosas del asesor (≥90 s) en telefonía   // v17: broker = cualquier etiqueta que empiece con "broker" (R-03)   // v16: el reloj arranca siempre en el alta del lead (sin traspaso a ventas)   // v15: si el asesor tocó al lead antes del traspaso a ventas, su reloj arranca en el alta   // v14: citas agendadas en el periodo por fecha de agendado; base de agendamiento con quien agendó sin escribir   // v13: citas del periodo por fecha de la cita y su asistencia (show rate)   // v12: telefonía por lead (canal del 1er toque, intentos, desenlace, duración conocida)   // v11: spec v1.1 (filtros de medición: inválidos, brokers, revertidas, horario, sin llamada, contacto efectivo)   // v10: calificación por reglas (la etapa manda), no el campo manual vacío   // v9: razón de descarte por lead   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
 const SLA_STALE_MS = 7*86400e3; // "sin toque" = 7 días sin mensaje
 const slaState = { built:false, agg:null, syncing:false, asesor:"", camp:"", abierto:{} };   // asesor/camp "" = sin filtro · abierto = plegables abiertos
 
@@ -7535,6 +7555,30 @@ function slaSeccionesV11(agg, leads, vacias){
       ${lista ? `<div class="table-scroll mb-sec"><table class="rep"><thead><tr><th class="lft">Lead</th><th class="lft">Asesor</th><th class="lft">Causa</th><th class="lft">Evidencia</th><th class="lft">Fuente</th><th class="lft">Campaña</th><th class="lft">Descalificado</th></tr></thead><tbody>${lista}</tbody></table></div>${V.invalidos.length>30?`<p class="hint">…y ${V.invalidos.length-30} más.</p>`:""}` : ""}
       <p class="hint" style="margin-top:-10px">Causa del grupo inválido con evidencia capturada (R-01): salen de TODAS las métricas del asesor desde el alta del lead — velocidad, cadencia, cierre de ciclo, tareas, actividad efectiva, contacto efectivo y todo conteo. Nunca suman ni restan. Marketing los ve por fuente y campaña en <b>Calidad de Leads</b>.</p>`;
   }
+  // Escalera incompleta (Dirección General, 16-oct-2026): leads que no contestaron y siguen en
+  // MQL solo porque el asesor no completó la escalera. No se le cobran a la campaña como lead
+  // que no responde; aquí se le marcan al asesor para que los trabaje.
+  {
+    const L = (leads||[]).filter(l=>l.mse && l.lv==="mql");
+    const porA = {}; L.forEach(l=>{ const u = quien(l.u); (porA[u] = porA[u] || { n:0 }).n++; });
+    const falta = (l)=>{
+      const ch = l.chans||[], f = [], sinLl = /sin llamada - (numero invalido|solo mensaje)/.test(String(l.tags||"").toLowerCase());
+      const ll = l.calls||0;
+      if(!sinLl && ll < 5) f.push(`${5-ll} llamada${5-ll===1?"":"s"}`);
+      if(!ch.includes("whatsapp") && !ch.includes("sms")) f.push("WhatsApp o SMS");
+      if(!ch.includes("email")) f.push("email");
+      return f.join(" · ") || "—";
+    };
+    const alta = (l)=> l.created || Date.parse(l.c) || 0;
+    const lista = L.slice().sort((a,b)=>alta(a)-alta(b)).slice(0,40).map(l=>`<tr><td class="lft celda-fuerte">${escAttr(l.n)}</td><td class="lft">${escAttr(name(l.u))}</td><td class="lft">${fecha(alta(l))}</td><td>${l.calls||0}</td><td class="lft">${escAttr(falta(l))}</td></tr>`).join("");
+    if(vacias && !L.length) vacias.push("MQL sin escalera completa"); else html += `<h3 class="h-sec">MQL sin escalera completa · ${L.length}</h3>
+      ${L.length ? `<div class="crm-tables mb-sec">
+        <div class="table-scroll" style="border:none;box-shadow:none"><table class="cons"><tr><th class="lft">Asesor</th><th>Leads</th></tr>
+          ${orden(porA).map(u=>`<tr><td class="name">${nomQ(u)}</td><td><b>${porA[u].n}</b></td></tr>`).join("")}</table></div>
+        <div class="table-scroll" style="border:none;box-shadow:none"><table class="rep"><thead><tr><th class="lft">Lead</th><th class="lft">Asesor</th><th class="lft">Alta</th><th>Llamadas</th><th class="lft">Le falta</th></tr></thead><tbody>${lista}</tbody></table></div>
+      </div>${L.length>40?`<p class="hint">…y ${L.length-40} más.</p>`:""}` : `<p class="hint">Todos los leads sin respuesta tienen la escalera completa.</p>`}
+      <p class="hint" style="margin-top:-10px">Leads que no han contestado y a los que el asesor no les completó la escalera (5 llamadas + WhatsApp o SMS + email; con "sin llamada", 1 mensaje + 1 email). Mientras no la complete, en Calidad de Leads cuentan como <b>MQL</b>, no como lead que no responde, para no castigar a la campaña por falta de seguimiento.</p>`;
+  }
   // R-03 · Error de asignación
   {
     const porA = {}; V.brokers.forEach(l=>{ const u = quien(l.u); (porA[u] = porA[u] || { n:0 }).n++; });
@@ -7983,7 +8027,10 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
   leads.forEach(l=>{
     const sw = (sweepMap||{})[l.id];
     const rsp = !sw ? undefined : (l.fi || l.li) ? "i" : (l.cl && l.cl.c90 > 0) ? "c" : "";
-    l.lv = lqAutoQualify({ ...l, rsp }).lv;
+    // escalera: la de Desempeño (l.breakup = escalera completa sin respuesta)
+    const a = lqAutoQualify({ ...l, rsp, ...(sw ? { escOk: !!l.breakup } : {}) });
+    l.lv = a.lv;
+    if(a.sinEsc) l.mse = 1;
   });
   const califCrm = leads.filter(l=>l.lvCrm!=="nc").length;
   // Horario REAL observado: se suman las horas de cada acción manual de los asesores.

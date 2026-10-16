@@ -364,7 +364,7 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
     contactado y trabajado, pero **no como Zoom realizado**: el cliente puede llegar a OPP
     directo de un recorrido sin Zoom, así que puede haber más OPP generadas que Zooms.
   - **Respuesta real del lead** (Dirección General, 16-oct-2026; `LQ_RESP_V2 = true`,
-    `lq:agg:v28`). La etiqueta `another-device-replied-whatsapp` la pone la integración de
+    `lq:agg:v29`, `sla:agg:v19`, caché `lq:resp:v2`). La etiqueta `another-device-replied-whatsapp` la pone la integración de
     WhatsApp cuando **nosotros** mandamos un mensaje desde el celular de la línea (confirmado con
     un lead: se agregó el mismo minuto que salió nuestro audio "Sent from another device"), y
     `LQ_TAGS_RESP` la contaba como respuesta del prospecto. Ahora:
@@ -375,16 +375,27 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
        identificado, Zoom, Tour, Cotización…: el registro del asesor). Las etiquetas ya no
        cuentan. La evidencia de la conversación la lee la acción `respuestas` de
        `lead-quality` en cada sincronización (10 contactos por llamada, del mensaje más nuevo al
-       más viejo, para en la primera evidencia) y se guarda en el kv `lq:resp:v1`: una
+       más viejo, para en la primera evidencia) y se guarda en el kv `lq:resp:v2`: una
        respuesta encontrada no se vuelve a pedir; sin respuesta se revisa de nuevo a las 6 h.
-       Sin respuesta no hay MQL: "oportunidad creada y movida del arranque" ya no basta (2do
-       toque, 3er toque, Ultimátum o Break up sin respuesta quedan en CQL).
+       También cuenta una **nota del asesor** que dice que sí habló con el lead por otro lado
+       ("hablé con él", "platicamos", "me dijo que…"; "no contestó" o "buzón" no cuentan, ni las
+       notas de un workflow sin usuario): se lee de `/contacts/{id}/notes` cuando la
+       conversación no trae respuesta.
+    3. **CQL solo con escalera completa** (16-oct-2026): un lead que no contestó es CQL solo si
+       ventas completó la escalera de Desempeño (5 llamadas manuales + WhatsApp o SMS + email;
+       con "sin llamada", 1 mensaje + 1 email). La acción `respuestas` cuenta esos intentos en
+       la conversación (los WhatsApp "Sent from another device" del celular de la línea cuentan;
+       los automáticos no). Si la escalera no está completa, el lead se queda en **MQL** (no
+       sabemos si es malo) con la marca `mse`: la celda de MQL dice "N sin escalera" y Desempeño
+       lista por asesor los **MQL sin escalera completa** con lo que le falta a cada uno.
+       "Oportunidad creada y movida del arranque" ya no hace MQL por sí sola. Nuevo (nadie lo ha
+       tocado) sigue igual.
     2. **Regla hacia abajo**: en Nurturing, Largo plazo, Rescate o Sin respuesta, un lead que
        nunca llegó a OPP no sube a SQL por el formulario; queda en MQL si respondió y en CQL si
        no. Una cita asistida o agendada lo sigue haciendo SQL (no es el formulario).
     - **Desempeño** (índice de calidad 1–5) usa la misma regla con la evidencia de su propio
       barrido: primer entrante real o contacto efectivo (`fi`), último entrante (`li`) o una
-      llamada de 90 s o más (`c90`). Se ve en la siguiente sincronización de Desempeño.
+      llamada de 90 s o más (`c90`), y su escalera (`breakup`).
   - **Verificado por ventas** = el campo del contacto **"Lead to Watch"** en Sí: la
     verificación de ventas de que el lead está calificado. Es informativo, no cambia la
     calificación. Si el campo no existe en GHL, el reporte lo avisa.
@@ -484,7 +495,7 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
   (Meta + Google) y se muestra inversión, CPL y **costo por SQL** por campaña (cruce por
   ID de campaña y, de respaldo, por nombre) y por plataforma (siempre calculable). Todo
   en **MXN** ("12,345 MXN", nunca "$").
-- **Cache compartido**: agregado en el kv (`lq:agg:v28`), staleness de 30 min, igual
+- **Cache compartido**: agregado en el kv (`lq:agg:v29`), staleness de 30 min, igual
   que CRM en vivo.
 - **Permisos**: canal `mkt_lq` (o `marketing`, o admin). El módulo manual de
   Calidad de Leads dentro de Marketing **se retiró el 2026-08-26** junto con PPC Ads

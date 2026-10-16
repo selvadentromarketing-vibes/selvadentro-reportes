@@ -193,12 +193,16 @@ const PORT = process.env.PORT || 8765;
       tagV1: q({ tags: 'squeeze, another-device-replied-whatsapp' }, false).lv,            // mql: la etiqueta contaba
       tagV2: q({ tags: 'squeeze, another-device-replied-whatsapp', rsp: '' }, true).lv,   // nuevo: no es del lead
       toqueV1: q({ pstage: '2do toque', pr: 1 }, false).lv,                                 // mql: oportunidad movida
-      toqueV2: q({ pstage: '2do toque', pr: 1, rsp: '' }, true).lv,                         // cql: sin respuesta
+      toqueV2: q({ pstage: '2do toque', pr: 1, rsp: '', rspE: { ll: 5, msg: 1, em: 1 } }, true).lv, // cql: escalera completa sin respuesta
+      toqueSinEsc: q({ pstage: '2do toque', pr: 1, rsp: '', rspE: { ll: 2, msg: 1, em: 0 } }, true),  // mql: ventas no completó la escalera
+      sinLlamada: q({ pstage: 'Break up', pr: 1, tags: 'sin llamada - numero invalido', rsp: '', rspE: { ll: 0, msg: 1, em: 1 } }, true).lv, // cql
+      notaV2: q({ pstage: 'Sin respuesta', pr: 1, rsp: 'n', rspNt: 'Hablé con él por su celular' }, true),               // mql: nota del asesor
+      escDesempeno: q({ pstage: 'Ultimátum', pr: 1, rsp: '', escOk: true }, true).lv,      // cql: escalera de Desempeño
       contactoV2: q({ pstage: 'Interés identificado', pr: 1, rsp: 'i', rspCh: 'whatsapp' }, true),
       contactoEtapaV2: q({ pstage: 'Contacto establecido', pr: 1, rsp: '' }, true),       // mql: la etapa dice que contestó
       nurtFormV1: q({ pstage: 'Nurturing', pr: 1, tags: 'another-device-replied-whatsapp', ...form }, false).lv, // sql
       nurtFormRespV2: q({ pstage: 'Nurturing', pr: 1, rsp: 'i', ...form }, true),            // mql: el formulario ya no sube
-      nurtFormSinV2: q({ pstage: 'Nurturing', pr: 1, rsp: '', ...form }, true).lv,           // cql
+      nurtFormSinV2: q({ pstage: 'Nurturing', pr: 1, rsp: '', rspE: { ll: 6, msg: 2, em: 1 }, ...form }, true).lv, // cql: escalera completa
       largoCitaV1: q({ pstage: 'Largo plazo', pr: 1, ap: { tot: 1, sh: 1, ns: 0 }, ...form }, false).lv, // sqls
       largoCitaV2: q({ pstage: 'Largo plazo', pr: 1, ap: { tot: 1, sh: 1, ns: 0 }, ...form }, true).lv,  // sql: cita, no formulario
       contactoFormV2: q({ pstage: 'Contacto establecido', pr: 1, rsp: 'c', rspD: 45, ...form }, true),    // sql: fuera de cubeta
@@ -207,11 +211,14 @@ const PORT = process.env.PORT || 8765;
       sinVerif: q({ pstage: '2do toque', pr: 1 }, true).why.join(' · '),
     };
     r.ok = r.flag === true && r.tagV1 === 'mql' && r.tagV2 === 'nuevo' && r.toqueV1 === 'mql' && r.toqueV2 === 'cql'
+      && r.toqueSinEsc.lv === 'mql' && r.toqueSinEsc.sinEsc === true && /escalera incompleta \(2 llamadas, 1 WhatsApp\/SMS, 0 emails\)/.test(r.toqueSinEsc.why.join(' '))
+      && r.sinLlamada === 'cql' && r.notaV2.lv === 'mql' && /nota del asesor: "Hablé con él por su celular"/.test(r.notaV2.why.join(' ')) && r.escDesempeno === 'cql'
       && r.contactoEtapaV2.lv === 'mql' && /respondió: etapa "Contacto establecido": el asesor registró que contestó/.test(r.contactoEtapaV2.why.join(' '))
       && r.nurtFormV1 === 'sql' && r.nurtFormRespV2.lv === 'mql' && /en "Nurturing" sin haber llegado a OPP: el formulario ya no lo sube a SQL/.test(r.nurtFormRespV2.why.join(' '))
       && r.nurtFormSinV2 === 'cql' && r.largoCitaV1 === 'sqls' && r.largoCitaV2 === 'sql'
       && r.contactoFormV2.lv === 'sql' && /llamada contestada de 45 s/.test(r.contactoFormV2.why.join(' '))
       && r.oppCaidaV2 === 'sql' && r.citaV2 === 'sql' && /respuesta sin verificar/.test(r.sinVerif);
+    r.toqueSinEsc = r.toqueSinEsc.lv + (r.toqueSinEsc.sinEsc ? '·sinEsc' : ''); r.notaV2 = r.notaV2.lv;
     r.contactoV2 = r.contactoV2.lv; r.contactoEtapaV2 = r.contactoEtapaV2.lv; r.nurtFormRespV2 = r.nurtFormRespV2.lv; r.contactoFormV2 = r.contactoFormV2.lv;
     return r;
   });
@@ -908,6 +915,7 @@ const PORT = process.env.PORT || 8765;
     const card = (k) => { const c = [...document.querySelectorAll('#lq-content .crm-kpi')].find(e => e.querySelector('.k-lbl').textContent.trim() === k); return c ? c.querySelector('.k-val').textContent.trim() : ''; };
     r.tarjetas = ['Verificados por ventas · Lead to Watch', 'OPP vigentes · hoy en OPP', 'OPP generadas · llegaron alguna vez', 'SQL+ → OPP generadas'].map(card).join(' | ');
     r.mes = [...document.querySelectorAll('#lq-content table.cons tr')].map(tr => (tr.querySelector('td.name') || {}).textContent || '').filter(x => /^OPP /.test(x)).join('|');
+    r.mqlSinEsc = (document.querySelector('table.lq-tree').textContent.match(/(\d+) sin escalera/) || [])[1] || '';
     r.siglas = /OPP generadas leads del cohorte que llegaron ALGUNA VEZ/.test(t) && /Verificado por ventas el lead tiene Lead to Watch = Sí/.test(t);
     r.nombres = r.caidas.includes(zr.n) && r.caidas.includes(ce.n) ? 'ok' : nombres;
     lqState.sub = 'combinado'; lqRender();
@@ -922,7 +930,7 @@ const PORT = process.env.PORT || 8765;
   opg.ok = opg.flags === 'og-o ogvv- og--' && opg.campo === 'Lead to Watch' && opg.geVig && opg.zoom090 === '1' && opg.formato && opg.filas > 5
     && opg.fila090 === '3 ¦ 1 ¦ 1 ¦ 32 caídas ¦ 3 de 3 · 100.0%' && opg.niveles === 'sql sqls' && /^1 : /.test(opg.sinCausa)
     && opg.columnas === 'SQL+|Verificado por ventas|Zoom realizado|OPP vigentes|OPP generadas|SQL+ → OPP generadas'
-    && opg.aviso && opg.nombres === 'ok' && opg.avisoCombo && opg.sinCampo && opg.siglas && opg.mes === 'OPP vigentes|OPP generadas';
+    && opg.aviso && opg.nombres === 'ok' && +opg.mqlSinEsc > 0 && opg.avisoCombo && opg.sinCampo && opg.siglas && opg.mes === 'OPP vigentes|OPP generadas';
   console.log('\n[calidad de leads] OPP generadas', JSON.stringify(opg));
   if (!opg.ok) hallazgos.push({ vista: 'lq:oppGeneradas', opg });
   await escanear('lq:oppGeneradas');
@@ -1251,6 +1259,19 @@ const PORT = process.env.PORT || 8765;
     r.detalleOculto = !/Telefonía por asesora/.test(txt) && !!C.querySelector('details[data-sla-pleg="detalle"] h3');
     // Secciones sin nada que corregir: una sola línea, sin su bloque vacío
     r.vacias = (txt.match(/✓ Sin pendientes en: ([^\n]*)/) || ['', ''])[1];
+    // MQL sin escalera completa (16-oct-2026): un lead en 2do toque sin respuesta, con 2 llamadas y un WhatsApp
+    {
+      const c2 = [{ id: 'esc1', n: 'Lead esc1', c: iso(Z('2026-10-06T10:00:00')), src: 'facebook', u: 'u1', tags: [], attr: {}, cf: {} }];
+      const sw2 = { esc1: { foM: Z('2026-10-06T10:03:00'), foMch: 'call', fi: null, fe: null, days: [], calls: 2, chans: ['call', 'whatsapp'], deliv: { sent: 0, delivered: 0, read: 0, failed: 0 },
+        ap: { tot: 0, sh: 0, ns: 0, fut: 0 }, tk: { prog: 0, enFecha: 0, venc: 0 }, cl: { n: 2, ok: 0, na: 2, linea: 0, otro: 0, dn: 0, c90: 0, t: [] } } };
+      const p2 = [{ id: 'p1', name: 'Seguimiento de ventas', stages: [{ id: 's2', name: '2do toque' }] }];
+      const ag2 = buildSlaAgg(['2026-W41'], c2, sw2, [{ id: 'o-esc1', ct: 'esc1', u: 'u1', st: 'open', c: iso(Z('2026-10-06T10:00:00')), p: 'p1', s: 's2', sc: '', cf: {} }], users, [], p2,
+        { oppFields: [], oppFieldsOk: true, ncState: {}, tagged: [], taggedOk: true, now });
+      const l2 = ag2.leads.find(x => x.id === 'esc1');
+      const div = document.createElement('div'); div.innerHTML = slaSeccionesV11(ag2, ag2.leads, []);
+      r.escDesempeno = (l2 ? l2.lv + (l2.mse ? '·mse' : '') : '') + ' | ' + ((div.textContent.match(/MQL sin escalera completa · \d+/) || [''])[0])
+        + ' | ' + ([...div.querySelectorAll('table.rep tr')].map(tr => [...tr.querySelectorAll('td')].map(td => td.textContent.trim()).join(' ¦ ')).filter(Boolean)[0] || '');
+    }
     r.sinBloquesVacios = !/Leads inválidos \(fuera de la nota\) · 0/.test(txt) && !/Error de asignación · 0/.test(txt) && /Más de 7 días sin toque · 4/.test(txt);
     // Telefonía (dentro del Detalle): exitosas ≥90 s justo después de conectadas
     const tt = [...C.querySelectorAll('table')].find(t => /Exitosas ≥90 s/.test(t.querySelector('tr').textContent));
@@ -1263,7 +1284,8 @@ const PORT = process.env.PORT || 8765;
     slaRender(); r.recuerda = !!pleg('detalle') && pleg('detalle').open;
     ADVISOR_LIST = advPrev; slaState.asesor = selPrev; slaState.agg = aggPrev; slaState.abierto = abPrev;
     r.ok = r.reglasCerrado && r.detalleCerrado && r.orden && r.fallas === 'Leads que bajaron la Velocidad · 3 de 4' && r.resumen && r.sinToque && r.tarde
-      && r.tasaLeads === '0% 0 de 4' && r.detalleOculto && r.sinBloquesVacios && /Leads inválidos \(fuera de la nota\) · Error de asignación · Descalificaciones revertidas/.test(r.vacias) && /Integridad del pipeline/.test(r.vacias)
+      && /^mql·mse \| MQL sin escalera completa · 1 \| Lead esc1 ¦ Daniela Arana ¦ .* ¦ 2 ¦ 3 llamadas · email$/.test(r.escDesempeno)
+      && r.tasaLeads === '0% 0 de 4' && r.detalleOculto && r.sinBloquesVacios && /Leads inválidos \(fuera de la nota\) · MQL sin escalera completa · Error de asignación · Descalificaciones revertidas/.test(r.vacias) && /Integridad del pipeline/.test(r.vacias)
       && r.colExitosas && r.exitosas === '1 (50%)' && r.recuerda;
     return r;
   });
