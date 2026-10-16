@@ -279,6 +279,56 @@ S.ghlFetch = (path, opt) => ghlSim(path, opt);
   ok(/9 leads en CRM \(incluye 2 re-envíos: contactos que ya existían y volvieron a llenar un formulario; CPL solo de nuevos 1,623 MXN\)/.test(prompt),
      "los re-envíos llegan al prompt con el CPL de leads nuevos");
 
+  // Respuesta real del lead (Dirección General, 16-oct-2026): la etiqueta another-device-replied
+  // la pone NUESTRO mensaje desde el celular; respondió = entrante suyo o llamada contestada > 30 s.
+  console.log("\n[lead-quality] respuestas: evidencia en la conversación");
+  const M = (o) => Object.assign({ id: "m" + Math.random(), dateAdded: "2026-10-02T19:18:00Z" }, o);
+  const CONV = {
+    // Geovanni: solo nuestro audio desde otro dispositivo, el texto predeterminado del botón y una autorrespuesta
+    geovanniR00000000001: [M({ direction: "outbound", messageType: "TYPE_WHATSAPP", body: "Sent from another device (+5219843175710)" }),
+      M({ direction: "inbound", messageType: "TYPE_WHATSAPP", body: "Hola, me interesa conocer más sobre Selvadentro Tulum" }),
+      M({ direction: "inbound", messageType: "TYPE_EMAIL", body: "Respuesta automática: estoy fuera de la oficina" }),
+      M({ direction: "outbound", messageType: "TYPE_CALL", status: "completed", meta: { call: { duration: 120 } } }),
+      M({ messageType: "TYPE_ACTIVITY_OPPORTUNITY", direction: "inbound" })],
+    respondioWA000000001: [M({ direction: "outbound", messageType: "TYPE_WHATSAPP", body: "Hola" }), M({ direction: "inbound", messageType: "TYPE_WHATSAPP", body: "Sí, mándame precios", dateAdded: "2026-10-03T15:00:00Z" })],
+    llamada45s0000000001: [M({ direction: "outbound", messageType: "TYPE_CALL", status: "completed", meta: { call: { duration: 45 } }, dateAdded: "2026-10-04T15:00:00Z" })],
+    llamada20s0000000001: [M({ direction: "outbound", messageType: "TYPE_CALL", status: "completed", meta: { call: { duration: 20 } } }),
+      M({ direction: "inbound", messageType: "TYPE_CALL", status: "no-answer", meta: { call: { duration: 0 } } })],
+    paginado000000000001: "paginas",
+  };
+  const pedidasR = [];
+  ghlSim = async (path) => {
+    pedidasR.push(path);
+    const mc = path.match(/\/conversations\/search\?.*contactId=([^&]+)/);
+    if (mc) return { conversations: CONV[mc[1]] === undefined ? [] : [{ id: "cv-" + mc[1] }] };
+    const mm = path.match(/\/conversations\/cv-([^/]+)\/messages\?(.*)/);
+    if (mm) {
+      if (mm[1] === "falla0000000000001") throw Object.assign(new Error("caída"), { status: 502 });
+      if (CONV[mm[1]] === "paginas") {
+        // primera página: solo salientes; la segunda (más vieja) trae la respuesta
+        if (!/lastMessageId/.test(mm[2])) return { messages: { messages: [M({ direction: "outbound", messageType: "TYPE_SMS", body: "seguimos" })], nextPage: true, lastMessageId: "p1" } };
+        return { messages: { messages: [M({ direction: "inbound", messageType: "TYPE_SMS", body: "ok gracias", dateAdded: "2026-09-20T15:00:00Z" })], nextPage: false } };
+      }
+      return { messages: { messages: CONV[mm[1]], nextPage: false } };
+    }
+    throw Object.assign(new Error("no simulado " + path), { status: 404 });
+  };
+  CONV.falla0000000000001 = [];
+  const rr = JSON.parse((await LQ.handler(ev({ action: "respuestas", ids: ["geovanniR00000000001", "respondioWA000000001", "llamada45s0000000001", "llamada20s0000000001", "paginado000000000001", "sinConversacion0001", "falla0000000000001", "x"] }))).body);
+  const R = Object.fromEntries((rr.res || []).map((x) => [x.ct, x]));
+  ok(R.geovanniR00000000001 && R.geovanniR00000000001.r === "c" && R.geovanniR00000000001.d === 120,
+    "nuestro mensaje desde otro dispositivo, el texto del botón y la autorrespuesta NO cuentan; la llamada contestada de 120 s sí", R.geovanniR00000000001);
+  ok(R.respondioWA000000001 && R.respondioWA000000001.r === "i" && R.respondioWA000000001.ch === "whatsapp" && R.respondioWA000000001.t === Date.parse("2026-10-03T15:00:00Z"),
+    "un WhatsApp entrante real del lead es respuesta (con su fecha)", R.respondioWA000000001);
+  ok(R.llamada45s0000000001 && R.llamada45s0000000001.r === "c" && R.llamada20s0000000001 && R.llamada20s0000000001.r === "",
+    "llamada contestada de 45 s cuenta; de 20 s no, ni una entrante sin contestar", { a: R.llamada45s0000000001, b: R.llamada20s0000000001 });
+  ok(R.paginado000000000001 && R.paginado000000000001.r === "i" && R.sinConversacion0001 && R.sinConversacion0001.r === "" && !R.sinConversacion0001.err,
+    "busca en páginas más viejas; sin conversación = sin respuesta (no error)", { p: R.paginado000000000001, s: R.sinConversacion0001 });
+  ok(R.falla0000000000001 && R.falla0000000000001.err === true && !R.x && rr.res.length === 7,
+    "si no se puede leer la conversación lo marca como error; descarta ids inválidos", { f: R.falla0000000000001, n: rr.res.length });
+  const r11 = await LQ.handler(ev({ action: "respuestas", ids: Array.from({ length: 12 }, (_, i) => "contacto" + String(i).padStart(12, "0")) }));
+  ok(JSON.parse(r11.body).res.length === 10, "máximo 10 contactos por llamada");
+
   console.log(fallas.length ? `\n${fallas.length} prueba(s) fallaron` : "\nTodas las pruebas del backend de Calidad de Leads pasaron");
   process.exit(fallas.length ? 1 : 0);
 })().catch((e) => { console.error("FALLO:", e); process.exit(2); });

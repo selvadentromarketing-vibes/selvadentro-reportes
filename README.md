@@ -363,6 +363,26 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
     Descalificado. Cuenta también como
     contactado y trabajado, pero **no como Zoom realizado**: el cliente puede llegar a OPP
     directo de un recorrido sin Zoom, así que puede haber más OPP generadas que Zooms.
+  - **Respuesta real del lead** (Dirección General, 16-oct-2026; **pendiente de activar**,
+    `LQ_RESP_V2 = false`). La etiqueta `another-device-replied-whatsapp` la pone la integración
+    de WhatsApp cuando **nosotros** mandamos un mensaje desde el celular de la línea (confirmado
+    con un lead: se agregó el mismo minuto que salió nuestro audio "Sent from another device"), y
+    `LQ_TAGS_RESP` la contaba como respuesta del prospecto. Con la regla nueva:
+    1. "Respondió" = un **mensaje entrante** del contacto en la conversación (WhatsApp, SMS,
+       email o redes; sin el texto predeterminado de nuestros botones ni respuestas
+       automáticas, `esPlantillaEntrante`) o una **llamada contestada de más de 30 s**. Lo lee
+       la acción `respuestas` de `lead-quality` (10 contactos por llamada, del mensaje más nuevo
+       al más viejo, para en la primera evidencia) y se guarda en el kv `lq:resp:v1`: una
+       respuesta encontrada no se vuelve a pedir; sin respuesta se revisa de nuevo a las 6 h.
+       Sin evidencia no hay MQL: "oportunidad creada y movida del arranque" ya no basta.
+    2. **Regla hacia abajo**: en Nurturing, Largo plazo, Rescate o Sin respuesta, un lead que
+       nunca llegó a OPP no sube a SQL por el formulario; queda en MQL si respondió y en CQL si
+       no. Una cita asistida o agendada lo sigue haciendo SQL (no es el formulario).
+    - **Vista previa** en Calidad de Lead ("Regla nueva de respuesta del lead"): antes / después
+      por campaña en los 30 días cerrados de Conclusiones (SQL+, MQL, costo por SQL) y la lista
+      de leads que cambian de categoría con el porqué de antes y de después. No cambia ninguna
+      cifra. Al activar (`LQ_RESP_V2 = true`) la sincronización lee las respuestas antes de
+      armar el agregado y la vista previa desaparece.
   - **Verificado por ventas** = el campo del contacto **"Lead to Watch"** en Sí: la
     verificación de ventas de que el lead está calificado. Es informativo, no cambia la
     calificación. Si el campo no existe en GHL, el reporte lo avisa.

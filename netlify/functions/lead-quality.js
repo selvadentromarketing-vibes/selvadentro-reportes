@@ -27,11 +27,16 @@
 //     esos contactos (los re-envíos: sus oportunidades son anteriores a la ventana).
 //   { action:"spend", start, end }   (fechas YYYY-MM-DD)
 //     → { configured:bool, rows:[{d,src,camp,cid,spend,clicks,impr,cur}], monedas }
+//   { action:"respuestas", ids:[...] }   (máx. 10 contactos por llamada)
+//     → { res:[{ct, r:"i"|"c"|"", t, ch, d, err}] }  Respuesta REAL del lead en sus
+//     conversaciones: "i" = mensaje entrante suyo (no el predeterminado de nuestros botones de
+//     WhatsApp ni una respuesta automática), "c" = llamada contestada de más de 30 s.
 //   { action:"ads", start, end }     (fechas YYYY-MM-DD)
 //     → { configured:bool, ads:[...] }  Detalle por anuncio (Meta + Google) vía
 //     Windsor: estado activo/pausado, link de preview, resultados.
 
 const S = require("./lib/shared.js");
+const SLA = require("./sla-report.js").internals;   // canal, llamadas y mensajes predeterminados
 
 const API_KEY = process.env.GHL_API_KEY;
 const LOCATION_ID = process.env.GHL_LOCATION_ID;
@@ -882,6 +887,60 @@ async function diag() {
   return { pruebas: [pContactos, pCampos, pUsuarios, pPipelines, pOpps, pConv, pMsgs, pCitas], cuentas };
 }
 
+// --- Respuesta real del lead (Dirección General, 16-oct-2026) ----------------------------
+// La etiqueta "another-device-replied-whatsapp" la pone la integración de WhatsApp cuando
+// NOSOTROS mandamos un mensaje desde el celular de la línea (confirmado con Geovanni R.: se
+// agregó el mismo minuto que salió nuestro audio "Sent from another device"), y Calidad de
+// Leads la leía como respuesta del prospecto. Ahora "respondió" se prueba en la conversación:
+// un mensaje ENTRANTE del contacto (WhatsApp, SMS, email o redes; sin el texto predeterminado de
+// nuestros botones ni respuestas automáticas, `esPlantillaEntrante`) o una llamada contestada
+// de más de 30 s, en cualquier sentido. Se recorre del mensaje más nuevo al más viejo y se para
+// en la primera evidencia: basta una.
+const RESP_MAX = 10;
+const RESP_SEG = 30;
+async function respuestaDe(ct) {
+  const r = { ct, r: "", t: 0, ch: "", d: null, err: false };
+  try {
+    const cs = await ghl(`/conversations/search?locationId=${LOCATION_ID}&contactId=${encodeURIComponent(ct)}&limit=20`);
+    const convIds = (cs.conversations || []).map((c) => c.id).filter(Boolean);
+    let fallidas = 0;
+    for (const id of convIds) {
+      try {
+        let lastId = null;
+        for (let i = 0; i < 6; i++) {
+          let qs = "limit=100";
+          if (lastId) qs += `&lastMessageId=${encodeURIComponent(lastId)}`;
+          const data = await ghl(`/conversations/${encodeURIComponent(id)}/messages?${qs}`);
+          const box = data && data.messages && Array.isArray(data.messages.messages) ? data.messages : data;
+          const list = Array.isArray(box.messages) ? box.messages : [];
+          for (const m of list) {
+            if (!m || /^TYPE_ACTIVITY/.test(m.messageType || "")) continue;
+            const ch = SLA.chanOf(m), t = SLA.ts(m.dateAdded) || 0;
+            if (ch === "call") {
+              const d = SLA.callDur(m);
+              if (SLA.callDesenlace(SLA.callStatus(m)) === "ok" && d != null && d > RESP_SEG) return Object.assign(r, { r: "c", t, ch, d });
+            } else if (m.direction === "inbound" && ch !== "otro" && !SLA.esPlantillaEntrante(m)) {
+              return Object.assign(r, { r: "i", t, ch });
+            }
+          }
+          if (!box.nextPage || !box.lastMessageId || !list.length) break;
+          lastId = box.lastMessageId;
+        }
+      } catch (e) { fallidas++; }
+    }
+    if (convIds.length && fallidas === convIds.length) r.err = true;
+  } catch (e) { r.err = true; }
+  return r;
+}
+async function respuestas({ ids }) {
+  const lista = [...new Set((Array.isArray(ids) ? ids : []).map(String).filter((x) => /^[A-Za-z0-9]{8,40}$/.test(x)))].slice(0, RESP_MAX);
+  if (!lista.length) throw Object.assign(new Error("ids requerido"), { status: 400 });
+  const res = [];
+  // Concurrencia 5: lejos del burst limit de GHL (100 req/10 s), como Primer Contacto.
+  for (let i = 0; i < lista.length; i += 5) res.push(...await Promise.all(lista.slice(i, i + 5).map(respuestaDe)));
+  return { res };
+}
+
 exports.fotoDiaria = fotoDiaria;
 exports.diffFotos = diffFotos;
 exports.tomarFoto = tomarFoto;
@@ -917,7 +976,8 @@ exports.handler = async (event) => {
     if (payload.action === "spend") return json(200, await spend(payload));
     if (payload.action === "ads") return json(200, await ads(payload));
     if (payload.action === "decision") return json(200, await decision(payload));
-    return json(400, { error: "action debe ser 'bootstrap', 'diag', 'leads', 'opps', 'spend', 'ads' o 'decision'" });
+    if (payload.action === "respuestas") return json(200, await respuestas(payload));
+    return json(400, { error: "action debe ser 'bootstrap', 'diag', 'leads', 'opps', 'spend', 'ads', 'decision' o 'respuestas'" });
   } catch (e) {
     const status = e.status === 429 ? 429 : e.status === 400 ? 400 : 502;
     return json(status, { error: String(e.message || e), detail: e.detail });

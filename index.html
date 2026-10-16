@@ -3472,6 +3472,17 @@ const LQ_RX = {
 };
 const LQ_TAGS_DESC = /descalificad|no-?califica|numero-?(equivocado|invalido)|wrong-?number|spam|duplicad|no-?interes/i;
 const LQ_TAGS_RESP = /respondi|replied|another-device-replied|contest|interesad/i;
+// Respuesta REAL del lead (Dirección General, 16-oct-2026). LQ_TAGS_RESP incluía
+// "another-device-replied", y esa etiqueta la pone la integración de WhatsApp cuando NOSOTROS
+// mandamos un mensaje desde el celular de la línea: el reporte contaba nuestros mensajes como
+// respuestas del prospecto. Con LQ_RESP_V2 "respondió" = mensaje entrante del contacto en la
+// conversación o llamada contestada de más de 30 s (acción `respuestas` de lead-quality, guardada
+// en el kv `lq:resp:v1`), y en Nurturing, Largo plazo, Rescate o Sin respuesta el formulario ya
+// no sube a SQL a un lead que nunca llegó a OPP. Apagada hasta que Dirección vea la vista previa
+// "Regla nueva de respuesta" (antes / después por campaña, últimos 30 días).
+const LQ_RESP_V2 = false;
+const LQ_RESP_KEY = "lq:resp:v1";
+const LQ_RX_CUBETA_FORM = /nurtur|largo\s*plazo|rescate|sin\s*respuesta/i;
 // Tags de lead inválido (no de un prospecto que se enfrió): son lo único que saca de SQL+ a una
 // OPP generada, junto con una causa de descalificación del grupo inválido (l.inv).
 const LQ_TAGS_INVALIDO = /spam|duplicad|numero-?(equivocado|invalido)|wrong-?number/i;
@@ -3499,7 +3510,9 @@ function lqNivelOppCaida(l, stage){
 }
 
 // Devuelve { lv, why[] } — why enumera la evidencia que disparó la regla.
-function lqAutoQualify(l){
+// opt.v2 fuerza la regla nueva de respuesta (vista previa); sin opt manda LQ_RESP_V2.
+function lqAutoQualify(l, opt){
+  const v2 = opt && opt.v2 != null ? !!opt.v2 : LQ_RESP_V2;
   const why = [];
   const tags = String(l.tags||"").toLowerCase();
   const stage = String(l.pstage||"");
@@ -3512,7 +3525,9 @@ function lqAutoQualify(l){
   // cualquier oportunidad supera los 100k y todas parecían de alto presupuesto.
   const presupuesto = pres;
   const noAns = (tags.match(/d\d+-no-a?n?swer/g)||[]).length;
-  const respondio = LQ_TAGS_RESP.test(tags) || ap.sh>0 || LQ_RX.contacto.test(stage) || LQ_RX.fuerte.test(stage);
+  // v2: solo la evidencia de la conversación (l.rsp: "i" entrante, "c" llamada > 30 s).
+  const respondio = v2 ? (l.rsp === "i" || l.rsp === "c")
+                       : (LQ_TAGS_RESP.test(tags) || ap.sh>0 || LQ_RX.contacto.test(stage) || LQ_RX.fuerte.test(stage));
 
   // OPP generada (Dirección General, 15-oct-2026): si el lead llegó alguna vez a OPP es SQL
   // Selvadentro igual que una OPP vigente, aunque hoy esté en Largo plazo, Rescate,
@@ -3567,8 +3582,13 @@ function lqAutoQualify(l){
     else if(perfilBajo) why.push("formulario por debajo del perfil: la etapa del pipeline manda");
     return {lv:"sqls", why};
   }
+  // Regla hacia abajo (v2, 16-oct-2026): en Nurturing, Largo plazo, Rescate o Sin respuesta,
+  // sin haber llegado a OPP, el formulario ya no sube a SQL: la etapa es el veredicto del asesor.
+  const cubeta = v2 && !ogen && LQ_RX_CUBETA_FORM.test(stage);
+  if(cubeta && perfilOk) why.push(`en "${stage}" sin haber llegado a OPP: el formulario ya no lo sube a SQL`);
+  const perfilF = perfilOk && !cubeta;
   // Señal fuerte sin OPP (cita asistida, etapa avanzada) + perfil confirmado
-  if(senalFuerte && perfilOk) return {lv:"sqls", why};
+  if(senalFuerte && perfilF) return {lv:"sqls", why};
 
   // 4) SQL — interés real y activo, pero sin perfil confirmado; o perfil declarado en el
   // formulario sin que ninguna etapa del pipeline lo respalde todavía (antes esto era SQL
@@ -3577,15 +3597,20 @@ function lqAutoQualify(l){
     if(presupuesto==null && hor==null) why.push("sin presupuesto ni horizonte capturados: no alcanza perfil Selvadentro");
     return {lv:"sql", why};
   }
-  if(perfilOk && respondio){ why.push("perfil declarado en el formulario y respuesta activa, sin etapa del pipeline que lo confirme"); return {lv:"sql", why}; }
+  const evid = ()=> l.rsp === "c" ? `llamada contestada de ${Math.round(l.rspD||0)} s` : `mensaje entrante del lead${l.rspCh ? " ("+l.rspCh+")" : ""}`;
+  const cuando = ()=> l.rspT ? " el "+lqFechaCorta(lqDiaTulum(new Date(l.rspT).toISOString())) : "";
+  if(perfilF && respondio){ why.push(v2 ? `perfil declarado en el formulario y ${evid()}${cuando()}, sin etapa del pipeline que lo confirme` : "perfil declarado en el formulario y respuesta activa, sin etapa del pipeline que lo confirme"); return {lv:"sql", why}; }
   if(ap.tot>0){ why.push("tiene cita agendada"); return {lv:"sql", why}; }
 
   // 5) MQL — respondió o mostró interés, aún sin calificar a fondo
   if(respondio){
-    if(!why.length || !why.some(w=>/respuesta|etapa|asisti/.test(w))) why.push("respuesta o interés registrado en el CRM");
+    if(v2) why.push(`respondió: ${evid()}${cuando()}`);
+    else if(!why.length || !why.some(w=>/respuesta|etapa|asisti/.test(w))) why.push("respuesta o interés registrado en el CRM");
     return {lv:"mql", why};
   }
-  if((l.pr||l.o)>0 && !LQ_RX.frio.test(stage)){ why.push("oportunidad creada y movida del arranque"); return {lv:"mql", why}; }
+  // v2: sin evidencia no hay MQL; una oportunidad movida del arranque ya no basta
+  if(!v2 && (l.pr||l.o)>0 && !LQ_RX.frio.test(stage)){ why.push("oportunidad creada y movida del arranque"); return {lv:"mql", why}; }
+  if(v2) why.push(l.rsp === undefined ? "respuesta sin verificar (no se pudo leer su conversación)" : "sin mensaje entrante del lead ni llamada contestada de más de 30 s");
 
   // 6) Nuevo — capturado y todavía sin ningún toque registrado
   if(!noAns && (LQ_RX.nuevo.test(stage) || (!stage && !l.o))){
@@ -4077,6 +4102,7 @@ function lqContactado(l, cIdx){
   if(lqEsOppGen(l)) return true;                            // OPP (vigente o generada) o WON: ya hubo conversación
   const n = String(l.pstage||"");
   if(!n){
+    if(LQ_RESP_V2) return l.rsp === "i" || l.rsp === "c";   // evidencia de la conversación (16-oct-2026)
     const tags = String(l.tags||"").toLowerCase().split(/\s*,\s*/);
     return tags.some(t=>LQ_TAGS_RESP.test(t) && !/no-?contest|sin-?respuesta|no-?a?n?swer/.test(t));
   }
@@ -4125,7 +4151,7 @@ function lqInicioCampanias(spendRows, dec, primerDia){
   return ini;
 }
 
-function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adExtra, rawRe){
+function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adExtra, rawRe, rspMap){
   // Paso 0 del manual de limpieza (jul-2026), aplicado ANTES de cualquier cálculo:
   // fuera los registros de prueba y los leads sin email NI teléfono (no hay a quién
   // contactar ni forma de detectar duplicados). Se cuentan y se muestran; no desaparecen.
@@ -4309,6 +4335,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
       // OPP generada: vigente, venta o etiqueta "opp-generada" del CRM (se lee antes de truncar tags)
       ...((op && ((op.o||0) > 0 || (op.w||0) > 0)) || lqTagOppGen(l.tags) ? { og:1 } : {}),
       ...(F.verif && lqSi(l.cf[F.verif.id]) ? { vv:1 } : {}),   // verificado por ventas (Lead to Watch)
+      ...lqRspCampos(rspMap && rspMap[l.id]),                     // respuesta real del lead (LQ_RESP_V2)
       ...(op && op.dq && op.dq.causa ? { dqc:String(op.dq.causa).slice(0,60) } : {}),   // causa de descalificación (nivel de una OPP caída)
       ...(l.attr && l.attr.inf ? { inf:1 } : {}),   // atribución inferida (LQ_INFERIDA)
       ...(l.attr && l.attr.pid ? { pid:1, cid:l.attr.cidOk } : {}),   // campaña resuelta por su ID (y cuál), no por nombre
@@ -4398,6 +4425,124 @@ function lqNotaExcluidos(agg, rangoSet){
   if(e.sinContacto) partes.push(`<b>${e.sinContacto}</b> sin email ni teléfono`);
   return partes.length ? `<p class="hint pegada lq-excluidos">Excluidos de todos los cálculos en este rango: ${partes.join(" · ")}.</p>` : "";
 }
+// Respuesta real del lead (LQ_RESP_V2): campos del lead a partir de una entrada del caché
+// `lq:resp:v1` ({r, t, ch, d, k}). Sin entrada (no se pudo leer) el lead queda sin rsp.
+function lqRspCampos(x){
+  if(!x) return {};
+  return x.r ? { rsp:x.r, rspT:x.t||0, rspCh:x.ch||"", ...(x.d != null ? { rspD:x.d } : {}) } : { rsp:"" };
+}
+// Lee la respuesta de cada lead: primero el caché del kv; se consulta al CRM (acción
+// `respuestas`, 10 por llamada, 3 en paralelo) lo que no está o lo que hace más de 6 h no
+// tenía respuesta. Una respuesta encontrada no se vuelve a pedir: no caduca.
+async function lqRespuestas(ids, onProg){
+  let cache = {};
+  try{ cache = (await sGet(LQ_RESP_KEY)) || {}; }catch(e){}
+  const ahora = Date.now();
+  const pend = [...new Set(ids.filter(Boolean))].filter(id=>{ const c = cache[id]; return !c || (!c.r && ahora - (c.k||0) > 6*3600e3); });
+  const nuevos = {}; let hechos = 0, errores = 0;
+  const lotes = []; for(let i = 0; i < pend.length; i += 10) lotes.push(pend.slice(i, i+10));
+  onProg && onProg(0, pend.length);
+  for(let i = 0; i < lotes.length; i += 3){
+    const grupo = lotes.slice(i, i+3);
+    const rs = await Promise.all(grupo.map(ids=>lqFn({ action:"respuestas", ids }).catch(()=>({ res: ids.map(ct=>({ ct, err:true })) }))));
+    rs.forEach(r=>(r.res||[]).forEach(x=>{ if(x.err){ errores++; return; } nuevos[x.ct] = { r:x.r||"", t:x.t||0, ch:x.ch||"", d:x.d ?? null, k:ahora }; }));
+    hechos += grupo.reduce((a,g)=>a+g.length, 0);
+    onProg && onProg(hechos, pend.length);
+  }
+  if(Object.keys(nuevos).length){
+    // Se mezcla con lo último guardado: otra persona pudo sincronizar mientras tanto.
+    try{ const ult = (await sGet(LQ_RESP_KEY)) || {}; await sSet(LQ_RESP_KEY, { ...ult, ...nuevos }); }catch(e){}
+  }
+  return { map:{ ...cache, ...nuevos }, errores, revisados:pend.length };
+}
+
+// Vista previa de la regla nueva de respuesta (Dirección General, 16-oct-2026): antes / después
+// por campaña en los últimos 30 días cerrados (la ventana de Conclusiones), con la lista de leads
+// que cambian de categoría. "Antes" = la calificación que hoy muestra el reporte; "después" =
+// lqAutoQualify con v2 sobre el mismo lead más su respuesta real. No cambia ninguna cifra.
+function lqSimCalcular(agg, map, V){
+  const L = (agg.leads||[]).filter(l=>{ const d = lqDiaTulum(l.c); return d >= V.ini && d <= V.fin; });
+  const M = lqModeloDecision(agg);
+  const grupo = {};
+  [...M.activas, ...M.pausadas].forEach(m=>((m.C && m.C.leads)||[]).forEach(l=>{ grupo[l.id] = m; }));
+  const filas = {}, cambios = [];
+  const esS = (v)=> v==="sql" || v==="sqls";
+  let sinVerif = 0;
+  L.forEach(l=>{
+    const m = grupo[l.id];
+    const key = m ? m.key : `${l.fuente||"Otra fuente"} · ${l.camp||LQ_SIN_CAMP}`;
+    const F = filas[key] = filas[key] || { key, inv: m ? m.inv : null, n:0, sA:0, sD:0, mA:0, mD:0 };
+    const x = map[l.id];
+    if(!x) sinVerif++;
+    const lead = { ...l, tags: (lqState._tagsFull||{})[l.id] ?? l.tags, rsp:undefined, rspT:0, rspCh:"", rspD:undefined, ...lqRspCampos(x) };
+    const antes = l.alv || "cql", q = lqAutoQualify(lead, { v2:true }), despues = q.lv;
+    F.n++;
+    if(esS(antes)) F.sA++;
+    if(esS(despues)) F.sD++;
+    if(antes === "mql") F.mA++;
+    if(despues === "mql") F.mD++;
+    if(antes !== despues) cambios.push({ n:l.n||"(sin nombre)", key, antes, despues, wA:l.awhy||"", wD:q.why.join(" · "), sinVerif:!x });
+  });
+  const lista = Object.values(filas).sort((a,b)=>((b.inv||0)-(a.inv||0)) || (b.n-a.n));
+  const tot = lista.reduce((t,f)=>({ n:t.n+f.n, sA:t.sA+f.sA, sD:t.sD+f.sD, mA:t.mA+f.mA, mD:t.mD+f.mD, inv:t.inv+(f.inv||0) }), { n:0, sA:0, sD:0, mA:0, mD:0, inv:0 });
+  const orden = { sqls:0, sql:1, mql:2, cql:3, nuevo:4, desc:5, nc:6 };
+  cambios.sort((a,b)=>a.key.localeCompare(b.key) || (orden[a.antes]-orden[b.antes]) || a.n.localeCompare(b.n, "es"));
+  const trans = {};
+  cambios.forEach(c=>{ const k = c.antes+">"+c.despues; trans[k] = (trans[k]||0) + 1; });
+  return { V, filas:lista, tot, cambios, trans, sinVerif, n:L.length };
+}
+function lqSimRespHtml(){
+  if(LQ_RESP_V2) return "";
+  const S = lqState.simResp || {};
+  const nv = (id)=> (LQ_LEVEL_BY_ID[id]||{}).name || id;
+  const cps = (inv, s)=> inv > 0 ? (s ? lqMXN(inv/s) : "sin SQL+") : "—";
+  const fl = (a, b, f)=> `${f ? f(a) : a} → <b>${f ? f(b) : b}</b>`;
+  let cuerpo = "";
+  if(S.corriendo) cuerpo = `<p class="hint" id="lq-sim-prog">${escAttr(S.prog||"Calculando…")}</p>`;
+  else if(S.error) cuerpo = `<p class="hint" style="color:var(--rojo)">No se pudo calcular: ${escAttr(S.error)}</p>`;
+  else if(S.res){
+    const R = S.res;
+    const fila = (f, total)=> `<tr${total?' class="total"':""}><td class="${total?"lft":"name"}">${escAttr(f.key)}</td><td>${f.inv>0 ? lqMXN(f.inv) : "—"}</td><td>${f.n}</td>
+      <td>${fl(f.sA, f.sD)}</td><td>${fl(f.mA, f.mD)}</td><td>${fl(cps(f.inv, f.sA), cps(f.inv, f.sD))}</td></tr>`;
+    const trans = Object.entries(R.trans).sort((a,b)=>b[1]-a[1]).map(([k,v])=>{ const [a,b] = k.split(">"); return `${nv(a)} → ${nv(b)}: <b>${v}</b>`; }).join(" · ");
+    const filasC = R.cambios.map(c=>`<tr><td class="lft celda-fuerte">${escAttr(c.n)}${c.sinVerif?' <span class="lq-sub">(sin verificar)</span>':""}</td><td class="lft">${escAttr(c.key)}</td>
+      <td class="lft">${nv(c.antes)} → <b>${nv(c.despues)}</b></td><td class="lft lq-sub" style="white-space:normal;min-width:220px">${escAttr(c.wA)}</td><td class="lft lq-sub" style="white-space:normal;min-width:220px">${escAttr(c.wD)}</td></tr>`).join("");
+    cuerpo = `<p class="hint pegada">Leads que entraron del <b>${lqFechaLarga(R.V.ini)}</b> al <b>${lqFechaLarga(R.V.fin)}</b> (los mismos 30 días cerrados de Conclusiones): <b>${R.n}</b>.
+        ${R.sinVerif ? ` <b style="color:var(--rojo)">${R.sinVerif} sin verificar</b> (no se pudo leer su conversación; en "después" cuentan sin respuesta).` : ""}</p>
+      <div class="table-scroll mb-sec"><table class="cons lq-sim">
+        <tr><th class="lft">Campaña</th><th>Inversión 30 días</th><th>Leads</th><th>SQL+ antes → después</th><th>MQL antes → después</th><th>Costo por SQL antes → después</th></tr>
+        ${R.filas.map(f=>fila(f)).join("") || `<tr><td colspan="6" class="lft txt-nota">Sin leads en la ventana.</td></tr>`}
+        ${fila({ ...R.tot, key:"Total" }, true)}
+      </table></div>
+      <p class="hint pegada">${R.cambios.length ? `Cambian de categoría <b>${R.cambios.length}</b> leads: ${trans}.` : "Ningún lead cambia de categoría."}</p>
+      ${R.cambios.length ? `<details class="mb-sec" open><summary><b>Leads que cambian de categoría</b> (${R.cambios.length})</summary>
+        <div class="table-scroll"><table class="cons lq-sim-cambios"><tr><th class="lft">Lead</th><th class="lft">Campaña</th><th class="lft">Antes → después</th><th class="lft">Por qué estaba así</th><th class="lft">Por qué queda así</th></tr>${filasC}</table></div></details>` : ""}`;
+  }
+  return `<div class="rep-section mb-sec" id="lq-sim-resp"><h3>Vista previa · regla nueva de respuesta del lead</h3>
+    <p class="hint pegada"><b>No cambia ninguna cifra del reporte</b>: compara la calificación de hoy contra la que tendría cada lead con las dos reglas nuevas.
+      (1) "Respondió" = un mensaje entrante del lead en la conversación o una llamada contestada de más de 30 s; la etiqueta another-device-replied-whatsapp es de un mensaje nuestro y deja de contar.
+      (2) En Nurturing, Largo plazo, Rescate o Sin respuesta, sin haber llegado a OPP, el formulario ya no lo sube a SQL: queda en MQL si respondió y en CQL si no.</p>
+    ${S.corriendo ? "" : `<button class="lt-btn" id="lq-sim-btn">${S.res ? "Volver a calcular" : "Calcular antes / después · últimos 30 días"}</button>`}
+    ${cuerpo}</div>`;
+}
+async function lqSimularRespuesta(){
+  if(lqState.simResp && lqState.simResp.corriendo) return;
+  const prog = (t)=>{ lqState.simResp.prog = t; const el = document.getElementById("lq-sim-prog"); if(el) el.textContent = t; };
+  lqState.simResp = { corriendo:true, prog:"Preparando…" }; lqRender();
+  try{
+    // La vista previa necesita los tags y el formulario completos del agregado recién armado
+    // (el del cache compartido puede venir recortado).
+    if(lqState.aggFresco !== lqState.agg){ prog("Actualizando desde el CRM…"); await lqSync(); }
+    if(!lqState.agg) throw new Error("no hay datos de Calidad de Leads");
+    const agg = lqVista(lqState.agg);
+    const V = (agg.dec && agg.dec.ventana) || lqDecVentana();
+    const L = (agg.leads||[]).filter(l=>{ const d = lqDiaTulum(l.c); return d >= V.ini && d <= V.fin; });
+    const R = await lqRespuestas(L.map(l=>l.id), (a,b)=>prog(`Revisando conversaciones en el CRM: ${a} de ${b} leads…`));
+    lqState.simResp = { corriendo:false, res: lqSimCalcular(agg, R.map, V) };
+  }catch(e){ lqState.simResp = { corriendo:false, error:e.message||String(e) }; }
+  lqRender();
+}
+
 // Aviso de OPP generadas. GoHighLevel no guarda el historial de etapas, así que antes de que
 // el workflow de la etiqueta "opp-generada" quedara activo una OPP caída solo cuenta si ventas
 // la etiquetó a mano: se dice en pantalla en vez de mostrar un número que parezca completo.
@@ -6352,6 +6497,7 @@ function lqRender(){
   </div>`;
   html += lqNotaExcluidos(lqState.agg, rangoSet);
   html += lqAvisoOppGen(agg, leads, rango);
+  html += lqSimRespHtml();
   if(!agg.califField){
     html += `<div class="lq-meth">⚠ No se encontró el campo <b>"Calificación del lead"</b> en GoHighLevel; todos los leads aparecen como "Sin calificar". Verifica que el campo exista y que el token tenga el scope de campos personalizados.</div>`;
   }
@@ -6644,6 +6790,8 @@ function lqRender(){
   document.querySelectorAll("[data-lq-level]").forEach(b=>b.onclick=()=>{ lqState.level=b.dataset.lqLevel; lqRender(); });
   document.querySelectorAll("[data-lq-plat]").forEach(b=>b.onclick=()=>{ lqState.plat=b.dataset.lqPlat; lqRender(); });
   document.querySelectorAll("[data-lq-qual]").forEach(b=>b.onclick=()=>{ lqState.qual=b.dataset.lqQual; lqRender(); });
+  const simB = document.getElementById("lq-sim-btn");
+  if(simB) simB.onclick = ()=>lqSimularRespuesta();
   const diagR = document.getElementById("lq-diag-reglas");
   if(diagR) diagR.onclick=()=>{ lqState.diagReglas = !lqState.diagReglas; lqRender(); };
   // Desplegar / plegar filas del árbol
@@ -6810,11 +6958,27 @@ async function lqSync(){
     } else {
       fallos.push("Windsor no está configurado (sin WINDSOR_API_KEY)");
     }
+    // Respuesta real del lead (LQ_RESP_V2): evidencia en la conversación, con caché en el kv
+    let rspMap = null;
+    if(LQ_RESP_V2){
+      try{
+        const R = await lqRespuestas(rawLeads.map(l=>l.id), (a,b)=>{ lbl.textContent=`Revisando respuestas en las conversaciones… ${a.toLocaleString()} de ${b.toLocaleString()}`; });
+        rspMap = R.map;
+        if(R.errores) fallos.push(`respuesta de ${R.errores} lead${R.errores===1?"":"s"}: no se pudo leer su conversación (cuentan sin respuesta hasta la próxima sincronización)`);
+      }catch(e){ fallos.push("respuestas de los leads (sin ellas nadie cuenta como MQL por respuesta)"); }
+    }
     bar.style.width="100%"; lbl.textContent="Procesando…";
-    lqState.agg = buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adExtra, rawRe);
+    lqState._tagsFull = Object.fromEntries(rawLeads.concat(rawRe).map(l=>[l.id, (l.tags||[]).join(", ")]));
+    lqState.agg = buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adExtra, rawRe, rspMap);
     // Las oportunidades de los re-envíos son anteriores a la ventana: se piden por contacto
     // (solo los que sí cuentan como re-envío) y se vuelve a armar el agregado.
     const reIds = [...new Set((lqState.agg.reenvios||[]).map(l=>l.id).filter(Boolean))].filter(id=>!oppsByContact[id]);
+    // y la respuesta de los re-envíos que sí cuentan
+    const reRsp = rspMap ? [...new Set((lqState.agg.reenvios||[]).map(l=>l.id).filter(Boolean))].filter(id=>!rspMap[id]) : [];
+    if(reRsp.length){
+      try{ Object.assign(rspMap, (await lqRespuestas(reRsp)).map); if(!reIds.length) lqState.agg = buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adExtra, rawRe, rspMap); }
+      catch(e){ fallos.push("respuestas de los re-envíos"); }
+    }
     if(reIds.length){
       lbl.textContent="Etapas de los re-envíos…";
       try{
@@ -6822,7 +6986,7 @@ async function lqSync(){
           const res = await lqFn({ action:"opps", contactIds: reIds.slice(i, i+40) });
           for(const o of res.opps) lqSumarOpp(oppsByContact, o, boot.stages, oppTh, C11);
         }
-        lqState.agg = buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adExtra, rawRe);
+        lqState.agg = buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adExtra, rawRe, rspMap);
       }catch(e){ fallos.push("etapas del CRM de los re-envíos (salen con la señal de sus tags)"); }
     }
     // Sincronización incompleta: se marca EN el agregado para que quien lo lea del
@@ -6830,6 +6994,7 @@ async function lqSync(){
     // quien pulsó Sincronizar, y el resto del equipo leía los ceros como si fueran datos.
     lqState.agg.fallos = fallos;
     lqState.agg.monedas = monedas;
+    lqState.aggFresco = lqState.agg;          // recién armado: trae tags y formulario completos
     lqPersist(lqState.agg);
     lqPopulateWeeks(); lqRender();
     toast("Leads sincronizados ✓ "+rawLeads.length.toLocaleString()+" contactos");
