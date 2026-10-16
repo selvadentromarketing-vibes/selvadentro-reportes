@@ -38,7 +38,6 @@ const PORT = process.env.PORT || 8765;
   await page.route(/cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com/, route => route.fulfill({ status: 200, contentType: 'application/javascript',
     body: 'window.Chart=class{constructor(){this.data={datasets:[]}}destroy(){}update(){}resize(){}};Chart.register=()=>{};Chart.defaults={font:{},plugins:{}};' }));
   await page.route(/fonts\.googleapis|fonts\.gstatic|filesafe\.space|\.(png|jpg|svg|woff2?)(\?|$)/, route => route.fulfill({ status: 204, body: '' }));
-  const RESP_PEDIDAS = [];
   await page.route('**/.netlify/functions/**', async route => {
     const url = route.request().url(); const fn = url.split('/functions/')[1].split('?')[0];
     let body = {}; try { body = JSON.parse(route.request().postData() || '{}'); } catch (e) {}
@@ -62,9 +61,8 @@ const PORT = process.env.PORT || 8765;
       if (a === 'contactos') return ok({ contactos: body.ids.map(id => D.cts[id] || D.leads.find(c => c.id === id)).filter(Boolean).map(c => body.tareas ? c : { ...c, tk: undefined }), fallidos: [] });
       if (a === 'opps') return ok({ opps: body.contactIds.flatMap(ct => D.opps[ct] || []), fallidos: [] });
     }
-    // Respuesta real del lead (vista previa 16-oct-2026): los ids que terminan en número par respondieron
+    // Respuesta real del lead (16-oct-2026): los ids que terminan en número par respondieron
     if (fn === 'lead-quality' && body.action === 'respuestas') {
-      RESP_PEDIDAS.push(...(body.ids || []));
       return ok({ res: (body.ids || []).map(ct => { const n = +((/(\d+)$/.exec(ct) || [])[1] || 1); return n % 2 === 0 ? { ct, r: 'i', t: Date.parse('2026-09-20T15:00:00Z'), ch: 'whatsapp' } : { ct, r: '' }; }) });
     }
     return route.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ error: 'stub: sin backend en la prueba' }) });
@@ -172,18 +170,19 @@ const PORT = process.env.PORT || 8765;
       whyCaida: q({ og: 1, pstage: 'Largo plazo' }).why[0] || '',
       fuerteSinForm: q({ pstage: 'Interés identificado' }).lv,                         // sql
       fuerteConPerfil: q({ pstage: 'Tour realizado', pres: '$150,000 USD', hor: '3 meses' }).lv, // sqls
-      soloFormulario: q({ tags: 'replied', pres: '$150,000 USD', hor: '3 meses' }).lv, // sql (antes sqls)
-      soloRespondio: q({ tags: 'replied' }).lv,                                        // mql
+      soloFormulario: q({ rsp: 'i', pres: '$150,000 USD', hor: '3 meses' }).lv,        // sql (antes sqls)
+      soloRespondio: q({ rsp: 'i' }).lv,                                               // mql: mensaje entrante real
+      soloEtiqueta: q({ tags: 'replied', rsp: '' }).lv,                                // nuevo: una etiqueta ya no es respuesta (16-oct-2026)
       why: q({ o: 1, pstage: 'Carta oferta', pres: '$50,000 USD' }).why.join(' · '),
     };
     r.ok = r.oppSinForm === 'sqls' && r.wonFormBajo === 'sqls' && r.oppPerdida === 'sqls'
       && r.caidaLargo === 'sql' && r.caidaRescate === 'sqls' && r.caidaNurturing === 'sqls' && r.caidaDescTag === 'sqls' && r.caidaYaNo === 'sqls' && r.caidaNoAlineado === 'sql'
       && r.caidaMalint === 'mql' && r.caidaInvalida === 'desc' && r.caidaSpam === 'desc' && r.sinOppDesc === 'desc'
-      && r.whyCaida === 'llegó a OPP (etiqueta opp-generada); hoy en "Largo plazo": el horizonte ya no es el del perfil' && r.fuerteSinForm === 'sql' && r.fuerteConPerfil === 'sqls' && r.soloFormulario === 'sql' && r.soloRespondio === 'mql' && /etapa del pipeline manda/.test(r.why);
+      && r.whyCaida === 'llegó a OPP (etiqueta opp-generada); hoy en "Largo plazo": el horizonte ya no es el del perfil' && r.fuerteSinForm === 'sql' && r.fuerteConPerfil === 'sqls' && r.soloFormulario === 'sql' && r.soloRespondio === 'mql' && r.soloEtiqueta === 'nuevo' && /etapa del pipeline manda/.test(r.why);
     return r;
   });
   console.log('\n[lqAutoQualify] etapa > formulario', JSON.stringify(lq));
-  // Regla nueva de respuesta (Dirección General, 16-oct-2026; detrás de LQ_RESP_V2)
+  // Regla nueva de respuesta (Dirección General, 16-oct-2026; activa: LQ_RESP_V2)
   VISTA = 'lqAutoQualify:respuesta';
   const lqr = await page.evaluate(() => {
     const base = { tags: '', pstage: '', ost: '', ap: { tot: 0, sh: 0, ns: 0 }, pres: '', hor: '', o: 0, pr: 0, w: 0, wv: 0, ov: 0 };
@@ -207,7 +206,7 @@ const PORT = process.env.PORT || 8765;
       citaV2: q({ pstage: 'Zoom agendado', pr: 1, ap: { tot: 1, sh: 0, ns: 0 }, rsp: '' }, true).lv, // sql: cita agendada
       sinVerif: q({ pstage: '2do toque', pr: 1 }, true).why.join(' · '),
     };
-    r.ok = r.flag === false && r.tagV1 === 'mql' && r.tagV2 === 'nuevo' && r.toqueV1 === 'mql' && r.toqueV2 === 'cql'
+    r.ok = r.flag === true && r.tagV1 === 'mql' && r.tagV2 === 'nuevo' && r.toqueV1 === 'mql' && r.toqueV2 === 'cql'
       && r.contactoEtapaV2.lv === 'mql' && /respondió: etapa "Contacto establecido": el asesor registró que contestó/.test(r.contactoEtapaV2.why.join(' '))
       && r.nurtFormV1 === 'sql' && r.nurtFormRespV2.lv === 'mql' && /en "Nurturing" sin haber llegado a OPP: el formulario ya no lo sube a SQL/.test(r.nurtFormRespV2.why.join(' '))
       && r.nurtFormSinV2 === 'cql' && r.largoCitaV1 === 'sqls' && r.largoCitaV2 === 'sql'
@@ -223,8 +222,9 @@ const PORT = process.env.PORT || 8765;
   VISTA = 'sla:indiceCalidad';
   const sla = await page.evaluate(() => {
     const c = (id, n, u, cf) => ({ id, n, c: '2026-09-15T15:00:00.000Z', src: 'facebook', u, tags: ['replied'], attr: {}, cf: cf || {} });
-    const contactos = [c('c1', 'Ana Gómez', 'u1'), c('c2', 'Luis Pérez', 'u1'), c('c3', 'Marta Ruiz', 'u1', { fcal: 'MQL' })];
-    const sweeps = { c1: { fi: Date.parse('2026-09-15T16:00:00Z') }, c2: {}, c3: {} };
+    const contactos = [c('c1', 'Ana Gómez', 'u1'), c('c2', 'Luis Pérez', 'u1'), c('c3', 'Marta Ruiz', 'u1', { fcal: 'MQL' }), c('c4', 'Pedro Sol', 'u1')];
+    // c2 contestó (entrante real en el barrido); c4 solo trae la etiqueta "replied": ya no es respuesta (16-oct-2026)
+    const sweeps = { c1: { fi: Date.parse('2026-09-15T16:00:00Z') }, c2: { fi: Date.parse('2026-09-15T17:00:00Z') }, c3: {}, c4: {} };
     const opps = [{ ct: 'c1', u: 'u1', st: 'open', c: '2026-09-16T10:00:00.000Z', stc: '', v: 0, p: 'p1', s: 's2', sc: '2026-09-17T10:00:00.000Z' }];
     const pipes = [{ id: 'p1', name: 'Pipeline de ventas', stages: [{ id: 's1', name: 'Contacto establecido' }, { id: 's2', name: 'Seguimiento de OPP' }] }];
     const campos = [{ id: 'fcal', name: 'Calificación del lead' }];
@@ -259,8 +259,9 @@ const PORT = process.env.PORT || 8765;
   });
   console.log('[sla] con Ejecutivo de Primer Contacto', JSON.stringify(slaPc));
   if (!slaPc.ok) hallazgos.push({ vista: 'sla:primerContacto', slaPc });
-  // c1: OPP real → sqls aunque el CRM no traiga calificación; c2: solo respondió → mql; c3: campo manual MQL, reglas mql.
-  if (!(sla.by.c1 && sla.by.c1.lv === 'sqls' && sla.by.c1.lvCrm === 'nc' && sla.by.c1.o === 1 && sla.by.c2.lv === 'mql' && sla.by.c3.lvCrm === 'mql' && sla.califCrm === 1 && sla.qTot === 3 && sla.q5 != null && sla.q5 > 1)) hallazgos.push({ vista: 'sla:indiceCalidad', sla });
+  // c1: OPP real → sqls aunque el CRM no traiga calificación; c2: contestó (entrante del barrido) → mql; c3: campo manual MQL;
+  // c4: solo la etiqueta "replied", sin entrante → no es MQL.
+  if (!(sla.by.c1 && sla.by.c1.lv === 'sqls' && sla.by.c1.lvCrm === 'nc' && sla.by.c1.o === 1 && sla.by.c2.lv === 'mql' && sla.by.c3.lvCrm === 'mql' && sla.by.c4 && sla.by.c4.lv !== 'mql' && sla.califCrm === 1 && sla.q5 != null && sla.q5 > 1)) hallazgos.push({ vista: 'sla:indiceCalidad', sla });
   // Change Spec v1.2 (25-sep-2026): Velocidad de primer contacto con umbrales 20·40·60·80
   // desde el 1-oct-2026. Los nueve casos de la sección 5, más: la leyenda muestra los
   // umbrales nuevos, una semana que terminó antes del 1-oct conserva su nota y un rango
@@ -925,50 +926,7 @@ const PORT = process.env.PORT || 8765;
   console.log('\n[calidad de leads] OPP generadas', JSON.stringify(opg));
   if (!opg.ok) hallazgos.push({ vista: 'lq:oppGeneradas', opg });
   await escanear('lq:oppGeneradas');
-  // Vista previa de la regla nueva de respuesta: dos leads de MX_DYNAMIC_090926 en Nurturing con
-  // perfil en el formulario y la etiqueta de NUESTRO mensaje (c-impar no respondió, c-par sí).
-  VISTA = 'lq:vistaPreviaRespuesta';
-  const vp = await page.evaluate(async (fx0) => {
-    const fx = JSON.parse(JSON.stringify(fx0));
-    fx.boot.fields = fx.boot.fields.concat([{ id: 'f_pres', name: 'Budget Range' }, { id: 'f_hor', name: 'Horizonte de inversión' }]);
-    const st = (nombre) => Object.keys(fx.boot.stages).find(k => fx.boot.stages[k].s === nombre && fx.boot.stages[k].p === 'Seguimiento de ventas');
-    const num = (l) => +l.id.replace(/\D/g, '');
-    const dyn = fx.rawLeads.filter(l => l.src === 'landing-seguridad' && fx.opps[l.id] && !fx.opps[l.id].o);
-    const impar = dyn.find(l => num(l) % 2 === 1), par = dyn.find(l => num(l) % 2 === 0);
-    [impar, par].forEach(l => { Object.assign(fx.opps[l.id], { s: st('Nurturing'), o: 0 }); l.tags = l.tags.concat(['another-device-replied-whatsapp']);
-      l.cf.f_pres = '$150,000 USD'; l.cf.f_hor = '3 meses'; });
-    const agg = buildLqAgg(fx.boot, fx.rawLeads, fx.spendRows, fx.weeks, fx.opps, fx.adRows, fx.adExtra);
-    agg.fallos = []; agg.monedas = ['MXN'];
-    Object.assign(lqState, { agg, aggFresco: agg, simResp: null, exp: {}, q: '', plat: 'all', level: 'camp', qual: 'auto', sub: 'calidad' });
-    lqState._tagsFull = Object.fromEntries(fx.rawLeads.map(l => [l.id, (l.tags || []).join(', ')]));
-    const r = { antes: [impar, par].map(l => agg.leads.find(x => x.id === l.id).alv).join(' ') };
-    lqRender();
-    r.boton = !!document.getElementById('lq-sim-btn') && /No cambia ninguna cifra del reporte/.test(document.getElementById('lq-sim-resp').textContent);
-    await lqSimularRespuesta();
-    const tabla = document.querySelector('table.lq-sim');
-    r.cols = tabla ? [...tabla.querySelector('tr').querySelectorAll('th')].map(th => th.textContent.trim()).join('|') : '';
-    const filas = tabla ? [...tabla.querySelectorAll('tr')].slice(1) : [];
-    const par2 = (t) => (t.match(/(\d+) → (\d+)/) || []).slice(1).map(Number);
-    const sum = filas.filter(tr => !tr.classList.contains('total')).reduce((a, tr) => { const td = tr.querySelectorAll('td'); const s = par2(td[3].textContent), m = par2(td[4].textContent);
-      return [a[0] + s[0], a[1] + s[1], a[2] + m[0], a[3] + m[1], a[4] + Number(td[2].textContent)]; }, [0, 0, 0, 0, 0]);
-    const tot = filas.find(tr => tr.classList.contains('total')); const tt = tot ? tot.querySelectorAll('td') : [];
-    r.cuadra = !!tot && JSON.stringify(sum) === JSON.stringify([...par2(tt[3].textContent), ...par2(tt[4].textContent), Number(tt[2].textContent)]);
-    const f090 = filas.find(tr => tr.querySelector('td').textContent.includes('INVESTORS_MX_DYNAMIC-TOPLPS_090926'));
-    r.fila090 = f090 ? [...f090.querySelectorAll('td')].slice(1).map(td => td.textContent.replace(/\s+/g, ' ').trim()).join(' ¦ ') : '';
-    const camb = [...document.querySelectorAll('table.lq-sim-cambios tr')].slice(1).map(tr => [...tr.querySelectorAll('td')].map(td => td.textContent.replace(/\s+/g, ' ').trim()));
-    const de = (l) => (camb.find(c => c[0] === l.n || c[0].startsWith(l.n + ' (')) || []);
-    r.impar = de(impar).slice(2).join(' | '); r.par = de(par).slice(2).join(' | ');
-    r.nCambios = camb.length;
-    r.sinCifrasOficiales = agg.leads.find(x => x.id === impar.id).alv === 'sql';   // el agregado no se tocó
-    return r;
-  }, fixture());
-  vp.pedidas = RESP_PEDIDAS.length;
-  vp.ok = vp.antes === 'sql sql' && vp.boton && vp.cols === 'Campaña|Inversión 30 días|Leads|SQL+ antes → después|MQL antes → después|Costo por SQL antes → después'
-    && vp.cuadra && /^SQL → CQL \| .*la etiqueta|^SQL → CQL/.test(vp.impar) && /sin mensaje entrante del lead ni llamada/.test(vp.impar) && /el formulario ya no lo sube a SQL/.test(vp.impar)
-    && /^SQL → MQL/.test(vp.par) && /respondió: mensaje entrante del lead \(whatsapp\)/.test(vp.par) && vp.sinCifrasOficiales && vp.pedidas > 0;
-  console.log('\n[calidad de leads] vista previa respuesta', JSON.stringify(vp));
-  if (!vp.ok) hallazgos.push({ vista: 'lq:vistaPreviaRespuesta', vp });
-  await escanear('lq:vistaPreviaRespuesta');
+
   // Telefonía por asesora (Dirección General, 7-oct-2026): canal del 1er toque, mediana del
   // 1er intento de llamada, intentos en 24 h y en total, sin marcar vs falla de línea,
   // duración conocida, y la actividad efectiva sin fallas de línea desde el 7-oct.
