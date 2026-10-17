@@ -962,6 +962,7 @@ const PORT = process.env.PORT || 8765;
       L('waPrueba', 'Botón landing', T('10:00:00'), { ph: '5550000003', attr: { med: 'whatsapp' } }),
       L('waSinRef', 'WhatsApp directo', T('11:00:00'), { ph: '5550000004', attr: { med: 'whatsapp', src: 'Social media' } }),
       L('waSinLeer', 'WhatsApp sin leer', T('12:00:00'), { ph: '5550000005', attr: { med: 'whatsapp', src: 'Social media' } }),
+      L('interno', 'equipo@selvadentrotulum.com', T('12:30:00'), { em: 'equipo@selvadentrotulum.com' }),
     ];
     const WA = {
       waLeo: { tx: '¡Hola! Soy Leonardo. Vi la página de Selvadentro y quiero saber más (ref: ' + DYN + ')' },
@@ -978,7 +979,7 @@ const PORT = process.env.PORT || 8765;
     const de = (id) => agg.leads.find(l => l.id === id);
     r.camps = ['orgIG', 'orgFB', 'orgRef', 'pagoFbc', 'waNuevo', 'waTarde', 'waSinRef', 'waSinLeer'].map(id => { const l = de(id); return l ? l.fuente + ' · ' + l.camp : '(fuera)'; }).join(' | ');
     r.dup = (agg.dupWa || []).map(d => d.n + '→' + d.de.n + ' (' + d.camp + ')').join(' | ');
-    r.fuera = ['waLeo', 'waOsc', 'waPrueba'].filter(id => !de(id)).length;
+    r.fuera = ['waLeo', 'waOsc', 'waPrueba', 'interno'].filter(id => !de(id)).length;
     r.prueba = agg.excl.prueba - aggB.excl.prueba;
     r.nLeads = agg.leads.length - aggB.leads.length;
     const sinC = (a) => a.leads.filter(l => l.camp === LQ_SIN_CAMP).length;
@@ -1004,7 +1005,7 @@ const PORT = process.env.PORT || 8765;
   }, fixture());
   sca.ok = sca.camps === 'Social orgánico / directo · Social orgánico · Instagram | Social orgánico / directo · Social orgánico · Facebook | Social orgánico / directo · Social orgánico · Instagram | Meta · (sin campaña atribuida) | Meta · INVESTORS_MX_DYNAMIC-TOPLPS_090926 | Meta · INVESTORS_MX_DYNAMIC-TOPLPS_090926 | Social orgánico / directo · Social orgánico · IG / WhatsApp | Otra fuente · (sin campaña atribuida)'
     && sca.dup === 'Leomx→Leonardo Ruiz Mora (INVESTORS_MX_DYNAMIC-TOPLPS_090926) | ShamanX→Oscar Demo (INVESTORS_US/CA_ESCAPE_090926)'
-    && sca.fuera === 3 && sca.prueba === 1 && sca.nLeads === 10 && sca.sinCamp === 2 && sca.wref && sca.metaOrg === 0
+    && sca.fuera === 4 && sca.prueba === 2 && sca.nLeads === 10 && sca.sinCamp === 2 && sca.wref && sca.metaOrg === 0
     && sca.soy === ' | oscar roman | ana' && sca.pruebas === '11001' && sca.lista && sca.excl !== '' && sca.filaOrg && sca.sinListaAntes;
   console.log('\n[calidad de leads] sin campaña atribuida', JSON.stringify(sca));
   if (!sca.ok) hallazgos.push({ vista: 'lq:sinCampania', sca });

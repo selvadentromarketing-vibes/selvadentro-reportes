@@ -420,8 +420,9 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
      SQL de ninguna campaña ni de Meta. El backend guarda ahora `attr.ref` (host del
      referrer) y `attr.fbc` (FBCLID en la atribución o en la URL).
   2. **WhatsApp después del formulario**: a los contactos que creó WhatsApp sin origen
-     (`lqWaSinOrigen`: atribución `whatsapp` o etiqueta "inbound whatsapp", sin campaña, ID,
-     utm_source ni fuente) se les lee el **primer mensaje entrante** (acción `primerMensaje`,
+     (`lqWaSinOrigen`: atribución o campo Medium `whatsapp`, o etiqueta "inbound whatsapp", sin
+     campaña, ID, utm_source ni fuente; "Social media" en Session source es la categoría que GHL
+     pone sola y no cuenta como origen) se les lee el **primer mensaje entrante** (acción `primerMensaje`,
      caché en el kv `lq:wa1:v1`: uno encontrado no se vuelve a pedir; sin mensaje, se reintenta
      a las 6 h). Sin ref (con el mensaje ya leído) es WhatsApp directo: "Social orgánico · IG /
      WhatsApp" (`wa0`); si el mensaje no se pudo leer, sigue sin campaña hasta la próxima
@@ -430,9 +431,10 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
      en las 24 h anteriores (`lqDuplicadoWa`; si hay varios, el más cercano), es un
      **duplicado por WhatsApp**: sale de todos los totales (`agg.dupWa`) y se lista aparte,
      debajo de la línea de excluidos, para unirlo en GoHighLevel.
-  3. **Pruebas**: fuera de todos los cálculos el contacto cuyo nombre, email o primer mensaje
-     diga "prueba(s)" o "test(s)" como palabra (no "latest" ni "testimonios"); cuenta en
-     "registros de prueba" de la línea de excluidos. El primer mensaje solo se lee de los
+  3. **Pruebas e internos**: fuera de todos los cálculos el contacto cuyo nombre, email o primer
+     mensaje diga "prueba(s)" o "test(s)" como palabra (no "latest" ni "testimonios"), y el que
+     tiene correo **@selvadentrotulum.com** (equipo interno); cuentan en "registros de prueba o
+     internos" de la línea de excluidos. El primer mensaje solo se lee de los
      contactos de WhatsApp sin origen.
 - **Limpieza**: la matriz "Reglas automáticas vs. captura del equipo" queda detrás del
   botón **Ver diagnóstico de reglas**; la tabla de inversión por campaña de Calidad de Lead
