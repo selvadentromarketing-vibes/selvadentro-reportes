@@ -959,6 +959,8 @@ const PORT = process.env.PORT || 8765;
       L('waNuevo', 'Marta WA', T('09:00:00'), { ph: '5550000001', tags: ['inbound whatsapp'] }),
       L('waTarde', 'Leo dos', T('08:00:00', 31 * 3600), { ph: '5550000002', attr: { med: 'whatsapp' } }),
       L('waPrueba', 'Botón landing', T('10:00:00'), { ph: '5550000003', attr: { med: 'whatsapp' } }),
+      L('waSinRef', 'WhatsApp directo', T('11:00:00'), { ph: '5550000004', attr: { med: 'whatsapp', src: 'Social media' } }),
+      L('waSinLeer', 'WhatsApp sin leer', T('12:00:00'), { ph: '5550000005', attr: { med: 'whatsapp', src: 'Social media' } }),
     ];
     const WA = {
       waLeo: { tx: '¡Hola! Soy Leonardo. Vi la página de Selvadentro y quiero saber más (ref: ' + DYN + ')' },
@@ -966,13 +968,14 @@ const PORT = process.env.PORT || 8765;
       waNuevo: { tx: 'Hola, soy Marta, quiero información (ref: ' + DYN + ')' },
       waTarde: { tx: 'Hola, soy Leonardo (ref: ' + DYN + ')' },
       waPrueba: { tx: 'Hola esto es una prueba del botón (ref: ' + DYN + ')' },
+      waSinRef: { tx: 'Hola, quiero información de los lotes' },
     };
     fx.rawLeads = fx.rawLeads.concat(nuevos);
     const r = {};
     const aggB = buildLqAgg(base.boot, base.rawLeads, base.spendRows, base.weeks, base.opps, base.adRows, base.adExtra);
     const agg = buildLqAgg(fx.boot, fx.rawLeads, fx.spendRows, fx.weeks, fx.opps, fx.adRows, fx.adExtra, [], null, WA);
     const de = (id) => agg.leads.find(l => l.id === id);
-    r.camps = ['orgIG', 'orgFB', 'orgRef', 'pagoFbc', 'waNuevo', 'waTarde'].map(id => { const l = de(id); return l ? l.fuente + ' · ' + l.camp : '(fuera)'; }).join(' | ');
+    r.camps = ['orgIG', 'orgFB', 'orgRef', 'pagoFbc', 'waNuevo', 'waTarde', 'waSinRef', 'waSinLeer'].map(id => { const l = de(id); return l ? l.fuente + ' · ' + l.camp : '(fuera)'; }).join(' | ');
     r.dup = (agg.dupWa || []).map(d => d.n + '→' + d.de.n + ' (' + d.camp + ')').join(' | ');
     r.fuera = ['waLeo', 'waOsc', 'waPrueba'].filter(id => !de(id)).length;
     r.prueba = agg.excl.prueba - aggB.excl.prueba;
@@ -998,9 +1001,9 @@ const PORT = process.env.PORT || 8765;
     r.sinListaAntes = !/Duplicados por WhatsApp/.test(document.getElementById('lq-content').textContent);
     return r;
   }, fixture());
-  sca.ok = sca.camps === 'Social orgánico / directo · Social orgánico · Instagram | Social orgánico / directo · Social orgánico · Facebook | Social orgánico / directo · Social orgánico · Instagram | Meta · (sin campaña atribuida) | Meta · INVESTORS_MX_DYNAMIC-TOPLPS_090926 | Meta · INVESTORS_MX_DYNAMIC-TOPLPS_090926'
+  sca.ok = sca.camps === 'Social orgánico / directo · Social orgánico · Instagram | Social orgánico / directo · Social orgánico · Facebook | Social orgánico / directo · Social orgánico · Instagram | Meta · (sin campaña atribuida) | Meta · INVESTORS_MX_DYNAMIC-TOPLPS_090926 | Meta · INVESTORS_MX_DYNAMIC-TOPLPS_090926 | Social orgánico / directo · Social orgánico · IG / WhatsApp | Otra fuente · (sin campaña atribuida)'
     && sca.dup === 'Leomx→Leonardo Ruiz Mora (INVESTORS_MX_DYNAMIC-TOPLPS_090926) | ShamanX→Oscar Demo (INVESTORS_US/CA_ESCAPE_090926)'
-    && sca.fuera === 3 && sca.prueba === 1 && sca.nLeads === 8 && sca.sinCamp === 1 && sca.wref && sca.metaOrg === 0
+    && sca.fuera === 3 && sca.prueba === 1 && sca.nLeads === 10 && sca.sinCamp === 2 && sca.wref && sca.metaOrg === 0
     && sca.soy === ' | oscar roman | ana' && sca.pruebas === '11001' && sca.lista && sca.excl !== '' && sca.filaOrg && sca.sinListaAntes;
   console.log('\n[calidad de leads] sin campaña atribuida', JSON.stringify(sca));
   if (!sca.ok) hallazgos.push({ vista: 'lq:sinCampania', sca });

@@ -3718,6 +3718,7 @@ function lqTagHint(t){
 //    el número de WhatsApp no es el del formulario. La campaña sale de ese ref; si además el
 //    "Soy X" / "I am X" coincide con un lead de formulario de la misma campaña creado en las 24 h
 //    anteriores, es la misma persona: va a "Duplicados por WhatsApp" y no cuenta como lead nuevo.
+//    Sin ref (mensaje ya leído) es WhatsApp directo: "Social orgánico · IG / WhatsApp".
 const LQ_RX_REF_SOCIAL = /(^|\.)(instagram|facebook)\.com$/i;
 const LQ_RX_REF_WA = /\(\s*ref\s*:\s*([^)]+?)\s*\)/i;
 const LQ_RX_SOY = /(?:^|[^a-z\u00c0-\u024f])(?:soy|me llamo|mi nombre es|i am|i'm|im|my name is|this is)\s+([a-z\u00c0-\u024f'´-]+(?:[ \t]+[a-z\u00c0-\u024f'´-]+){0,3})/i;
@@ -3776,6 +3777,7 @@ function lqDuplicadoWa(l, nombre, candidatos){
 // y el utm_source únicamente deciden la plataforma (Meta / Google / Webinar).
 function lqSourceCamp(lead){
   if(lead.attr && lead.attr.org) return { fuente:"Social orgánico / directo", camp:"Social orgánico · "+lead.attr.org, hint:"" };
+  if(lead.attr && lead.attr.wa0) return { fuente:"Social orgánico / directo", camp:"Social orgánico · IG / WhatsApp", hint:"" };
   const t = (lead.tags||[]).map(x=>String(x).toLowerCase());
   const blob = ((lead.src||"")+" "+(lead.attr?.src||"")+" "+(lead.attr?.med||"")).toLowerCase();
   const camp = String(lead.attr?.camp || "").trim();
@@ -4324,8 +4326,10 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
     const red = lqRedOrganica(l, A);
     if(red){ l.attr.org = red; return; }
     // Contacto que creó WhatsApp sin origen: la campaña del "(ref: …)" de su primer mensaje.
-    const refWa = WA[l.id] && lqWaSinOrigen(l, A) ? lqRefWa(WA[l.id]) : "";
+    // Sin ref (y con el mensaje ya leído) es WhatsApp directo: grupo orgánico, no "sin campaña".
+    const waSO = !!WA[l.id] && lqWaSinOrigen(l, A), refWa = waSO ? lqRefWa(WA[l.id]) : "";
     if(refWa){ l.attr.camp = refWa; l.attr.wref = true; }
+    else if(waSO){ l.attr.wa0 = true; return; }
     if(!l.attr.camp) l.attr.camp = cf(A.camp) || cf(A.campAlt);
     if(!l.attr.ad)   l.attr.ad   = cf(A.ad);
     if(!l.attr.grp)  l.attr.grp  = cf(A.grp);
@@ -6782,7 +6786,7 @@ function lqRender(){
     La <b>inversión</b> viene de Windsor.ai (Meta + Google).
     <br><b>Campaña</b>: la de la atribución del contacto (utm_campaign o ID de campaña). Un lead con utm_medium "social" (o que llegó desde l.instagram.com / l.facebook.com) sin FBCLID ni campaña es
     <b>Social orgánico · Instagram</b> o <b>· Facebook</b> según su utm_source: no entra al costo por lead ni al costo por SQL de ninguna campaña.
-    Un contacto que creó WhatsApp sin origen toma la campaña del <b>"(ref: …)"</b> de su primer mensaje; si además su "Soy X" / "I am X" coincide con un lead del formulario de esa campaña de las
+    Un contacto que creó WhatsApp sin origen toma la campaña del <b>"(ref: …)"</b> de su primer mensaje (sin ref, va a Social orgánico · IG / WhatsApp); si además su "Soy X" / "I am X" coincide con un lead del formulario de esa campaña de las
     ${LQ_DUP_WA_HORAS} h anteriores, es un <b>duplicado por WhatsApp</b>: no cuenta como lead nuevo y se lista aparte para unirlo en GoHighLevel. Quedan fuera los registros de prueba: nombre, email o primer mensaje con "prueba" o "test".
     <br>Los datos se refrescan solos cada 30 minutos; para verlos al instante usa <b>Actualizar desde el CRM</b>.</div>
     <div class="lq-meth"><b>Reglas de calificación automática</b> — se evalúan en orden y la primera que se cumple manda. Umbral de producto

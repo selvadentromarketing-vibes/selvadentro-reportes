@@ -423,7 +423,9 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
      (`lqWaSinOrigen`: atribución `whatsapp` o etiqueta "inbound whatsapp", sin campaña, ID,
      utm_source ni fuente) se les lee el **primer mensaje entrante** (acción `primerMensaje`,
      caché en el kv `lq:wa1:v1`: uno encontrado no se vuelve a pedir; sin mensaje, se reintenta
-     a las 6 h). Si trae `(ref: CAMPAÑA)`, esa es su campaña (`wref`). Si además el "Soy X" /
+     a las 6 h). Sin ref (con el mensaje ya leído) es WhatsApp directo: "Social orgánico · IG /
+     WhatsApp" (`wa0`); si el mensaje no se pudo leer, sigue sin campaña hasta la próxima
+     sincronización. Si trae `(ref: CAMPAÑA)`, esa es su campaña (`wref`). Si además el "Soy X" /
      "I am X" (`lqNombreSoy`) está en el nombre de un lead de formulario de esa campaña creado
      en las 24 h anteriores (`lqDuplicadoWa`; si hay varios, el más cercano), es un
      **duplicado por WhatsApp**: sale de todos los totales (`agg.dupWa`) y se lista aparte,
