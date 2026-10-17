@@ -430,12 +430,16 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
      en las 24 h anteriores (`lqDuplicadoWa`; si hay varios, el más cercano), es un
      **duplicado por WhatsApp**: sale de todos los totales (`agg.dupWa`) y se lista aparte,
      debajo de la línea de excluidos, para unirlo en GoHighLevel. Mientras no se unan, el lead
-     del formulario se queda con **lo más avanzado de los dos** (`lqUnirDupWa`): calificación,
-     Zoom, OPP, WON y respuesta, y la etapa que se muestra es la del contacto que avanzó más; si
-     ventas trabajó el contacto de WhatsApp, la campaña no pierde ese avance. Descalificar el de
-     WhatsApp (p. ej. como duplicado) nunca baja al del formulario, y un formulario descalificado
-     solo sube si el de WhatsApp tiene avance real (MQL o más) (`lqNivelMayor`). La lista dice
-     qué avance pasó.
+     del formulario se queda con **lo más avanzado de los dos**: como son la misma persona, antes
+     de calificar se comparten la respuesta, las citas y los intentos de la escalera (se suman:
+     un MQL "sin escalera" pasa a CQL si sumando los dos contactos sí se completó)
+     (`lqCompartirDupWa`); después, el del formulario toma el nivel mayor, Zoom, OPP, OPP
+     generada y WON del de WhatsApp, y la etapa que se muestra es la del contacto que dio el
+     nivel, la del que tiene OPP/WON o —si los dos siguen vivos— la más adelantada
+     (`lqUnirDupWa`). Si ventas trabajó el contacto de WhatsApp, la campaña no pierde ese avance.
+     Descalificar el de WhatsApp (p. ej. como duplicado) nunca baja al del formulario, y un
+     formulario descalificado solo sube si el de WhatsApp tiene avance real (MQL o más)
+     (`lqNivelMayor`). La lista dice qué pasó al lead del formulario.
   3. **Pruebas**: fuera de todos los cálculos el contacto cuyo nombre, email o primer mensaje
      diga "prueba(s)" o "test(s)" como palabra (no "latest" ni "testimonios"); cuenta en
      "registros de prueba" de la línea de excluidos. El primer mensaje solo se lee de los

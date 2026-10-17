@@ -3775,9 +3775,11 @@ function lqDuplicadoWa(l, nombre, candidatos){
 
 // Duplicado por WhatsApp: el lead del formulario se queda con lo más avanzado de los dos
 // contactos — calificación, Zoom, OPP, WON y respuesta (Dirección General, 17-oct-2026). Si
-// ventas trabajó el contacto de WhatsApp, la campaña no pierde ese avance. Descalificar el
-// contacto de WhatsApp (p. ej. como duplicado) nunca baja al del formulario; un formulario
-// descalificado solo sube si el de WhatsApp tiene avance real (MQL o más).
+// ventas trabajó el contacto de WhatsApp, la campaña no pierde ese avance. Son la misma persona:
+// antes de calificar se comparten la respuesta, las citas y los intentos de la escalera
+// (`lqCompartirDupWa`); después, el del formulario toma el nivel mayor y los pasos de los dos
+// (`lqUnirDupWa`). Descalificar el contacto de WhatsApp (p. ej. como duplicado) nunca baja al
+// del formulario; un formulario descalificado solo sube si el de WhatsApp tiene avance real.
 const LQ_PROG = { nuevo:0, cql:1, mql:2, sql:3, sqls:4 };
 function lqNivelMayor(a, b){
   if(!b || LQ_PROG[b] == null) return a;              // desc, sin calificar o vacío no suben nada
@@ -3785,15 +3787,33 @@ function lqNivelMayor(a, b){
   if(a === "desc") return LQ_PROG[b] >= LQ_PROG.mql ? b : a;
   return LQ_PROG[b] > LQ_PROG[a] ? b : a;
 }
+const LQ_RSP_CAMPOS = ["rsp","rspT","rspCh","rspD","rspNt"];
+function lqCompartirDupWa(f, d){
+  const [con, sin] = f.rsp ? [f, d] : d.rsp ? [d, f] : [null, null];
+  if(con){ LQ_RSP_CAMPOS.forEach(k=>{ if(con[k] != null) sin[k] = con[k]; else delete sin[k]; }); delete sin.rspE; }
+  else if(f.rspE || d.rspE){
+    const a = f.rspE || {}, b = d.rspE || {};
+    f.rspE = d.rspE = { ll:(a.ll||0)+(b.ll||0), msg:(a.msg||0)+(b.msg||0), em:(a.em||0)+(b.em||0) };
+  }
+  const A = f.ap || {}, B = d.ap || {};
+  f.ap = d.ap = { tot:Math.max(A.tot||0, B.tot||0), sh:Math.max(A.sh||0, B.sh||0), ns:Math.max(A.ns||0, B.ns||0) };
+}
+// Avance de la etapa: WON, OPP, y luego la posición en el pipeline; -1 = sin etapa o etapa muerta
+// (Largo plazo, Nurturing, Descalificado…), que no se compara.
+const lqAvanceEtapa = (l)=> (l.w||0) > 0 ? 1e4 : (l.o||0) > 0 ? 1e3 : (!l.pstage || LQ_RX_MUERTA.test(l.pstage)) ? -1 : (l._si ?? -1);
 // Pasa al lead del formulario (f) lo que el contacto de WhatsApp (d) tiene más avanzado y
 // devuelve qué pasó, para la lista de duplicados.
-function lqUnirDupWa(f, d){
-  const lleva = [], f0 = { alv:f.alv, o:f.o||0, w:f.w||0 };
+// `base` = cómo calificaba el del formulario solo, sin nada del de WhatsApp ({ alv, rsp }).
+function lqUnirDupWa(f, d, base){
+  const lleva = [], f0 = { alv:f.alv, o:f.o||0, w:f.w||0, rsp:base.rsp };
   const alv = lqNivelMayor(f.alv, d.alv);
   if(alv !== f.alv){
-    lleva.push(LQ_LEVEL_BY_ID[alv].name);
     Object.assign(f, { alv, awhy:("en su contacto de WhatsApp «" + (d.n||"") + "»: " + (d.awhy||"")).slice(0,180) });
     if(d.mse) f.mse = 1; else delete f.mse;
+  } else if(alv !== base.alv) f.awhy = ("con su contacto de WhatsApp «" + (d.n||"") + "»: " + (f.awhy||"")).slice(0,180);
+  if(alv !== base.alv){
+    // Solo baja de MQL a CQL cuando la escalera se completó sumando los intentos de los dos.
+    lleva.push(LQ_PROG[alv] < (LQ_PROG[base.alv] ?? -1) ? `escalera completa sumando los dos (${LQ_LEVEL_BY_ID[alv].name})` : LQ_LEVEL_BY_ID[alv].name);
     if(alv !== "desc") delete f.inv;                    // con avance real ya no es un lead inválido
   }
   const lv = lqNivelMayor(f.lv, d.lv);
@@ -3802,22 +3822,21 @@ function lqUnirDupWa(f, d){
   if((d.o||0) > f0.o) lleva.push("OPP");
   else if(d.og && !f.og) lleva.push("OPP generada");
   if((d.w||0) > f0.w) lleva.push("WON");
+  if(!f0.rsp && f.rsp) lleva.push("respuesta");
+  // La etapa que se muestra es la del contacto que dio el nivel, la del que tiene OPP o WON, o
+  // —si los dos siguen vivos en el pipeline— la más adelantada.
+  const vivas = lqAvanceEtapa(f) >= 0 && lqAvanceEtapa(d) >= 0;
+  const etapaD = !!d.pstage && (alv !== f0.alv || (d.o||0) > f0.o || (d.w||0) > f0.w || (vivas && lqAvanceEtapa(d) > lqAvanceEtapa(f)));
+  if(etapaD){
+    if(d.pstage !== f.pstage && !lleva.some(x=>/^(Zoom|OPP|WON)/.test(x))) lleva.push("etapa " + d.pstage);
+    Object.assign(f, { pipe:d.pipe, pstage:d.pstage, ost:d.ost });
+    if(d.dqc) f.dqc = d.dqc; else delete f.dqc;
+  }
   ["o","pr","w","wv","ov"].forEach(k=>{ if((d[k]||0) > (f[k]||0)) f[k] = d[k]; });
   if(d.og) f.og = 1;
   if(d.vv) f.vv = 1;
   if(d.ct) f.ct = 1;
   if(d.tr) f.tr = 1;
-  const A = f.ap || {}, B = d.ap || {};
-  f.ap = { tot:Math.max(A.tot||0, B.tot||0), sh:Math.max(A.sh||0, B.sh||0), ns:Math.max(A.ns||0, B.ns||0) };
-  if(!f.rsp && d.rsp){
-    ["rsp","rspT","rspCh","rspD","rspNt"].forEach(k=>{ if(d[k] != null) f[k] = d[k]; });
-    delete f.rspE; lleva.push("respuesta");
-  }
-  // La etapa que se muestra es la del contacto que avanzó más.
-  if(d.pstage && (alv !== f0.alv || (d.o||0) > f0.o || (d.w||0) > f0.w)){
-    Object.assign(f, { pipe:d.pipe, pstage:d.pstage, ost:d.ost });
-    if(d.dqc) f.dqc = d.dqc; else delete f.dqc;
-  }
   if(lleva.length) f.avWa = String(d.n||"").slice(0,60);   // parte de su avance está en el contacto de WhatsApp
   return lleva;
 }
@@ -4520,6 +4539,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
   // Con la calificación se marcan pasos que no son niveles: Zoom realizado (zm), trabajado
   // (tr: salió de "Nuevo lead") y contactado (ct: hubo conversación).
   const zIdx = lqEtapaIdx(boot.stages, LQ_RX_ZOOM_OK), cIdx = lqEtapaIdx(boot.stages, /contacto\s*establecid/i);
+  dupRec.forEach(x=>{ x.base = { alv:lqAutoQualify({ ...x.f }).lv, rsp:x.f.rsp || "" }; lqCompartirDupWa(x.f, x.d); });
   leads.concat(dupRec.map(x=>x.d)).forEach(l=>{
     const a = lqAutoQualify(l); l.alv = a.lv; l.awhy = a.why.join(" · ").slice(0,180);
     if(a.sinEsc) l.mse = 1;                 // MQL solo porque ventas no completó la escalera
@@ -4527,10 +4547,10 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
     const ct = lqContactado(l, cIdx);
     if(ct) l.ct = 1;
     if(lqTrabajado(l, ct)) l.tr = 1;
-    delete l._si;
     l.tags = l.tags.slice(0,140);
   });
-  dupRec.forEach(({ d, f }, i)=>{ dupWa[i].lleva = lqUnirDupWa(f, d); });
+  dupRec.forEach(({ d, f, base }, i)=>{ dupWa[i].lleva = lqUnirDupWa(f, d, base); });
+  leads.forEach(l=>{ delete l._si; });
   // Re-envíos que sí cuentan: fecha exacta en otra semana que el alta, o (fecha aproximada)
   // alta anterior al inicio de la campaña que traen y actualización desde ese inicio.
   const primerDia = (weeks && weeks.length) ? lqWeekBounds([...weeks].sort()[0]).startYMD : "";
