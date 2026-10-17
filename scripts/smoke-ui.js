@@ -943,7 +943,8 @@ const PORT = process.env.PORT || 8765;
   const sca = await page.evaluate((fx0) => {
     const base = JSON.parse(JSON.stringify(fx0));
     const fx = JSON.parse(JSON.stringify(fx0));
-    fx.boot.fields = fx.boot.fields.concat([{ id: 'f_med', name: 'utm_medium' }, { id: 'f_src', name: 'utm_source' }, { id: 'f_fbc', name: 'fbclid' }]);
+    fx.boot.fields = fx.boot.fields.concat([{ id: 'f_med', name: 'utm_medium' }, { id: 'f_src', name: 'utm_source' }, { id: 'f_fbc', name: 'fbclid' },
+      { id: 'f_ses', name: 'Session source' }, { id: 'f_medio', name: 'Medium' }]);
     const T = (h, s) => new Date(Date.parse('2026-10-01T' + h + 'Z') + (s || 0) * 1000).toISOString();
     const L = (id, n, c, o) => Object.assign({ id, n, em: '', ph: '', c, src: '', u: 'u1', tags: [], cf: {}, attr: {} }, o);
     const DYN = 'INVESTORS_MX_DYNAMIC-TOPLPS_090926', ESC = 'INVESTORS_US/CA_ESCAPE_090926';
@@ -955,7 +956,7 @@ const PORT = process.env.PORT || 8765;
       L('formLeo', 'Leonardo Ruiz Mora', T('07:32:38'), { em: 'l@x.com', ph: '6610000001', src: 'fb', cf: { f_camp: DYN } }),
       L('waLeo', 'Leomx', T('07:33:03'), { ph: '6190000001', tags: ['wa: +5219840000000'], attr: { med: 'whatsapp', src: 'Social media' } }),
       L('formOsc', 'Oscar Demo', T('06:14:05'), { em: 'os@x.com', ph: '7020000001', src: 'fb', cf: { f_camp: ESC } }),
-      L('waOsc', 'ShamanX', T('06:14:24'), { ph: '7750000001', attr: { med: 'whatsapp', src: 'Social media' } }),
+      L('waOsc', 'ShamanX', T('06:14:24'), { ph: '7750000001', cf: { f_ses: 'Social media', f_medio: 'whatsapp' } }),
       L('waNuevo', 'Marta WA', T('09:00:00'), { ph: '5550000001', tags: ['inbound whatsapp'] }),
       L('waTarde', 'Leo dos', T('08:00:00', 31 * 3600), { ph: '5550000002', attr: { med: 'whatsapp' } }),
       L('waPrueba', 'Botón landing', T('10:00:00'), { ph: '5550000003', attr: { med: 'whatsapp' } }),
