@@ -3181,7 +3181,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v29";  // v29: sin respuesta → CQL solo con escalera completa (si no, MQL); nota del asesor como respuesta  // v28: respuesta real del lead (mensaje entrante, llamada > 30 s o etapa de contacto) y el formulario ya no sube a SQL en Nurturing/Largo plazo/Rescate/Sin respuesta  // v27: nivel de la OPP caída según dónde cayó (Largo plazo → SQL, Rescate → SQL Selvadentro, Descalificado por causa)  // v26: OPP generada = SQL Selvadentro (salvo causa inválida) y cuenta como contactado y trabajado (no como Zoom)  // v25: OPP generadas (etiqueta opp-generada del CRM) y verificado por ventas (Lead to Watch)  // v24: broker = cualquier etiqueta que empiece con "broker" (no solo broker-client)  // v23: re-envíos de formulario (agg.reenvios)  // v22: datos de la decisión de hoy (rango fijo 30 días y 7 contra 7) en `dec`  // v21: el v20 guardado el 9-oct pudo quedar sin detalle por anuncio (la consulta con campos extra se volvía lenta)  // v20: URL de destino por anuncio, gasto por keyword de Google y presupuesto diario (recomendaciones concretas)  // v19: trabajado (tr) y contactado (ct) por etapa, separados  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
+const LQ_AGG_KEY = "lq:agg:v30";  // v30: Social orgánico · Instagram/Facebook, campaña del "(ref: …)" de WhatsApp, duplicados por WhatsApp (dupWa) y pruebas por primer mensaje  // v29: sin respuesta → CQL solo con escalera completa (si no, MQL); nota del asesor como respuesta  // v28: respuesta real del lead (mensaje entrante, llamada > 30 s o etapa de contacto) y el formulario ya no sube a SQL en Nurturing/Largo plazo/Rescate/Sin respuesta  // v27: nivel de la OPP caída según dónde cayó (Largo plazo → SQL, Rescate → SQL Selvadentro, Descalificado por causa)  // v26: OPP generada = SQL Selvadentro (salvo causa inválida) y cuenta como contactado y trabajado (no como Zoom)  // v25: OPP generadas (etiqueta opp-generada del CRM) y verificado por ventas (Lead to Watch)  // v24: broker = cualquier etiqueta que empiece con "broker" (no solo broker-client)  // v23: re-envíos de formulario (agg.reenvios)  // v22: datos de la decisión de hoy (rango fijo 30 días y 7 contra 7) en `dec`  // v21: el v20 guardado el 9-oct pudo quedar sin detalle por anuncio (la consulta con campos extra se volvía lenta)  // v20: URL de destino por anuncio, gasto por keyword de Google y presupuesto diario (recomendaciones concretas)  // v19: trabajado (tr) y contactado (ct) por etapa, separados  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 // (LQ_TZ y LQ_TZ_MS ahora viven junto al resto de helpers de fecha, arriba)
@@ -3707,9 +3707,75 @@ function lqTagHint(t){
   return "";
 }
 
+// SIN CAMPAÑA ATRIBUIDA (Dirección General, 17-oct-2026). Dos casos que sí se sabe de dónde
+// vinieron:
+// 1. Instagram/Facebook sin pauta: utm_medium "social" (o referrer l.instagram.com /
+//    l.facebook.com) sin FBCLID ni utm_campaign = link de la bio o de un post. Es "Social
+//    orgánico · Instagram/Facebook" (red según utm_source ig/fb), no "Meta · sin campaña": no
+//    entra al costo por lead ni al costo por SQL de ninguna campaña ni de Meta.
+// 2. WhatsApp después del formulario: el botón de la landing abre WhatsApp con un texto que
+//    termina en "(ref: NOMBRE_CAMPAÑA)", y GoHighLevel crea un contacto NUEVO (sin origen) cuando
+//    el número de WhatsApp no es el del formulario. La campaña sale de ese ref; si además el
+//    "Soy X" / "I am X" coincide con un lead de formulario de la misma campaña creado en las 24 h
+//    anteriores, es la misma persona: va a "Duplicados por WhatsApp" y no cuenta como lead nuevo.
+const LQ_RX_REF_SOCIAL = /(^|\.)(instagram|facebook)\.com$/i;
+const LQ_RX_REF_WA = /\(\s*ref\s*:\s*([^)]+?)\s*\)/i;
+const LQ_RX_SOY = /(?:^|[^a-z\u00c0-\u024f])(?:soy|me llamo|mi nombre es|i am|i'm|im|my name is|this is)\s+([a-z\u00c0-\u024f'´-]+(?:[ \t]+[a-z\u00c0-\u024f'´-]+){0,3})/i;
+const LQ_NO_NOMBRE = new Set(["de","del","la","el","los","las","un","una","muy","yo","from","the","a","an","interesado","interesada","interested","cliente","inversionista","investor"]);
+const LQ_DUP_WA_HORAS = 24;
+const LQ_WA1_KEY = "lq:wa1:v1";   // primer mensaje de los contactos de WhatsApp sin origen
+const lqNormNombre = (x)=> String(x||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9ñ ]+/g, " ").trim().split(/\s+/).filter(Boolean);
+const lqRefWa = (wa)=>{ const m = wa && wa.tx ? String(wa.tx).match(LQ_RX_REF_WA) : null; return m ? m[1].trim() : ""; };
+// Nombre que se da en el mensaje ("Soy Leo", "I am Oscar Roman"): primera palabra que sí es nombre.
+function lqNombreSoy(tx){
+  const m = String(tx||"").match(LQ_RX_SOY);
+  if(!m) return [];
+  const t = lqNormNombre(m[1]);
+  return t.length && t[0].length >= 3 && !LQ_NO_NOMBRE.has(t[0]) ? t : [];
+}
+// Contacto que creó WhatsApp y no trae origen (ni campaña, ni ID, ni utm_source, ni fuente).
+function lqWaSinOrigen(l, A){
+  const cf = (f)=> f && l.cf ? String(l.cf[f.id]||"").trim() : "";
+  const a = l.attr || {};
+  if(a.camp || a.cid || cf(A.camp) || cf(A.campAlt) || cf(A.cid) || cf(A.src) || cf(A.srcAlt)) return false;
+  if(l.src && !/whatsapp/i.test(l.src)) return false;
+  return [a.med, a.src, l.src].some(x=>/whatsapp/i.test(String(x||""))) || (l.tags||[]).some(t=>/inbound\s*whatsapp/i.test(String(t)));
+}
+// Red social del orgánico (regla 1), o "" si el lead no es orgánico de Instagram/Facebook.
+function lqRedOrganica(l, A){
+  const cf = (f)=> f && l.cf ? String(l.cf[f.id]||"").trim() : "";
+  const a = l.attr || {};
+  if(a.camp || cf(A.camp) || cf(A.campAlt) || a.cid || cf(A.cid) || a.fbc || cf(A.fbclid)) return "";
+  const med = [cf(A.med), cf(A.medAlt), a.med].some(x=>/^social$/i.test(String(x||"").trim()));
+  const ref = LQ_RX_REF_SOCIAL.test(String(a.ref||""));
+  if(!med && !ref) return "";
+  const src = [cf(A.src), l.src, a.src].map(x=>String(x||"").trim().toLowerCase()).find(x=>/^(ig|instagram|fb|facebook)$/.test(x)) || "";
+  if(/^(ig|instagram)$/.test(src)) return "Instagram";
+  if(/^(fb|facebook)$/.test(src)) return "Facebook";
+  if(/instagram/i.test(a.ref||"")) return "Instagram";
+  if(/facebook/i.test(a.ref||"")) return "Facebook";
+  return "otra red";
+}
+// Lead de formulario del que el contacto de WhatsApp es duplicado: misma campaña, creado en las
+// 24 h anteriores y el nombre del mensaje está en su nombre. Si hay varios, el más cercano.
+function lqDuplicadoWa(l, nombre, candidatos){
+  if(!nombre.length || !l.camp || l.camp === LQ_SIN_CAMP) return null;
+  const t = Date.parse(l.c);
+  if(isNaN(t)) return null;
+  const hits = candidatos.filter(f=>{
+    if(f.id === l.id || lqNormCamp(f.camp) !== lqNormCamp(l.camp)) return false;
+    const tf = Date.parse(f.c);
+    if(isNaN(tf) || tf > t || t - tf > LQ_DUP_WA_HORAS*3600e3) return false;
+    const n = lqNormNombre(f.n);
+    return n.includes(nombre[0]);
+  });
+  return hits.sort((a,b)=>Date.parse(b.c)-Date.parse(a.c))[0] || null;
+}
+
 // Fuente y campaña: la campaña SOLO sale de la atribución del contacto. Los tags
 // y el utm_source únicamente deciden la plataforma (Meta / Google / Webinar).
 function lqSourceCamp(lead){
+  if(lead.attr && lead.attr.org) return { fuente:"Social orgánico / directo", camp:"Social orgánico · "+lead.attr.org, hint:"" };
   const t = (lead.tags||[]).map(x=>String(x).toLowerCase());
   const blob = ((lead.src||"")+" "+(lead.attr?.src||"")+" "+(lead.attr?.med||"")).toLowerCase();
   const camp = String(lead.attr?.camp || "").trim();
@@ -4064,8 +4130,12 @@ function lqCanalDeNegocio(lead, F){
 // CRM (jul-2026) los excluye antes de calificar; el SLA ya lo hacía, Calidad de Leads no.
 // "hoshitest@…" no tiene frontera de palabra antes de "test": va como alternativa propia,
 // y "@" cuenta como cierre porque el nombre del lead cae al email cuando no hay nombre.
-const RX_REGISTRO_PRUEBA = /(^|\b)(test|prueba|testing|propy\s*test|hoshitest)(\b|\d|@|$)/i;
+const RX_REGISTRO_PRUEBA = /(^|\b)(tests?|pruebas?|testing|propy\s*test|hoshitest)(\b|\d|@|$)/i;
 const esRegistroPrueba = (l)=> RX_REGISTRO_PRUEBA.test(String(l.n||"")) || RX_REGISTRO_PRUEBA.test(String(l.em||""));
+// …y el PRIMER MENSAJE de los contactos que creó WhatsApp (Dirección General, 17-oct-2026): quien
+// prueba el botón de la landing escribe "prueba" o "test". Con frontera de palabra, para no sacar
+// a quien escribe "latest" o "testimonios".
+const lqMensajePrueba = (wa)=> !!(wa && wa.tx && RX_REGISTRO_PRUEBA.test(String(wa.tx)));
 // Lead inválido según la spec v1.1 (R-01): la oportunidad está en Descalificado con una
 // causa del grupo inválido y su evidencia, y el CRM no la marcó como injustificada.
 function lqInvalido(op, tags){
@@ -4174,15 +4244,17 @@ function lqInicioCampanias(spendRows, dec, primerDia){
   return ini;
 }
 
-function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adExtra, rawRe, rspMap){
+function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adExtra, rawRe, rspMap, waMap){
   // Paso 0 del manual de limpieza (jul-2026), aplicado ANTES de cualquier cálculo:
   // fuera los registros de prueba y los leads sin email NI teléfono (no hay a quién
   // contactar ni forma de detectar duplicados). Se cuentan y se muestran; no desaparecen.
   // Por semana, para que la nota de excluidos diga cuántos hay en el rango que se lee.
+  // Prueba = el nombre o el email, o el primer mensaje de un contacto de WhatsApp (waMap).
   const excl = { prueba:0, sinContacto:0 }, exclWk = { prueba:{}, sinContacto:{} };
   const fuera = (k, l)=>{ excl[k]++; const w = lqWeekOf(l.c); if(w) exclWk[k][w] = (exclWk[k][w]||0) + 1; return false; };
+  const WA = waMap || {};
   rawLeads = (rawLeads||[]).filter(l=>{
-    if(esRegistroPrueba(l)) return fuera("prueba", l);
+    if(esRegistroPrueba(l) || lqMensajePrueba(WA[l.id])) return fuera("prueba", l);
     if(!l.em && !l.ph) return fuera("sinContacto", l);
     return true;
   });
@@ -4248,6 +4320,12 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
   todos.forEach(l=>{
     l.attr = l.attr || {};
     const cf = (f)=> f && l.cf ? String(l.cf[f.id]||"").trim() : "";
+    // Instagram/Facebook orgánico (sin FBCLID ni campaña): no se le deduce campaña de nada.
+    const red = lqRedOrganica(l, A);
+    if(red){ l.attr.org = red; return; }
+    // Contacto que creó WhatsApp sin origen: la campaña del "(ref: …)" de su primer mensaje.
+    const refWa = WA[l.id] && lqWaSinOrigen(l, A) ? lqRefWa(WA[l.id]) : "";
+    if(refWa){ l.attr.camp = refWa; l.attr.wref = true; }
     if(!l.attr.camp) l.attr.camp = cf(A.camp) || cf(A.campAlt);
     if(!l.attr.ad)   l.attr.ad   = cf(A.ad);
     if(!l.attr.grp)  l.attr.grp  = cf(A.grp);
@@ -4332,7 +4410,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
     if(!l.attr.plat && l.attr.camp) l.attr.plat = campPlat[lqNormCamp(l.attr.camp)] || "";
   });
   const O = oppsByContact || {};
-  const leads = todos.map(l=>{
+  let leads = todos.map(l=>{
     const tagsLower = (l.tags||[]).map(x=>String(x).toLowerCase());
     const lv = lqClassify(F.calif ? l.cf[F.calif.id] : "");
     const sc = lqSourceCamp(l);
@@ -4361,12 +4439,26 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
       ...lqRspCampos(rspMap && rspMap[l.id]),                     // respuesta real del lead (LQ_RESP_V2)
       ...(op && op.dq && op.dq.causa ? { dqc:String(op.dq.causa).slice(0,60) } : {}),   // causa de descalificación (nivel de una OPP caída)
       ...(l.attr && l.attr.inf ? { inf:1 } : {}),   // atribución inferida (LQ_INFERIDA)
+      ...(l.attr && l.attr.wref ? { wref:1 } : {}), // campaña del "(ref: …)" del primer mensaje de WhatsApp
       ...(l.attr && l.attr.pid ? { pid:1, cid:l.attr.cidOk } : {}),   // campaña resuelta por su ID (y cuál), no por nombre
       ...(l.attr && l.attr.kw ? { kw:String(l.attr.kw).slice(0,80) } : {}),   // palabra clave de Google (utm_term={keyword})
       ...(l._re ? { re:1, alta:l._re.alta, ...(l._re.aprox ? { reAprox:1 } : {}) } : {}),   // re-envío de formulario
       _si: stg ? (stg.i ?? 0) : null,    // posición de la etapa, solo para el cálculo de abajo
     };
   }).filter(l=>l.wk);
+  // Duplicados por WhatsApp: el contacto que creó WhatsApp con el ref de una campaña y el
+  // nombre de un lead de formulario de esa campaña de las 24 h anteriores es la misma persona.
+  // Sale de todos los totales y se lista aparte para unirlo en GoHighLevel.
+  const dupWa = [];
+  const deForm = leads.filter(l=>!l.wref && !l.re);
+  leads = leads.filter(l=>{
+    if(!l.wref) return true;
+    const nombre = lqNombreSoy(WA[l.id] && WA[l.id].tx);
+    const f = lqDuplicadoWa(l, nombre, deForm);
+    if(!f) return true;
+    dupWa.push({ id:l.id, n:l.n, c:l.c, wk:l.wk, camp:l.camp, soy:nombre.join(" "), de:{ id:f.id, n:f.n, c:f.c } });
+    return false;
+  });
   // Calificación automática por reglas (independiente del campo que llena el equipo).
   // Los tags se truncan DESPUÉS de calificar: recortarlos antes podía comerse el tag de
   // descalificación o de respuesta de un lead con muchos tags y cambiarle el nivel.
@@ -4397,7 +4489,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
     const ini = (l.cid && iniC["id:"+l.cid]) || iniC["n:"+lqNormCamp(l.camp)];
     return !!ini && ini >= primerDia && diaT(l.alta) < ini && diaT(l.c) >= ini;
   });
-  return { ts:Date.now(), users:boot.users||{}, califField:F.calif, fuenteField:F.fuente, presField:F.pres, horField:F.hor, verifField:F.verif, windsor:!!boot.windsor, excl, exclWk,
+  return { ts:Date.now(), users:boot.users||{}, califField:F.calif, fuenteField:F.fuente, presField:F.pres, horField:F.hor, verifField:F.verif, windsor:!!boot.windsor, excl, exclWk, dupWa,
            oppStages: lqOppStageNames(boot.stages, lqOppThresholds(boot.stages)),
            zoomStages: [...new Set(Object.values(boot.stages||{}).filter(st=>LQ_RX_ZOOM_OK.test(st.s||"")).map(st=>(st.p?st.p+" › ":"")+st.s))].sort(),
            stages: boot.stages||{},
@@ -4447,7 +4539,17 @@ function lqNotaExcluidos(agg, rangoSet){
   if(e.broker) partes.push(`<span${lqNotaBrokers(agg, rangoSet)}><b>${e.broker}</b> lead${e.broker!==1?"s":""} de brokers</span> <span class="lq-sub">(pipeline Brokers - Producción (B2B2C) o una etiqueta que empieza con "broker": los sube el equipo comercial, no vienen de marketing)</span>`);
   if(e.prueba) partes.push(`<b>${e.prueba}</b> registro${e.prueba!==1?"s":""} de prueba`);
   if(e.sinContacto) partes.push(`<b>${e.sinContacto}</b> sin email ni teléfono`);
-  return partes.length ? `<p class="hint pegada lq-excluidos">Excluidos de todos los cálculos en este rango: ${partes.join(" · ")}.</p>` : "";
+  return (partes.length ? `<p class="hint pegada lq-excluidos">Excluidos de todos los cálculos en este rango: ${partes.join(" · ")}.</p>` : "")
+    + lqNotaDupWa(agg, rangoSet);
+}
+// Duplicados por WhatsApp del rango: no cuentan como lead nuevo en ningún total. Se nombran
+// para que ventas los una en GoHighLevel (al unirlos desaparecen de esta lista).
+function lqNotaDupWa(agg, rangoSet){
+  const d = ((agg && agg.dupWa) || []).filter(x=>rangoSet.has(x.wk));
+  if(!d.length) return "";
+  const fila = (x)=> `<b>${escAttr(x.n||"(sin nombre)")}</b> → duplicado de <b>${escAttr(x.de.n||"(sin nombre)")}</b> <span class="lq-sub">(${escAttr(x.camp)})</span>`;
+  return `<p class="hint pegada lq-excluidos lq-dupwa">Duplicados por WhatsApp en este rango (${d.length}, no cuentan como lead nuevo; únelos en GoHighLevel): ${d.map(fila).join(" · ")}.
+    <span class="lq-sub">Contacto que creó WhatsApp con el "(ref: campaña)" del botón de la landing y el mismo nombre que un lead del formulario de esa campaña de las ${LQ_DUP_WA_HORAS} h anteriores.</span></p>`;
 }
 // Respuesta real del lead (LQ_RESP_V2): campos del lead a partir de una entrada del caché
 // `lq:resp:v1` ({r, t, ch, d, k}). Sin entrada (no se pudo leer) el lead queda sin rsp.
@@ -4480,6 +4582,29 @@ async function lqRespuestas(ids, onProg){
     try{ const ult = (await sGet(LQ_RESP_KEY)) || {}; await sSet(LQ_RESP_KEY, { ...ult, ...nuevos }); }catch(e){}
   }
   return { map:{ ...cache, ...nuevos }, errores, revisados:pend.length };
+}
+
+// Primer mensaje de los contactos que creó WhatsApp sin origen (acción `primerMensaje`, 10 por
+// llamada, 3 en paralelo), con caché en el kv: el primer mensaje no cambia, así que uno
+// encontrado no se vuelve a pedir; sin mensaje todavía, se reintenta a las 6 h.
+async function lqPrimerMensajes(ids){
+  let cache = {};
+  try{ cache = (await sGet(LQ_WA1_KEY)) || {}; }catch(e){}
+  const ahora = Date.now();
+  const pend = [...new Set(ids.filter(Boolean))].filter(id=>{ const c = cache[id]; return !c || (!c.tx && ahora - (c.k||0) > 6*3600e3); });
+  const nuevos = {}; let errores = 0;
+  const lotes = []; for(let i = 0; i < pend.length; i += 10) lotes.push(pend.slice(i, i+10));
+  for(let i = 0; i < lotes.length; i += 3){
+    const rs = await Promise.all(lotes.slice(i, i+3).map(ids=>lqFn({ action:"primerMensaje", ids }).catch(()=>({ res: ids.map(ct=>({ ct, err:true })) }))));
+    rs.forEach(r=>(r.res||[]).forEach(x=>{ if(x.err){ errores++; return; } nuevos[x.ct] = { tx:String(x.tx||"").slice(0,300), t:x.t||0, ch:x.ch||"", k:ahora }; }));
+  }
+  if(Object.keys(nuevos).length){
+    // Se mezcla con lo último guardado (otra persona pudo sincronizar) y se olvida lo de hace más de 6 meses.
+    try{ const ult = (await sGet(LQ_WA1_KEY)) || {}, todo = { ...ult, ...nuevos };
+      Object.keys(todo).forEach(k=>{ if(ahora - (todo[k].k||0) > 183*86400e3) delete todo[k]; });
+      await sSet(LQ_WA1_KEY, todo); }catch(e){}
+  }
+  return { map:{ ...cache, ...nuevos }, errores };
 }
 
 // Aviso de OPP generadas. GoHighLevel no guarda el historial de etapas, así que antes de que
@@ -6655,7 +6780,11 @@ function lqRender(){
     que un workflow del CRM pone al entrar a OPP y nadie quita. <b>Verificado por ventas</b> = Lead to Watch en Sí (informativo, no cambia la calificación). <b>WON</b> = venta cerrada.
     ${(agg.oppStages||[]).length ? `<br><span style="color:var(--neutro)">Etapas que hoy cuentan como OPP en tu CRM: <b>${escAttr((agg.oppStages||[]).join(" · "))}</b>.</span>` : ""}
     La <b>inversión</b> viene de Windsor.ai (Meta + Google).
-    Los datos se refrescan solos cada 30 minutos; para verlos al instante usa <b>Actualizar desde el CRM</b>.</div>
+    <br><b>Campaña</b>: la de la atribución del contacto (utm_campaign o ID de campaña). Un lead con utm_medium "social" (o que llegó desde l.instagram.com / l.facebook.com) sin FBCLID ni campaña es
+    <b>Social orgánico · Instagram</b> o <b>· Facebook</b> según su utm_source: no entra al costo por lead ni al costo por SQL de ninguna campaña.
+    Un contacto que creó WhatsApp sin origen toma la campaña del <b>"(ref: …)"</b> de su primer mensaje; si además su "Soy X" / "I am X" coincide con un lead del formulario de esa campaña de las
+    ${LQ_DUP_WA_HORAS} h anteriores, es un <b>duplicado por WhatsApp</b>: no cuenta como lead nuevo y se lista aparte para unirlo en GoHighLevel. Quedan fuera los registros de prueba: nombre, email o primer mensaje con "prueba" o "test".
+    <br>Los datos se refrescan solos cada 30 minutos; para verlos al instante usa <b>Actualizar desde el CRM</b>.</div>
     <div class="lq-meth"><b>Reglas de calificación automática</b> — se evalúan en orden y la primera que se cumple manda. Umbral de producto
     <b>${lqUSD(LQ_UMBRAL_USD)}</b>, horizonte del perfil <b>≤${LQ_HORIZONTE_M} meses</b>.
     <br>1 · <b>Descalificado</b>: oportunidad perdida en el CRM, etapa de descalificación, o tag de descalificación (número equivocado, spam, duplicado, sin interés). A una <b>OPP generada</b> solo la descalifica una causa del grupo inválido (número equivocado, registro de prueba, spam, duplicado).
@@ -6904,15 +7033,28 @@ async function lqSync(){
         if(R.errores) fallos.push(`respuesta de ${R.errores} lead${R.errores===1?"":"s"}: no se pudo leer su conversación (cuentan sin respuesta hasta la próxima sincronización)`);
       }catch(e){ fallos.push("respuestas de los leads (sin ellas nadie cuenta como MQL por respuesta)"); }
     }
+    // Contactos que creó WhatsApp sin origen: su primer mensaje trae la campaña "(ref: …)", el
+    // nombre ("Soy X") o un "prueba". Si no se puede leer, se quedan como hoy y se avisa.
+    let waMap = null;
+    try{
+      const A0 = lqDetectAtrib(boot.fields);
+      const waIds = rawLeads.filter(l=>lqWaSinOrigen(l, A0)).map(l=>l.id);
+      if(waIds.length){
+        lbl.textContent=`Leyendo el primer mensaje de ${waIds.length} contacto${waIds.length===1?"":"s"} de WhatsApp…`;
+        const W = await lqPrimerMensajes(waIds);
+        waMap = W.map;
+        if(W.errores) fallos.push(`primer mensaje de ${W.errores} contacto${W.errores===1?"":"s"} de WhatsApp: no se pudo leer (sin su campaña "(ref: …)" hasta la próxima sincronización)`);
+      }
+    }catch(e){ fallos.push("primer mensaje de los contactos de WhatsApp (los que no traen origen quedan sin campaña)"); }
     bar.style.width="100%"; lbl.textContent="Procesando…";
-    lqState.agg = buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adExtra, rawRe, rspMap);
+    lqState.agg = buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adExtra, rawRe, rspMap, waMap);
     // Las oportunidades de los re-envíos son anteriores a la ventana: se piden por contacto
     // (solo los que sí cuentan como re-envío) y se vuelve a armar el agregado.
     const reIds = [...new Set((lqState.agg.reenvios||[]).map(l=>l.id).filter(Boolean))].filter(id=>!oppsByContact[id]);
     // y la respuesta de los re-envíos que sí cuentan
     const reRsp = rspMap ? [...new Set((lqState.agg.reenvios||[]).map(l=>l.id).filter(Boolean))].filter(id=>!rspMap[id]) : [];
     if(reRsp.length){
-      try{ Object.assign(rspMap, (await lqRespuestas(reRsp)).map); if(!reIds.length) lqState.agg = buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adExtra, rawRe, rspMap); }
+      try{ Object.assign(rspMap, (await lqRespuestas(reRsp)).map); if(!reIds.length) lqState.agg = buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adExtra, rawRe, rspMap, waMap); }
       catch(e){ fallos.push("respuestas de los re-envíos"); }
     }
     if(reIds.length){
@@ -6922,7 +7064,7 @@ async function lqSync(){
           const res = await lqFn({ action:"opps", contactIds: reIds.slice(i, i+40) });
           for(const o of res.opps) lqSumarOpp(oppsByContact, o, boot.stages, oppTh, C11);
         }
-        lqState.agg = buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adExtra, rawRe, rspMap);
+        lqState.agg = buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adExtra, rawRe, rspMap, waMap);
       }catch(e){ fallos.push("etapas del CRM de los re-envíos (salen con la señal de sus tags)"); }
     }
     // Sincronización incompleta: se marca EN el agregado para que quien lo lea del

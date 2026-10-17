@@ -354,6 +354,47 @@ S.ghlFetch = (path, opt) => ghlSim(path, opt);
   const r11 = await LQ.handler(ev({ action: "respuestas", ids: Array.from({ length: 12 }, (_, i) => "contacto" + String(i).padStart(12, "0")) }));
   ok(JSON.parse(r11.body).res.length === 10, "máximo 10 contactos por llamada");
 
+  // Sin campaña atribuida (Dirección General, 17-oct-2026): referrer y FBCLID para separar el
+  // orgánico de Instagram/Facebook del anuncio, y el primer mensaje de los contactos de WhatsApp.
+  console.log("\n[lead-quality] referrer, FBCLID y primer mensaje de WhatsApp");
+  const ORG = [
+    { id: "organicoIG000000001", contactName: "Org IG", email: "o@x.com", dateAdded: "2026-10-14T16:03:00Z", source: "ig",
+      attributionSource: { utmSource: "ig", utmMedium: "social", referrer: "https://l.instagram.com/?u=https%3A%2F%2Fselvadentrotulum.com" } },
+    { id: "anuncioFB000000001", contactName: "Anuncio FB", email: "p@x.com", dateAdded: "2026-10-14T16:05:00Z", source: "fb",
+      attributionSource: { utmSource: "fb", url: "https://selvadentrotulum.com/?fbclid=IwAR123" } },
+  ];
+  ghlSim = async (path) => { if (path === "/contacts/search") return { contacts: ORG, total: ORG.length }; throw Object.assign(new Error("no simulado"), { status: 404 }); };
+  const ro2 = JSON.parse((await LQ.handler(ev({ action: "leads", start: "2026-10-12T00:00:00-05:00", end: "2026-10-18T23:59:59-05:00" }))).body);
+  const B2 = Object.fromEntries((ro2.leads || []).map((l) => [l.id, l]));
+  ok(B2.organicoIG000000001 && B2.organicoIG000000001.attr.ref === "l.instagram.com" && !B2.organicoIG000000001.attr.fbc && B2.organicoIG000000001.attr.med === "social",
+    "orgánico: referrer l.instagram.com, utm_medium social y sin FBCLID", B2.organicoIG000000001 && B2.organicoIG000000001.attr);
+  ok(B2.anuncioFB000000001 && B2.anuncioFB000000001.attr.fbc === true && !B2.anuncioFB000000001.attr.ref,
+    "anuncio: el FBCLID de la URL de la landing se conserva", B2.anuncioFB000000001 && B2.anuncioFB000000001.attr);
+  const WA = {
+    // Del más nuevo al más viejo, en dos páginas: el primero (el más viejo) trae el ref
+    waLeo0000000000001: [[M({ direction: "outbound", messageType: "TYPE_WHATSAPP", body: "Hola Leo, soy Daniela", dateAdded: "2026-10-15T08:00:00Z" }),
+      M({ direction: "inbound", messageType: "TYPE_WHATSAPP", body: "Sí soy yo", dateAdded: "2026-10-15T07:50:00Z" })],
+      [M({ direction: "inbound", messageType: "TYPE_WHATSAPP", body: "¡Hola! Soy Leo.  Quiero saber más (ref: INVESTORS_MX_DYNAMIC-TOPLPS_090926)", dateAdded: "2026-10-15T07:33:03Z" }),
+        M({ messageType: "TYPE_ACTIVITY_CONTACT", direction: "inbound", body: "Contacto creado", dateAdded: "2026-10-15T07:33:00Z" })]],
+    waSinEntrante00001: [[M({ direction: "outbound", messageType: "TYPE_WHATSAPP", body: "Hola" })]],
+  };
+  ghlSim = async (path) => {
+    const mc = path.match(/\/conversations\/search\?.*contactId=([^&]+)/);
+    if (mc) return { conversations: WA[mc[1]] ? [{ id: "wa-" + mc[1] }] : [] };
+    const mm = path.match(/\/conversations\/wa-([^/]+)\/messages\?(.*)/);
+    if (mm) {
+      const pags = WA[mm[1]], seg = /lastMessageId/.test(mm[2]);
+      return { messages: { messages: pags[seg ? 1 : 0], nextPage: !seg && pags.length > 1, lastMessageId: seg ? null : "p1" } };
+    }
+    throw Object.assign(new Error("no simulado " + path), { status: 404 });
+  };
+  const rp = JSON.parse((await LQ.handler(ev({ action: "primerMensaje", ids: ["waLeo0000000000001", "waSinEntrante00001", "sinConversacion0001"] }))).body);
+  const P = Object.fromEntries((rp.res || []).map((x) => [x.ct, x]));
+  ok(P.waLeo0000000000001 && /^¡Hola! Soy Leo\. Quiero saber más \(ref: INVESTORS_MX_DYNAMIC-TOPLPS_090926\)$/.test(P.waLeo0000000000001.tx) && P.waLeo0000000000001.ch === "whatsapp"
+    && P.waLeo0000000000001.t === Date.parse("2026-10-15T07:33:03Z"), "devuelve el mensaje entrante MÁS VIEJO (página 2), con el ref y sin la actividad", P.waLeo0000000000001);
+  ok(P.waSinEntrante00001 && P.waSinEntrante00001.tx === "" && !P.waSinEntrante00001.err && P.sinConversacion0001 && P.sinConversacion0001.tx === "",
+    "sin mensaje entrante o sin conversación: texto vacío, sin error", { a: P.waSinEntrante00001, b: P.sinConversacion0001 });
+
   console.log(fallas.length ? `\n${fallas.length} prueba(s) fallaron` : "\nTodas las pruebas del backend de Calidad de Leads pasaron");
   process.exit(fallas.length ? 1 : 0);
 })().catch((e) => { console.error("FALLO:", e); process.exit(2); });

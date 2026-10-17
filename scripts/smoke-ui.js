@@ -935,6 +935,77 @@ const PORT = process.env.PORT || 8765;
   if (!opg.ok) hallazgos.push({ vista: 'lq:oppGeneradas', opg });
   await escanear('lq:oppGeneradas');
 
+  // Sin campaña atribuida (Dirección General, 17-oct-2026), sobre el mismo fixture con leads
+  // sintéticos en la W40: orgánico de Instagram/Facebook (utm_medium social o referrer, sin
+  // FBCLID ni campaña), contactos que creó WhatsApp con "(ref: CAMPAÑA)" (dos duplicados de un
+  // lead de formulario, uno nuevo, uno fuera de las 24 h) y uno que escribió "prueba".
+  VISTA = 'lq:sinCampania';
+  const sca = await page.evaluate((fx0) => {
+    const base = JSON.parse(JSON.stringify(fx0));
+    const fx = JSON.parse(JSON.stringify(fx0));
+    fx.boot.fields = fx.boot.fields.concat([{ id: 'f_med', name: 'utm_medium' }, { id: 'f_src', name: 'utm_source' }, { id: 'f_fbc', name: 'fbclid' }]);
+    const T = (h, s) => new Date(Date.parse('2026-10-01T' + h + 'Z') + (s || 0) * 1000).toISOString();
+    const L = (id, n, c, o) => Object.assign({ id, n, em: '', ph: '', c, src: '', u: 'u1', tags: [], cf: {}, attr: {} }, o);
+    const DYN = 'INVESTORS_MX_DYNAMIC-TOPLPS_090926', ESC = 'INVESTORS_US/CA_ESCAPE_090926';
+    const nuevos = [
+      L('orgIG', 'Orgánico IG', T('16:03:00'), { em: 'o1@x.com', src: 'ig', tags: ['ig'], attr: { src: 'ig', med: 'social' } }),
+      L('orgFB', 'Orgánico FB', T('16:10:00'), { em: 'o2@x.com', src: 'fb', cf: { f_med: 'social', f_src: 'fb' }, attr: { med: 'Manual', src: 'CRM Workflows' } }),
+      L('orgRef', 'Orgánico referrer', T('16:20:00'), { em: 'o3@x.com', attr: { ref: 'l.instagram.com' } }),
+      L('pagoFbc', 'Anuncio sin campaña', T('16:30:00'), { em: 'o4@x.com', src: 'fb', attr: { src: 'fb', med: 'social', fbc: true } }),
+      L('formLeo', 'Leonardo Ruiz Mora', T('07:32:38'), { em: 'l@x.com', ph: '6610000001', src: 'fb', cf: { f_camp: DYN } }),
+      L('waLeo', 'Leomx', T('07:33:03'), { ph: '6190000001', tags: ['wa: +5219840000000'], attr: { med: 'whatsapp', src: 'Social media' } }),
+      L('formOsc', 'Oscar Demo', T('06:14:05'), { em: 'os@x.com', ph: '7020000001', src: 'fb', cf: { f_camp: ESC } }),
+      L('waOsc', 'ShamanX', T('06:14:24'), { ph: '7750000001', attr: { med: 'whatsapp', src: 'Social media' } }),
+      L('waNuevo', 'Marta WA', T('09:00:00'), { ph: '5550000001', tags: ['inbound whatsapp'] }),
+      L('waTarde', 'Leo dos', T('08:00:00', 31 * 3600), { ph: '5550000002', attr: { med: 'whatsapp' } }),
+      L('waPrueba', 'Botón landing', T('10:00:00'), { ph: '5550000003', attr: { med: 'whatsapp' } }),
+    ];
+    const WA = {
+      waLeo: { tx: '¡Hola! Soy Leonardo. Vi la página de Selvadentro y quiero saber más (ref: ' + DYN + ')' },
+      waOsc: { tx: 'Hi! I am Oscar. I saw the website and want to know more (ref: ' + ESC + ')' },
+      waNuevo: { tx: 'Hola, soy Marta, quiero información (ref: ' + DYN + ')' },
+      waTarde: { tx: 'Hola, soy Leonardo (ref: ' + DYN + ')' },
+      waPrueba: { tx: 'Hola esto es una prueba del botón (ref: ' + DYN + ')' },
+    };
+    fx.rawLeads = fx.rawLeads.concat(nuevos);
+    const r = {};
+    const aggB = buildLqAgg(base.boot, base.rawLeads, base.spendRows, base.weeks, base.opps, base.adRows, base.adExtra);
+    const agg = buildLqAgg(fx.boot, fx.rawLeads, fx.spendRows, fx.weeks, fx.opps, fx.adRows, fx.adExtra, [], null, WA);
+    const de = (id) => agg.leads.find(l => l.id === id);
+    r.camps = ['orgIG', 'orgFB', 'orgRef', 'pagoFbc', 'waNuevo', 'waTarde'].map(id => { const l = de(id); return l ? l.fuente + ' · ' + l.camp : '(fuera)'; }).join(' | ');
+    r.dup = (agg.dupWa || []).map(d => d.n + '→' + d.de.n + ' (' + d.camp + ')').join(' | ');
+    r.fuera = ['waLeo', 'waOsc', 'waPrueba'].filter(id => !de(id)).length;
+    r.prueba = agg.excl.prueba - aggB.excl.prueba;
+    r.nLeads = agg.leads.length - aggB.leads.length;
+    const sinC = (a) => a.leads.filter(l => l.camp === LQ_SIN_CAMP).length;
+    r.sinCamp = sinC(agg) - sinC(aggB);
+    r.wref = de('waNuevo') && de('waNuevo').wref === 1;
+    r.metaOrg = agg.leads.filter(l => l.fuente === 'Meta' && /^org/.test(l.id)).length;
+    // Unitarias: nombre del mensaje y mensajes de prueba
+    r.soy = [lqNombreSoy('Soy de Monterrey').join(' '), lqNombreSoy('Hi, I am Oscar Roman and I want').slice(0, 2).join(' '), lqNombreSoy('Me llamo Ana').join(' ')].join(' | ');
+    r.pruebas = ['esto es una prueba', 'Test', 'I saw the latest video', 'Testimonios de clientes', 'pruebas del botón'].map(tx => lqMensajePrueba({ tx }) ? 1 : 0).join('');
+    // En pantalla: lista aparte de duplicados y la línea de excluidos
+    agg.fallos = []; agg.monedas = ['MXN'];
+    Object.assign(lqState, { agg, exp: {}, q: '', plat: 'all', level: 'camp', qual: 'auto', sub: 'calidad' });
+    document.getElementById('lq-sem-ini').value = '2026-W37'; document.getElementById('lq-sem-fin').value = '2026-W40';
+    lqRender();
+    const t = document.getElementById('lq-content').textContent.replace(/\s+/g, ' ');
+    r.lista = /Duplicados por WhatsApp en este rango \(2, no cuentan como lead nuevo; únelos en GoHighLevel\): Leomx → duplicado de Leonardo Ruiz Mora \(INVESTORS_MX_DYNAMIC-TOPLPS_090926\)/.test(t)
+      && /ShamanX → duplicado de Oscar Demo \(INVESTORS_US\/CA_ESCAPE_090926\)/.test(t);
+    r.excl = (t.match(/Excluidos de todos los cálculos en este rango: [^.]*?(\d+) registros? de prueba/) || [])[1] || '';
+    r.filaOrg = [...document.querySelectorAll('table.lq-tree tr')].some(tr => (tr.querySelector('td') || {}).textContent && tr.querySelector('td').textContent.includes('Social orgánico · Instagram'));
+    lqState.agg = aggB; lqRender();
+    r.sinListaAntes = !/Duplicados por WhatsApp/.test(document.getElementById('lq-content').textContent);
+    return r;
+  }, fixture());
+  sca.ok = sca.camps === 'Social orgánico / directo · Social orgánico · Instagram | Social orgánico / directo · Social orgánico · Facebook | Social orgánico / directo · Social orgánico · Instagram | Meta · (sin campaña atribuida) | Meta · INVESTORS_MX_DYNAMIC-TOPLPS_090926 | Meta · INVESTORS_MX_DYNAMIC-TOPLPS_090926'
+    && sca.dup === 'Leomx→Leonardo Ruiz Mora (INVESTORS_MX_DYNAMIC-TOPLPS_090926) | ShamanX→Oscar Demo (INVESTORS_US/CA_ESCAPE_090926)'
+    && sca.fuera === 3 && sca.prueba === 1 && sca.nLeads === 8 && sca.sinCamp === 1 && sca.wref && sca.metaOrg === 0
+    && sca.soy === ' | oscar roman | ana' && sca.pruebas === '11001' && sca.lista && sca.excl !== '' && sca.filaOrg && sca.sinListaAntes;
+  console.log('\n[calidad de leads] sin campaña atribuida', JSON.stringify(sca));
+  if (!sca.ok) hallazgos.push({ vista: 'lq:sinCampania', sca });
+  await escanear('lq:sinCampania');
+
   // Telefonía por asesora (Dirección General, 7-oct-2026): canal del 1er toque, mediana del
   // 1er intento de llamada, intentos en 24 h y en total, sin marcar vs falla de línea,
   // duración conocida, y la actividad efectiva sin fallas de línea desde el 7-oct.

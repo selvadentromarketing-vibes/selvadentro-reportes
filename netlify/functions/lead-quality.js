@@ -33,6 +33,10 @@
 //     una respuesta automática), "c" = llamada contestada de más de 30 s, "n" = nota del asesor
 //     que dice que sí se habló con él por otro lado (nt = el texto). Sin respuesta, `e` cuenta
 //     nuestros intentos manuales (escalera): llamadas, WhatsApp/SMS y emails.
+//   { action:"primerMensaje", ids:[...] }   (máx. 10 contactos por llamada)
+//     → { res:[{ct, tx, t, ch, err}] }  Primer mensaje ENTRANTE del contacto (recortado a 300
+//     caracteres). El frontend lo pide solo para los contactos que creó WhatsApp sin origen:
+//     de ahí salen la campaña "(ref: …)", el nombre "Soy X" y los mensajes de prueba.
 //   { action:"ads", start, end }     (fechas YYYY-MM-DD)
 //     → { configured:bool, ads:[...] }  Detalle por anuncio (Meta + Google) vía
 //     Windsor: estado activo/pausado, link de preview, resultados.
@@ -73,14 +77,19 @@ function attrOf(c) {
   const URLS = ["url", "pageUrl", "page_url", "landingPage", "landingPageUrl", "fullUrl"];
   const deUrl = (o) => {
     const u = pick(o, ...URLS);
-    if (!u) return { cid: "", host: "" };
+    if (!u) return { cid: "", host: "", fbc: false };
     try {
       const x = new URL(u);
       const q = (k) => String(x.searchParams.get(k) || "").trim();
-      return { cid: q("hsa_cam") || q("utm_id") || q("campaign_id") || q("campaignid"), host: x.hostname.toLowerCase() };
-    } catch (e) { return { cid: "", host: "" }; }
+      return { cid: q("hsa_cam") || q("utm_id") || q("campaign_id") || q("campaignid"), host: x.hostname.toLowerCase(), fbc: !!q("fbclid") };
+    } catch (e) { return { cid: "", host: "", fbc: false }; }
   };
   const uL = deUrl(last), uF = deUrl(first);
+  // Referrer (l.instagram.com, l.facebook.com…) y FBCLID: distinguen el link orgánico de la
+  // bio o de un post (sin FBCLID ni campaña) del clic en un anuncio.
+  const hostDe = (u) => { try { return new URL(u).hostname.toLowerCase(); } catch (e) { return ""; } };
+  const ref = hostDe(pick(last, "referrer", "referer", "referrerUrl")) || hostDe(pick(first, "referrer", "referer", "referrerUrl"));
+  const fbc = !!(pick(last, "fbclid", "fbc") || pick(first, "fbclid", "fbc")) || uL.fbc || uF.fbc;
   return {
     camp: pick(last, ...CAMP) || pick(first, ...CAMP),
     src: pick(last, ...SRC) || pick(first, ...SRC),
@@ -89,6 +98,8 @@ function attrOf(c) {
     grp: pick(last, ...GRP) || pick(first, ...GRP),
     cid: pick(last, ...CID) || uL.cid || pick(first, ...CID) || uF.cid,
     host: uL.host || uF.host,
+    ...(ref ? { ref } : {}),
+    ...(fbc ? { fbc: true } : {}),
   };
 }
 
@@ -954,6 +965,50 @@ async function respuestaDe(ct) {
   } catch (e) { r.err = true; }
   return r;
 }
+// --- Primer mensaje del contacto (Dirección General, 17-oct-2026) -------------------------
+// Un contacto que creó WhatsApp no trae origen: la campaña viaja en el texto predeterminado del
+// botón de la landing ("… (ref: INVESTORS_MX_DYNAMIC-TOPLPS_090926)") y el nombre en "Soy X" /
+// "I am X". Se devuelve el mensaje ENTRANTE más viejo de sus conversaciones, recortado. Aquí sí
+// cuenta el texto predeterminado: es justo lo que se busca.
+const PRIMER_MAX_TX = 300;
+async function primerMensajeDe(ct) {
+  const r = { ct, tx: "", t: 0, ch: "", err: false };
+  try {
+    const cs = await ghl(`/conversations/search?locationId=${LOCATION_ID}&contactId=${encodeURIComponent(ct)}&limit=20`);
+    const convIds = (cs.conversations || []).map((c) => c.id).filter(Boolean);
+    let fallidas = 0;
+    for (const id of convIds) {
+      try {
+        let lastId = null;
+        for (let i = 0; i < 6; i++) {        // del más nuevo al más viejo: el último entrante visto es el primero
+          let qs = "limit=100";
+          if (lastId) qs += `&lastMessageId=${encodeURIComponent(lastId)}`;
+          const data = await ghl(`/conversations/${encodeURIComponent(id)}/messages?${qs}`);
+          const box = data && data.messages && Array.isArray(data.messages.messages) ? data.messages : data;
+          const list = Array.isArray(box.messages) ? box.messages : [];
+          for (const m of list) {
+            if (!m || /^TYPE_ACTIVITY/.test(m.messageType || "") || m.direction !== "inbound") continue;
+            const ch = SLA.chanOf(m), t = SLA.ts(m.dateAdded) || 0, tx = String(m.body || "").replace(/\s+/g, " ").trim();
+            if (ch === "call" || !tx) continue;
+            if (!r.t || (t && t < r.t)) Object.assign(r, { tx: tx.slice(0, PRIMER_MAX_TX), t, ch });
+          }
+          if (!box.nextPage || !box.lastMessageId || !list.length) break;
+          lastId = box.lastMessageId;
+        }
+      } catch (e) { fallidas++; }
+    }
+    if (convIds.length && fallidas === convIds.length) r.err = true;
+  } catch (e) { r.err = true; }
+  return r;
+}
+async function primerMensaje({ ids }) {
+  const lista = [...new Set((Array.isArray(ids) ? ids : []).map(String).filter((x) => /^[A-Za-z0-9]{8,40}$/.test(x)))].slice(0, RESP_MAX);
+  if (!lista.length) throw Object.assign(new Error("ids requerido"), { status: 400 });
+  const res = [];
+  for (let i = 0; i < lista.length; i += 5) res.push(...await Promise.all(lista.slice(i, i + 5).map(primerMensajeDe)));
+  return { res };
+}
+
 async function respuestas({ ids }) {
   const lista = [...new Set((Array.isArray(ids) ? ids : []).map(String).filter((x) => /^[A-Za-z0-9]{8,40}$/.test(x)))].slice(0, RESP_MAX);
   if (!lista.length) throw Object.assign(new Error("ids requerido"), { status: 400 });
@@ -999,7 +1054,8 @@ exports.handler = async (event) => {
     if (payload.action === "ads") return json(200, await ads(payload));
     if (payload.action === "decision") return json(200, await decision(payload));
     if (payload.action === "respuestas") return json(200, await respuestas(payload));
-    return json(400, { error: "action debe ser 'bootstrap', 'diag', 'leads', 'opps', 'spend', 'ads', 'decision' o 'respuestas'" });
+    if (payload.action === "primerMensaje") return json(200, await primerMensaje(payload));
+    return json(400, { error: "action debe ser 'bootstrap', 'diag', 'leads', 'opps', 'spend', 'ads', 'decision', 'respuestas' o 'primerMensaje'" });
   } catch (e) {
     const status = e.status === 429 ? 429 : e.status === 400 ? 400 : 502;
     return json(status, { error: String(e.message || e), detail: e.detail });
