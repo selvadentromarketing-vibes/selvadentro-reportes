@@ -411,7 +411,7 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
 - **Aviso de leads sin campaña**: cuenta exactamente los leads de las filas
   "(sin campaña atribuida)" de la tabla (antes contaba aparte los de Meta/Google con
   utm_campaign vacío y no cuadraba: decía 1 de 60 con 10 en la tabla).
-- **Leads que sí sabemos de dónde vinieron** (Dirección General, 17-oct-2026; `lq:agg:v30`,
+- **Leads que sí sabemos de dónde vinieron** (Dirección General, 17-oct-2026; `lq:agg:v30`→`v31`,
   caché `lq:wa1:v1`). Tres reglas para que no caigan en "(sin campaña atribuida)":
   1. **Social orgánico · Instagram / · Facebook** (`lqRedOrganica`): utm_medium `social` (del
      campo del contacto o de la atribución) o referrer `l.instagram.com` / `l.facebook.com`, sin
@@ -429,17 +429,7 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
      "I am X" (`lqNombreSoy`) está en el nombre de un lead de formulario de esa campaña creado
      en las 24 h anteriores (`lqDuplicadoWa`; si hay varios, el más cercano), es un
      **duplicado por WhatsApp**: sale de todos los totales (`agg.dupWa`) y se lista aparte,
-     debajo de la línea de excluidos, para unirlo en GoHighLevel. Mientras no se unan, el lead
-     del formulario se queda con **lo más avanzado de los dos**: como son la misma persona, antes
-     de calificar se comparten la respuesta, las citas y los intentos de la escalera (se suman:
-     un MQL "sin escalera" pasa a CQL si sumando los dos contactos sí se completó)
-     (`lqCompartirDupWa`); después, el del formulario toma el nivel mayor, Zoom, OPP, OPP
-     generada y WON del de WhatsApp, y la etapa que se muestra es la del contacto que dio el
-     nivel, la del que tiene OPP/WON o —si los dos siguen vivos— la más adelantada
-     (`lqUnirDupWa`). Si ventas trabajó el contacto de WhatsApp, la campaña no pierde ese avance.
-     Descalificar el de WhatsApp (p. ej. como duplicado) nunca baja al del formulario, y un
-     formulario descalificado solo sube si el de WhatsApp tiene avance real (MQL o más)
-     (`lqNivelMayor`). La lista dice qué pasó al lead del formulario.
+     debajo de la línea de excluidos, para unirlo en GoHighLevel.
   3. **Pruebas**: fuera de todos los cálculos el contacto cuyo nombre, email o primer mensaje
      diga "prueba(s)" o "test(s)" como palabra (no "latest" ni "testimonios"); cuenta en
      "registros de prueba" de la línea de excluidos. El primer mensaje solo se lee de los
@@ -528,7 +518,7 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
   (Meta + Google) y se muestra inversión, CPL y **costo por SQL** por campaña (cruce por
   ID de campaña y, de respaldo, por nombre) y por plataforma (siempre calculable). Todo
   en **MXN** ("12,345 MXN", nunca "$").
-- **Cache compartido**: agregado en el kv (`lq:agg:v30`), staleness de 30 min, igual
+- **Cache compartido**: agregado en el kv (`lq:agg:v31`), staleness de 30 min, igual
   que CRM en vivo.
 - **Permisos**: canal `mkt_lq` (o `marketing`, o admin). El módulo manual de
   Calidad de Leads dentro de Marketing **se retiró el 2026-08-26** junto con PPC Ads

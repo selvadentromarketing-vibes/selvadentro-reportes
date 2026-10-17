@@ -971,44 +971,19 @@ const PORT = process.env.PORT || 8765;
       waSinRef: { tx: 'Hola, quiero información de los lotes' },
     };
     fx.rawLeads = fx.rawLeads.concat(nuevos);
-    // Avance en el contacto de WhatsApp: ventas trabajó a "Leomx" (Zoom realizado) y el lead del
-    // formulario sigue en 1er toque; a "ShamanX" lo descalificaron como duplicado y "Oscar Demo"
-    // está en Contacto establecido (no baja).
-    const st = (nombre) => Object.keys(fx.boot.stages).find(k => fx.boot.stages[k].s === nombre && fx.boot.stages[k].p === 'Seguimiento de ventas');
-    const op = (s, o) => Object.assign({ o: 0, pr: 1, w: 0, v: 0, ov: 0, s: st(s), sc: 1, st: 'open', ap: { tot: 0, sh: 0, ns: 0 } }, o);
-    fx.opps.formLeo = op('1er toque');
-    fx.opps.waLeo = op('Zoom realizado', { ap: { tot: 1, sh: 1, ns: 0 } });
-    fx.opps.formOsc = op('Contacto establecido');
-    fx.opps.waOsc = op('Descalificado', { st: 'lost' });
-    // Caso W42: los dos sin respuesta, el de WhatsApp en una etapa más adelantada (2ndo toque) y la
-    // escalera repartida entre los dos contactos (3 llamadas aquí, 2 + WhatsApp + email allá).
-    nuevos.push(L('formEsc', 'Ernesto Forma', T('13:00:00'), { em: 'e@x.com', ph: '6610000009', src: 'fb', cf: { f_camp: DYN } }),
-      L('waEsc', 'Ernie WA', T('13:00:30'), { ph: '6190000009', attr: { med: 'whatsapp', src: 'Social media' } }));
-    fx.rawLeads.push(nuevos[nuevos.length - 2], nuevos[nuevos.length - 1]);
-    WA.waEsc = { tx: 'Hola, soy Ernesto (ref: ' + DYN + ')' };
-    fx.opps.formEsc = op('1er toque');
-    fx.opps.waEsc = op('2ndo toque');
-    const rspMap = { formEsc: { r: '', e: { ll: 3, msg: 0, em: 0 } }, waEsc: { r: '', e: { ll: 2, msg: 1, em: 1 } } };
     const r = {};
     const aggB = buildLqAgg(base.boot, base.rawLeads, base.spendRows, base.weeks, base.opps, base.adRows, base.adExtra);
-    const agg = buildLqAgg(fx.boot, fx.rawLeads, fx.spendRows, fx.weeks, fx.opps, fx.adRows, fx.adExtra, [], rspMap, WA);
+    const agg = buildLqAgg(fx.boot, fx.rawLeads, fx.spendRows, fx.weeks, fx.opps, fx.adRows, fx.adExtra, [], null, WA);
     const de = (id) => agg.leads.find(l => l.id === id);
     r.camps = ['orgIG', 'orgFB', 'orgRef', 'pagoFbc', 'waNuevo', 'waTarde', 'waSinRef', 'waSinLeer'].map(id => { const l = de(id); return l ? l.fuente + ' · ' + l.camp : '(fuera)'; }).join(' | ');
     r.dup = (agg.dupWa || []).map(d => d.n + '→' + d.de.n + ' (' + d.camp + ')').join(' | ');
-    r.fuera = ['waLeo', 'waOsc', 'waPrueba', 'waEsc'].filter(id => !de(id)).length;
+    r.fuera = ['waLeo', 'waOsc', 'waPrueba'].filter(id => !de(id)).length;
     r.prueba = agg.excl.prueba - aggB.excl.prueba;
     r.nLeads = agg.leads.length - aggB.leads.length;
     const sinC = (a) => a.leads.filter(l => l.camp === LQ_SIN_CAMP).length;
     r.sinCamp = sinC(agg) - sinC(aggB);
     r.wref = de('waNuevo') && de('waNuevo').wref === 1;
     r.metaOrg = agg.leads.filter(l => l.fuente === 'Meta' && /^org/.test(l.id)).length;
-    const fl = de('formLeo'), fo = de('formOsc');
-    r.leo = [fl.alv, fl.zm ? 'zm' : '-', fl.pstage, fl.avWa || '-', /^con su contacto de WhatsApp «Leomx»: asistió a una cita/.test(fl.awhy) ? 'why' : fl.awhy].join(' | ');
-    r.osc = [fo.alv, fo.pstage, fo.avWa || '-'].join(' | ');
-    r.lleva = (agg.dupWa || []).map(d => (d.lleva || []).join('+') || '-').join(' / ');
-    const fe = de('formEsc');
-    r.esc = [fe.alv, fe.mse ? 'mse' : '-', fe.pstage, JSON.stringify(fe.rspE)].join(' | ');
-    r.mayor = [['desc', 'cql'], ['desc', 'mql'], ['cql', 'desc'], ['nc', 'sql'], ['sqls', 'sql'], ['nuevo', 'cql']].map(([a, b]) => lqNivelMayor(a, b)).join(' ');
     // Unitarias: nombre del mensaje y mensajes de prueba
     r.soy = [lqNombreSoy('Soy de Monterrey').join(' '), lqNombreSoy('Hi, I am Oscar Roman and I want').slice(0, 2).join(' '), lqNombreSoy('Me llamo Ana').join(' ')].join(' | ');
     r.pruebas = ['esto es una prueba', 'Test', 'I saw the latest video', 'Testimonios de clientes', 'pruebas del botón'].map(tx => lqMensajePrueba({ tx }) ? 1 : 0).join('');
@@ -1018,9 +993,8 @@ const PORT = process.env.PORT || 8765;
     document.getElementById('lq-sem-ini').value = '2026-W37'; document.getElementById('lq-sem-fin').value = '2026-W40';
     lqRender();
     const t = document.getElementById('lq-content').textContent.replace(/\s+/g, ' ');
-    r.lista = /Duplicados por WhatsApp en este rango \(3, no cuentan como lead nuevo; únelos en GoHighLevel\): Leomx → duplicado de Leonardo Ruiz Mora \(INVESTORS_MX_DYNAMIC-TOPLPS_090926\)/.test(t)
-      && /ShamanX → duplicado de Oscar Demo \(INVESTORS_US\/CA_ESCAPE_090926\)/.test(t)
-      && /Leomx → duplicado de Leonardo Ruiz Mora \(INVESTORS_MX_DYNAMIC-TOPLPS_090926\) · su avance pasa al lead del formulario: SQL, Zoom realizado/.test(t);
+    r.lista = /Duplicados por WhatsApp en este rango \(2, no cuentan como lead nuevo; únelos en GoHighLevel\): Leomx → duplicado de Leonardo Ruiz Mora \(INVESTORS_MX_DYNAMIC-TOPLPS_090926\)/.test(t)
+      && /ShamanX → duplicado de Oscar Demo \(INVESTORS_US\/CA_ESCAPE_090926\)/.test(t);
     r.excl = (t.match(/Excluidos de todos los cálculos en este rango: [^.]*?(\d+) registros? de prueba/) || [])[1] || '';
     r.filaOrg = [...document.querySelectorAll('table.lq-tree tr')].some(tr => (tr.querySelector('td') || {}).textContent && tr.querySelector('td').textContent.includes('Social orgánico · Instagram'));
     lqState.agg = aggB; lqRender();
@@ -1028,11 +1002,8 @@ const PORT = process.env.PORT || 8765;
     return r;
   }, fixture());
   sca.ok = sca.camps === 'Social orgánico / directo · Social orgánico · Instagram | Social orgánico / directo · Social orgánico · Facebook | Social orgánico / directo · Social orgánico · Instagram | Meta · (sin campaña atribuida) | Meta · INVESTORS_MX_DYNAMIC-TOPLPS_090926 | Meta · INVESTORS_MX_DYNAMIC-TOPLPS_090926 | Social orgánico / directo · Social orgánico · IG / WhatsApp | Otra fuente · (sin campaña atribuida)'
-    && sca.dup === 'Leomx→Leonardo Ruiz Mora (INVESTORS_MX_DYNAMIC-TOPLPS_090926) | ShamanX→Oscar Demo (INVESTORS_US/CA_ESCAPE_090926) | Ernie WA→Ernesto Forma (INVESTORS_MX_DYNAMIC-TOPLPS_090926)'
-    && sca.fuera === 4 && sca.prueba === 1 && sca.nLeads === 11 && sca.sinCamp === 2 && sca.wref && sca.metaOrg === 0
-    && sca.leo === 'sql | zm | Zoom realizado | Leomx | why' && sca.osc === 'mql | Contacto establecido | -' && sca.lleva === 'SQL+Zoom realizado / - / escalera completa sumando los dos (CQL)+etapa 2ndo toque'
-    && sca.esc === 'cql | - | 2ndo toque | {"ll":5,"msg":1,"em":1}'
-    && sca.mayor === 'desc mql cql sql sqls cql'
+    && sca.dup === 'Leomx→Leonardo Ruiz Mora (INVESTORS_MX_DYNAMIC-TOPLPS_090926) | ShamanX→Oscar Demo (INVESTORS_US/CA_ESCAPE_090926)'
+    && sca.fuera === 3 && sca.prueba === 1 && sca.nLeads === 10 && sca.sinCamp === 2 && sca.wref && sca.metaOrg === 0
     && sca.soy === ' | oscar roman | ana' && sca.pruebas === '11001' && sca.lista && sca.excl !== '' && sca.filaOrg && sca.sinListaAntes;
   console.log('\n[calidad de leads] sin campaña atribuida', JSON.stringify(sca));
   if (!sca.ok) hallazgos.push({ vista: 'lq:sinCampania', sca });
