@@ -446,6 +446,7 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
      sin origen". GHL crea solo el contacto cuando llama un número que no reconoce (origen
      "Other", sin nombre). Grupo aparte, fuera de todo costo por lead, hasta saber a qué número
      llamó. Al 23-oct-2026 había 9 contactos así, todos de EE. UU. (ladas 210, 361, 917).
+     `lq:agg:v33`→`v34` regenera la caché con las dos reglas.
 - **Limpieza**: la matriz "Reglas automáticas vs. captura del equipo" queda detrás del
   botón **Ver diagnóstico de reglas**; la tabla de inversión por campaña de Calidad de Lead
   se volvió **Inversión por plataforma** (el detalle por campaña ya está en la tabla del
