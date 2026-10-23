@@ -1018,6 +1018,45 @@ const PORT = process.env.PORT || 8765;
   if (!sca.ok) hallazgos.push({ vista: 'lq:sinCampania', sca });
   await escanear('lq:sinCampania');
 
+  // "Otra fuente" (Dirección General, 23-oct-2026): el DM de Instagram que el asesor da de alta a
+  // mano (etiqueta lead-dm-redes + ig, origen "CRM UI" / manual) va a Social orgánico · Instagram
+  // (DM); la llamada de un número que GHL no reconoce (etiqueta "couldn't find caller name", origen
+  // "Other") va a Llamada entrante · sin origen. Con campaña atribuida, la campaña sigue mandando.
+  VISTA = 'lq:otraFuente';
+  const otf = await page.evaluate((fx0) => {
+    const base = JSON.parse(JSON.stringify(fx0)), fx = JSON.parse(JSON.stringify(fx0));
+    const T = (h) => new Date(Date.parse('2026-10-01T' + h + 'Z')).toISOString();
+    const L = (id, n, c, o) => Object.assign({ id, n, em: '', ph: '', c, src: '', u: 'u1', tags: [], cf: {}, attr: {} }, o);
+    const DYN = 'INVESTORS_MX_DYNAMIC-TOPLPS_090926';
+    fx.rawLeads = fx.rawLeads.concat([
+      L('dmIG', 'Dm Instagram', T('18:00:00'), { ph: '9840000001', tags: ['lead-dm-redes', 'ig', 'wa: +5219840000000'], attr: { src: 'CRM UI', med: 'manual' } }),
+      L('dmFB', 'Dm Facebook', T('18:10:00'), { ph: '9840000002', tags: ['Lead-DM-Redes', 'fb'], attr: { src: 'CRM UI', med: 'manual' } }),
+      L('llam', '(210) 000-0001', T('18:20:00'), { ph: '+12100000001', tags: ["couldn't find caller name"], attr: { src: 'Other', med: 'other' } }),
+      L('llamCamp', '(210) 000-0002', T('18:30:00'), { ph: '+12100000002', tags: ['couldn’t find caller name'], attr: { src: 'Other', med: 'other', camp: DYN } }),
+      L('otra', 'Otra cosa', T('18:40:00'), { ph: '9840000003', attr: { src: 'CRM UI', med: 'manual' } }),
+    ]);
+    const aggB = buildLqAgg(base.boot, base.rawLeads, base.spendRows, base.weeks, base.opps, base.adRows, base.adExtra);
+    const agg = buildLqAgg(fx.boot, fx.rawLeads, fx.spendRows, fx.weeks, fx.opps, fx.adRows, fx.adExtra);
+    const de = (id) => agg.leads.find(l => l.id === id);
+    const r = {};
+    r.camps = ['dmIG', 'dmFB', 'llam', 'llamCamp', 'otra'].map(id => { const l = de(id); return l ? l.fuente + ' · ' + l.camp : '(fuera)'; }).join(' | ');
+    r.nLeads = agg.leads.length - aggB.leads.length;                                  // siguen contando como leads
+    const sinC = (a) => a.leads.filter(l => l.camp === LQ_SIN_CAMP).length;
+    r.sinCamp = sinC(agg) - sinC(aggB);                                                 // solo "otra" queda sin campaña
+    agg.fallos = []; agg.monedas = ['MXN'];
+    Object.assign(lqState, { agg, exp: {}, q: '', plat: 'all', level: 'camp', qual: 'auto', sub: 'calidad' });
+    document.getElementById('lq-sem-ini').value = '2026-W37'; document.getElementById('lq-sem-fin').value = '2026-W40';
+    lqRender();
+    const t = document.getElementById('lq-content').textContent.replace(/\s+/g, ' ');
+    r.pantalla = /Social orgánico · Instagram \(DM\)/.test(t) && /Llamada entrante · sin origen/.test(t);
+    r.ok = r.camps === 'Social orgánico / directo · Social orgánico · Instagram (DM) | Social orgánico / directo · Social orgánico · Facebook (DM) | Llamada entrante · Llamada entrante · sin origen | Meta · ' + DYN + ' | Otra fuente · ' + LQ_SIN_CAMP
+      && r.nLeads === 5 && r.sinCamp === 1 && r.pantalla;
+    return r;
+  }, fixture());
+  console.log('\n[calidad de leads] otra fuente', JSON.stringify(otf));
+  if (!otf.ok) hallazgos.push({ vista: 'lq:otraFuente', otf });
+  await escanear('lq:otraFuente');
+
   // Telefonía por asesora (Dirección General, 7-oct-2026): canal del 1er toque, mediana del
   // 1er intento de llamada, intentos en 24 h y en total, sin marcar vs falla de línea,
   // duración conocida, y la actividad efectiva sin fallas de línea desde el 7-oct.

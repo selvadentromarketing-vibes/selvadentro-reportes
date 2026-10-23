@@ -3751,6 +3751,29 @@ function lqWaSinOrigen(l, A){
   return [a.med, a.src, l.src, cf(A.med), cf(A.medAlt), cf(A.src), cf(A.srcAlt)].some(x=>/whatsapp/i.test(String(x||"")))
     || (l.tags||[]).some(t=>/inbound\s*whatsapp/i.test(String(t)));
 }
+// Sin ninguna atribución de campaña: ni campaña, ni ID de campaña, ni FBCLID.
+function lqSinCampaniaAttr(l, A){
+  const cf = (f)=> f && l.cf ? String(l.cf[f.id]||"").trim() : "";
+  const a = l.attr || {};
+  return !(a.camp || cf(A.camp) || cf(A.campAlt) || a.cid || cf(A.cid) || a.fbc || cf(A.fbclid));
+}
+// DM de redes que el asesor da de alta a mano (Dirección General, 23-oct-2026): etiqueta
+// lead-dm-redes, origen "CRM UI" / manual y la red en otra etiqueta (ig / fb). Caían en "Otra
+// fuente · sin campaña" porque el origen interno de GHL no se parece a Meta ni a Google.
+const LQ_RX_TAG_DM = /^lead[-_\s]*dm[-_\s]*redes$/i;
+function lqDmRedes(l, A){
+  const t = (l.tags||[]).map(x=>String(x).trim().toLowerCase());
+  if(!t.some(x=>LQ_RX_TAG_DM.test(x)) || !lqSinCampaniaAttr(l, A)) return "";
+  if(t.some(x=>/^(ig|instagram)$/.test(x))) return "Instagram (DM)";
+  if(t.some(x=>/^(fb|facebook)$/.test(x))) return "Facebook (DM)";
+  return "redes (DM)";
+}
+// Llamada entrante de un número que GHL no reconoce: GHL crea el contacto solo, sin nombre ni
+// origen (sesión "Other"), y le pone la etiqueta "couldn't find caller name". No es "sin campaña":
+// falta saber a qué número llamó. Grupo aparte, fuera de todo costo por lead.
+const LQ_RX_TAG_LLAMADA = /^couldn[’'`]?t find caller name$/i;
+const lqLlamadaSinOrigen = (l, A)=> (l.tags||[]).some(x=>LQ_RX_TAG_LLAMADA.test(String(x).trim())) && lqSinCampaniaAttr(l, A);
+
 // Red social del orgánico (regla 1), o "" si el lead no es orgánico de Instagram/Facebook.
 function lqRedOrganica(l, A){
   const cf = (f)=> f && l.cf ? String(l.cf[f.id]||"").trim() : "";
@@ -3787,6 +3810,7 @@ function lqDuplicadoWa(l, nombre, candidatos){
 function lqSourceCamp(lead){
   if(lead.attr && lead.attr.org) return { fuente:"Social orgánico / directo", camp:"Social orgánico · "+lead.attr.org, hint:"" };
   if(lead.attr && lead.attr.wa0) return { fuente:"Social orgánico / directo", camp:"Social orgánico · IG / WhatsApp", hint:"" };
+  if(lead.attr && lead.attr.llam) return { fuente:"Llamada entrante", camp:"Llamada entrante · sin origen", hint:"" };
   const t = (lead.tags||[]).map(x=>String(x).toLowerCase());
   const blob = ((lead.src||"")+" "+(lead.attr?.src||"")+" "+(lead.attr?.med||"")).toLowerCase();
   const camp = String(lead.attr?.camp || "").trim();
@@ -4338,6 +4362,10 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
     // Instagram/Facebook orgánico (sin FBCLID ni campaña): no se le deduce campaña de nada.
     const red = lqRedOrganica(l, A);
     if(red){ l.attr.org = red; return; }
+    // DM de Instagram/Facebook registrado a mano y llamada entrante sin origen (23-oct-2026).
+    const dm = lqDmRedes(l, A);
+    if(dm){ l.attr.org = dm; return; }
+    if(lqLlamadaSinOrigen(l, A)){ l.attr.llam = true; return; }
     // Contacto que creó WhatsApp sin origen: la campaña del "(ref: …)" de su primer mensaje.
     // Sin ref (y con el mensaje ya leído) es WhatsApp directo: grupo orgánico, no "sin campaña".
     const waSO = !!WA[l.id] && lqWaSinOrigen(l, A), refWa = waSO ? lqRefWa(WA[l.id]) : "";

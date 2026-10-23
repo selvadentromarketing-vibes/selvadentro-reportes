@@ -436,6 +436,16 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
      tiene correo **@selvadentrotulum.com** (equipo interno); cuentan en "registros de prueba o
      internos" de la línea de excluidos. El primer mensaje solo se lee de los
      contactos de WhatsApp sin origen.
+  4. **DM de redes registrado a mano** (Dirección General, 23-oct-2026; `lqDmRedes`): etiqueta
+     `lead-dm-redes` sin campaña, ID ni FBCLID → "Social orgánico · Instagram (DM)" (con
+     etiqueta `ig`), "· Facebook (DM)" (con `fb`) o "· redes (DM)". El asesor los da de alta en
+     el CRM: GHL les pone origen "CRM UI" / manual, que no se parece a Meta ni a Google, y caían
+     en "Otra fuente · (sin campaña atribuida)".
+  5. **Llamada entrante sin origen** (`lqLlamadaSinOrigen`, `attr.llam`): etiqueta "couldn't
+     find caller name" sin campaña → fuente **"Llamada entrante"**, campaña "Llamada entrante ·
+     sin origen". GHL crea solo el contacto cuando llama un número que no reconoce (origen
+     "Other", sin nombre). Grupo aparte, fuera de todo costo por lead, hasta saber a qué número
+     llamó. Al 23-oct-2026 había 9 contactos así, todos de EE. UU. (ladas 210, 361, 917).
 - **Limpieza**: la matriz "Reglas automáticas vs. captura del equipo" queda detrás del
   botón **Ver diagnóstico de reglas**; la tabla de inversión por campaña de Calidad de Lead
   se volvió **Inversión por plataforma** (el detalle por campaña ya está en la tabla del
