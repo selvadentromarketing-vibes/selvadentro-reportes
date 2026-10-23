@@ -3181,7 +3181,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v32";  // v32: el contacto de WhatsApp con Session source "Social media" sí se lee (antes se tomaba como origen) y fuera los correos @selvadentrotulum.com  // v31: igual que v30; el agregado v30 pudo guardarse con el avance del duplicado por WhatsApp pasado al formulario (publicado unos minutos por error el 17-oct)  // v30: Social orgánico · Instagram/Facebook, campaña del "(ref: …)" de WhatsApp, duplicados por WhatsApp (dupWa) y pruebas por primer mensaje  // v29: sin respuesta → CQL solo con escalera completa (si no, MQL); nota del asesor como respuesta  // v28: respuesta real del lead (mensaje entrante, llamada > 30 s o etapa de contacto) y el formulario ya no sube a SQL en Nurturing/Largo plazo/Rescate/Sin respuesta  // v27: nivel de la OPP caída según dónde cayó (Largo plazo → SQL, Rescate → SQL Selvadentro, Descalificado por causa)  // v26: OPP generada = SQL Selvadentro (salvo causa inválida) y cuenta como contactado y trabajado (no como Zoom)  // v25: OPP generadas (etiqueta opp-generada del CRM) y verificado por ventas (Lead to Watch)  // v24: broker = cualquier etiqueta que empiece con "broker" (no solo broker-client)  // v23: re-envíos de formulario (agg.reenvios)  // v22: datos de la decisión de hoy (rango fijo 30 días y 7 contra 7) en `dec`  // v21: el v20 guardado el 9-oct pudo quedar sin detalle por anuncio (la consulta con campos extra se volvía lenta)  // v20: URL de destino por anuncio, gasto por keyword de Google y presupuesto diario (recomendaciones concretas)  // v19: trabajado (tr) y contactado (ct) por etapa, separados  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
+const LQ_AGG_KEY = "lq:agg:v33";  // v33: presupuesto y horizonte de respaldo ("Presupuesto / Budget", "Horizonte de inversión / Investment timeline") del formulario de la landing de Google  // v32: el contacto de WhatsApp con Session source "Social media" sí se lee (antes se tomaba como origen) y fuera los correos @selvadentrotulum.com  // v31: igual que v30; el agregado v30 pudo guardarse con el avance del duplicado por WhatsApp pasado al formulario (publicado unos minutos por error el 17-oct)  // v30: Social orgánico · Instagram/Facebook, campaña del "(ref: …)" de WhatsApp, duplicados por WhatsApp (dupWa) y pruebas por primer mensaje  // v29: sin respuesta → CQL solo con escalera completa (si no, MQL); nota del asesor como respuesta  // v28: respuesta real del lead (mensaje entrante, llamada > 30 s o etapa de contacto) y el formulario ya no sube a SQL en Nurturing/Largo plazo/Rescate/Sin respuesta  // v27: nivel de la OPP caída según dónde cayó (Largo plazo → SQL, Rescate → SQL Selvadentro, Descalificado por causa)  // v26: OPP generada = SQL Selvadentro (salvo causa inválida) y cuenta como contactado y trabajado (no como Zoom)  // v25: OPP generadas (etiqueta opp-generada del CRM) y verificado por ventas (Lead to Watch)  // v24: broker = cualquier etiqueta que empiece con "broker" (no solo broker-client)  // v23: re-envíos de formulario (agg.reenvios)  // v22: datos de la decisión de hoy (rango fijo 30 días y 7 contra 7) en `dec`  // v21: el v20 guardado el 9-oct pudo quedar sin detalle por anuncio (la consulta con campos extra se volvía lenta)  // v20: URL de destino por anuncio, gasto por keyword de Google y presupuesto diario (recomendaciones concretas)  // v19: trabajado (tr) y contactado (ct) por etapa, separados  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 // (LQ_TZ y LQ_TZ_MS ahora viven junto al resto de helpers de fecha, arriba)
@@ -3399,6 +3399,11 @@ function lqDetectFields(fields, llenos){
     // apuesta; el nombre exacto va primero y lo más poblado queda como respaldo.
     pres:  find(/^budget range$/i) || find(/presupuesto|budget/i),
     hor:   find(/^horizonte de inversi[oó]n$/i) || find(/horizonte|timeline|plazo/i),
+    // Respaldo cuando el canónico viene vacío (Dirección General, 23-oct-2026): el formulario
+    // de la landing de Google ("lotes-main-form") guarda presupuesto y horizonte en los campos
+    // del grupo "NO USAR – duplicados de Discovery" y no en Budget Range / Horizonte de inversión.
+    presAlt: find(/^presupuesto\s*\/\s*budget$/i),
+    horAlt:  find(/^horizonte de inversi[oó]n\s*\/\s*investment timeline$/i),
     desc:  find(/raz[oó]n de descarte|motivo.*descalific|descalificaci[oó]n/i),
     segSem: find(/semanas con seguimiento|seguimiento[_ ]semanal/i),
     segMes: find(/meses con seguimiento|seguimiento[_ ]mensual/i),
@@ -4440,8 +4445,8 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
       o: op ? op.o : 0, pr: op ? op.pr : 0, w: op ? op.w : 0, wv: op ? op.v : 0,   // OPP (cotización) / registros de pipeline / WONs / valor
       ov: op ? op.ov : 0, ap: op ? op.ap : {tot:0,sh:0,ns:0},   // valor máximo de oportunidad y citas
       tags:(l.tags||[]).join(", "),
-      pres: F.pres ? (l.cf[F.pres.id]||"") : "",
-      hor:  F.hor  ? (l.cf[F.hor.id] ||"") : "",
+      pres: (F.pres ? (l.cf[F.pres.id]||"") : "") || (F.presAlt ? (l.cf[F.presAlt.id]||"") : ""),
+      hor:  (F.hor  ? (l.cf[F.hor.id] ||"") : "") || (F.horAlt  ? (l.cf[F.horAlt.id] ||"") : ""),
       ch: cn.ch, chVia: cn.via,          // canal de negocio deducido del CRM (o null)
       inv: lqInvalido(op, l.tags),       // causa del grupo inválido (spec v1.1 R-01), o ""
       ...(lqEsBroker(l.tags, op) ? { bk:1 } : {}),  // lead de brokers: fuera de Calidad de Leads
@@ -7117,7 +7122,7 @@ async function showLQ(){
 // Reporte de disciplina comercial directo del CRM: SLA de primera respuesta por
 // asesor y canal, leads >7 días sin toque, trabajados vs contactados efectivos,
 // citas y show rate, y OPPs/WONs por asesor. Con nombres, acumulable por semanas.
-const SLA_AGG_KEY = "sla:agg:v19";   // v19: calificación con respuesta real y escalera (MQL sin escalera completa por asesor)   // v18: llamadas exitosas del asesor (≥90 s) en telefonía   // v17: broker = cualquier etiqueta que empiece con "broker" (R-03)   // v16: el reloj arranca siempre en el alta del lead (sin traspaso a ventas)   // v15: si el asesor tocó al lead antes del traspaso a ventas, su reloj arranca en el alta   // v14: citas agendadas en el periodo por fecha de agendado; base de agendamiento con quien agendó sin escribir   // v13: citas del periodo por fecha de la cita y su asistencia (show rate)   // v12: telefonía por lead (canal del 1er toque, intentos, desenlace, duración conocida)   // v11: spec v1.1 (filtros de medición: inválidos, brokers, revertidas, horario, sin llamada, contacto efectivo)   // v10: calificación por reglas (la etapa manda), no el campo manual vacío   // v9: razón de descarte por lead   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
+const SLA_AGG_KEY = "sla:agg:v20";   // v20: presupuesto y horizonte de respaldo del formulario de la landing de Google   // v19: calificación con respuesta real y escalera (MQL sin escalera completa por asesor)   // v18: llamadas exitosas del asesor (≥90 s) en telefonía   // v17: broker = cualquier etiqueta que empiece con "broker" (R-03)   // v16: el reloj arranca siempre en el alta del lead (sin traspaso a ventas)   // v15: si el asesor tocó al lead antes del traspaso a ventas, su reloj arranca en el alta   // v14: citas agendadas en el periodo por fecha de agendado; base de agendamiento con quien agendó sin escribir   // v13: citas del periodo por fecha de la cita y su asistencia (show rate)   // v12: telefonía por lead (canal del 1er toque, intentos, desenlace, duración conocida)   // v11: spec v1.1 (filtros de medición: inválidos, brokers, revertidas, horario, sin llamada, contacto efectivo)   // v10: calificación por reglas (la etapa manda), no el campo manual vacío   // v9: razón de descarte por lead   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
 const SLA_STALE_MS = 7*86400e3; // "sin toque" = 7 días sin mensaje
 const slaState = { built:false, agg:null, syncing:false, asesor:"", camp:"", abierto:{} };   // asesor/camp "" = sin filtro · abierto = plegables abiertos
 
@@ -7963,7 +7968,10 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
               // Presupuesto y horizonte del formulario, los mismos campos canónicos que
               // Calidad de Leads, para calificar por reglas (ver más abajo).
               pres: find(/^budget range$/i) || find(/presupuesto|budget/i),
-              hor:  find(/^horizonte de inversi[oó]n$/i) || find(/horizonte|timeline|plazo/i) };
+              hor:  find(/^horizonte de inversi[oó]n$/i) || find(/horizonte|timeline|plazo/i),
+              // Respaldo del formulario de la landing de Google (ver lqDetectFields)
+              presAlt: find(/^presupuesto\s*\/\s*budget$/i),
+              horAlt:  find(/^horizonte de inversi[oó]n\s*\/\s*investment timeline$/i) };
   // Catálogo de pipelines/etapas, literal del CRM (spec B1/D1/E1)
   const pipeName = {}, stageName = {}, stageOfPipe = {};
   (pipesArr||[]).forEach(p=>{ pipeName[p.id]=p.name||""; (p.stages||[]).forEach(s=>{ stageName[s.id]=s.name||""; stageOfPipe[s.id]=p.name||""; }); });
@@ -8103,7 +8111,7 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
              // y el cierre de ciclo en blanco para todos los asesores.
              lvCrm: F.calif ? lqClassify(c.cf && c.cf[F.calif.id]) : "nc", lv: "nc",
              tags: (c.tags||[]).join(", "), pstage: cp ? cp.s : "",
-             pres: cf(F.pres), hor: cf(F.hor),
+             pres: cf(F.pres) || cf(F.presAlt), hor: cf(F.hor) || cf(F.horAlt),
              o: 0, pr: 0, w: 0, wv: 0, ov: 0, ost: "",
              // v1.1: la razón es la "Causa de descalificación" de la oportunidad; antes, el
              // campo de contacto "Razón de descarte", que llegaba vacío.

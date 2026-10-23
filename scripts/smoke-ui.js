@@ -944,7 +944,9 @@ const PORT = process.env.PORT || 8765;
     const base = JSON.parse(JSON.stringify(fx0));
     const fx = JSON.parse(JSON.stringify(fx0));
     fx.boot.fields = fx.boot.fields.concat([{ id: 'f_med', name: 'utm_medium' }, { id: 'f_src', name: 'utm_source' }, { id: 'f_fbc', name: 'fbclid' },
-      { id: 'f_ses', name: 'Session source' }, { id: 'f_medio', name: 'Medium' }]);
+      { id: 'f_ses', name: 'Session source' }, { id: 'f_medio', name: 'Medium' },
+      { id: 'f_bud', name: 'Budget Range' }, { id: 'f_hz', name: 'Horizonte de inversión' },
+      { id: 'f_bud2', name: 'Presupuesto / Budget' }, { id: 'f_hz2', name: 'Horizonte de inversión / Investment timeline' }]);
     const T = (h, s) => new Date(Date.parse('2026-10-01T' + h + 'Z') + (s || 0) * 1000).toISOString();
     const L = (id, n, c, o) => Object.assign({ id, n, em: '', ph: '', c, src: '', u: 'u1', tags: [], cf: {}, attr: {} }, o);
     const DYN = 'INVESTORS_MX_DYNAMIC-TOPLPS_090926', ESC = 'INVESTORS_US/CA_ESCAPE_090926';
@@ -963,6 +965,9 @@ const PORT = process.env.PORT || 8765;
       L('waSinRef', 'WhatsApp directo', T('11:00:00'), { ph: '5550000004', attr: { med: 'whatsapp', src: 'Social media' } }),
       L('waSinLeer', 'WhatsApp sin leer', T('12:00:00'), { ph: '5550000005', attr: { med: 'whatsapp', src: 'Social media' } }),
       L('interno', 'equipo@selvadentrotulum.com', T('12:30:00'), { em: 'equipo@selvadentrotulum.com' }),
+      // Formulario de la landing de Google: presupuesto y horizonte en los campos de respaldo
+      L('formGoogle', 'Forma Google', T('14:00:00'), { em: 'g@x.com', src: 'google', tags: ['google'], cf: { f_bud2: '200k-250k', f_hz2: '6-12' } }),
+      L('formCanon', 'Forma canónica', T('14:30:00'), { em: 'c@x.com', src: 'fb', cf: { f_camp: DYN, f_bud: '$100K–$150K', f_hz: '0-6 meses', f_bud2: '200k-250k', f_hz2: '6-12' } }),
     ];
     const WA = {
       waLeo: { tx: '¡Hola! Soy Leonardo. Vi la página de Selvadentro y quiero saber más (ref: ' + DYN + ')' },
@@ -986,6 +991,7 @@ const PORT = process.env.PORT || 8765;
     r.sinCamp = sinC(agg) - sinC(aggB);
     r.wref = de('waNuevo') && de('waNuevo').wref === 1;
     r.metaOrg = agg.leads.filter(l => l.fuente === 'Meta' && /^org/.test(l.id)).length;
+    r.presHor = ['formGoogle', 'formCanon'].map(id => { const l = de(id); return l.pres + ' / ' + l.hor; }).join(' | ');
     // Unitarias: nombre del mensaje y mensajes de prueba
     r.soy = [lqNombreSoy('Soy de Monterrey').join(' '), lqNombreSoy('Hi, I am Oscar Roman and I want').slice(0, 2).join(' '), lqNombreSoy('Me llamo Ana').join(' ')].join(' | ');
     r.pruebas = ['esto es una prueba', 'Test', 'I saw the latest video', 'Testimonios de clientes', 'pruebas del botón'].map(tx => lqMensajePrueba({ tx }) ? 1 : 0).join('');
@@ -1005,7 +1011,8 @@ const PORT = process.env.PORT || 8765;
   }, fixture());
   sca.ok = sca.camps === 'Social orgánico / directo · Social orgánico · Instagram | Social orgánico / directo · Social orgánico · Facebook | Social orgánico / directo · Social orgánico · Instagram | Meta · (sin campaña atribuida) | Meta · INVESTORS_MX_DYNAMIC-TOPLPS_090926 | Meta · INVESTORS_MX_DYNAMIC-TOPLPS_090926 | Social orgánico / directo · Social orgánico · IG / WhatsApp | Otra fuente · (sin campaña atribuida)'
     && sca.dup === 'Leomx→Leonardo Ruiz Mora (INVESTORS_MX_DYNAMIC-TOPLPS_090926) | ShamanX→Oscar Demo (INVESTORS_US/CA_ESCAPE_090926)'
-    && sca.fuera === 4 && sca.prueba === 2 && sca.nLeads === 10 && sca.sinCamp === 2 && sca.wref && sca.metaOrg === 0
+    && sca.fuera === 4 && sca.prueba === 2 && sca.nLeads === 12 && sca.sinCamp === 3 && sca.wref && sca.metaOrg === 0
+    && sca.presHor === '200k-250k / 6-12 | $100K–$150K / 0-6 meses'
     && sca.soy === ' | oscar roman | ana' && sca.pruebas === '11001' && sca.lista && sca.excl !== '' && sca.filaOrg && sca.sinListaAntes;
   console.log('\n[calidad de leads] sin campaña atribuida', JSON.stringify(sca));
   if (!sca.ok) hallazgos.push({ vista: 'lq:sinCampania', sca });

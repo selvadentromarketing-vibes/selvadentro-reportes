@@ -520,7 +520,7 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
   (Meta + Google) y se muestra inversión, CPL y **costo por SQL** por campaña (cruce por
   ID de campaña y, de respaldo, por nombre) y por plataforma (siempre calculable). Todo
   en **MXN** ("12,345 MXN", nunca "$").
-- **Cache compartido**: agregado en el kv (`lq:agg:v32`), staleness de 30 min, igual
+- **Cache compartido**: agregado en el kv (`lq:agg:v33`), staleness de 30 min, igual
   que CRM en vivo.
 - **Permisos**: canal `mkt_lq` (o `marketing`, o admin). El módulo manual de
   Calidad de Leads dentro de Marketing **se retiró el 2026-08-26** junto con PPC Ads
@@ -611,7 +611,12 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
 - **Campos canónicos de presupuesto y horizonte**: el framework del cliente (*Primera
   Conexión*, 21-jul-2026, §6) los nombra: **Budget Range** y **Horizonte de inversión**.
   `lqDetectFields` busca primero ese nombre exacto y solo de respaldo el campo más poblado
-  (el CRM tiene tres de presupuesto y dos de horizonte). Budget Range **mezcla MXN y USD
+  (el CRM tiene tres de presupuesto y dos de horizonte). **Respaldo** (23-oct-2026): si el
+  canónico viene vacío se leen "Presupuesto / Budget" y "Horizonte de inversión / Investment
+  timeline" (grupo "NO USAR – duplicados de Discovery"), porque el formulario de la landing
+  de Google ("lotes-main-form") los guarda ahí; lo mismo en Desempeño (`lq:agg:v33`,
+  `sla:agg:v20`). El arreglo de fondo es que su workflow en GHL escriba en los canónicos.
+  Budget Range **mezcla MXN y USD
   sin decirlo**: "$1M–$2M" (la opción más común, 28 leads en julio) son pesos y
   "$75K–$100K" dólares. `lqParseMoney` trata como pesos cualquier cifra ≥ 400,000 sin
   moneda explícita —nadie declara USD 400K+ para un lote de USD 70–150K— y la convierte a
