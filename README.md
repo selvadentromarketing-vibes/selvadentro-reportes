@@ -257,6 +257,19 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
   leads del rango y por lead (no por oportunidad). **Zoom realizado** = etapa "Zoom
   realizado" o una posterior del embudo (OPP y WON incluidos); las etapas de tour/visita y
   las cubetas que no son embudo no cuentan. Es la etapa actual: el CRM no da historial.
+  - **Etiqueta `zoom-realizado`** (27-oct-2026; `LQ_TAG_ZOOM`). Un lead que tuvo Zoom y hoy
+    está en Largo plazo, Nurturing, Rescate o Descalificado dejaba de contar: Jim Rodriguez
+    (INVESTORS_US/CA_ESCAPE_090926) tuvo Zoom, Daniela lo pasó a Largo plazo el 26-oct y la
+    campaña lo perdió. El reporte ya leía la etiqueta `zoom-realizado` del contacto (también
+    `zoom realizado`, `zoom_completado`, `zoom-completed`), pero **ningún contacto del CRM la
+    tenía**: no había workflow que la pusiera. Mismo patrón que `opp-generada`: la marca la
+    pone el CRM. **Pendiente en GHL**: un workflow que agregue `zoom-realizado` al contacto
+    cuando su oportunidad entra a "Zoom realizado" (pipeline Seguimiento de ventas) **o** su
+    cita del calendario de Zoom se marca como *Showed*, y que nadie la quite; más el
+    etiquetado a mano de Jim y de los leads con Zoom que ya cayeron, desde las notas de ventas.
+    Con la etiqueta el Zoom cuenta en la siguiente sincronización, sin cambiar el agregado (la
+    regla ya existía). Una OPP caída sigue sin contar como Zoom si no tiene la etiqueta: pudo
+    llegar a OPP directo de un recorrido.
 - **% trabajados** = leads que ya salieron de "Nuevo lead (no contactado)": cualquier etapa
   posterior, también "Sin respuesta", toques, Ultimátum, Rescate o Descalificado. Si es
   bajo, el problema es de seguimiento, no de la campaña.

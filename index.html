@@ -4190,9 +4190,18 @@ function lqInvalido(op, tags){
    en el embudo canónico, así que también cuentan: sin eso el embudo de un cohorte podría
    tener más OPP que Zooms. Las cubetas que no son embudo (Largo plazo, Rescate,
    Descalificado…) y el pipeline post-venta no cuentan. Es la etapa ACTUAL: el CRM no da el
-   historial, así que un lead que tuvo Zoom y hoy está en Largo plazo ya no se ve. */
+   historial, así que un lead que tuvo Zoom y hoy está en Largo plazo ya no se ve por etapa.
+   Para eso está la etiqueta "zoom-realizado" del contacto (mismo patrón que "opp-generada"):
+   un workflow de GHL la agrega cuando la oportunidad entra a "Zoom realizado" o la cita de
+   Zoom se marca como asistida, y nadie la quita. Con ella el Zoom cuenta aunque el lead hoy
+   esté en Largo plazo, Nurturing, Rescate o Descalificado. Caso que lo destapó (27-oct-2026):
+   Jim Rodriguez (INVESTORS_US/CA_ESCAPE_090926) tuvo Zoom, el 26-oct pasó a Largo plazo y no
+   contaba; al revisar, ningún contacto del CRM tenía la etiqueta: el workflow no existía. */
 const LQ_RX_ZOOM_OK = /zoom\s*realizad/i;
 const LQ_RX_NO_ZOOM = /tour|visita|recorrido|cita|no\s*show|re\s*agend/i;
+// Etiqueta del CRM que dice que el lead tuvo Zoom, esté donde esté hoy (zoom-realizado; se
+// aceptan también zoom realizado / zoom_completado / zoom-completed).
+const LQ_TAG_ZOOM = /zoom[-_ ]?realizad|zoom[-_ ]?complet/i;
 // Posición de la primera etapa que cumple `rx`, por pipeline.
 function lqEtapaIdx(stages, rx){
   const out = {};
@@ -4208,7 +4217,7 @@ function lqZoomRealizado(l, zIdx){
   // directo de un recorrido, sin Zoom (Dirección General, 15-oct-2026), así que puede haber más
   // OPP generadas que Zooms.
   if((l.o||0) > 0 || (l.w||0) > 0) return true;
-  if(/zoom[-_ ]?realizad|zoom[-_ ]?complet/i.test(String(l.tags||""))) return true;
+  if(LQ_TAG_ZOOM.test(String(l.tags||""))) return true;   // etiqueta zoom-realizado del CRM
   const n = String(l.pstage||"");
   if(!n || LQ_RX_MUERTA.test(n) || LQ_RX_PIPE_NO_FUNNEL.test(l.pipe||"")) return false;
   if(LQ_RX_ZOOM_OK.test(n)) return true;
@@ -4728,7 +4737,7 @@ function lqLeyenda(){
       <span><b>SQL+</b> SQL + SQL Selvadentro: la única definición de lead bueno. CQL y MQL son volumen</span>
       <span><b>Costo por SQL</b> inversión de la campaña en el rango ÷ sus SQL+ · meta ${lqMXN(LQ_SEMAFORO.metaCostoSql)}</span>
       <span><b>Semáforo</b> verde subir presupuesto diario ${LQ_SEMAFORO.subirPct}% · amarillo optimizar calidad o costo · rojo pausar (o revisar seguimiento si menos del ${LQ_SEMAFORO.minTrabajados}% está trabajado) · gris en evaluación · inversión < ${lqMXN(LQ_SEMAFORO.umbralEval)}: mantener (muestra chica) (reglas completas arriba de cada tabla)</span>
-      <span><b>Zoom realizado</b> etapa "Zoom realizado" o posterior. Cita o visita de sitio no cuenta</span>
+      <span><b>Zoom realizado</b> etapa "Zoom realizado" o posterior, o etiqueta zoom-realizado del CRM (cuenta aunque hoy esté en Largo plazo). Cita o visita de sitio no cuenta</span>
       <span><b>% trabajados</b> ya salieron de "Nuevo lead (no contactado)" (Sin respuesta y toques incluidos). Si es bajo, el problema es de seguimiento, no de la campaña</span>
       <span><b>% contactados</b> hubo conversación: Contacto establecido, Interés identificado, Nurturing, Zoom, Largo plazo, OPP, WON o posterior. Sin respuesta y toques no cuentan; trabajados altos con contactados bajos = los leads no contestan</span>
       <span><b>CPL</b> costo por lead = inversión ÷ leads CRM · <b>⚠</b> CPL de 7 días más de ${LQ_SEMAFORO.alertaCpl.pct}% arriba de su promedio de 30</span>
@@ -5837,7 +5846,7 @@ const LQ_CCOLS = {
   cql:  { th:"CQL",              t:"Volumen: capturado, sin respuesta todavía", sec:true },
   mql:  { th:"MQL",              t:"Volumen: respondió o mostró interés", sec:true },
   sqlp: { th:"SQL+",             t:"SQL + SQL Selvadentro: la métrica principal" },
-  zoom: { th:"Zoom realizado",   t:"Leads del cohorte con Zoom realizado o una etapa posterior (OPP, WON). Una cita o visita de sitio NO cuenta" },
+  zoom: { th:"Zoom realizado",   t:"Leads del cohorte con Zoom realizado o una etapa posterior (OPP, WON), o con la etiqueta zoom-realizado del CRM aunque hoy estén en Largo plazo, Nurturing o Rescate. Una cita o visita de sitio NO cuenta" },
   vv:   { th:"Verificado por ventas", t:"Leads del cohorte que ventas marcó con Lead to Watch = Sí en el CRM: su verificación de que el lead está calificado. Es informativo: no cambia la calificación SQL+ del reporte" },
   opp:  { th:"OPP vigentes",     t:"Leads del cohorte cuya oportunidad está HOY en Seguimiento de OPP, Carta oferta, Apartado o WON. Si la OPP se cae (Largo plazo, Rescate, Descalificado…) deja de contar aquí" },
   og:   { th:"OPP generadas",    t:"Leads del cohorte que llegaron ALGUNA VEZ a Seguimiento de OPP, Carta oferta, Apartado o WON, estén donde estén hoy: las vigentes, las ventas y las que tienen la etiqueta opp-generada en el CRM. Cada lead cuenta una vez. Debajo, cuántas se cayeron" },
@@ -6101,7 +6110,7 @@ function lqAdsCrmTabla(C, m, ctr, cpc){
       <thead><tr><th class="lft">${meta ? "Conjunto / anuncio" : "Grupo / anuncio"}</th><th>Inversión</th><th title="Leads que reporta ${meta ? "Meta" : "Google"}">Leads plat.</th>
         <th title="Contactos del CRM cuyo utm_content cruza con este ${nivel} o anuncio">Leads CRM</th>
         <th title="Calificados = SQL+ (SQL + SQL Selvadentro), la misma definición del semáforo">SQL+</th>
-        <th title="Zoom realizado: leads con Zoom realizado o una etapa posterior (OPP, WON). Una cita agendada no cuenta">Zoom</th>
+        <th title="Zoom realizado: leads con Zoom realizado o una etapa posterior (OPP, WON), o con la etiqueta zoom-realizado del CRM. Una cita agendada no cuenta">Zoom</th>
         <th title="Inversión ÷ leads CRM">CPL CRM</th><th>Impres.</th><th>Clics</th><th>CTR</th><th>CPC</th></tr></thead>
       <tbody>${rows || `<tr><td colspan="11" class="lft txt-nota">Sin anuncios con actividad en el rango.</td></tr>`}</tbody></table></div>
     <p class="hint lq-pl-cuadre" style="margin:6px 0 0">${cuadre}</p>`;
@@ -6196,7 +6205,7 @@ function lqLevelSection(agg, leadsAll, rango, rangoSet){
   }
 
   const noAd = leads.filter(l=>!l.ad).length;
-  const hint = `<p class="hint" style="margin-top:-4px">SQL+ = SQL + SQL Selvadentro · Costo por SQL = inversión ÷ SQL+ · Zoom realizado, OPP vigentes y WON = leads del cohorte del rango según su etapa de hoy en el CRM · OPP generadas = las que llegaron alguna vez a OPP, también las caídas · ${level==="camp"?"la inversión se cruza por ID de campaña cuando el lead lo trae y, si no, por nombre":"la inversión se empareja por nombre con Windsor (— = sin empate)"}.
+  const hint = `<p class="hint" style="margin-top:-4px">SQL+ = SQL + SQL Selvadentro · Costo por SQL = inversión ÷ SQL+ · Zoom realizado = etapa de hoy en el CRM o etiqueta zoom-realizado · OPP vigentes y WON = leads del cohorte del rango según su etapa de hoy en el CRM · OPP generadas = las que llegaron alguna vez a OPP, también las caídas · ${level==="camp"?"la inversión se cruza por ID de campaña cuando el lead lo trae y, si no, por nombre":"la inversión se empareja por nombre con Windsor (— = sin empate)"}.
     ${level!=="camp"&&noAd?` <b>${noAd}</b> de ${leads.length} leads no traen anuncio en su atribución (UTM) y caen en "(sin anuncio atribuido)".`:""}</p>`;
 
   const tree = level==="camp" ? lqQualityTree(agg, leads, rangoSet, rango) : "";
@@ -6294,7 +6303,7 @@ function lqComboSection(agg, leadsAll, rango, rangoSet){
     <tr class="total lq-total2"><td class="lft">Todos los leads del rango</td>${lqCeldas({ ...todo, cpl:null, cps:null }, keys, { total:true, sinMeta:true })}</tr>
   </table></div>
   <p class="hint">Leads CRM = contactos en GoHighLevel (los leads que reporta la plataforma están en Datos de campañas) · CPL = inversión ÷ leads CRM · SQL+ = SQL + SQL Selvadentro · Costo por SQL = inversión ÷ SQL+ ·
-    Zoom realizado, OPP y WON = leads del cohorte del rango según su etapa en el CRM (una cita o visita de sitio no cuenta como Zoom) · % trabajados = salieron de "Nuevo lead" · % contactados = hubo conversación (Sin respuesta y toques no cuentan).
+    Zoom realizado, OPP y WON = leads del cohorte del rango según su etapa en el CRM; el Zoom cuenta también con la etiqueta zoom-realizado aunque el lead hoy esté en Largo plazo (una cita o visita de sitio no cuenta como Zoom) · % trabajados = salieron de "Nuevo lead" · % contactados = hubo conversación (Sin respuesta y toques no cuentan).
     La inversión se cruza con los leads por ID de campaña cuando el lead lo trae (hsa_cam de Google, campaignId de Meta) y, si no, por nombre.</p>`;
 
   lqState._combo = { rows, pagado:pag, todo, leads, semTot, gap:M.gap };
