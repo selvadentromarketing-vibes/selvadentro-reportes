@@ -3181,7 +3181,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v34";  // v34: DM de redes registrado a mano (lead-dm-redes) a Social orgánico · Instagram (DM) y llamada entrante sin origen ("couldn't find caller name") a su propia fuente  // v33: presupuesto y horizonte de respaldo ("Presupuesto / Budget", "Horizonte de inversión / Investment timeline") del formulario de la landing de Google  // v32: el contacto de WhatsApp con Session source "Social media" sí se lee (antes se tomaba como origen) y fuera los correos @selvadentrotulum.com  // v31: igual que v30; el agregado v30 pudo guardarse con el avance del duplicado por WhatsApp pasado al formulario (publicado unos minutos por error el 17-oct)  // v30: Social orgánico · Instagram/Facebook, campaña del "(ref: …)" de WhatsApp, duplicados por WhatsApp (dupWa) y pruebas por primer mensaje  // v29: sin respuesta → CQL solo con escalera completa (si no, MQL); nota del asesor como respuesta  // v28: respuesta real del lead (mensaje entrante, llamada > 30 s o etapa de contacto) y el formulario ya no sube a SQL en Nurturing/Largo plazo/Rescate/Sin respuesta  // v27: nivel de la OPP caída según dónde cayó (Largo plazo → SQL, Rescate → SQL Selvadentro, Descalificado por causa)  // v26: OPP generada = SQL Selvadentro (salvo causa inválida) y cuenta como contactado y trabajado (no como Zoom)  // v25: OPP generadas (etiqueta opp-generada del CRM) y verificado por ventas (Lead to Watch)  // v24: broker = cualquier etiqueta que empiece con "broker" (no solo broker-client)  // v23: re-envíos de formulario (agg.reenvios)  // v22: datos de la decisión de hoy (rango fijo 30 días y 7 contra 7) en `dec`  // v21: el v20 guardado el 9-oct pudo quedar sin detalle por anuncio (la consulta con campos extra se volvía lenta)  // v20: URL de destino por anuncio, gasto por keyword de Google y presupuesto diario (recomendaciones concretas)  // v19: trabajado (tr) y contactado (ct) por etapa, separados  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
+const LQ_AGG_KEY = "lq:agg:v35";  // v35: Lead to Watch = Sí sube al lead a SQL como mínimo (antes solo informativo)  // v34: DM de redes registrado a mano (lead-dm-redes) a Social orgánico · Instagram (DM) y llamada entrante sin origen ("couldn't find caller name") a su propia fuente  // v33: presupuesto y horizonte de respaldo ("Presupuesto / Budget", "Horizonte de inversión / Investment timeline") del formulario de la landing de Google  // v32: el contacto de WhatsApp con Session source "Social media" sí se lee (antes se tomaba como origen) y fuera los correos @selvadentrotulum.com  // v31: igual que v30; el agregado v30 pudo guardarse con el avance del duplicado por WhatsApp pasado al formulario (publicado unos minutos por error el 17-oct)  // v30: Social orgánico · Instagram/Facebook, campaña del "(ref: …)" de WhatsApp, duplicados por WhatsApp (dupWa) y pruebas por primer mensaje  // v29: sin respuesta → CQL solo con escalera completa (si no, MQL); nota del asesor como respuesta  // v28: respuesta real del lead (mensaje entrante, llamada > 30 s o etapa de contacto) y el formulario ya no sube a SQL en Nurturing/Largo plazo/Rescate/Sin respuesta  // v27: nivel de la OPP caída según dónde cayó (Largo plazo → SQL, Rescate → SQL Selvadentro, Descalificado por causa)  // v26: OPP generada = SQL Selvadentro (salvo causa inválida) y cuenta como contactado y trabajado (no como Zoom)  // v25: OPP generadas (etiqueta opp-generada del CRM) y verificado por ventas (Lead to Watch)  // v24: broker = cualquier etiqueta que empiece con "broker" (no solo broker-client)  // v23: re-envíos de formulario (agg.reenvios)  // v22: datos de la decisión de hoy (rango fijo 30 días y 7 contra 7) en `dec`  // v21: el v20 guardado el 9-oct pudo quedar sin detalle por anuncio (la consulta con campos extra se volvía lenta)  // v20: URL de destino por anuncio, gasto por keyword de Google y presupuesto diario (recomendaciones concretas)  // v19: trabajado (tr) y contactado (ct) por etapa, separados  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 // (LQ_TZ y LQ_TZ_MS ahora viven junto al resto de helpers de fecha, arriba)
@@ -3407,7 +3407,8 @@ function lqDetectFields(fields, llenos){
     desc:  find(/raz[oó]n de descarte|motivo.*descalific|descalificaci[oó]n/i),
     segSem: find(/semanas con seguimiento|seguimiento[_ ]semanal/i),
     segMes: find(/meses con seguimiento|seguimiento[_ ]mensual/i),
-    // "Lead to Watch" (Sí/No): ventas lo marca al verificar que el lead está calificado.
+    // "Lead to Watch" (Sí/No): ventas lo marca al verificar que el lead está calificado; en Sí,
+    // el lead es SQL como mínimo (lqAutoQualify, 27-oct-2026).
     verif: find(/lead\s*to\s*watch/i) || find(/hot\s*lead/i),
   };
 }
@@ -3569,6 +3570,13 @@ function lqAutoQualify(l, opt){
   if(l.w>0) why.push("tiene una venta cerrada (WON)");
   else if(enOpp) why.push(stage ? `oportunidad real de cierre en "${stage}"` : "oportunidad real de cierre abierta");
   else if(stage && LQ_RX.fuerte.test(stage)) why.push(`etapa avanzada: "${stage}"`);
+  // Verificado por ventas (Dirección General, 27-oct-2026): Lead to Watch = Sí es ventas
+  // diciendo que el lead está calificado, y eso es un SQL (Sales Qualified Lead). Lo sube a
+  // SQL como mínimo aunque esté en una cubeta: un lead que tuvo Zoom y hoy está en Largo plazo
+  // salía MQL porque el CRM solo da la etapa actual y el Zoom ya no se ve. A SQL Selvadentro no
+  // lo sube: eso sigue pidiendo OPP o señal fuerte con perfil. Lo descalificado sigue así (regla 1).
+  const verif = !!l.vv;
+  if(verif) why.push("ventas lo verificó como calificado (Lead to Watch = Sí)");
 
   const perfilOk = presupuesto!=null && presupuesto>=LQ_UMBRAL_USD && (hor==null || hor<=LQ_HORIZONTE_M);
   const perfilBajo = (presupuesto!=null && presupuesto<LQ_UMBRAL_USD) || (hor!=null && hor>LQ_HORIZONTE_M);
@@ -3602,8 +3610,8 @@ function lqAutoQualify(l, opt){
 
   // 4) SQL — interés real y activo, pero sin perfil confirmado; o perfil declarado en el
   // formulario sin que ninguna etapa del pipeline lo respalde todavía (antes esto era SQL
-  // Selvadentro: el formulario solo no debe llegar al nivel más alto).
-  if(senalFuerte){
+  // Selvadentro: el formulario solo no debe llegar al nivel más alto); o verificado por ventas.
+  if(senalFuerte || verif){
     if(presupuesto==null && hor==null) why.push("sin presupuesto ni horizonte capturados: no alcanza perfil Selvadentro");
     return {lv:"sql", why};
   }
@@ -3933,7 +3941,8 @@ const LQ_OPP_REGISTRO_DESDE = "2026-10-15";
 const lqEsOppGen = (l)=> !!(l && (l.og || (l.o||0) > 0 || (l.w||0) > 0));
 const lqTagOppGen = (tags)=> (tags||[]).some(t=>LQ_TAG_OPP_GEN.test(String(t).trim()));
 // Verificado por ventas: el campo "Lead to Watch" del contacto en Sí. Es la verificación de
-// ventas de que el lead está calificado; se muestra aparte y NO cambia la calificación.
+// ventas de que el lead está calificado; se muestra aparte y sube al lead a SQL como mínimo
+// (Dirección General, 27-oct-2026; antes era solo informativo).
 // (Sin \b: después de "í" no hay límite de palabra en JS y "Sí" no pasaba.)
 const lqSi = (v)=> /^(s[ií]|yes|true|1|checked)(?![a-z0-9])/i.test(String(v||"").trim());
 
@@ -4717,13 +4726,13 @@ function lqLeyenda(){
     <summary>Qué significa cada sigla</summary>
     <div class="lq-leyenda-cuerpo">
       <span><b>SQL Selvadentro</b> oportunidad real de cierre o venta cerrada en el pipeline (manda sobre el formulario), también una OPP generada que cayó a Rescate o Nurturing o se descalificó por "Ya no interesado" (tenía perfil y no se cerró); o cita asistida/etapa avanzada <i>y</i> perfil de ≥100,000 USD con horizonte ≤6 meses. Una OPP caída a Largo plazo o descalificada por "No alineado" es SQL; por "Malinterpretó la campaña", MQL; por causa inválida, Descalificado</span>
-      <span><b>SQL</b> señal fuerte sin ese perfil, o perfil del formulario sin etapa que lo respalde</span>
+      <span><b>SQL</b> señal fuerte sin ese perfil, perfil del formulario sin etapa que lo respalde, o verificado por ventas (Lead to Watch = Sí)</span>
       <span><b>MQL</b> respondió o mostró interés</span>
       <span><b>CQL</b> capturado, sin respuesta aún</span>
       <span><b>OPP vigentes</b> leads del cohorte cuya oportunidad está HOY en Seguimiento de OPP, Carta oferta, Apartado o WON. Una cotización enviada todavía no cuenta; si la OPP se cae (Largo plazo, Rescate, Descalificado…) deja de contar aquí</span>
       <span><b>OPP generadas</b> leads del cohorte que llegaron ALGUNA VEZ a Seguimiento de OPP, Carta oferta, Apartado o WON, sin importar su etapa de hoy: las vigentes, las ventas y las que tienen la etiqueta opp-generada en el CRM. Una OPP caída se sigue contando y cada lead cuenta una sola vez</span>
       <span><b>SQL+ → OPP generadas</b> de los SQL+ del rango, cuántos generaron OPP: "7 de 11 · 63.6%". Mismos leads arriba y abajo</span>
-      <span><b>Verificado por ventas</b> el lead tiene Lead to Watch = Sí en el CRM: ventas verificó que está calificado. No cambia la calificación del reporte</span>
+      <span><b>Verificado por ventas</b> el lead tiene Lead to Watch = Sí en el CRM: ventas verificó que está calificado. Lo sube a SQL como mínimo (a SQL Selvadentro no: eso pide OPP o perfil confirmado)</span>
       <span><b>WON</b> leads del cohorte con venta cerrada, sin importar cuándo se cerró. Todo el dinero en MXN</span>
       <span><b>SQL+</b> SQL + SQL Selvadentro: la única definición de lead bueno. CQL y MQL son volumen</span>
       <span><b>Costo por SQL</b> inversión de la campaña en el rango ÷ sus SQL+ · meta ${lqMXN(LQ_SEMAFORO.metaCostoSql)}</span>
@@ -5838,7 +5847,7 @@ const LQ_CCOLS = {
   mql:  { th:"MQL",              t:"Volumen: respondió o mostró interés", sec:true },
   sqlp: { th:"SQL+",             t:"SQL + SQL Selvadentro: la métrica principal" },
   zoom: { th:"Zoom realizado",   t:"Leads del cohorte con Zoom realizado o una etapa posterior (OPP, WON). Una cita o visita de sitio NO cuenta" },
-  vv:   { th:"Verificado por ventas", t:"Leads del cohorte que ventas marcó con Lead to Watch = Sí en el CRM: su verificación de que el lead está calificado. Es informativo: no cambia la calificación SQL+ del reporte" },
+  vv:   { th:"Verificado por ventas", t:"Leads del cohorte que ventas marcó con Lead to Watch = Sí en el CRM: su verificación de que el lead está calificado. Lo sube a SQL como mínimo, así que cuenta en SQL+" },
   opp:  { th:"OPP vigentes",     t:"Leads del cohorte cuya oportunidad está HOY en Seguimiento de OPP, Carta oferta, Apartado o WON. Si la OPP se cae (Largo plazo, Rescate, Descalificado…) deja de contar aquí" },
   og:   { th:"OPP generadas",    t:"Leads del cohorte que llegaron ALGUNA VEZ a Seguimiento de OPP, Carta oferta, Apartado o WON, estén donde estén hoy: las vigentes, las ventas y las que tienen la etiqueta opp-generada en el CRM. Cada lead cuenta una vez. Debajo, cuántas se cayeron" },
   sqlog:{ th:"SQL+ → OPP generadas", t:"De los SQL+ de la fila, cuántos generaron OPP: conteo, denominador y porcentaje, con los mismos leads del rango" },
@@ -6822,7 +6831,7 @@ function lqRender(){
     <b>OPP</b> = oportunidad real de cierre: la cotización ya está entregada y en seguimiento activo. <b>"Cotización enviada" no cuenta</b>; cuentan
     "Seguimiento de OPP", "Carta oferta", "Apartado" y cualquier etapa posterior. No es cualquier registro del pipeline. <b>OPP vigentes</b> lee la etapa de hoy;
     <b>OPP generadas</b> cuenta también las que se cayeron: GoHighLevel no guarda el historial de etapas, así que la marca es la etiqueta <b>opp-generada</b>
-    que un workflow del CRM pone al entrar a OPP y nadie quita. <b>Verificado por ventas</b> = Lead to Watch en Sí (informativo, no cambia la calificación). <b>WON</b> = venta cerrada.
+    que un workflow del CRM pone al entrar a OPP y nadie quita. <b>Verificado por ventas</b> = Lead to Watch en Sí (sube al lead a SQL como mínimo). <b>WON</b> = venta cerrada.
     ${(agg.oppStages||[]).length ? `<br><span style="color:var(--neutro)">Etapas que hoy cuentan como OPP en tu CRM: <b>${escAttr((agg.oppStages||[]).join(" · "))}</b>.</span>` : ""}
     La <b>inversión</b> viene de Windsor.ai (Meta + Google).
     <br><b>Campaña</b>: la de la atribución del contacto (utm_campaign o ID de campaña). Un lead con utm_medium "social" (o que llegó desde l.instagram.com / l.facebook.com) sin FBCLID ni campaña es
@@ -6837,7 +6846,8 @@ function lqRender(){
     formulario esté vacío o por debajo del perfil, porque es el veredicto del asesor tras hablar con el prospecto. También: cita asistida o etapa avanzada
     (interés identificado, cotización, tour/zoom realizado) <b>y</b> perfil confirmado (presupuesto ≥ umbral y horizonte dentro del perfil).
     <br>3 · <b>SQL</b>: interés real y activo (cita asistida, etapa avanzada o cita agendada) sin presupuesto/horizonte que confirmen el perfil; o perfil declarado en el
-    formulario con respuesta activa pero sin ninguna etapa del pipeline que lo respalde todavía (el formulario solo no llega al nivel más alto).
+    formulario con respuesta activa pero sin ninguna etapa del pipeline que lo respalde todavía (el formulario solo no llega al nivel más alto); o <b>verificado por ventas</b>
+    (Lead to Watch = Sí), aunque hoy esté en Largo plazo, Nurturing o Rescate (Dirección, 27-oct-2026).
     <br>4 · <b>MQL</b>: respondió o mostró interés (tag de respuesta, etapa de contacto establecido, u oportunidad ya movida del arranque), aún sin calificar a fondo.
     <br>5 · <b>CQL</b>: capturado; primer alcance enviado o intentos sin respuesta sustancial, sin nada de lo anterior.
     <br>El presupuesto sale del campo de presupuesto del contacto (Budget Range); los montos en pesos se
@@ -7150,7 +7160,7 @@ async function showLQ(){
 // Reporte de disciplina comercial directo del CRM: SLA de primera respuesta por
 // asesor y canal, leads >7 días sin toque, trabajados vs contactados efectivos,
 // citas y show rate, y OPPs/WONs por asesor. Con nombres, acumulable por semanas.
-const SLA_AGG_KEY = "sla:agg:v20";   // v20: presupuesto y horizonte de respaldo del formulario de la landing de Google   // v19: calificación con respuesta real y escalera (MQL sin escalera completa por asesor)   // v18: llamadas exitosas del asesor (≥90 s) en telefonía   // v17: broker = cualquier etiqueta que empiece con "broker" (R-03)   // v16: el reloj arranca siempre en el alta del lead (sin traspaso a ventas)   // v15: si el asesor tocó al lead antes del traspaso a ventas, su reloj arranca en el alta   // v14: citas agendadas en el periodo por fecha de agendado; base de agendamiento con quien agendó sin escribir   // v13: citas del periodo por fecha de la cita y su asistencia (show rate)   // v12: telefonía por lead (canal del 1er toque, intentos, desenlace, duración conocida)   // v11: spec v1.1 (filtros de medición: inválidos, brokers, revertidas, horario, sin llamada, contacto efectivo)   // v10: calificación por reglas (la etapa manda), no el campo manual vacío   // v9: razón de descarte por lead   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
+const SLA_AGG_KEY = "sla:agg:v21";   // v21: Lead to Watch = Sí sube al lead a SQL como mínimo   // v20: presupuesto y horizonte de respaldo del formulario de la landing de Google   // v19: calificación con respuesta real y escalera (MQL sin escalera completa por asesor)   // v18: llamadas exitosas del asesor (≥90 s) en telefonía   // v17: broker = cualquier etiqueta que empiece con "broker" (R-03)   // v16: el reloj arranca siempre en el alta del lead (sin traspaso a ventas)   // v15: si el asesor tocó al lead antes del traspaso a ventas, su reloj arranca en el alta   // v14: citas agendadas en el periodo por fecha de agendado; base de agendamiento con quien agendó sin escribir   // v13: citas del periodo por fecha de la cita y su asistencia (show rate)   // v12: telefonía por lead (canal del 1er toque, intentos, desenlace, duración conocida)   // v11: spec v1.1 (filtros de medición: inválidos, brokers, revertidas, horario, sin llamada, contacto efectivo)   // v10: calificación por reglas (la etapa manda), no el campo manual vacío   // v9: razón de descarte por lead   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
 const SLA_STALE_MS = 7*86400e3; // "sin toque" = 7 días sin mensaje
 const slaState = { built:false, agg:null, syncing:false, asesor:"", camp:"", abierto:{} };   // asesor/camp "" = sin filtro · abierto = plegables abiertos
 
@@ -7999,7 +8009,9 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
               hor:  find(/^horizonte de inversi[oó]n$/i) || find(/horizonte|timeline|plazo/i),
               // Respaldo del formulario de la landing de Google (ver lqDetectFields)
               presAlt: find(/^presupuesto\s*\/\s*budget$/i),
-              horAlt:  find(/^horizonte de inversi[oó]n\s*\/\s*investment timeline$/i) };
+              horAlt:  find(/^horizonte de inversi[oó]n\s*\/\s*investment timeline$/i),
+              // "Lead to Watch" en Sí: SQL como mínimo, la misma regla de Calidad de Leads
+              verif: find(/lead\s*to\s*watch/i) || find(/hot\s*lead/i) };
   // Catálogo de pipelines/etapas, literal del CRM (spec B1/D1/E1)
   const pipeName = {}, stageName = {}, stageOfPipe = {};
   (pipesArr||[]).forEach(p=>{ pipeName[p.id]=p.name||""; (p.stages||[]).forEach(s=>{ stageName[s.id]=s.name||""; stageOfPipe[s.id]=p.name||""; }); });
@@ -8140,6 +8152,7 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
              lvCrm: F.calif ? lqClassify(c.cf && c.cf[F.calif.id]) : "nc", lv: "nc",
              tags: (c.tags||[]).join(", "), pstage: cp ? cp.s : "",
              pres: cf(F.pres) || cf(F.presAlt), hor: cf(F.hor) || cf(F.horAlt),
+             ...(lqSi(cf(F.verif)) ? { vv:1 } : {}),   // verificado por ventas (Lead to Watch)
              o: 0, pr: 0, w: 0, wv: 0, ov: 0, ost: "",
              // v1.1: la razón es la "Causa de descalificación" de la oportunidad; antes, el
              // campo de contacto "Razón de descarte", que llegaba vacío.
@@ -12332,10 +12345,10 @@ function diagSeccionGlosario(){
       ${fila("OPP generadas", "Calidad de Leads",
              "Leads del cohorte que llegaron <b>alguna vez</b> a OPP, estén donde estén hoy: las vigentes, las ventas y los contactos con la etiqueta <b>opp-generada</b> (la pone un workflow del CRM al entrar a OPP y nadie la quita). Una OPP caída se sigue contando; cada lead cuenta una vez. Antes de activar el workflow, las caídas solo cuentan si ventas las etiquetó a mano: el reporte avisa \"histórico incompleto\".")}
       ${fila("Verificado por ventas", "Calidad de Leads",
-             "Contactos con <b>Lead to Watch</b> = Sí: la verificación de ventas de que el lead está calificado. Se muestra aparte; no cambia la calificación SQL+.")}
+             "Contactos con <b>Lead to Watch</b> = Sí: la verificación de ventas de que el lead está calificado. Se muestra aparte y sube al lead a SQL como mínimo.")}
       ${fila("SQL Selvadentro", "Calidad de Leads",
              "Oportunidad real de cierre o venta cerrada en el pipeline (la etapa manda sobre el formulario), también una <b>OPP generada</b> que cayó a Rescate o Nurturing, o se descalificó por \"Ya no interesado\" o sin causa (tenía perfil; la venta no se cerró). Caída a Largo plazo o \"No alineado\" → SQL; \"Malinterpretó la campaña\" → MQL; causa inválida → Descalificado. O cita asistida/etapa avanzada <b>y</b> perfil de ≥$100K USD con horizonte ≤6 meses.")}
-      ${fila("SQL", "Calidad de Leads", "Señal fuerte de interés sin el perfil de presupuesto y horizonte, o perfil del formulario sin etapa del pipeline que lo respalde.")}
+      ${fila("SQL", "Calidad de Leads", "Señal fuerte de interés sin el perfil de presupuesto y horizonte, perfil del formulario sin etapa del pipeline que lo respalde, o verificado por ventas (Lead to Watch = Sí).")}
       ${fila("MQL", "Calidad de Leads", "Respondió o mostró interés, sin señal fuerte todavía.")}
       ${fila("CQL", "Calidad de Leads", "Capturado: el lead entró y quedó registrado, sin respuesta aún.")}
     </tbody>

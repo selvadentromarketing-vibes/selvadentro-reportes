@@ -209,6 +209,14 @@ const PORT = process.env.PORT || 8765;
       oppCaidaV2: q({ og: 1, pstage: 'Largo plazo', rsp: '' }, true).lv,                    // sql: la regla de OPP no cambia
       citaV2: q({ pstage: 'Zoom agendado', pr: 1, ap: { tot: 1, sh: 0, ns: 0 }, rsp: '' }, true).lv, // sql: cita agendada
       sinVerif: q({ pstage: '2do toque', pr: 1 }, true).why.join(' · '),
+      // Lead to Watch = Sí (Dirección General, 27-oct-2026): SQL como mínimo. El caso real: tuvo
+      // Zoom, hoy está en Largo plazo sin haber llegado a OPP y salía MQL.
+      ltwLargo: q({ pstage: 'Largo plazo', pr: 1, rsp: 'i', vv: 1 }, true),               // sql (sin vv: mql)
+      ltwLargoForm: q({ pstage: 'Largo plazo', pr: 1, rsp: 'i', vv: 1, ...form }, true).lv, // sql: tampoco Selvadentro
+      ltwSinResp: q({ pstage: '2do toque', pr: 1, rsp: '', vv: 1 }, true).lv,             // sql
+      ltwDesc: q({ pstage: 'Descalificado', pr: 1, vv: 1 }, true).lv,                     // desc: lo descalificado sigue así
+      ltwOpp: q({ o: 1, pstage: 'Seguimiento de OPP', vv: 1 }, true).lv,                  // sqls: no la baja
+      ltwPerfil: q({ pstage: 'Tour realizado', pr: 1, vv: 1, ...form }, true).lv,         // sqls: señal fuerte + perfil
     };
     r.ok = r.flag === true && r.tagV1 === 'mql' && r.tagV2 === 'nuevo' && r.toqueV1 === 'mql' && r.toqueV2 === 'cql'
       && r.toqueSinEsc.lv === 'mql' && r.toqueSinEsc.sinEsc === true && /escalera incompleta \(2 llamadas, 1 WhatsApp\/SMS, 0 emails\)/.test(r.toqueSinEsc.why.join(' '))
@@ -217,7 +225,11 @@ const PORT = process.env.PORT || 8765;
       && r.nurtFormV1 === 'sql' && r.nurtFormRespV2.lv === 'mql' && /en "Nurturing" sin haber llegado a OPP: el formulario ya no lo sube a SQL/.test(r.nurtFormRespV2.why.join(' '))
       && r.nurtFormSinV2 === 'cql' && r.largoCitaV1 === 'sqls' && r.largoCitaV2 === 'sql'
       && r.contactoFormV2.lv === 'sql' && /llamada contestada de 45 s/.test(r.contactoFormV2.why.join(' '))
-      && r.oppCaidaV2 === 'sql' && r.citaV2 === 'sql' && /respuesta sin verificar/.test(r.sinVerif);
+      && r.oppCaidaV2 === 'sql' && r.citaV2 === 'sql' && /respuesta sin verificar/.test(r.sinVerif)
+      && r.ltwLargo.lv === 'sql' && r.ltwLargo.why[0] === 'ventas lo verificó como calificado (Lead to Watch = Sí)'
+      && q({ pstage: 'Largo plazo', pr: 1, rsp: 'i' }, true).lv === 'mql'
+      && r.ltwLargoForm === 'sql' && r.ltwSinResp === 'sql' && r.ltwDesc === 'desc' && r.ltwOpp === 'sqls' && r.ltwPerfil === 'sqls';
+    r.ltwLargo = r.ltwLargo.lv;
     r.toqueSinEsc = r.toqueSinEsc.lv + (r.toqueSinEsc.sinEsc ? '·sinEsc' : ''); r.notaV2 = r.notaV2.lv;
     r.contactoV2 = r.contactoV2.lv; r.contactoEtapaV2 = r.contactoEtapaV2.lv; r.nurtFormRespV2 = r.nurtFormRespV2.lv; r.contactoFormV2 = r.contactoFormV2.lv;
     return r;

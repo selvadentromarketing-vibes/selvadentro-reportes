@@ -397,8 +397,12 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
       barrido: primer entrante real o contacto efectivo (`fi`), último entrante (`li`) o una
       llamada de 90 s o más (`c90`), y su escalera (`breakup`).
   - **Verificado por ventas** = el campo del contacto **"Lead to Watch"** en Sí: la
-    verificación de ventas de que el lead está calificado. Es informativo, no cambia la
-    calificación. Si el campo no existe en GHL, el reporte lo avisa.
+    verificación de ventas de que el lead está calificado. Desde el 27-oct-2026 (Dirección
+    General) sube al lead a **SQL como mínimo** (antes era solo informativo): un lead que tuvo
+    Zoom y hoy está en Largo plazo salía MQL porque el CRM solo da la etapa actual. No lo sube a
+    SQL Selvadentro (eso sigue pidiendo OPP o señal fuerte con perfil) ni rescata a un
+    descalificado. Desempeño usa la misma regla. Caché `lq:agg:v35` y `sla:agg:v21`. Si el campo no existe en
+    GHL, el reporte lo avisa.
   - Columnas en todas las tablas de calidad (campaña, conjunto, anuncio, plataforma, Reporte
     Combinado y totales), tarjetas de Calidad de Lead, Mes contra mes, leyenda de siglas,
     metodología, glosario de Diagnóstico y prompt de la IA (`oppGen`).
@@ -531,7 +535,7 @@ semanal de calificación (SQL Selvadentro / SQL / MQL / CQL / Descalificado):
   (Meta + Google) y se muestra inversión, CPL y **costo por SQL** por campaña (cruce por
   ID de campaña y, de respaldo, por nombre) y por plataforma (siempre calculable). Todo
   en **MXN** ("12,345 MXN", nunca "$").
-- **Cache compartido**: agregado en el kv (`lq:agg:v33`), staleness de 30 min, igual
+- **Cache compartido**: agregado en el kv (`lq:agg:v35`), staleness de 30 min, igual
   que CRM en vivo.
 - **Permisos**: canal `mkt_lq` (o `marketing`, o admin). El módulo manual de
   Calidad de Leads dentro de Marketing **se retiró el 2026-08-26** junto con PPC Ads
