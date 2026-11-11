@@ -316,14 +316,15 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
       tendencia de 7 días y prompt de la IA salen solo de leads nuevos. Cada campaña dice
       "+ N re-envíos fuera de la decisión" (con nombres, alta y fecha en el title) y la IA recibe
       `reenviosFuera`. "Medición rota" los sigue contando (`C.re`): prueban que el formulario llega.
-    - **Tablas**: `lqVista` solo suma los re-envíos con fecha exacta. Los de fecha aproximada
-      salen de todos los totales y se listan aparte ("Re-envíos sin fecha confiable",
-      `lqNotaReAprox`).
+    - **Tablas y lista de leads**: sin cambio. `lqVista` los sigue sumando y la lista de cada
+      campaña los muestra con la etiqueta "Re-envío" (su title dice que no cuentan en
+      Conclusiones). Se probó sacar de las tablas los de fecha aproximada y Dirección General
+      pidió dejarlos (11-nov-2026): solo la decisión los excluye.
     - **Fecha exacta**: el campo de texto "Fecha último formulario" ya existe en GHL ("AAAA-MM-DD
       HH:MM, hora de Tulum", lo llena el workflow de Primer Contacto) y `lqFechaIso` lo lee en
       hora de Tulum (antes `Date.parse` lo tomaba en la hora del navegador). Al 11-nov-2026 está
       vacío en todos los contactos: el workflow no lo escribe todavía. En cuanto lo haga, los
-      re-envíos vuelven a las tablas con su semana real; a Conclusiones no.
+      re-envíos salen en las tablas en su semana real; a Conclusiones siguen sin entrar.
 - **Atribución inferida** (`LQ_INFERIDA`): leads con origen `landing-seguridad`
   (seguridad.selvadentrotulum.com) **sin utm_campaign y creados antes del 08-oct-2026**
   se asignan a `INVESTORS_MX_DYNAMIC-TOPLPS_090926`, conjunto SEGURIDAD_PATRIMONIO, con la

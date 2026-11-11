@@ -712,8 +712,7 @@ const PORT = process.env.PORT || 8765;
     const bloque = [...document.querySelectorAll('#lq-content .lq-camp')].find(d => /INVESTORS_US\/CA_ESCAPE_090926/.test(d.querySelector('.lc-name').textContent));
     const celdaRe = bloque ? [...bloque.querySelectorAll('tbody tr td:first-child')].find(td => /Contacto viejo/.test(td.textContent)) : null;
     r.reBadge = celdaRe ? celdaRe.textContent.replace(/\s+/g, ' ').trim() + ' · ' + (celdaRe.querySelector('.lq-re') || {}).title : '';
-    // Fecha aproximada (Dirección General, 11-nov-2026): fuera de los totales, nombrado aparte
-    r.reNota = ((document.querySelector('#lq-content .lq-re-aprox') || {}).textContent || '').replace(/\s+/g, ' ').trim();
+    // Se quedan en las tablas y en la lista de su campaña (Dirección General, 11-nov-2026)
     r.reEnVista = lqVista(agg6).leads.filter(l => l.re).length;
     // Conclusiones: ningún re-envío cuenta para la decisión; se nombra aparte en su campaña
     const M6 = lqModeloDecision(lqVista(agg6)), M3 = lqModeloDecision(lqVista(agg3));
@@ -818,8 +817,8 @@ const PORT = process.env.PORT || 8765;
     && !/CONJ_|AD_/.test(lqx.sinDetalleMeta) && /\|\| $/.test(lqx.sinDetalleMeta)
     && /^[1-9]\d* · true · false · false · true · 0$/.test(lqx.sinA30)
     && lqx.reCuentan === 'Contacto viejo 2026-W40 INVESTORS_US/CA_ESCAPE_090926 aprox' && lqx.reFueraDeVentas
-    && lqx.reCombo === '11,200 MXN ¦ 7 ¦ 1,600 MXN' && lqx.reBadge === '' && lqx.reEnVista === 0
-    && /^Re-envíos sin fecha confiable en este rango \(1, no cuentan en ningún total\): Contacto viejo \(INVESTORS_US\/CA_ESCAPE_090926 · alta 22 feb · actualizado 30 sep\)\./.test(lqx.reNota)
+    && lqx.reCombo === '11,200 MXN ¦ 8 1 re-envío ¦ 1,400 MXN total 1,600 MXN nuevos' && lqx.reEnVista === 1
+    && /^Contacto viejo Re-envío · Contacto existente \(alta 22\/02\/2026\) que volvió a llenar un formulario el 30\/09\/2026 \(fecha aproximada.*no cuenta en Conclusiones/.test(lqx.reBadge)
     && lqx.reDecision === '1 true true true false' && lqx.reFueraTxt === '+ 1 re-envío fuera de la decisión | true'
     && lqx.fechaForm === '2026-10-01T14:30:00.000Z | 2026-10-01T09:30:00.000Z |  | '
     && lqx.reExacto === 'true exacta Fecha último formulario' && lqx.reExactoEnVista === 1

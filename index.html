@@ -4284,8 +4284,9 @@ function lqTrabajado(l, contactado){
    cuando Meta reportaba 1, y Conclusiones recomendaba subirle presupuesto. Desde entonces:
    · Conclusiones (semáforo, acciones, tendencia de 7 días, IA) no cuenta NINGÚN re-envío: la
      decisión sale solo de leads nuevos, y los re-envíos se nombran aparte ("fuera de la decisión").
-   · Las tablas solo cuentan los re-envíos con fecha exacta ("Fecha último formulario"); los de
-     fecha aproximada salen de los totales y se listan aparte (lqNotaReAprox). */
+   · Las tablas y la lista de leads los siguen mostrando y contando como antes, marcados
+     "Re-envío" (Dirección General, 11-nov-2026: se quedan en la lista; solo la decisión los
+     excluye). */
 const LQ_RX_ULT_FORM = /submitted[ _]?at|(fecha|date)\W*(del?\s+)?(últim[oa]|ultim[oa]|last)\W*(formulario|form|env[ií]o|registro|entrada|submission)/i;
 const lqCampoUltimoForm = (fields)=> (fields||[]).find(f=>LQ_RX_ULT_FORM.test(String(f.name||""))) || null;
 // "Fecha último formulario" es un campo de texto que el workflow llena con "AAAA-MM-DD HH:MM" en
@@ -4574,9 +4575,9 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
 function lqVista(agg){
   if(!agg) return agg;
   // + los re-envíos de formulario (contactos existentes que volvieron a llenar uno): cuentan
-  // como lead de la semana del re-envío solo aquí, no en Ventas ni Dirección. Solo los de fecha
-  // exacta: los de fecha aproximada no tienen semana confiable y se listan aparte (lqNotaReAprox).
-  if(lqState._vistaDe !== agg){ lqState._vista = { ...agg, leads:(agg.leads||[]).concat((agg.reenvios||[]).filter(l=>!l.reAprox)).filter(l=>!l.bk) }; lqState._vistaDe = agg; }
+  // como lead de la semana del re-envío solo aquí, no en Ventas ni Dirección. Conclusiones no los
+  // cuenta (lqModeloDecision).
+  if(lqState._vistaDe !== agg){ lqState._vista = { ...agg, leads:(agg.leads||[]).concat(agg.reenvios||[]).filter(l=>!l.bk) }; lqState._vistaDe = agg; }
   return lqState._vista;
 }
 // Excluidos de todos los cálculos, contados en el rango que se está leyendo.
@@ -4606,19 +4607,7 @@ function lqNotaExcluidos(agg, rangoSet){
   if(e.prueba) partes.push(`<b>${e.prueba}</b> registro${e.prueba!==1?"s":""} de prueba o interno${e.prueba!==1?"s":""} <span class="lq-sub">("prueba"/"test" en el nombre, el email o el primer mensaje, o correo @selvadentrotulum.com)</span>`);
   if(e.sinContacto) partes.push(`<b>${e.sinContacto}</b> sin email ni teléfono`);
   return (partes.length ? `<p class="hint pegada lq-excluidos">Excluidos de todos los cálculos en este rango: ${partes.join(" · ")}.</p>` : "")
-    + lqNotaDupWa(agg, rangoSet) + lqNotaReAprox(agg, rangoSet);
-}
-// Re-envíos con fecha aproximada (la última actualización del contacto) en el rango: no cuentan
-// en ningún total porque no se sabe en qué semana volvieron a llenar el formulario. Se nombran
-// para que no se pierdan; cuentan en cuanto el workflow llene "Fecha último formulario".
-const LQ_RE_APROX_MAX = 30;
-function lqNotaReAprox(agg, rangoSet){
-  const d = ((agg && agg.reenvios) || []).filter(l=>l.reAprox && !l.bk && rangoSet.has(l.wk));
-  if(!d.length) return "";
-  const f = (iso)=> lqFechaCorta(lqDiaTulum(iso));
-  const fila = (l)=> `<b>${escAttr(l.n||"(sin nombre)")}</b> <span class="lq-sub">(${escAttr(l.camp)} · alta ${f(l.alta)} · actualizado ${f(l.c)})</span>`;
-  return `<p class="hint pegada lq-excluidos lq-re-aprox">Re-envíos sin fecha confiable en este rango (${d.length}, no cuentan en ningún total): ${d.slice(0, LQ_RE_APROX_MAX).map(fila).join(" · ")}${d.length > LQ_RE_APROX_MAX ? ` y ${d.length - LQ_RE_APROX_MAX} más` : ""}.
-    <span class="lq-sub">Contactos que ya existían y traen la utm_campaign de una campaña que empezó después de su alta: volvieron a llenar un formulario, pero GoHighLevel no guardó cuándo ("Fecha último formulario" vacía) y su última actualización cambia con cualquier movimiento del equipo. Cuentan en cuanto el workflow llene ese campo.</span></p>`;
+    + lqNotaDupWa(agg, rangoSet);
 }
 // Duplicados por WhatsApp del rango: no cuentan como lead nuevo en ningún total. Se nombran
 // para que ventas los una en GoHighLevel (al unirlos desaparecen de esta lista).
@@ -5881,7 +5870,7 @@ function lqModeloDecision(agg){
 const LQ_CCOLS = {
   inv:  { th:"Inversión",        t:"Inversión de la campaña en el rango, en MXN (Windsor)" },
   res:  { th:"Leads plataforma", t:"Leads que reporta Meta / Google para la campaña" },
-  n:    { th:"Leads CRM",        t:"Contactos que entraron a GoHighLevel en el rango, más los que ya existían y volvieron a llenar un formulario con fecha registrada (re-envíos, contados aparte debajo). Los re-envíos sin fecha confiable no cuentan: se listan debajo de la tabla" },
+  n:    { th:"Leads CRM",        t:"Contactos que entraron a GoHighLevel en el rango, más los que ya existían y volvieron a llenar un formulario (re-envíos, contados aparte debajo). Los re-envíos no cuentan en Conclusiones" },
   cpl:  { th:"CPL",              t:"Costo por lead = inversión ÷ leads CRM del rango elegido. Si hay re-envíos, arriba el CPL total (nuevos + re-envíos) y abajo el de leads nuevos" },
   tr:   { th:"% trabajados",     t:"Leads que ya salieron de \"Nuevo lead (no contactado)\": cualquier etapa posterior, también Sin respuesta, toques, Rescate o Descalificado. Si es bajo, el problema es de seguimiento, no de la campaña" },
   ct:   { th:"% contactados",    t:"Leads con conversación: Contacto establecido, Interés identificado, Nurturing, Zoom, Largo plazo, OPP, Carta oferta, WON o posterior. Sin respuesta y los toques sin respuesta no cuentan. Trabajados altos con contactados bajos = los leads no contestan (calidad del lead)" },
@@ -5972,7 +5961,7 @@ function lqCeldas(m, keys, o){
     switch(k){
       case "inv":  return `<td>${m.inv>0 ? lqMXN(m.inv) : "—"}</td>`;
       case "res":  return `<td>${m.res ? m.res.toLocaleString() : "—"}</td>`;
-      case "n":    return `<td><b>${m.n.toLocaleString()}</b>${m.re ? `<div class="lq-sub lq-re-n" title="Contactos que ya existían y volvieron a llenar un formulario en el rango (re-envío). Incluidos en el total.">${m.re} re-envío${m.re===1?"":"s"}</div>` : ""}</td>`;
+      case "n":    return `<td><b>${m.n.toLocaleString()}</b>${m.re ? `<div class="lq-sub lq-re-n" title="Contactos que ya existían y volvieron a llenar un formulario en el rango (re-envío). Incluidos en el total de esta tabla; no cuentan en Conclusiones.">${m.re} re-envío${m.re===1?"":"s"}</div>` : ""}</td>`;
       case "cpl":  return m.re && m.cpl!=null
         ? `<td title="CPL total = inversión ÷ leads CRM (nuevos + re-envíos). CPL nuevos = inversión ÷ solo leads nuevos.">${lqMXN(m.cpl)}<div class="lq-sub">total</div><div class="lq-sub lq-re-n">${m.cplNuevos!=null ? lqMXN(m.cplNuevos) : "—"}<br>nuevos</div></td>`
         : `<td>${m.cpl!=null ? lqMXN(m.cpl) : "—"}</td>`;
@@ -6009,7 +5998,7 @@ function lqCeldas(m, keys, o){
 }
 // Texto del badge "Re-envío": cuándo se dio de alta y cuándo volvió a llenar el formulario.
 const lqReTitulo = (l)=>{ const f = (iso)=>{ const t = Date.parse(iso); return isNaN(t) ? "?" : new Date(t - LQ_TZ_MS).toISOString().slice(0,10).split("-").reverse().join("/"); };
-  return `Contacto existente (alta ${f(l.alta)}) que volvió a llenar un formulario el ${f(l.c)}${l.reAprox ? " (fecha aproximada: última actualización del contacto; GHL no guarda la fecha del formulario)" : ""}. Cuenta como lead de esa semana, atribuido a la utm_campaign que trae.`; };
+  return `Contacto existente (alta ${f(l.alta)}) que volvió a llenar un formulario el ${f(l.c)}${l.reAprox ? " (fecha aproximada: última actualización del contacto; GHL no guarda la fecha del formulario)" : ""}. Cuenta como lead de esa semana en esta tabla, atribuido a la utm_campaign que trae; no cuenta en Conclusiones (la decisión de presupuesto sale solo de leads nuevos).`; };
 const lqInfBadge = (n)=> n ? ` <span class="lq-inf" title="Atribución inferida: leads de la landing seguridad.selvadentrotulum.com que llegaron sin utm_campaign antes del 08-oct-2026; se asignan a la campaña de Meta que alimentaba esa landing.">${n} con atribución inferida</span>` : "";
 
 // Fila de la tabla de calidad, a cualquier profundidad
