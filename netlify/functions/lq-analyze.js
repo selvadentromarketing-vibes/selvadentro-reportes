@@ -53,7 +53,7 @@ exports.handler = async (event) => {
   const corta = (x) => String(x || "").slice(0, 700);
   // Tope de tamaño: sin él, un body arbitrario infla el prompt (y la cuenta de la API).
   const camps = (d.campanias || []).slice(0, 20).map((c) =>
-    `- ${c.nombre} [${c.plataforma || "?"}]: inversión ${money(c.inv)} · ${c.leadsPlataforma ?? "—"} leads en plataforma · ${c.leads} leads en CRM${c.reenvios ? ` (incluye ${c.reenvios} re-envío${c.reenvios === 1 ? "" : "s"}: contactos que ya existían y volvieron a llenar un formulario; CPL solo de nuevos ${c.cplNuevos != null ? money(c.cplNuevos) : "—"})` : ""} · ` +
+    `- ${c.nombre} [${c.plataforma || "?"}]: inversión ${money(c.inv)} · ${c.leadsPlataforma ?? "—"} leads en plataforma · ${c.leads} leads nuevos en CRM${c.reenviosFuera ? ` (aparte, ${c.reenviosFuera} re-envío${c.reenviosFuera === 1 ? "" : "s"} de contactos que ya existían: no cuentan para la decisión ni para el semáforo)` : ""} · ` +
     `${c.sqlPlus} SQL+ · costo por SQL ${c.costoSql != null ? money(c.costoSql) : "sin SQL+"} · CPL ${money(c.cpl)} · ` +
     `${c.zoom} Zoom realizado · ${c.opp} OPP vigentes${c.oppGen != null ? ` · ${c.oppGen} OPP generadas (alguna vez en OPP, también las caídas)` : ""} · ${c.won} WON · ${c.trabajadosPct ?? "—"}% trabajados · ${c.contactadosPct ?? "—"}% contactados · ` +
     `SEMÁFORO ${c.semaforo}${c.muestraChica ? " (muestra chica)" : ""} → acción "${c.accion}" porque ${c.regla}` +

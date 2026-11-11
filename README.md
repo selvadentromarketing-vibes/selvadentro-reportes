@@ -305,6 +305,25 @@ automáticas por defecto o el campo del CRM). "Alto valor", "Costo/alto valor", 
     re-envío); Conclusiones dice "(N re-envíos)" y "CPL … (nuevos …)"; la IA los recibe.
     "Medición rota" cuenta los re-envíos: solo salta si después del cruce el CRM sigue sin
     leads de la campaña. Agregado `lq:agg:v23`.
+  - **Ajuste del 11-nov-2026 (Dirección General): la fecha aproximada no sirve.** `dateUpdated`
+    cambia con cualquier movimiento del equipo (mover la tarjeta, etiquetas, Lead to Watch,
+    workflows; el 23-oct una acción masiva actualizó decenas de contactos a las 00:31), así que
+    un re-envío de septiembre salía como lead de esta semana y con la calificación que ventas
+    ya le había trabajado. Caso real: INVESTORS_US/CA_ESCAPE_090926 salía con 6 leads en 14 días
+    (4 re-envíos: contactos dados de alta entre ago-2025 y ago-2026) cuando Meta reportaba 1, y
+    Conclusiones recomendaba subirle presupuesto. Ahora:
+    - **Conclusiones no cuenta ningún re-envío** (`lqModeloDecision`): semáforo, acciones,
+      tendencia de 7 días y prompt de la IA salen solo de leads nuevos. Cada campaña dice
+      "+ N re-envíos fuera de la decisión" (con nombres, alta y fecha en el title) y la IA recibe
+      `reenviosFuera`. "Medición rota" los sigue contando (`C.re`): prueban que el formulario llega.
+    - **Tablas**: `lqVista` solo suma los re-envíos con fecha exacta. Los de fecha aproximada
+      salen de todos los totales y se listan aparte ("Re-envíos sin fecha confiable",
+      `lqNotaReAprox`).
+    - **Fecha exacta**: el campo de texto "Fecha último formulario" ya existe en GHL ("AAAA-MM-DD
+      HH:MM, hora de Tulum", lo llena el workflow de Primer Contacto) y `lqFechaIso` lo lee en
+      hora de Tulum (antes `Date.parse` lo tomaba en la hora del navegador). Al 11-nov-2026 está
+      vacío en todos los contactos: el workflow no lo escribe todavía. En cuanto lo haga, los
+      re-envíos vuelven a las tablas con su semana real; a Conclusiones no.
 - **Atribución inferida** (`LQ_INFERIDA`): leads con origen `landing-seguridad`
   (seguridad.selvadentrotulum.com) **sin utm_campaign y creados antes del 08-oct-2026**
   se asignan a `INVESTORS_MX_DYNAMIC-TOPLPS_090926`, conjunto SEGURIDAD_PATRIMONIO, con la

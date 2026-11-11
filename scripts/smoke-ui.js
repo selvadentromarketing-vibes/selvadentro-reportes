@@ -712,6 +712,19 @@ const PORT = process.env.PORT || 8765;
     const bloque = [...document.querySelectorAll('#lq-content .lq-camp')].find(d => /INVESTORS_US\/CA_ESCAPE_090926/.test(d.querySelector('.lc-name').textContent));
     const celdaRe = bloque ? [...bloque.querySelectorAll('tbody tr td:first-child')].find(td => /Contacto viejo/.test(td.textContent)) : null;
     r.reBadge = celdaRe ? celdaRe.textContent.replace(/\s+/g, ' ').trim() + ' · ' + (celdaRe.querySelector('.lq-re') || {}).title : '';
+    // Fecha aproximada (Dirección General, 11-nov-2026): fuera de los totales, nombrado aparte
+    r.reNota = ((document.querySelector('#lq-content .lq-re-aprox') || {}).textContent || '').replace(/\s+/g, ' ').trim();
+    r.reEnVista = lqVista(agg6).leads.filter(l => l.re).length;
+    // Conclusiones: ningún re-envío cuenta para la decisión; se nombra aparte en su campaña
+    const M6 = lqModeloDecision(lqVista(agg6)), M3 = lqModeloDecision(lqVista(agg3));
+    const e6 = M6.activas.find(m => m.camp === 'INVESTORS_US/CA_ESCAPE_090926'), e3 = M3.activas.find(m => m.camp === 'INVESTORS_US/CA_ESCAPE_090926');
+    r.reDecision = e6 && e3 ? [e6.reFuera, e6.n === e3.n, e6.sqlp === e3.sqlp, e6.sem.k === e3.sem.k, M6.leads.some(l => l.re)].join(' ') : 'sin campaña';
+    lqState.agg = agg6; lqState.sub = 'conclusiones'; lqRender();
+    const filaDec = document.querySelector('tr[data-dec-camp="INVESTORS_US/CA_ESCAPE_090926"]');
+    const fuera = filaDec && filaDec.querySelector('.lq-re-fuera');
+    r.reFueraTxt = fuera ? fuera.textContent.trim() + ' | ' + /Contacto viejo \(alta 22 feb, actualizado 30 sep\)/.test(fuera.title) : '';
+    // "AAAA-MM-DD HH:MM" del workflow = hora de Tulum
+    r.fechaForm = [lqFechaIso('2026-10-01 09:30'), lqFechaIso('2026-10-01T09:30:00Z'), lqFechaIso('2026-10-01'), lqFechaIso('')].join(' | ');
     // Con el campo "Fecha último formulario" la fecha es exacta y basta con que caiga en otra semana que el alta
     const fx7 = copia();
     fx7.boot.fields = (fx7.boot.fields || []).concat([{ id: 'f_ult', name: 'Fecha último formulario' }]);
@@ -719,12 +732,13 @@ const PORT = process.env.PORT || 8765;
     r7.cf.f_ult = new Date(Date.parse(r7.c) + 8 * 86400e3).toISOString();
     const agg7 = buildLqAgg(fx7.boot, fx7.rawLeads, fx7.spendRows, fx7.weeks, fx7.opps, fx7.adRows, fx7.adExtra, []);
     r.reExacto = (agg7.reenvios || []).map(l => `${l.n === r7.n} ${l.reAprox ? 'aprox' : 'exacta'} ${agg7.campoUltForm}`).join(' | ');
+    r.reExactoEnVista = lqVista(agg7).leads.filter(l => l.re).length;   // con fecha exacta sí cuenta en las tablas
     // Medición rota: solo si DESPUÉS de contar los re-envíos el CRM sigue sin leads de la campaña
     const Vd = agg.dec.ventana, d3 = [0, 1, 2].map(i => lqSumaDias(Vd.fin, -i));
     const decP = { dias: { '777': { [d3[0]]: { sp: 100, res: 1 }, [d3[1]]: { sp: 100, res: 1 } } } };
-    const Cm = (leads) => ({ cids: new Set(['777']), grps: [], leads, sp: { dias: { [Vd.fin]: 100 } } });
+    const Cm = (leads, re) => ({ cids: new Set(['777']), grps: [], leads, re: re || [], sp: { dias: { [Vd.fin]: 100 } } });
     r.medicionSinRe = lqAtenderHoy({ plat: 'Meta' }, Cm([]), decP, Vd).map(e => e.tipo).join(',');
-    r.medicionConRe = lqAtenderHoy({ plat: 'Meta' }, Cm([{ re: 1, dia: d3[1] }]), decP, Vd).map(e => e.tipo).join(',');
+    r.medicionConRe = lqAtenderHoy({ plat: 'Meta' }, Cm([], [{ re: 1, dia: d3[1] }]), decP, Vd).map(e => e.tipo).join(',');
     lqState.agg = agg3;
     // Sin datos de decisión (Windsor no respondió): Conclusiones sigue saliendo, con aviso
     lqState.sub = 'conclusiones'; lqRender();
@@ -804,9 +818,11 @@ const PORT = process.env.PORT || 8765;
     && !/CONJ_|AD_/.test(lqx.sinDetalleMeta) && /\|\| $/.test(lqx.sinDetalleMeta)
     && /^[1-9]\d* · true · false · false · true · 0$/.test(lqx.sinA30)
     && lqx.reCuentan === 'Contacto viejo 2026-W40 INVESTORS_US/CA_ESCAPE_090926 aprox' && lqx.reFueraDeVentas
-    && lqx.reCombo === '11,200 MXN ¦ 8 1 re-envío ¦ 1,400 MXN total 1,600 MXN nuevos'
-    && /^Contacto viejo Re-envío · Contacto existente \(alta 22\/02\/2026\) que volvió a llenar un formulario el 30\/09\/2026 \(fecha aproximada/.test(lqx.reBadge)
-    && lqx.reExacto === 'true exacta Fecha último formulario'
+    && lqx.reCombo === '11,200 MXN ¦ 7 ¦ 1,600 MXN' && lqx.reBadge === '' && lqx.reEnVista === 0
+    && /^Re-envíos sin fecha confiable en este rango \(1, no cuentan en ningún total\): Contacto viejo \(INVESTORS_US\/CA_ESCAPE_090926 · alta 22 feb · actualizado 30 sep\)\./.test(lqx.reNota)
+    && lqx.reDecision === '1 true true true false' && lqx.reFueraTxt === '+ 1 re-envío fuera de la decisión | true'
+    && lqx.fechaForm === '2026-10-01T14:30:00.000Z | 2026-10-01T09:30:00.000Z |  | '
+    && lqx.reExacto === 'true exacta Fecha último formulario' && lqx.reExactoEnVista === 1
     && lqx.medicionSinRe === 'medicion' && lqx.medicionConRe === ''
     && /^Gasto detenido: 0 MXN ayer \(04 oct\) con la campaña activa; los 7 días previos gastó 900 MXN$/.test(lqx.gastoDetenido)
     && lqx.iaPayload === '2026-09-05 → 2026-10-04 · false · INVESTORS - GOOGLE SEARCH - US+CAN · true · ES_LLAMADA_NUEVO6-ESCAPE_CENOTES'

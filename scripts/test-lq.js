@@ -239,7 +239,7 @@ S.ghlFetch = (path, opt) => ghlSim(path, opt);
     campanias: [
       { nombre: "INVESTORS_US/CA_ESCAPE_090926", plataforma: "Meta", inv: 11360, leadsPlataforma: 13, leads: 9, sqlPlus: 0, costoSql: null, cpl: 1262, zoom: 0, opp: 0, won: 0,
         trabajadosPct: 100, contactadosPct: 30, semaforo: "ROJO", accion: "pausar", regla: "inversión 11,360 MXN ≥ 8,000 MXN con 0 SQL+", muestraChica: false, alertaCpl: "", inferidos: 0,
-        recomendaciones: ["Pausar la campaña INVESTORS_US/CA_ESCAPE_090926 — gasto 11,360 MXN, 9 leads, 0 SQL+, CPL 1,262 MXN"], esperar: "", reenvios: 2, cplNuevos: 1623 },
+        recomendaciones: ["Pausar la campaña INVESTORS_US/CA_ESCAPE_090926 — gasto 11,360 MXN, 9 leads, 0 SQL+, CPL 1,262 MXN"], esperar: "", reenviosFuera: 2 },
       { nombre: "INVESTORS_MX_DYNAMIC-TOPLPS_090926", plataforma: "Meta", inv: 9230, leadsPlataforma: 51, leads: 10, sqlPlus: 2, costoSql: 4615, cpl: 923, zoom: 1, opp: 1, oppGen: 3, won: 0,
         trabajadosPct: 90, contactadosPct: 40, semaforo: "AMARILLO", accion: "optimizar", accionTexto: "Optimizar costo", regla: "costo por SQL 4,615 MXN", muestraChica: false, alertaCpl: "", inferidos: 8,
         recomendaciones: ["Probar 2 creativos nuevos junto a ES_LLAMADA_NUEVO6-ESCAPE_CENOTES (conjunto ES_LLAMADA_NUEVO6-SEGURIDAD_PATRIMONIO), que hoy lleva a https://seguridad.selvadentrotulum.com/seguridadpatrimonio/ — gasto 3,965 MXN"],
@@ -276,8 +276,9 @@ S.ghlFetch = (path, opt) => ghlSim(path, opt);
      && /no calcules su CPL ni su costo por SQL y no lo uses para recomendar qué conservar o pausar/.test(prompt)
      && /SIN DETALLE DE META: no llegó la consulta de 30 días/.test(prompt) && /"Sin detalle de Meta en esta sincronización; revisar en Meta Ads"/.test(prompt),
      "gasto no disponible y sin detalle de Meta llegan al prompt con su regla (no calcular CPL, no conservar ni pausar, no sugerir conjuntos)");
-  ok(/9 leads en CRM \(incluye 2 re-envíos: contactos que ya existían y volvieron a llenar un formulario; CPL solo de nuevos 1,623 MXN\)/.test(prompt),
-     "los re-envíos llegan al prompt con el CPL de leads nuevos");
+  // Re-envíos fuera de la decisión (Dirección General, 11-nov-2026): se nombran aparte
+  ok(/9 leads nuevos en CRM \(aparte, 2 re-envíos de contactos que ya existían: no cuentan para la decisión ni para el semáforo\)/.test(prompt),
+     "los re-envíos llegan al prompt como aparte: no cuentan para la decisión");
 
   // Respuesta real del lead (Dirección General, 16-oct-2026): la etiqueta another-device-replied
   // la pone NUESTRO mensaje desde el celular; respondió = entrante suyo o llamada contestada > 30 s.
