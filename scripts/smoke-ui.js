@@ -1223,6 +1223,47 @@ const PORT = process.env.PORT || 8765;
   if (!show.ok) hallazgos.push({ vista: 'showrate', show });
   if (!auto.ok) hallazgos.push({ vista: 'telefonia:auto', auto });
   if (!tel.ok) hallazgos.push({ vista: 'telefonia:asesora', tel });
+  // Solo lo que está en manos de un asesor (Dirección General, 12-nov-2026): los leads de un dueño
+  // fuera de la lista de Asesores (Olimpia, marketing) no cuentan en ninguna parte; los de
+  // reclutamiento salen de todo aunque su dueño sea asesor; un DM orgánico no entra en la Velocidad,
+  // salvo que traiga "Fecha asignación asesor", y entonces su reloj arranca ahí.
+  VISTA = 'desempeno:soloAsesores';
+  const solo = await page.evaluate(() => {
+    const Z = (local) => Date.parse(local + '-05:00'), M = 60e3, H = 3600e3, iso = (t) => new Date(t).toISOString();
+    const c0 = Z('2026-10-06T10:00:00'), base = (i) => c0 + i * M;
+    const ct = (id, i, u, tags, cf) => ({ id, n: 'Lead ' + id, c: iso(base(i)), src: 'instagram', u, tags, attr: {}, cf: cf || {} });
+    const contactos = [ct('a1', 1, 'u1', []), ct('dm1', 2, 'u1', ['organico-rrss', 'lead-dm-redes']),
+      ct('rc1', 3, 'u1', ['reclutamiento-asesores-nov26', 'organico-rrss']), ct('o1', 4, 'u2', ['dm-sin-calificar', 'organico-rrss']),
+      ct('as1', 5, 'u1', ['organico-rrss'], { f_asig: new Date(base(5) + 2 * H - 5 * H).toISOString().slice(0, 16).replace('T', ' ') })];
+    const sw = (i, o) => Object.assign({ foM: base(i) + 2 * M, fi: null, fe: null, days: ['2026-10-06'], calls: 0, chans: [], deliv: { sent: 0, delivered: 0, read: 0, failed: 0, linea: 0 }, ap: { tot: 0, sh: 0, ns: 0, fut: 0 }, tk: { prog: 0, enFecha: 0, venc: 0 },
+      tel: { tot: 0, dExp: 0, d0: 0, dNo: 0, c90: 0, noSt: {}, llaves: [] } }, o);
+    const sweeps = { a1: sw(1), dm1: sw(2, { foM: base(2) + 3 * H }), rc1: sw(3, { foM: null }), o1: sw(4, { foM: null }), as1: sw(5, { foM: base(5) + 2 * H + 3 * M }) };
+    const users = { u1: 'Daniela Arana', u2: 'Olimpia Sulvaran' };
+    const agg = buildSlaAgg(['2026-W41'], contactos, sweeps, [], users, [{ id: 'f_asig', name: 'Fecha asignación asesor' }], [], { now: Z('2026-10-12T12:00:00') });
+    const L = (id) => agg.leads.find(l => l.id === id) || {};
+    const r = {};
+    r.ids = agg.leads.map(l => l.id).join(',');
+    r.recl = agg.reclExcl;
+    r.nv = ['a1', 'dm1', 'as1'].map(id => L(id).nv ? 1 : 0).join('');
+    r.asig = Math.round((L('as1').slaAt || 0) / M) + ' min · ' + (L('as1').velOk ? 'cumple' : 'no');
+    r.p80 = ['a1', 'dm1', 'as1'].map(id => slaEnP80(L(id), agg.v11) ? 1 : 0).join('');
+    r.vel = (slaScoreAsesor(agg.leads.filter(l => l.u === 'u1')).cnt.vel || []).join(' de ');
+    const advPrev = ADVISOR_LIST, aggPrev = slaState.agg, selPrev = slaState.asesor, campPrev = slaState.camp;
+    ADVISOR_LIST = [{ name: 'Daniela Arana', active: true }]; slaState.agg = agg; slaState.asesor = ''; slaState.camp = ''; agg.ts = Date.now();
+    navIr('ventas', 'desempeno'); slaRender();
+    const vista = document.getElementById('view-sla'), txt = vista.innerText.replace(/\s+/g, ' ');
+    r.nota = ((vista.querySelector('.sla-fuera-eq') || {}).innerText || '').replace(/\s+/g, ' ').trim();
+    r.leadsKpi = ([...vista.querySelectorAll('.crm-kpi')].find(k => /Leads en el rango/i.test(k.innerText)) || { innerText: '' }).innerText.split('\n')[0].trim();
+    r.sinOlimpia = !/Lead o1/.test(txt) && !/Lead rc1/.test(txt);
+    r.fueraLinea = /Fuera del equipo de ventas \(Olimpia Sulvaran\) 1/.test(txt);
+    ADVISOR_LIST = advPrev; slaState.agg = aggPrev; slaState.asesor = selPrev; slaState.camp = campPrev;
+    r.ok = r.ids === 'a1,dm1,o1,as1' && r.recl === 1 && r.nv === '010' && r.asig === '3 min · cumple' && r.p80 === '101' && r.vel === '2 de 2'
+      && r.nota === 'No cuentan en este reporte: 1 lead de dueños fuera de la lista de Asesores (Olimpia Sulvaran 1) y 1 de reclutamiento (candidatos a asesor, etiqueta "reclutamiento…"). Solo se mide lo que ya está en manos de un asesor activo.'
+      && r.leadsKpi === '3' && r.sinOlimpia && r.fueraLinea;
+    return r;
+  });
+  console.log('\n[desempeño] solo leads de asesores', JSON.stringify(solo));
+  if (!solo.ok) hallazgos.push({ vista: 'desempeno:soloAsesores', solo });
   if (!lqx.ok) hallazgos.push({ vista: 'lq:rediseño', lqx });
   // Brokers por CUALQUIER etiqueta que empiece con "broker" (Dirección, 14-oct-2026): los seis
   // contactos de W42 que salían en "Otra fuente · (sin campaña atribuida)", dados de alta a mano.

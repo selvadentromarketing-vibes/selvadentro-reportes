@@ -924,6 +924,28 @@ reporte semanal de disciplina comercial, directo del CRM y con nombres:
     el tiempo entre la entrada y el primer toque. `sla:agg:v16` fuerza a regenerar el agregado.
     `slaAntesReloj` queda solo para un toque anterior al alta (contacto fusionado o importado);
     "ver leads" ya no lo llama "sin 1er toque".
+  - **Solo lo que está en manos de un asesor** (Dirección General, 12-nov-2026). Los DM
+    orgánicos de Instagram entran con marketing (Olimpia Sulvaran); un bot les pide sus datos y,
+    si contestan, el workflow cambia el dueño a un asesor. Del 2 al 12-nov, 62 de 150 leads
+    seguían con Olimpia y salían en "Sin 1er toque". Ahora:
+    - **Lista de Asesores activos en todo el reporte** (`slaRender`): tarjetas, ranking, tablas y
+      "Qué corregir hoy" solo cuentan leads cuyo dueño (o quien lo descalificó, R-02) es un
+      asesor activo de la pantalla Asesores. Los demás se dicen en una línea arriba de las
+      tarjetas ("No cuentan en este reporte: N leads de dueños fuera de la lista…") y en la línea
+      "Fuera del equipo de ventas" del ranking. Con el roster vacío no se filtra.
+    - **Reclutamiento fuera de todo** (`SLA_RX_RECLUT`, etiqueta que empieza con
+      "reclutamiento"): son candidatos a asesor, no compradores. Salen aunque su dueño sea
+      asesor (Talía Hernández lleva ventas y reclutamiento: 27 de sus 33 leads de esas fechas
+      eran de reclutamiento), también de las citas y del resumen v1.1, y no se barren
+      (`agg.reclExcl` los cuenta).
+    - **DM orgánicos sin Velocidad** (`SLA_RX_DM_ORG`: `organico-rrss` o `dm-…`; marca `nv`): su
+      reloj tendría que arrancar cuando llegan al asesor y GHL no guarda cuándo cambió el dueño.
+      Salen del P80, de la nota de Velocidad, de la tarjeta, de "Leads que bajaron la
+      Velocidad" y de "fuera de horario"; siguen en todo lo demás. "Ver leads" dice por qué.
+    - **"Fecha asignación asesor"** (opcional, hoy no existe en GHL): si el workflow que reasigna
+      llega a escribirla (texto "AAAA-MM-DD HH:MM", hora de Tulum), el reloj del lead arranca ahí
+      y el DM vuelve a la Velocidad; un toque anterior a esa fecha no es del asesor y lo deja
+      fuera (`nv`). `sla:agg:v22` regenera el agregado.
   - **Campaña de origen = la de Calidad de Leads**: se toma por id de contacto del agregado
     de Calidad de Leads (ID de campaña, alias de UTM, atribución inferida), que ahora guarda
     el `id` de cada lead; si no está en memoria se lee del kv una vez. Sin él, la

@@ -7191,7 +7191,7 @@ async function showLQ(){
 // Reporte de disciplina comercial directo del CRM: SLA de primera respuesta por
 // asesor y canal, leads >7 días sin toque, trabajados vs contactados efectivos,
 // citas y show rate, y OPPs/WONs por asesor. Con nombres, acumulable por semanas.
-const SLA_AGG_KEY = "sla:agg:v21";   // v21: Lead to Watch = Sí sube al lead a SQL como mínimo   // v20: presupuesto y horizonte de respaldo del formulario de la landing de Google   // v19: calificación con respuesta real y escalera (MQL sin escalera completa por asesor)   // v18: llamadas exitosas del asesor (≥90 s) en telefonía   // v17: broker = cualquier etiqueta que empiece con "broker" (R-03)   // v16: el reloj arranca siempre en el alta del lead (sin traspaso a ventas)   // v15: si el asesor tocó al lead antes del traspaso a ventas, su reloj arranca en el alta   // v14: citas agendadas en el periodo por fecha de agendado; base de agendamiento con quien agendó sin escribir   // v13: citas del periodo por fecha de la cita y su asistencia (show rate)   // v12: telefonía por lead (canal del 1er toque, intentos, desenlace, duración conocida)   // v11: spec v1.1 (filtros de medición: inválidos, brokers, revertidas, horario, sin llamada, contacto efectivo)   // v10: calificación por reglas (la etapa manda), no el campo manual vacío   // v9: razón de descarte por lead   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
+const SLA_AGG_KEY = "sla:agg:v22";   // v22: fuera los leads de reclutamiento; DM orgánicos sin Velocidad; reloj desde la "Fecha asignación asesor" si existe   // v21: Lead to Watch = Sí sube al lead a SQL como mínimo   // v20: presupuesto y horizonte de respaldo del formulario de la landing de Google   // v19: calificación con respuesta real y escalera (MQL sin escalera completa por asesor)   // v18: llamadas exitosas del asesor (≥90 s) en telefonía   // v17: broker = cualquier etiqueta que empiece con "broker" (R-03)   // v16: el reloj arranca siempre en el alta del lead (sin traspaso a ventas)   // v15: si el asesor tocó al lead antes del traspaso a ventas, su reloj arranca en el alta   // v14: citas agendadas en el periodo por fecha de agendado; base de agendamiento con quien agendó sin escribir   // v13: citas del periodo por fecha de la cita y su asistencia (show rate)   // v12: telefonía por lead (canal del 1er toque, intentos, desenlace, duración conocida)   // v11: spec v1.1 (filtros de medición: inválidos, brokers, revertidas, horario, sin llamada, contacto efectivo)   // v10: calificación por reglas (la etapa manda), no el campo manual vacío   // v9: razón de descarte por lead   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
 const SLA_STALE_MS = 7*86400e3; // "sin toque" = 7 días sin mensaje
 const slaState = { built:false, agg:null, syncing:false, asesor:"", camp:"", abierto:{} };   // asesor/camp "" = sin filtro · abierto = plegables abiertos
 
@@ -7272,7 +7272,7 @@ function slaFallasVel(cd, V11, name, now, vacias){
 function slaDetalleLeads(arr, V11, name){
   const hora = (ms)=> ms ? new Date(ms - LQ_TZ_MS).toISOString().slice(5,16).replace("T"," ").replace(/^(\d\d)-(\d\d)/, "$2/$1") : "—";
   const canal = (l)=> l.tAuto ? "llamada automática con contacto" : ({ call:"llamada", whatsapp:"WhatsApp", sms:"SMS", email:"correo" }[l.fch] || l.fch || "—");
-  const motivo = (l)=> l.sd ? "no: sin datos de conversación" : (V11 && l.fh) ? "no: entró fuera de horario (su meta es antes de las 11:00)"
+  const motivo = (l)=> l.sd ? "no: sin datos de conversación" : l.nv ? "no: DM orgánico (pasó por marketing; no se sabe cuándo llegó al asesor)" : (V11 && l.fh) ? "no: entró fuera de horario (su meta es antes de las 11:00)"
     : slaAntesReloj(l) ? "sí, como 0 min: su 1er toque es anterior a su alta en el CRM" : l.slaAt == null ? "sí, como sin toque: cuenta en contra" : "sí";
   const filas = arr.slice().sort((a,b)=>(a.created||0)-(b.created||0)).slice(0,80).map(l=>`<tr>
       <td class="lft">${escAttr(l.n||"—")}</td><td>${hora(l.created)}</td><td>${V11 ? (l.fh ? "fuera" : "en horario") : "—"}</td>
@@ -7302,7 +7302,7 @@ const slaPctl = (arr, p)=>{ if(!arr.length) return null; const s=arr.slice().sor
 // reglas v1.1, que entró en horario (fuera de horario su meta es antes de las 11:00, no minutos).
 // Un lead SIN toque no sale de la base —eso era lo que dejaba bonita a la mediana—: cuenta como
 // el peor tiempo (Infinity). Tocado antes de que arrancara su reloj: 0, cumplido como en Velocidad.
-const slaEnP80 = (l, V11)=> !l.sd && !(V11 && l.fh);
+const slaEnP80 = (l, V11)=> !l.sd && !l.nv && !(V11 && l.fh);
 const slaTToque = (l)=> l.slaAt != null ? l.slaAt : slaAntesReloj(l) ? 0 : Infinity;
 // Bajo 10 min, a la décima y hacia ARRIBA: 5 min 20 s es "5.4 min", nunca un "5 min" que se lea cumplido.
 const fmtP80 = (ms)=> ms === Infinity ? "sin toque" : ms != null && ms < 10*60000 ? `${Math.ceil(ms/6000)/10} min` : fmtDur(ms);
@@ -7377,6 +7377,14 @@ const SLA_V11_DESDE = "2026-10-01";
 const SLA_LINEA_DESDE = "2026-10-07";
 const slaLineaFuera = (per)=> !!(per && per.fin && per.fin >= SLA_LINEA_DESDE);
 const SLA_V11_TAGS = { nci:"sin llamada - numero invalido", ncm:"sin llamada - solo mensaje", inj:"descalificacion injustificada", broker:"broker" };
+// Dirección General, 12-nov-2026. Reclutamiento: los DM de la campaña de reclutamiento de asesores
+// (reclutamiento-asesores-nov26…) son candidatos a trabajar en Selvadentro, no compradores: salen de
+// TODO Desempeño aunque su dueño sea asesor (Talía lleva ventas y reclutamiento). DM orgánico: entra
+// con marketing (Olimpia), un bot le pide sus datos y, si los manda, el workflow lo pasa a un asesor;
+// GoHighLevel no guarda cuándo cambió de dueño, así que no entra en la Velocidad (sí en lo demás).
+const SLA_RX_RECLUT = /^reclutamiento/i;
+const SLA_RX_DM_ORG = /^(organico-rrss|dm-.+)$/i;
+const slaTagRe = (tags, rx)=> (tags||[]).some(t=>rx.test(String(t).trim()));
 const SLA_V11_CAMPOS = { causa:"Causa de descalificación", evid:"Evidencia de descalificación", asesor:"Asesor que descalificó", fecha:"Fecha de entrada a Descalificado", ncDesde:"Sin llamada - fecha de inicio" };
 // R-01: dos grupos. Inválido = sale de todo; real descartado = se mide hasta su descalificación.
 const SLA_CAUSAS_INVALIDO = ["Dejó datos por error","Pruebas de marketing","Sin datos válidos","Número equivocado","Contacto inapropiado / broma"];
@@ -7626,8 +7634,10 @@ function slaScoreAsesor(arr, rub, opts){
   // 5 min en horario, antes de las 11:00 del siguiente día de servicio fuera de horario
   // (velOk, fijado en buildSlaAgg). Reglas v1.0: ≤5 MINUTOS las 24 horas (A5).
   const cumple = (l)=> l.velOk !== undefined ? !!l.velOk : l.bucket==="b5";
-  const b5 = cd.filter(cumple).length;
-  const fhDe = cd.filter(l=>l.fh).length, fhOk = cd.filter(l=>l.fh && cumple(l)).length;
+  // Sin los DM orgánicos (nv): su reloj no se puede arrancar cuando llegan al asesor (12-nov-2026)
+  const cv = cd.filter(l=>!l.nv), NV = cv.length;
+  const b5 = cv.filter(cumple).length;
+  const fhDe = cv.filter(l=>l.fh).length, fhOk = cv.filter(l=>l.fh && cumple(l)).length;
   // Cadencia: % con al menos 3 días distintos de contacto manual en los primeros 10 días
   const c3 = cd.filter(l=>(l.d10||0)>=3).length, c5 = cd.filter(l=>(l.d10||0)>=5).length;
   // Cierre de ciclo (A1): UNA población fija — los descalificados del asesor — y el
@@ -7651,17 +7661,17 @@ function slaScoreAsesor(arr, rub, opts){
   const pctEfec = env > 0 ? ent*100/env : null;
 
   const pcts = {
-    vel: pct(b5), cad: pct(c3),
+    vel: NV ? b5*100/NV : null, cad: pct(c3),
     cierre: desc > 0 ? bk*100/desc : null,
     tareas: (tkLeidas && tkProg > 0) ? tkFecha*100/tkProg : null,
     efec: pctEfec,
-    c5: pct(c5), d05: pct(cd.filter(l=>l.bucket==="b5").length),
-    d30: pct(cd.filter(l=>l.bucket==="b30").length), d120: pct(cd.filter(l=>l.bucket==="b120").length),
-    dout: pct(cd.filter(l=>l.bucket==="out").length),
+    c5: pct(c5), d05: NV ? cv.filter(l=>l.bucket==="b5").length*100/NV : null,
+    d30: NV ? cv.filter(l=>l.bucket==="b30").length*100/NV : null, d120: NV ? cv.filter(l=>l.bucket==="b120").length*100/NV : null,
+    dout: NV ? cv.filter(l=>l.bucket==="out").length*100/NV : null,
   };
   // Los dos números de cada porcentaje, para imprimirlos junto a él (spec A1)
   const cnt = {
-    vel:[b5,N], cad:[c3,N],
+    vel: NV ? [b5,NV] : null, cad:[c3,N],
     cierre: desc>0 ? [bk,desc] : null,
     tareas: (tkLeidas && tkProg>0) ? [tkFecha,tkProg] : null,
     efec: env>0 ? [ent,env] : null,
@@ -7984,7 +7994,7 @@ function slaAsesorSection(agg, leadsIn){
         <div class="table-scroll" style="margin-top:6px"><table class="cons"><tr><th class="lft">Lead</th><th class="lft">Causa</th><th class="lft">Evidencia</th><th class="lft">Fecha</th></tr>
         ${rev.map(x=>`<tr><td class="lft celda-fuerte">${escAttr(x.n)}</td><td class="lft">${escAttr(x.causa||"(sin causa)")}</td><td class="lft">${escAttr(x.evid||"(sin evidencia)")}</td><td class="lft">${x.fecha?fmtDate(new Date(x.fecha-LQ_TZ_MS)):"—"}</td></tr>`).join("")}</table></div></details>` : ""}
       <div style="font-size:var(--fs-s);font-weight:600;color:var(--neutro);margin:12px 0 4px">Distribución de velocidad de primer contacto</div>
-      <div class="lq-qbar">${dist.map(([k,,cl])=>`<span style="width:${c.pcts[k]}%;background:${cl}"></span>`).join("")}</div>
+      <div class="lq-qbar">${dist.map(([k,,cl])=>`<span style="width:${c.pcts[k]||0}%;background:${cl}"></span>`).join("")}</div>
       <div class="lq-legend-dots">${dist.map(([k,lbl,cl])=>`<span><i style="background:${cl};display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px"></i>${lbl} ${pct1(c.pcts[k])}</span>`).join("")}</div>
     </div>`;
   }).join("");
@@ -8042,7 +8052,10 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
               presAlt: find(/^presupuesto\s*\/\s*budget$/i),
               horAlt:  find(/^horizonte de inversi[oó]n\s*\/\s*investment timeline$/i),
               // "Lead to Watch" en Sí: SQL como mínimo, la misma regla de Calidad de Leads
-              verif: find(/lead\s*to\s*watch/i) || find(/hot\s*lead/i) };
+              verif: find(/lead\s*to\s*watch/i) || find(/hot\s*lead/i),
+              // Cuándo pasó el lead a un asesor (texto "AAAA-MM-DD HH:MM", hora de Tulum). Hoy no
+              // existe en el CRM: si el workflow que reasigna lo llega a escribir, el reloj arranca ahí.
+              asig: find(/fecha\s*(de\s*)?asignaci[oó]n/i) };
   // Catálogo de pipelines/etapas, literal del CRM (spec B1/D1/E1)
   const pipeName = {}, stageName = {}, stageOfPipe = {};
   (pipesArr||[]).forEach(p=>{ pipeName[p.id]=p.name||""; (p.stages||[]).forEach(s=>{ stageName[s.id]=s.name||""; stageOfPipe[s.id]=p.name||""; }); });
@@ -8073,13 +8086,17 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
   // v1.1 (R-01/R-03): brokers e inválidos salen de TODO desde su alta, en los dos sentidos.
   // Antes (reglas v1.0) solo salían los leads cuyas oportunidades vivían TODAS en Expansión.
   const excluir = (c)=> v11 ? fueraDeTodo(c.id) : esExpansion(c.id);
+  // Reclutamiento fuera de TODO (SLA_RX_RECLUT): leads, citas y resumen v1.1. Se cuentan y se declaran.
+  const esReclut = (c)=> slaTagRe(c.tags, SLA_RX_RECLUT);
+  const reclIds = new Set(contactsArr.filter(esReclut).map(c=>c.id));
+  const reclExcl = contactsArr.filter(c=>{ const wk = lqWeekOf(c.c); return wk && rangoSet.has(wk) && esReclut(c) && !esTest(c); }).length;
   // Ejecutivo de Primer Contacto (desde que arranca el puesto, 26-oct-2026; Dirección General,
   // 13-oct-2026): el asesor se mide desde la ENTREGA y solo con sus propios toques —el barrido ya
   // excluye los del ejecutivo—. Los leads que siguen en manos del ejecutivo salen del ranking de
   // asesores: se miden en su reporte (Ventas → Primer contacto).
   const PCX = X.pc && Array.isArray(X.pc.epc) && X.pc.epc.length ? { epc:new Set(X.pc.epc), desde:X.pc.activaT||0 } : null;
   const pcEnEj = [], pcEnt = [];
-  const leads = contactsArr.filter(c=>!esTest(c) && !excluir(c)).map(c=>{
+  const leads = contactsArr.filter(c=>!esTest(c) && !excluir(c) && !esReclut(c)).map(c=>{
     const wk = lqWeekOf(c.c); if(!wk || !rangoSet.has(wk)) return null;
     const sw = sweepMap[c.id] || {sin:true};
     const dp = disp[c.id] || null;
@@ -8095,7 +8112,9 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
     // entregó, el reloj del asesor arranca en la ENTREGA —el contacto efectivo del ejecutivo (o su
     // último toque)— y el contacto efectivo del asesor es el primero que no es del ejecutivo.
     const entPc = !!(PCX && alta >= PCX.desde && sw.ex && sw.ex.n > 0);
-    const created = entPc ? Math.max(alta, sw.ex.fe || sw.ex.l || alta) : alta;
+    // Con "Fecha asignación asesor" el reloj arranca cuando el lead llegó al asesor (12-nov-2026).
+    const asig = pcFechaHora(cf(F.asig));
+    const created = Math.max(entPc ? Math.max(alta, sw.ex.fe || sw.ex.l || alta) : alta, asig != null ? asig : 0);
     if(entPc) pcEnt.push(c.id);
     const fiEf = entPc ? ((sw.efT||[]).find(t=>t >= created) || null) : fiEf0;
     // Primer toque para la VELOCIDAD y su P80: el toque manual del asesor o, con las
@@ -8112,6 +8131,9 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
     // Velocidad (R-04): en horario, 1er toque manual en ≤5 min; fuera de horario, antes de
     // las 11:00 del siguiente día de servicio. Con las reglas v1.0, ≤5 min las 24 horas.
     const vt = v11 ? slaVentanaV11(created, H11) : null;
+    // nv = no entra en la Velocidad: DM orgánico sin fecha de asignación, o tocado antes de llegar
+    // al asesor (ese toque no es suyo y el barrido no da el siguiente).
+    const nv = asig != null ? !!(foT && foT < created) : slaTagRe(c.tags, SLA_RX_DM_ORG);
     const velOk = !foT ? false : foT < created ? true
       : vt ? (vt.enHorario ? foT-created <= 5*60000 : foT < vt.limite) : foT-slaReloj(created) <= 5*60000;
     // Excepciones "sin llamada" (R-05): etiqueta presente, o retirada desde la última vez que
@@ -8184,6 +8206,7 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
              tags: (c.tags||[]).join(", "), pstage: cp ? cp.s : "",
              pres: cf(F.pres) || cf(F.presAlt), hor: cf(F.hor) || cf(F.horAlt),
              ...(lqSi(cf(F.verif)) ? { vv:1 } : {}),   // verificado por ventas (Lead to Watch)
+             ...(nv ? { nv:1 } : {}),                    // no entra en la Velocidad (DM orgánico)
              o: 0, pr: 0, w: 0, wv: 0, ov: 0, ost: "",
              // v1.1: la razón es la "Causa de descalificación" de la oportunidad; antes, el
              // campo de contacto "Razón de descarte", que llegaba vacío.
@@ -8280,8 +8303,9 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
            exclExpansion: v11 ? 0 : exclExpansion, pipelines: pipesArr||[],
            pc: PCX ? { enEj: pcEnEj.length, ent: pcEnt.length, desde: X.pc.activaYMD || "" } : null,
            plant: Object.values(sweepMap||{}).reduce((a,r)=>a+((r&&r.plant)||0), 0),
-           citasP: slaCitasDelPeriodo(X, contactsArr, oppsArr, ctPipe, v11 ? fueraDeTodo : null, now, per),
-           v11: v11 ? slaResumenV11({ contactsArr, tagged: X.tagged||[], disp, esTest, rangoSet, per, C11, H11, X, leads }) : null };
+           citasP: slaCitasDelPeriodo(X, contactsArr, oppsArr, ctPipe, (id)=> reclIds.has(id) || (v11 && fueraDeTodo(id)), now, per),
+           v11: v11 ? slaResumenV11({ contactsArr: contactsArr.filter(c=>!reclIds.has(c.id)), tagged: X.tagged||[], disp, esTest, rangoSet, per, C11, H11, X, leads }) : null,
+           reclExcl };
 }
 
 // Citas del periodo por FECHA DE LA CITA, de cualquier lead (7-oct-2026), con su asistencia
@@ -8460,6 +8484,11 @@ const SLA_MANUAL_ETAPAS = [
 // reportada como volumen a corregir y nunca calificada.
 const SLA_FUERA = "__fuera_del_equipo";
 function slaNorm(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim(); }
+// "62 leads de dueños fuera de la lista de Asesores (Olimpia Sulvaran 62 · …)"
+function slaFueraEqTxt(arr, name){
+  const por = {}; arr.forEach(l=>{ const k = name(l.u); por[k] = (por[k]||0) + 1; });
+  return `${arr.length} lead${arr.length===1?"":"s"} de dueños fuera de la lista de Asesores (${Object.entries(por).sort((a,b)=>b[1]-a[1]).map(([k,n])=>`${escAttr(k)} ${n}`).join(" · ")})`;
+}
 function slaRosterIds(users){
   const roster = new Set((typeof ADVISOR_LIST!=="undefined"?ADVISOR_LIST:[]).filter(a=>a.active!==false).map(a=>slaNorm(a.name)));
   const ids = new Set();
@@ -8490,10 +8519,19 @@ function slaRender(){
   const agg = slaState.agg; if(!agg) return;
   document.getElementById("sla-last-sync").textContent = crmAgo(agg.ts);
   const mapC = slaCampLq();
-  const todos = mapC ? agg.leads.map(l=> Object.prototype.hasOwnProperty.call(mapC, l.id) ? { ...l, camp: mapC[l.id] } : l) : agg.leads;
+  const todosAll = mapC ? agg.leads.map(l=> Object.prototype.hasOwnProperty.call(mapC, l.id) ? { ...l, camp: mapC[l.id] } : l) : agg.leads;
+  // Solo los leads de asesores ACTIVOS de la pantalla Asesores, en todo el reporte (Dirección
+  // General, 12-nov-2026). Antes el ranking ya calificaba solo al roster, pero las tarjetas y las
+  // listas de "Qué corregir hoy" contaban todos: los DM orgánicos que siguen con marketing (Olimpia)
+  // salían como "sin 1er toque". Los de otros dueños se cuentan en una línea; con el roster vacío
+  // (ningún nombre empata con GHL) no se filtra y el ranking lo avisa.
+  const equipo = slaRosterIds(agg.users);
+  const delEquipo = (l)=> !equipo.size || equipo.has(l.uNota || l.u);
+  const todos = todosAll.filter(delEquipo);
   // Filtro por campaña de origen (spec D5). "" = todas; "__sin" = sin campaña atribuida.
   const fCamp = slaState.camp || "";
-  const leads = !fCamp ? todos : todos.filter(l=> fCamp==="__sin" ? !(l.camp||"").trim() : l.camp===fCamp);
+  const porCamp = (arr)=> !fCamp ? arr : arr.filter(l=> fCamp==="__sin" ? !(l.camp||"").trim() : l.camp===fCamp);
+  const leads = porCamp(todos), fueraEq = porCamp(todosAll).filter(l=>!delEquipo(l));
   const now = Date.now();
   const name = (u)=> agg.users[u] || (u ? "(sin nombre)" : "(sin asesor)");
   const pcti = (n,d)=> d ? Math.round(n/d*100)+"%" : "—";
@@ -8557,8 +8595,9 @@ function slaRender(){
   const kpiND = (n,d,lbl,metaTxt,ok,t)=>`<div class="crm-kpi"${t||""}><div class="k-val"${ok!=null?` style="color:${ok?'var(--verde-prof)':'var(--rojo)'}"`:""}>${d?Math.round(n/d*100)+"%":"—"}</div><div class="k-lbl">${lbl}${metaTxt?` · ${metaTxt}`:""}</div><div class="k-lbl" style="opacity:.7">${d?`${n} de ${d}`:""}</div></div>`;
   // 1er toque manual en ≤5 minutos (spec A5): la cifra existía en la ficha y nunca se
   // había promovido a titular. Reloj: desde la entrada (alta) del lead.
-  const v5n = conDatos.filter(l=> l.velOk !== undefined ? l.velOk : l.bucket==="b5").length;
-  const fhDe = conDatos.filter(l=>l.fh).length, fhOk = conDatos.filter(l=>l.fh && l.velOk).length;
+  const velBase = conDatos.filter(l=>!l.nv), nvN = conDatos.length - velBase.length;   // sin DM orgánicos
+  const v5n = velBase.filter(l=> l.velOk !== undefined ? l.velOk : l.bucket==="b5").length;
+  const fhDe = velBase.filter(l=>l.fh).length, fhOk = velBase.filter(l=>l.fh && l.velOk).length;
   // Tasa de agendamiento (spec D3): citas sobre CONTACTADOS EFECTIVOS — no sobre todos
   // los leads, que era medir tasa de respuesta y castigar seis veces de más.
   const agB = slaAgBase(conDatos);
@@ -8583,16 +8622,19 @@ function slaRender(){
   // 8: volumen, velocidad (la nota, su P80 en horario y fuera de horario) y resultado (contacto
   // efectivo, tasa de agendamiento sobre contactados y sobre todos los leads, show). La meta de velocidad es 5 min: la de 60 s se retiró. Llamada
   // conectada, ≤15/≤60 min, mediana de efectivo y P80 de 1a llamada siguen en la tabla por asesor.
+  if(fueraEq.length || agg.reclExcl) res += `<p class="hint pegada sla-fuera-eq">No cuentan en este reporte: ${[fueraEq.length ? slaFueraEqTxt(fueraEq, name) : "",
+      agg.reclExcl ? `${agg.reclExcl} de reclutamiento (candidatos a asesor, etiqueta "reclutamiento…")` : ""].filter(Boolean).join(" y ")}. Solo se mide lo que ya está en manos de un asesor activo.</p>`;
   res += `<div class="kpi-grupo">Leads y velocidad · meta 5 min</div><div class="crm-kpis k4">
     ${kpi(leads.length.toLocaleString(),"Leads en el rango", lqNota(
       `<b>Leads creados en las semanas del rango</b> (hora Tulum), estén en el pipeline que estén: el universo lo define el dueño, no el pipeline.${fCamp ? " Solo la campaña de origen elegida." : ""}`,
-      `Fuera de todo el reporte: ${V11 ? `${pl(V11.invalidos.length, "lead inválido", "leads inválidos")}, ${pl(V11.brokers.length, "error", "errores")} de asignación (brokers)` : `${pl(agg.exclExpansion||0, "lead")} de Brokers Expansión y activación`} y ${pl(agg.testExcl||0, "registro")} de prueba.`,
+      `Fuera de todo el reporte: ${V11 ? `${pl(V11.invalidos.length, "lead inválido", "leads inválidos")}, ${pl(V11.brokers.length, "error", "errores")} de asignación (brokers)` : `${pl(agg.exclExpansion||0, "lead")} de Brokers Expansión y activación`} y ${pl(agg.testExcl||0, "registro")} de prueba${agg.reclExcl ? `, y ${pl(agg.reclExcl, "lead")} de reclutamiento (candidatos a asesor)` : ""}.`,
+      fueraEq.length ? `No cuentan en este reporte: ${slaFueraEqTxt(fueraEq, name)}.` : "",
       sinDatos ? `Sin datos de conversación (no se pudieron leer): ${sinDatos}. Cuentan aquí, pero no en los porcentajes.` : ""))}
-    ${V11 ? kpiND(v5n,cd,`Velocidad · cumplieron su SLA de 1er toque (5 min en horario, antes de las 11:00 fuera)${nAuto?` · ${nAuto} por llamada automática con contacto ≥90 s`:""}`,null,null, lqNota(
+    ${V11 ? kpiND(v5n,velBase.length,`Velocidad · cumplieron su SLA de 1er toque (5 min en horario, antes de las 11:00 fuera)${nAuto?` · ${nAuto} por llamada automática con contacto ≥90 s`:""}`,null,null, lqNota(
               `<b>Leads cuyo 1er toque llegó a tiempo.</b> Si entró en horario (${horTxt}): en 5 minutos o menos. Si entró fuera de horario: antes de las 11:00 del siguiente día de servicio. 1er toque = manual del asesor o llamada automática que conectó ≥90 s, lo que llegue primero.`,
-              `${cdTxt} No cumplen: los que no tienen 1er toque (${sinToque}) y los que llegaron tarde.`,
+              `${cdTxt}${nvN ? ` Sin los DM orgánicos (${nvN}): su reloj tendría que arrancar cuando llegan al asesor y GoHighLevel no guarda cuándo.` : ""} No cumplen: los que no tienen 1er toque (${sinToque}) y los que llegaron tarde.`,
               antesN ? `Incluye ${pl(antesN, "lead")} cuyo 1er toque fue antes de que arrancara su reloj: se dan por cumplidos. ${reloj}` : ""))
-          : kpiND(v5n,cd,"Velocidad · 1er toque manual ≤5 min · desde la entrada del lead","meta 5 min",null, lqNota(
+          : kpiND(v5n,velBase.length,"Velocidad · 1er toque manual ≤5 min · desde la entrada del lead","meta 5 min",null, lqNota(
               `<b>Leads con 1er toque manual en 5 minutos o menos</b> desde su entrada, las 24 horas.`, cdTxt,
               antesN ? `Incluye ${pl(antesN, "lead")} cuyo 1er toque fue antes de que arrancara su reloj: se dan por cumplidos. ${reloj}` : ""))}
     ${kpiP80(slasAt, V11?"P80 1er toque · el 80% de los leads en horario se tocó en este tiempo o menos · meta 5 min":"P80 1er toque manual · el 80% de los leads se tocó en este tiempo o menos · desde la entrada · meta 5 min", lqNota(
@@ -8691,7 +8733,7 @@ function slaRender(){
         return `<span${ch ? ' class="sla-chica-v"' : meta && v > meta ? ' style="color:var(--rojo);font-weight:600"' : ""}>${fmtP80(v)}</span><div class="lq-sub"${ch ? ' title="Muestra chica: no comparar"' : ""}>${xs.length} lead${xs.length===1?"":"s"}${ch ? " · chica" : ""}</div>`; };
       // En horario (R-04): cuántos leads entraron en horario —el P80 solo los usa— y, de
       // los que entraron fuera, cuántos se atendieron antes de las 11:00 del siguiente día hábil.
-      const nEnH = arr.filter(l=>!l.fh).length, fhCd = cd.filter(l=>l.fh), fhOk = fhCd.filter(l=>l.velOk).length;
+      const nEnH = arr.filter(l=>!l.fh).length, fhCd = cd.filter(l=>l.fh && !l.nv), fhOk = fhCd.filter(l=>l.velOk).length;
       const enHor = !V11 ? "—" : `${nEnH} de ${arr.length} <span class="lq-sub">(${pcti(nEnH, arr.length)})</span>${fhCd.length ? `<div class="lq-sub" title="Leads que entraron fuera de horario atendidos antes de las 11:00 del siguiente día de servicio">fuera: ${fhOk} de ${fhCd.length} a tiempo</div>` : ""}`;
       // Quién atiende el grupo (los 3 asesores con más leads)
       const porU = {}; arr.forEach(l=>{ const u = name(l.u); porU[u] = (porU[u]||0) + 1; });
@@ -8745,7 +8787,7 @@ function slaRender(){
   if(sinCitas){
     res += `<div class="lq-meth">⚠ <b>${sinCitas}</b> de ${leads.length} leads quedaron <b>sin datos de citas</b> (mismo motivo) y están fuera del conteo de citas y del show rate. No se asume que no tuvieron cita.</div>`;
   }
-  res += slaAsesorSection(agg, leads);
+  res += slaAsesorSection(agg, leads.concat(fueraEq));   // con los de fuera: su línea de volumen
   hoyV11 = slaSeccionesV11(agg, leads, vacias);
   // Tabla de SLA por asesor: mismo criterio del roster (spec A2) — todo dueño fuera
   // del roster de Asesores se agrega en una sola línea de volumen.
@@ -9074,7 +9116,7 @@ function slaRender(){
 
   html += res
     + `<h2 class="sla-bloque">Qué corregir hoy</h2><p class="hint" style="margin-top:0">Listas con nombre: lo que se arregla hoy en el CRM o en la retro con cada asesora.</p>`
-    + slaFallasVel(conDatos, V11, name, now, vacias) + hoyStale + hoyInt + hoyDesc + hoyV11
+    + slaFallasVel(velBase, V11, name, now, vacias) + hoyStale + hoyInt + hoyDesc + hoyV11
     + (vacias.length ? `<p class="hint" style="margin-top:14px"><b style="color:var(--verde-prof)">✓ Sin pendientes en:</b> ${vacias.map(escAttr).join(" · ")}.</p>` : "")
     + slaPlegable("detalle", `<span class="sla-bloque">Detalle</span> <span class="lq-sub">tiempos por asesor, canal, pipeline y campaña · citas · telefonía · embudo · etapas · datos · definiciones</span>`, det, "sla-pleg-h");
   document.getElementById("sla-content").innerHTML = html;
@@ -9185,11 +9227,12 @@ async function slaSync(){
     try{ const pc = pcCfgDe(await sGet(PC_CFG_KEY));
       if(pc.usuarios.length) pcX = { epc: pc.usuarios, activaT: Date.parse((pc.activa||PC_ACTIVA_DEF)+"T00:00:00"+LQ_TZ), activaYMD: pc.activa||PC_ACTIVA_DEF }; }
     catch(e){ fallos.push("la configuración del Ejecutivo de Primer Contacto (sus toques pueden contarse como del asesor)"); }
-    // Barrido de conversaciones y citas, en lotes de 8
+    // Barrido de conversaciones y citas, en lotes de 8 (sin los de reclutamiento: salen del reporte)
     const sweepMap={};
-    for(let i=0;i<contactsArr.length;i+=8){
+    const aBarrer = contactsArr.filter(c=>!slaTagRe(c.tags, SLA_RX_RECLUT));
+    for(let i=0;i<aBarrer.length;i+=8){
       if(syncCancelado("sla")){ toast("Reporte cancelado"); return; }
-      const ids = contactsArr.slice(i,i+8).map(c=>c.id);
+      const ids = aBarrer.slice(i,i+8).map(c=>c.id);
       const opts = {}; ids.forEach(id=>{ if(sweepOpts[id]) opts[id] = sweepOpts[id]; });
       try{
         const res = await slaFn({action:"sweep", ids, ...(Object.keys(opts).length ? { opts } : {}), ...(pcX ? { excluir: pcX.epc } : {})});
@@ -9200,9 +9243,9 @@ async function slaSync(){
         // reporta en el encabezado del reporte en vez de desaparecer.
         lotesFallidos++; leadsSinBarrer += ids.length;
       }
-      const done=Math.min(i+8,contactsArr.length);
-      bar.style.width=(14+Math.round(done/Math.max(1,contactsArr.length)*80))+"%";
-      lbl.textContent=`Analizando conversaciones y citas… ${done} de ${contactsArr.length}`;
+      const done=Math.min(i+8,aBarrer.length);
+      bar.style.width=(14+Math.round(done/Math.max(1,aBarrer.length)*80))+"%";
+      lbl.textContent=`Analizando conversaciones y citas… ${done} de ${aBarrer.length}`;
     }
     bar.style.width="100%"; lbl.textContent="Procesando…";
     if(lotesFallidos){
