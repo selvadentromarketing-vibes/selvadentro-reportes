@@ -1532,11 +1532,22 @@ const PORT = process.env.PORT || 8765;
     // Sin marcador registrado: la velocidad es informativa (3.1)
     const A3 = pcBuild(F.D, pcCfgDe({ ...F.cfg, marcador: '' }), F.now);
     r.marcador = A3.vel.every(v => v.eval === false);
-    // Pantalla
-    navIr('ventas', 'primer');
-    pcState.cfg = pcCfgDe(F.cfg); pcState.agg = A; pcRender();
-    await new Promise(res => setTimeout(res, 200));
-    const t = document.getElementById('pc-content').innerText;
+    // Pantalla. Reloj y periodo fijos en los del fixture: al abrir la pestaña, showPC regenera
+    // solo (pcSync) el reporte de la semana EN CURSO si el guardado es de un día anterior. Con el
+    // reloj real el selector queda en la semana de hoy y A.ts (= F.now, 9-nov) pasa a ser "de
+    // ayer" desde el 10-nov-2026: la auto-sincronización cambiaba A por un reporte vacío de la
+    // semana actual a mitad de la prueba. Se espera a que showPC termine antes de inyectar A.
+    let t;
+    const ahoraP = Date.now; Date.now = () => F.now;
+    try {
+      pcState.cfg = pcCfgDe(F.cfg); pcState.quien = ''; pcState.tipo = 'semana'; pcState.clave = '2026-W44';
+      navIr('ventas', 'primer');
+      await new Promise(res => setTimeout(res, 300));
+      pcState.cfg = pcCfgDe(F.cfg); pcState.agg = A; pcRender();
+      await new Promise(res => setTimeout(res, 200));
+      t = document.getElementById('pc-content').innerText;
+      r.sinAutoSync = pcState.agg === A && !pcState.syncing;
+    } finally { Date.now = ahoraP; }
     r.pantalla = /Indicadores del puesto/.test(t) && /5 de 10 leads en la ventana operativa: la automática conectó/.test(t) && /5\.2/.test(t) && /70%/.test(t) && /5 de 10 cumplieron/.test(t)
       && /por registro del ejecutivo 1/.test(t) && /1 cita sin conversación registrada/.test(t) && /marcados en ≤15 min desde la apertura: 1 de 1/.test(t) && /intento 2: 1/.test(t) && /en ≤2 min 1/.test(t) && /primer toque completo/i.test(t) && /Agenda de más|Problema de fondo|Correcto/.test(t)
       && !/undefined|NaN|\[object Object\]/.test(t);
