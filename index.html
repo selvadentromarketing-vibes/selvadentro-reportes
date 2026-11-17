@@ -3181,7 +3181,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v35";  // v35: Lead to Watch = Sí sube al lead a SQL como mínimo (antes solo informativo)  // v34: DM de redes registrado a mano (lead-dm-redes) a Social orgánico · Instagram (DM) y llamada entrante sin origen ("couldn't find caller name") a su propia fuente  // v33: presupuesto y horizonte de respaldo ("Presupuesto / Budget", "Horizonte de inversión / Investment timeline") del formulario de la landing de Google  // v32: el contacto de WhatsApp con Session source "Social media" sí se lee (antes se tomaba como origen) y fuera los correos @selvadentrotulum.com  // v31: igual que v30; el agregado v30 pudo guardarse con el avance del duplicado por WhatsApp pasado al formulario (publicado unos minutos por error el 17-oct)  // v30: Social orgánico · Instagram/Facebook, campaña del "(ref: …)" de WhatsApp, duplicados por WhatsApp (dupWa) y pruebas por primer mensaje  // v29: sin respuesta → CQL solo con escalera completa (si no, MQL); nota del asesor como respuesta  // v28: respuesta real del lead (mensaje entrante, llamada > 30 s o etapa de contacto) y el formulario ya no sube a SQL en Nurturing/Largo plazo/Rescate/Sin respuesta  // v27: nivel de la OPP caída según dónde cayó (Largo plazo → SQL, Rescate → SQL Selvadentro, Descalificado por causa)  // v26: OPP generada = SQL Selvadentro (salvo causa inválida) y cuenta como contactado y trabajado (no como Zoom)  // v25: OPP generadas (etiqueta opp-generada del CRM) y verificado por ventas (Lead to Watch)  // v24: broker = cualquier etiqueta que empiece con "broker" (no solo broker-client)  // v23: re-envíos de formulario (agg.reenvios)  // v22: datos de la decisión de hoy (rango fijo 30 días y 7 contra 7) en `dec`  // v21: el v20 guardado el 9-oct pudo quedar sin detalle por anuncio (la consulta con campos extra se volvía lenta)  // v20: URL de destino por anuncio, gasto por keyword de Google y presupuesto diario (recomendaciones concretas)  // v19: trabajado (tr) y contactado (ct) por etapa, separados  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
+const LQ_AGG_KEY = "lq:agg:v36";  // v36: presupuesto y plazo del registro a eventos ("Just exploring" fuera de perfil, "Presupuesto aproximado para inversión", CAD y EUR a USD, miles con punto) y reclutamiento fuera de la inversión  // v35: Lead to Watch = Sí sube al lead a SQL como mínimo (antes solo informativo)  // v34: DM de redes registrado a mano (lead-dm-redes) a Social orgánico · Instagram (DM) y llamada entrante sin origen ("couldn't find caller name") a su propia fuente  // v33: presupuesto y horizonte de respaldo ("Presupuesto / Budget", "Horizonte de inversión / Investment timeline") del formulario de la landing de Google  // v32: el contacto de WhatsApp con Session source "Social media" sí se lee (antes se tomaba como origen) y fuera los correos @selvadentrotulum.com  // v31: igual que v30; el agregado v30 pudo guardarse con el avance del duplicado por WhatsApp pasado al formulario (publicado unos minutos por error el 17-oct)  // v30: Social orgánico · Instagram/Facebook, campaña del "(ref: …)" de WhatsApp, duplicados por WhatsApp (dupWa) y pruebas por primer mensaje  // v29: sin respuesta → CQL solo con escalera completa (si no, MQL); nota del asesor como respuesta  // v28: respuesta real del lead (mensaje entrante, llamada > 30 s o etapa de contacto) y el formulario ya no sube a SQL en Nurturing/Largo plazo/Rescate/Sin respuesta  // v27: nivel de la OPP caída según dónde cayó (Largo plazo → SQL, Rescate → SQL Selvadentro, Descalificado por causa)  // v26: OPP generada = SQL Selvadentro (salvo causa inválida) y cuenta como contactado y trabajado (no como Zoom)  // v25: OPP generadas (etiqueta opp-generada del CRM) y verificado por ventas (Lead to Watch)  // v24: broker = cualquier etiqueta que empiece con "broker" (no solo broker-client)  // v23: re-envíos de formulario (agg.reenvios)  // v22: datos de la decisión de hoy (rango fijo 30 días y 7 contra 7) en `dec`  // v21: el v20 guardado el 9-oct pudo quedar sin detalle por anuncio (la consulta con campos extra se volvía lenta)  // v20: URL de destino por anuncio, gasto por keyword de Google y presupuesto diario (recomendaciones concretas)  // v19: trabajado (tr) y contactado (ct) por etapa, separados  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 // (LQ_TZ y LQ_TZ_MS ahora viven junto al resto de helpers de fecha, arriba)
@@ -3404,6 +3404,12 @@ function lqDetectFields(fields, llenos){
     // del grupo "NO USAR – duplicados de Discovery" y no en Budget Range / Horizonte de inversión.
     presAlt: find(/^presupuesto\s*\/\s*budget$/i),
     horAlt:  find(/^horizonte de inversi[oó]n\s*\/\s*investment timeline$/i),
+    // Segundo respaldo (Dirección General, 17-nov-2026): el registro a los eventos (Owning Tulum
+    // Toronto/Montreal, Madrid) guarda presupuesto y plazo en "Presupuesto aproximado para
+    // inversión" y "Plazo de inversión (registro)". Sin esto, un lead de evento con $250K+ CAD
+    // salía sin presupuesto y nunca podía llegar a SQL por perfil.
+    presEvt: find(/^presupuesto aproximado para inversi[oó]n/i),
+    horEvt:  find(/^plazo de inversi[oó]n/i),
     desc:  find(/raz[oó]n de descarte|motivo.*descalific|descalificaci[oó]n/i),
     segSem: find(/semanas con seguimiento|seguimiento[_ ]semanal/i),
     segMes: find(/meses con seguimiento|seguimiento[_ ]mensual/i),
@@ -3421,11 +3427,17 @@ function lqDetectFields(fields, llenos){
    suficiente el lead queda en CQL (capturado) y se explica por qué. */
 const LQ_UMBRAL_USD = 100000;
 const LQ_HORIZONTE_M = 6;
+const LQ_HOR_EXPLORANDO = 999;   // "Just exploring": fuera de perfil
 
 // "$150,000 USD", "150k", "1.2 millones", "USD 90 mil" → número en USD (aprox)
+// Tipos de cambio aproximados a USD para los formularios de eventos (Canadá en CAD, Madrid en
+// EUR). Como el 1/18 de los pesos: sirven para comparar contra el umbral, no para contabilidad.
+const LQ_FX_USD = { cad: 0.72, eur: 1.08 };
 function lqParseMoney(s){
-  const t = String(s||"").toLowerCase().replace(/\s+/g," ").trim();
+  let t = String(s||"").toLowerCase().replace(/\s+/g," ").trim();
   if(!t) return null;
+  // Miles con punto (formato europeo del registro de Madrid): "100.000-200.000€" se leía como 100.
+  t = t.replace(/\d{1,3}(?:\.\d{3})+(?![\d.,])/g, (x)=>x.replace(/\./g,""));
   // Orden de la alternancia: primero "millones" (si no, "mil" se lo come)
   const m = t.match(/(\d[\d.,]*)\s*(millones?|mill|mdp|mil|k|m)?\b/);
   if(!m) return null;
@@ -3436,6 +3448,10 @@ function lqParseMoney(s){
   else if(/^(millones?|mill|m|mdp)$/.test(u)) n*=1000000;
   // Rango tipo "100,000 - 200,000": toma el extremo bajo (criterio conservador)
   const dicePesos = /mxn|pesos|mdp/.test(t), diceDolares = /usd|dls|d[oó]lar/.test(t);
+  // Registro a eventos de Canadá ("$100K–$250K CAD") y de Madrid ("60.000-100.000€"): sin
+  // convertir, 100K CAD (≈ 72K USD) pasaba el umbral de 100K USD.
+  if(/\bcad\b|c\$/.test(t)) return n*LQ_FX_USD.cad;
+  if(/€|\beur\b|euros?\b/.test(t)) return n*LQ_FX_USD.eur;
   if(dicePesos && !diceDolares) return n/18;                 // aprox MXN→USD
   // Budget Range mezcla rangos en MXN y USD sin decirlo: "$1M–$2M" (28 leads en julio de
   // 2026, la opción más común) son pesos —el lote arranca en 1.4M MXN— y "$75K–$100K" son
@@ -3452,6 +3468,9 @@ function lqParseMonths(s){
   if(!t) return null;
   // "Immediately" es una opción real del campo Investment Timeline (47% lleno)
   if(/inmediat|immediat|\bya\b|ahora|urgent|asap/.test(t)) return 0;
+  // "Just exploring" del registro a eventos (Dirección General, 17-nov-2026): sin plazo de
+  // compra no hay perfil de ≤6 meses. Cuenta como fuera de perfil, no como plazo vacío.
+  if(/just exploring|solo explorando|explorando|exploring/.test(t)) return LQ_HOR_EXPLORANDO;
   // "o más", "or more", "más de", "more than", "+": el horizonte EXCEDE el número. La regla
   // del CRM manager (Listas inteligentes, 29-jul-2026) es "6 meses o más = MQL", así que
   // "6 meses o más" no puede leerse como 6 y colarse en el perfil de ≤6 meses: se devuelve
@@ -3581,7 +3600,8 @@ function lqAutoQualify(l, opt){
   const perfilOk = presupuesto!=null && presupuesto>=LQ_UMBRAL_USD && (hor==null || hor<=LQ_HORIZONTE_M);
   const perfilBajo = (presupuesto!=null && presupuesto<LQ_UMBRAL_USD) || (hor!=null && hor>LQ_HORIZONTE_M);
   if(presupuesto!=null) why.push(`presupuesto ${lqUSD(presupuesto)}${presupuesto>=LQ_UMBRAL_USD?" ≥ umbral":" < umbral de "+lqUSD(LQ_UMBRAL_USD)}`);
-  if(hor!=null) why.push(`horizonte ${hor} mes${hor===1?"":"es"}${hor<=LQ_HORIZONTE_M?" ≤ perfil":" > perfil"}`);
+  if(hor===LQ_HOR_EXPLORANDO) why.push("horizonte: solo explorando, fuera de perfil");
+  else if(hor!=null) why.push(`horizonte ${hor} mes${hor===1?"":"es"}${hor<=LQ_HORIZONTE_M?" ≤ perfil":" > perfil"}`);
 
   // 3) SQL Selvadentro — la etapa del pipeline manda sobre el formulario (Dirección
   // General, 2026-09-15). Una oportunidad real de cierre o una venta cerrada es el
@@ -4494,8 +4514,8 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
       o: op ? op.o : 0, pr: op ? op.pr : 0, w: op ? op.w : 0, wv: op ? op.v : 0,   // OPP (cotización) / registros de pipeline / WONs / valor
       ov: op ? op.ov : 0, ap: op ? op.ap : {tot:0,sh:0,ns:0},   // valor máximo de oportunidad y citas
       tags:(l.tags||[]).join(", "),
-      pres: (F.pres ? (l.cf[F.pres.id]||"") : "") || (F.presAlt ? (l.cf[F.presAlt.id]||"") : ""),
-      hor:  (F.hor  ? (l.cf[F.hor.id] ||"") : "") || (F.horAlt  ? (l.cf[F.horAlt.id] ||"") : ""),
+      pres: (F.pres ? (l.cf[F.pres.id]||"") : "") || (F.presAlt ? (l.cf[F.presAlt.id]||"") : "") || (F.presEvt ? (l.cf[F.presEvt.id]||"") : ""),
+      hor:  (F.hor  ? (l.cf[F.hor.id] ||"") : "") || (F.horAlt  ? (l.cf[F.horAlt.id] ||"") : "") || (F.horEvt  ? (l.cf[F.horEvt.id] ||"") : ""),
       ch: cn.ch, chVia: cn.via,          // canal de negocio deducido del CRM (o null)
       inv: lqInvalido(op, l.tags),       // causa del grupo inválido (spec v1.1 R-01), o ""
       ...(lqEsBroker(l.tags, op) ? { bk:1 } : {}),  // lead de brokers: fuera de Calidad de Leads
@@ -4601,11 +4621,33 @@ function lqNotaBrokers(agg, rangoSet){
     `<b>Leads de brokers fuera de Calidad de Leads en este rango (${bk.length}):</b> ${nombres.slice(0, LQ_BK_NOMBRES_MAX).map(escAttr).join(", ")}${nombres.length > LQ_BK_NOMBRES_MAX ? ` y ${nombres.length - LQ_BK_NOMBRES_MAX} más` : ""}.`,
     `<b>Con ellos → sin ellos</b> (todas las plataformas): Todos los leads del rango ${todos.length} → ${todos.length - bk.length}${filas.map(x=>` · ${escAttr(x.key)} ${x.n} → ${x.n - x.b}`).join("")}.`);
 }
+// Reclutamiento de asesores (Dirección General, 17-nov-2026): sus campañas (nombre con
+// "reclutamiento", p. ej. RECLUTAMIENTO_ASESORES_CUN-TUL-PDC_DM_NOV26) buscan candidatos a
+// trabajar en Selvadentro, no compradores. Su gasto inflaba la inversión del mes y el costo
+// por SQL (4,991 MXN del 1 al 17-nov). Sale de la inversión, de las tablas, de los anuncios y
+// de la decisión de hoy; se declara en la nota de excluidos con su monto.
+const LQ_RX_CAMP_RECLUT = /reclutamiento/i;
+function lqSinReclutamiento(spendRows, adRows, adExtra){
+  const es = (n)=> LQ_RX_CAMP_RECLUT.test(String(n||""));
+  const fuera = (spendRows||[]).filter(r=>es(r.camp)).map(r=>({ d:r.d, camp:r.camp, spend:r.spend||0, cur:r.cur }));
+  for(const plat of ["meta","google"]){
+    const D = adExtra && adExtra[plat]; if(!D || !D.camps) continue;
+    const ids = new Set(Object.keys(D.camps).filter(cid=>es(D.camps[cid] && D.camps[cid].name)));
+    if(!ids.size) continue;
+    ids.forEach(cid=>{ delete D.camps[cid]; if(D.dias) delete D.dias[cid]; });
+    if(D.grps) Object.keys(D.grps).forEach(g=>{ if(ids.has(D.grps[g].cid)) delete D.grps[g]; });
+    ["ads","an","kw"].forEach(k=>{ if(Array.isArray(D[k])) D[k] = D[k].filter(x=>!ids.has(x.cid)); });
+  }
+  return { spendRows:(spendRows||[]).filter(r=>!es(r.camp)), adRows:(adRows||[]).filter(r=>!es(r.camp)), fuera };
+}
 function lqNotaExcluidos(agg, rangoSet){
   const e = lqExcluidosRango(agg, rangoSet), partes = [];
   if(e.broker) partes.push(`<span${lqNotaBrokers(agg, rangoSet)}><b>${e.broker}</b> lead${e.broker!==1?"s":""} de brokers</span> <span class="lq-sub">(pipeline Brokers - Producción (B2B2C) o una etiqueta que empieza con "broker": los sube el equipo comercial, no vienen de marketing)</span>`);
   if(e.prueba) partes.push(`<b>${e.prueba}</b> registro${e.prueba!==1?"s":""} de prueba o interno${e.prueba!==1?"s":""} <span class="lq-sub">("prueba"/"test" en el nombre, el email o el primer mensaje, o correo @selvadentrotulum.com)</span>`);
   if(e.sinContacto) partes.push(`<b>${e.sinContacto}</b> sin email ni teléfono`);
+  const recl = ((agg && agg.reclSpend) || []).filter(r=>{ const w=r.d?lqWeekOf(r.d+"T12:00:00"+LQ_TZ):null; return w && rangoSet.has(w); });
+  const reclSp = recl.reduce((a,r)=>a+(r.spend||0), 0);
+  if(reclSp > 0) partes.push(`<b>${lqMXN(reclSp)}</b> de inversión en reclutamiento de asesores <span class="lq-sub">(${escAttr([...new Set(recl.map(r=>r.camp))].join(", "))}: busca candidatos, no compradores; no cuenta en la inversión ni en el costo por SQL)</span>`);
   return (partes.length ? `<p class="hint pegada lq-excluidos">Excluidos de todos los cálculos en este rango: ${partes.join(" · ")}.</p>` : "")
     + lqNotaDupWa(agg, rangoSet);
 }
@@ -7110,6 +7152,8 @@ async function lqSync(){
     } else {
       fallos.push("Windsor no está configurado (sin WINDSOR_API_KEY)");
     }
+    const sinRecl = lqSinReclutamiento(spendRows, adRows, adExtra);
+    spendRows = sinRecl.spendRows; adRows = sinRecl.adRows;
     // Respuesta real del lead (LQ_RESP_V2): evidencia en la conversación, con caché en el kv
     let rspMap = null;
     if(LQ_RESP_V2){
@@ -7158,6 +7202,7 @@ async function lqSync(){
     // quien pulsó Sincronizar, y el resto del equipo leía los ceros como si fueran datos.
     lqState.agg.fallos = fallos;
     lqState.agg.monedas = monedas;
+    lqState.agg.reclSpend = sinRecl.fuera;
     lqPersist(lqState.agg);
     lqPopulateWeeks(); lqRender();
     toast("Leads sincronizados ✓ "+rawLeads.length.toLocaleString()+" contactos");
@@ -7191,7 +7236,7 @@ async function showLQ(){
 // Reporte de disciplina comercial directo del CRM: SLA de primera respuesta por
 // asesor y canal, leads >7 días sin toque, trabajados vs contactados efectivos,
 // citas y show rate, y OPPs/WONs por asesor. Con nombres, acumulable por semanas.
-const SLA_AGG_KEY = "sla:agg:v22";   // v22: fuera los leads de reclutamiento; DM orgánicos sin Velocidad; reloj desde la "Fecha asignación asesor" si existe   // v21: Lead to Watch = Sí sube al lead a SQL como mínimo   // v20: presupuesto y horizonte de respaldo del formulario de la landing de Google   // v19: calificación con respuesta real y escalera (MQL sin escalera completa por asesor)   // v18: llamadas exitosas del asesor (≥90 s) en telefonía   // v17: broker = cualquier etiqueta que empiece con "broker" (R-03)   // v16: el reloj arranca siempre en el alta del lead (sin traspaso a ventas)   // v15: si el asesor tocó al lead antes del traspaso a ventas, su reloj arranca en el alta   // v14: citas agendadas en el periodo por fecha de agendado; base de agendamiento con quien agendó sin escribir   // v13: citas del periodo por fecha de la cita y su asistencia (show rate)   // v12: telefonía por lead (canal del 1er toque, intentos, desenlace, duración conocida)   // v11: spec v1.1 (filtros de medición: inválidos, brokers, revertidas, horario, sin llamada, contacto efectivo)   // v10: calificación por reglas (la etapa manda), no el campo manual vacío   // v9: razón de descarte por lead   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
+const SLA_AGG_KEY = "sla:agg:v23";   // v23: presupuesto y plazo del registro a eventos (CAD y EUR a USD)   // v22: fuera los leads de reclutamiento; DM orgánicos sin Velocidad; reloj desde la "Fecha asignación asesor" si existe   // v21: Lead to Watch = Sí sube al lead a SQL como mínimo   // v20: presupuesto y horizonte de respaldo del formulario de la landing de Google   // v19: calificación con respuesta real y escalera (MQL sin escalera completa por asesor)   // v18: llamadas exitosas del asesor (≥90 s) en telefonía   // v17: broker = cualquier etiqueta que empiece con "broker" (R-03)   // v16: el reloj arranca siempre en el alta del lead (sin traspaso a ventas)   // v15: si el asesor tocó al lead antes del traspaso a ventas, su reloj arranca en el alta   // v14: citas agendadas en el periodo por fecha de agendado; base de agendamiento con quien agendó sin escribir   // v13: citas del periodo por fecha de la cita y su asistencia (show rate)   // v12: telefonía por lead (canal del 1er toque, intentos, desenlace, duración conocida)   // v11: spec v1.1 (filtros de medición: inválidos, brokers, revertidas, horario, sin llamada, contacto efectivo)   // v10: calificación por reglas (la etapa manda), no el campo manual vacío   // v9: razón de descarte por lead   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
 const SLA_STALE_MS = 7*86400e3; // "sin toque" = 7 días sin mensaje
 const slaState = { built:false, agg:null, syncing:false, asesor:"", camp:"", abierto:{} };   // asesor/camp "" = sin filtro · abierto = plegables abiertos
 
@@ -8051,6 +8096,8 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
               // Respaldo del formulario de la landing de Google (ver lqDetectFields)
               presAlt: find(/^presupuesto\s*\/\s*budget$/i),
               horAlt:  find(/^horizonte de inversi[oó]n\s*\/\s*investment timeline$/i),
+              presEvt: find(/^presupuesto aproximado para inversi[oó]n/i),
+              horEvt:  find(/^plazo de inversi[oó]n/i),
               // "Lead to Watch" en Sí: SQL como mínimo, la misma regla de Calidad de Leads
               verif: find(/lead\s*to\s*watch/i) || find(/hot\s*lead/i),
               // Cuándo pasó el lead a un asesor (texto "AAAA-MM-DD HH:MM", hora de Tulum). Hoy no
@@ -8204,7 +8251,7 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
              // y el cierre de ciclo en blanco para todos los asesores.
              lvCrm: F.calif ? lqClassify(c.cf && c.cf[F.calif.id]) : "nc", lv: "nc",
              tags: (c.tags||[]).join(", "), pstage: cp ? cp.s : "",
-             pres: cf(F.pres) || cf(F.presAlt), hor: cf(F.hor) || cf(F.horAlt),
+             pres: cf(F.pres) || cf(F.presAlt) || cf(F.presEvt), hor: cf(F.hor) || cf(F.horAlt) || cf(F.horEvt),
              ...(lqSi(cf(F.verif)) ? { vv:1 } : {}),   // verificado por ventas (Lead to Watch)
              ...(nv ? { nv:1 } : {}),                    // no entra en la Velocidad (DM orgánico)
              o: 0, pr: 0, w: 0, wv: 0, ov: 0, ost: "",
@@ -12269,7 +12316,7 @@ function diagSeccionLectura(){
   const filaP = (o)=>{ const v=lqParseMoney(o); const ok = v!=null && v>=LQ_UMBRAL_USD;
     return `<tr><td class="lft celda-fuerte">${escAttr(o)}</td><td>${v==null?"—":fmtMoney(Math.round(v))+" USD"}</td><td style="${v==null?"":ok?"color:var(--verde-prof);font-weight:600":"color:var(--neutro)"}">${v==null?"no se entiende":ok?"✓ alcanza el umbral":"debajo del umbral"}</td></tr>`; };
   const filaH = (o)=>{ const v=lqParseMonths(o); const ok = v!=null && v<=LQ_HORIZONTE_M;
-    return `<tr><td class="lft celda-fuerte">${escAttr(o)}</td><td>${v==null?"—":v+" mes"+(v===1?"":"es")}</td><td style="${v==null?"":ok?"color:var(--verde-prof);font-weight:600":"color:var(--neutro)"}">${v==null?"no se entiende":ok?"✓ dentro del perfil":"fuera del perfil"}</td></tr>`; };
+    return `<tr><td class="lft celda-fuerte">${escAttr(o)}</td><td>${v==null?"—":v===LQ_HOR_EXPLORANDO?"solo explorando":v+" mes"+(v===1?"":"es")}</td><td style="${v==null?"":ok?"color:var(--verde-prof);font-weight:600":"color:var(--neutro)"}">${v==null?"no se entiende":ok?"✓ dentro del perfil":"fuera del perfil"}</td></tr>`; };
   const tabla = (c, filas, cab)=> `<div class="table-scroll" style="border:none;box-shadow:none"><table class="cons">
       <tr><th class="lft">${escAttr(c.nombre)} · opción del CRM</th><th>${cab}</th><th class="lft">Lectura</th></tr>
       ${(c.opciones||[]).length ? (c.opciones||[]).map(filas).join("") : `<tr><td colspan="3" class="lft txt-nota">El campo no es de lista (texto libre): se interpreta valor por valor.</td></tr>`}
