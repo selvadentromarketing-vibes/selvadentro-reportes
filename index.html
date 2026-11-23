@@ -121,8 +121,9 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
   #ing-dims, #rep-dims{ display:contents; }
   .periodo .grp{ display:flex; flex-direction:column; gap:5px; }
   .periodo label{ font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.8px; color:var(--neutro); font-weight:600; }
-  .periodo input[type=date], .periodo select{ font-family:var(--sans); font-size:var(--fs-sm); padding:8px 10px; border:1px solid var(--linea); border-radius:var(--r-m); background:var(--crema); color:var(--texto); }
+  .periodo input[type=date], .periodo select, .periodo input.dim-texto{ font-family:var(--sans); font-size:var(--fs-sm); padding:8px 10px; border:1px solid var(--linea); border-radius:var(--r-m); background:var(--crema); color:var(--texto); }
   .periodo input[readonly]{ background:var(--crema-2); color:var(--neutro); }
+  .periodo input.dim-texto{ min-width:180px; }
   .semana-badge{ font-family:var(--sans); font-size:var(--fs-sm); color:var(--texto); background:var(--crema); padding:8px 10px; border-radius:var(--r-m); border:1px solid var(--linea); min-width:110px; }
   .periodo .spacer{ flex:1; }
   .hint{ font-size:var(--fs-s); color:var(--neutro); margin:0 0 22px 4px; font-style:italic; }
@@ -251,7 +252,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
     table.usr-table td.ch-col{ min-width:0; }
     .periodo{ gap:12px; padding:12px 14px; }
     .periodo .grp{ flex:1 1 140px; min-width:0; max-width:100%; }
-    .periodo select{ max-width:100%; min-width:0; }   /* las etiquetas largas de semana empujaban la página de lado */
+    .periodo select, .periodo input.dim-texto{ max-width:100%; min-width:0; }   /* las etiquetas largas de semana empujaban la página de lado */
   }
   @media (max-width:700px){
     /* iOS Safari acerca la pantalla al enfocar un campo de menos de 16px y no vuelve a
@@ -259,7 +260,7 @@ Canales como datos · dimensiones flexibles (asesor / ciudad) · metas o convers
     /* Selectores específicos: las reglas de cada campo (.periodo input[type=date], .frow
        input, .meta-num…) ganan por especificidad a un `input` pelón. */
     input, select, textarea,
-    .periodo input[type=date], .periodo select, .frow input, .textareas textarea,
+    .periodo input[type=date], .periodo select, .periodo input.dim-texto, .frow input, .textareas textarea,
     .login-field input, .adv-add input, .adv-name, .lq-search,
     .meta-name, .meta-num, .meta-pct, .usr-fld input, .usr-fld select,
     table.usr-table select, table.usr-table input, #canal-select, #mkt-select,
@@ -1528,6 +1529,9 @@ const SEMINARIOS_SECTIONS = [
     {k:"ventas_90", l:"Ventas 90 días", meta:null},
   ]},
 ];
+// Ciudades BASE de Seminarios: la ciudad es un campo abierto (la gira cambia de destino en
+// cada evento). Estas tres siempre se sugieren; a ellas se suma toda ciudad que ya exista en
+// los registros guardados y en la semilla — ver ciudadesDe().
 const SEMINARIOS_CITIES = ["Madrid","Houston","General"];
 /* Orden de campos (30): leads, leads_contacto, leads_frios, leads_templados, leads_calientes,
    sem_registrados, sem_confirmados, sem_asistidos, seg_post_seminario,
@@ -1640,12 +1644,64 @@ let CH = "brokers";
 const sections  = () => CHANNELS[CH].sections;
 const allFields = () => (sections()||[]).flatMap(s=>s.fields);
 const isConfigured = () => !!sections();
-function dimsList(chKey){ const c=CHANNELS[chKey]; const d=[]; if(c.advisors) d.push({id:"asesor",label:"Asesor",values:advisorNames()}); if(c.cities) d.push({id:"ciudad",label:"Ciudad",values:c.cities}); return d; }
+// `values` de la ciudad es un getter: se calcula solo cuando alguien pinta la lista (el filtro
+// del Reporte), no en cada recKey/parseRecKey, que llaman a dimsList muchas veces por render.
+function dimsList(chKey){ const c=CHANNELS[chKey]; const d=[]; if(c.advisors) d.push({id:"asesor",label:"Asesor",values:advisorNames()}); if(c.cities) d.push({id:"ciudad",label:"Ciudad",get values(){ return ciudadesDe(chKey); }}); return d; }
 const dimsOf=()=>dimsList(CH);
 const hasDims=()=>dimsOf().length>0;
 const recKey=(w,dimVals)=> hasDims()? `${CH}:rec:${w}__${(dimVals||[]).join("__")}` : `${CH}:week:${w}`;
 const recPrefix=()=> hasDims()? `${CH}:rec:` : `${CH}:week:`;
 function parseRecKey(k){ if(hasDims()){ const r=k.slice((CH+":rec:").length); const p=r.split("__"); return {w:p[0],dimVals:p.slice(1)}; } return {w:k.slice((CH+":week:").length),dimVals:[]}; }
+
+/* ----- Ciudad abierta (Seminarios, nov-2026) -----------------------------------------------
+   Antes la ciudad era un <select> con Madrid/Houston/General escritos en el código, y capturar
+   Toronto o Montreal pedía tocar el código. Ahora es texto libre con sugerencias. La llave
+   (`seminarios:rec:W__asesor__ciudad`) y `dimVals` NO cambian de formato: solo cambia de dónde
+   sale la lista. Para no partir una ciudad en dos ("Montreal" y "Montréal", "toronto" y
+   "Toronto"), lo escrito se normaliza y, si ya hay una ciudad equivalente (sin distinguir
+   mayúsculas ni acentos), se usa la escritura que ya existe. */
+// Llave de comparación: sin acentos, sin mayúsculas, espacios colapsados.
+const ciudadClave = (s)=> String(s==null?"":s).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/\s+/g," ").trim();
+// Ciudades del canal: las base + las de la semilla + las de los registros guardados.
+// Alfabéticas y sin duplicados (equivalentes cuentan como una; gana la primera escritura vista).
+function ciudadesDe(chKey){
+  const c = CHANNELS[chKey]; if(!c || !c.cities) return [];
+  const pos = 1 + (c.advisors ? 1 : 0);                 // W__asesor__ciudad (o W__ciudad)
+  const vistas = new Map();
+  const agregar = (v)=>{ const t = String(v==null?"":v).replace(/\s+/g," ").trim(), k = ciudadClave(t); if(k && !vistas.has(k)) vistas.set(k, t); };
+  c.cities.forEach(agregar);
+  (c.seed||[]).forEach(s=>agregar(s.ciudad));
+  const p = `${chKey}:rec:`;
+  recList(p).forEach(k=>agregar(k.slice(p.length).split("__")[pos]));
+  return [...vistas.values()].sort((a,b)=>a.localeCompare(b,"es",{sensitivity:"base"}));
+}
+// Conectores que se quedan en minúscula a media palabra: "Ciudad de México", "Playa del Carmen".
+const CIUDAD_CONECTORES = new Set(["de","del","la","las","los","el","y","e"]);
+// trim + espacios colapsados + mayúscula inicial en cada palabra; si ya existe una ciudad
+// equivalente, su escritura. El "_" se vuelve espacio: "__" es el separador de la llave.
+function normalizarCiudad(chKey, v){
+  const t = String(v==null?"":v).replace(/_/g," ").replace(/\s+/g," ").trim();
+  if(!t) return "";
+  const bonita = t.split(" ").map((w,i)=> i>0 && CIUDAD_CONECTORES.has(w.toLowerCase())
+    ? w.toLowerCase() : w.charAt(0).toLocaleUpperCase("es") + w.slice(1)).join(" ");
+  const k = ciudadClave(bonita);
+  return ciudadesDe(chKey).find(x=>ciudadClave(x)===k) || bonita;
+}
+// Rellena las sugerencias de Ingreso y el filtro de ciudad del Reporte con las ciudades vigentes.
+function refreshCiudadOpciones(){
+  const i = dimsOf().findIndex(d=>d.id==="ciudad"); if(i<0) return;
+  const ciudades = ciudadesDe(CH);
+  const dl = document.getElementById("ciudades-sugeridas");
+  if(dl) dl.innerHTML = ciudades.map(v=>`<option value="${escAttr(v)}"></option>`).join("");
+  const rep = document.getElementById("rep-dim-"+i);
+  if(rep){
+    // "General" no es una ciudad (es el embudo genérico): como antes, no sale en el filtro y
+    // sus registros cuentan en "Todos".
+    const cur = rep.value, vals = ciudades.filter(v=>ciudadClave(v)!=="general");
+    rep.innerHTML = `<option value="__todos">Todos</option>` + vals.map(v=>`<option value="${escAttr(v)}">${escAttr(v)}</option>`).join("");
+    rep.value = vals.includes(cur) ? cur : "__todos";
+  }
+}
 
 /* ===================== CONFIG: BACKEND (Netlify Functions con sesión firmada) ===================== */
 // Todo el acceso a datos pasa por /.netlify/functions/kv con un token firmado que
@@ -1822,7 +1878,8 @@ function allowedEditWeeks(){
 }
 function isWeekEditable(w){ return typeof isAdmin === "function" && isAdmin() ? true : allowedEditWeeks().has(w); }
 function updateSemanaBadge(){ document.getElementById("ing-semana").textContent=currentWeekId()||"—"; }
-function curDimVals(){ return dimsOf().map((d,i)=>document.getElementById("ing-dim-"+i).value); }
+// La ciudad (texto libre) sale ya normalizada: la llave, `dimVals` y el borrador usan la misma escritura.
+function curDimVals(){ return dimsOf().map((d,i)=>{ const v=document.getElementById("ing-dim-"+i).value; return d.id==="ciudad" ? normalizarCiudad(CH, v) : v; }); }
 let LAST_RESP = {};
 async function loadLastResp(){ const s=await sGet("selvadentro:last_resp"); if(s && typeof s==="object") LAST_RESP=s; }
 async function saveLastResp(){ await sSet("selvadentro:last_resp", LAST_RESP); }
@@ -1862,7 +1919,10 @@ function gatherForm(){
 }
 function fillForm(rec){
   document.getElementById("ing-inicio").value=rec.inicio||""; document.getElementById("ing-fin").value=rec.fin||"";
-  dimsOf().forEach((d,i)=>{ const el=document.getElementById("ing-dim-"+i); if(el&&rec.dimVals&&rec.dimVals[i]!=null){ const val=rec.dimVals[i]; if(![...el.options].some(o=>o.value===val)){ const o=document.createElement("option"); o.value=val; o.textContent=val; el.appendChild(o); } el.value=val; } });
+  dimsOf().forEach((d,i)=>{ const el=document.getElementById("ing-dim-"+i); if(el&&rec.dimVals&&rec.dimVals[i]!=null){ const val=rec.dimVals[i];
+    // La ciudad es un <input> con sugerencias: basta asignar el valor. El asesor sigue siendo <select>.
+    if(el.tagName==="SELECT" && ![...el.options].some(o=>o.value===val)){ const o=document.createElement("option"); o.value=val; o.textContent=val; el.appendChild(o); }
+    el.value=val; if(d.id==="ciudad"){ el.dataset.prev=val; ciudadMarcarError(el, false); } } });
   ingMarcarErrores([]);
   allFields().forEach(f=>{ const el=document.getElementById("in_"+f.k); if(el) el.value=(rec.valores&&rec.valores[f.k]!=null)?rec.valores[f.k]:""; });
   document.getElementById("txt-notas").value=rec.notas||""; document.getElementById("txt-aprendizajes").value=rec.aprendizajes||""; document.getElementById("txt-cambios").value=rec.cambios||"";
@@ -1919,6 +1979,12 @@ function ingRevisarCoherencia(form){
   return { mensaje: problemas.length ? "· " + problemas.join("\n· ") : "", campos:[...campos], bloqueo };
 }
 const etiquetaCampo = (k)=> (allFields().find(f=>f.k===k)||{}).l || k;
+// Ciudad vacía al guardar: misma marca en rojo que los campos numéricos.
+function ciudadMarcarError(el, on){
+  if(!el) return;
+  el.classList.toggle("campo-error", !!on);
+  if(on) el.setAttribute("aria-invalid","true"); else el.removeAttribute("aria-invalid");
+}
 // Marca en rojo los campos culpables en vez de dejar el aviso en un toast genérico.
 function ingMarcarErrores(campos){
   document.querySelectorAll("#ing-sections input.campo-error").forEach(el=>{
@@ -1992,14 +2058,20 @@ async function ingSobrescribirOk(previo, dv, w){
 // Antes, elegir una semana que YA tenía datos abría el formulario en blanco: el camino
 // natural —semana, asesor, capturar— llevaba a pisar un registro completo con uno parcial.
 // fillForm ya existía y solo se usaba desde los chips de abajo; ahora también aquí.
-async function cargarRegistroDeSeleccion(){
+async function cargarRegistroDeSeleccion({ conservarSiNoHay=false } = {}){
   const w = currentWeekId(); if(!w) return;
+  let dv; try{ dv = curDimVals(); }catch(e){ return; }
+  // Sin ciudad todavía no hay registro que traer: lo que está en pantalla se queda.
+  const iCiudad = dimsOf().findIndex(d=>d.id==="ciudad");
+  if(iCiudad>=0 && !dv[iCiudad]) return;
+  // Escribir una ciudad que aún no tiene registro esa semana es ponerle nombre a lo que se está
+  // capturando, no cambiar de registro: lo escrito se queda (ni confirmación ni formulario en blanco).
+  if(conservarSiNoHay && !recGet(recKey(w, dv)) && ingSucio && ingTieneAlgo()) return;
   if(ingSucio && ingTieneAlgo()){
     const seguir = await confirmar("Si cambias de semana o de asesor, lo que está en pantalla se reemplaza por lo que haya guardado.",
       { titulo:"Captura sin guardar", ok:"Continuar", peligro:true });
     if(!seguir) return;
   }
-  let dv; try{ dv = curDimVals(); }catch(e){ return; }
   const rec = recGet(recKey(w, dv));
   if(rec){ fillForm(rec); borrarBorrador(); toast("Registro cargado — " + w + (dv.length?(" · "+dv.join(" · ")):"")); }
   else { clearForm(); borrarBorrador(); }
@@ -2043,7 +2115,14 @@ window.addEventListener("beforeunload", (e)=>{
 async function saveWeek(){
   const w=currentWeekId(); if(!w){ toast("Selecciona la fecha de inicio primero"); return; }
   if(!isWeekEditable(w)){ toast("Solo puedes guardar la semana actual o la anterior"); return; }
-  const dv=curDimVals(); const k=recKey(w,dv); const form=gatherForm();
+  const dv=curDimVals();
+  const iCiudad=dimsOf().findIndex(d=>d.id==="ciudad"), ciudadEl=iCiudad>=0?document.getElementById("ing-dim-"+iCiudad):null;
+  if(ciudadEl){
+    if(!dv[iCiudad]){ ciudadMarcarError(ciudadEl, true); ciudadEl.focus(); toast("Escribe la ciudad antes de guardar"); return; }
+    ciudadMarcarError(ciudadEl, false);
+    ciudadEl.value = dv[iCiudad]; ciudadEl.dataset.prev = dv[iCiudad];   // la escritura con la que se guarda
+  }
+  const k=recKey(w,dv); const form=gatherForm();
   // Pisar un registro existente ya no es silencioso.
   const revision = ingRevisarCoherencia(form);
   ingMarcarErrores(revision.campos);
@@ -2069,6 +2148,7 @@ async function saveWeek(){
   if(form.responsable && form.responsable !== LAST_RESP[CH]){ LAST_RESP[CH]=form.responsable; try{ await saveLastResp(); }catch(e){} }
   borrarBorrador();
   toast("Guardado ✓ "+w+(dv.length?(" · "+dv.join(" · ")):"")); renderChips();
+  refreshCiudadOpciones();   // una ciudad nueva entra a las sugerencias y al filtro del Reporte ya
 }
 function renderChips(){
   const keys=recList(recPrefix()); const cont=document.getElementById("chips");
@@ -2140,7 +2220,7 @@ async function generarReporte(){
     for(const k of recList(recPrefix())){
       const p=parseRecKey(k);
       if(!weekSet.has(p.w)) continue;
-      if(!selDim.every((v,i)=>v==="__todos" || p.dimVals[i]===v)) continue;
+      if(!selDim.every((v,i)=>v==="__todos" || (dims[i].id==="ciudad" ? ciudadClave(p.dimVals[i])===ciudadClave(v) : p.dimVals[i]===v))) continue;
       const rec=recGet(k); if(rec) recs.push({w:p.w, combo:p.dimVals, rec});
     }
   } else {
@@ -11737,8 +11817,12 @@ async function switchChannel(ch){
     return;
   }
   const dims=dimsOf();
-  document.getElementById("ing-dims").innerHTML = dims.map((d,i)=>{ const vals = d.id==="asesor" ? activeAdvisorNames() : d.values; return `<div class="grp"><label>${d.label}</label><select id="ing-dim-${i}">${vals.map(v=>`<option>${v}</option>`).join("")}</select></div>`; }).join("");
-  document.getElementById("rep-dims").innerHTML = dims.map((d,i)=>{ const vals = d.id==="ciudad" ? d.values.filter(v=>v!=="General") : d.values; return `<div class="grp"><label>${d.label}</label><select id="rep-dim-${i}"><option value="__todos">Todos</option>${vals.map(v=>`<option value="${v}">${v}</option>`).join("")}</select></div>`; }).join("");
+  // Ciudad: campo abierto con sugerencias (mismo id ing-dim-N, así curDimVals y fillForm no cambian).
+  document.getElementById("ing-dims").innerHTML = dims.map((d,i)=>{
+    if(d.id==="ciudad") return `<div class="grp"><label for="ing-dim-${i}">${d.label}</label><input id="ing-dim-${i}" class="dim-texto" list="ciudades-sugeridas" data-dim="ciudad" data-prev="" placeholder="Escribe la ciudad" autocomplete="off" maxlength="60"><datalist id="ciudades-sugeridas"></datalist></div>`;
+    const vals = d.id==="asesor" ? activeAdvisorNames() : d.values; return `<div class="grp"><label>${d.label}</label><select id="ing-dim-${i}">${vals.map(v=>`<option>${v}</option>`).join("")}</select></div>`; }).join("");
+  document.getElementById("rep-dims").innerHTML = dims.map((d,i)=>{ const vals = d.id==="ciudad" ? [] : d.values; return `<div class="grp"><label>${d.label}</label><select id="rep-dim-${i}"><option value="__todos">Todos</option>${vals.map(v=>`<option value="${v}">${v}</option>`).join("")}</select></div>`; }).join("");
+  refreshCiudadOpciones();
   // Al cambiar de canal, soltar las gráficas del canal anterior: sus canvas ya no están
   // en el DOM y sus manejadores de resize seguían vivos en cada redimensionamiento.
   Object.values(ANAL_STATE.charts).forEach(c=>{ try{ c.destroy(); }catch(e){} });
@@ -11786,7 +11870,23 @@ async function init(){
     cargarRegistroDeSeleccion();
   });
   // Cambiar de asesor o ciudad también debe traer el registro de esa combinación.
-  document.getElementById("ing-dims")?.addEventListener("change", cargarRegistroDeSeleccion);
+  document.getElementById("ing-dims")?.addEventListener("change", (e)=>{
+    const t = e.target;
+    if(t && t.dataset && t.dataset.dim==="ciudad"){
+      // El <input> avisa al salir del campo (no al elegir, como el <select>): se muestra la
+      // escritura con la que se guardará y solo se busca registro si de verdad cambió la ciudad.
+      const antes = t.dataset.prev || "";
+      t.value = normalizarCiudad(CH, t.value); t.dataset.prev = t.value;
+      if(t.value) ciudadMarcarError(t, false);
+      if(ciudadClave(antes) === ciudadClave(t.value)) return;
+      cargarRegistroDeSeleccion({ conservarSiNoHay:true });
+      return;
+    }
+    cargarRegistroDeSeleccion();
+  });
+  document.getElementById("ing-dims")?.addEventListener("input", (e)=>{
+    if(e.target && e.target.dataset && e.target.dataset.dim==="ciudad" && e.target.value.trim()) ciudadMarcarError(e.target, false);
+  });
 
   document.getElementById("btn-guardar2").onclick=saveWeek;
   const limpiarConfirm = async ()=>{

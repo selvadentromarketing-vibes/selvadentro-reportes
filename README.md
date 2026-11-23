@@ -808,6 +808,33 @@ noche caían en semanas distintas según la pestaña. El agregado del CRM subió
   no cumplen, para corregirlas en Ingreso de datos. Zooms + tours por encima del total solo avisa
   (una OPP con zoom y tour debe contarse en una sola).
 
+## Seminarios de inversión: ciudad abierta (23-nov-2026)
+
+La gira de seminarios cambia de destino en cada evento, y la ciudad era un `<select>` con
+`SEMINARIOS_CITIES` (Madrid, Houston, General) fija en el código: capturar Toronto pedía un
+deploy. Ahora es un campo de texto con sugerencias.
+
+- **Ingreso de datos**: `#ing-dim-1` es `<input list="ciudades-sugeridas">` (mismo `id`, así
+  `curDimVals()` y `fillForm()` siguen leyendo/escribiendo `.value`). Arranca vacío y es
+  **obligatoria**: "Guardar semana" sin ciudad se detiene con aviso y el campo en rojo.
+- **Sugerencias** (`ciudadesDe(canal)`): las ciudades base de `SEMINARIOS_CITIES` + las de
+  `SEMINARIOS_SEED` + toda ciudad de las llaves guardadas `seminarios:rec:W__asesor__ciudad`.
+  Alfabéticas, sin duplicados. Una ciudad recién guardada entra a la lista sin recargar.
+- **Normalización** (`normalizarCiudad`, en `curDimVals()`): `trim`, espacios colapsados,
+  mayúscula inicial por palabra (los conectores *de, del, la, las, los, el, y, e* a media
+  palabra quedan en minúscula: "Ciudad de México"); el `_` se vuelve espacio porque `__` es el
+  separador de la llave. Si ya existe una ciudad equivalente sin distinguir mayúsculas ni
+  acentos, se usa la escritura existente (`montreal` → `Montréal` si ya hay Montréal).
+- **Cambiar la ciudad** al salir del campo carga el registro de esa combinación, como el asesor.
+  Si la ciudad escrita todavía no tiene registro esa semana y ya hay captura en pantalla, la
+  captura se queda (se está nombrando, no cambiando de registro).
+- **Reporte**: el filtro `#rep-dim-1` lista las ciudades dinámicas y compara sin mayúsculas ni
+  acentos. "General" sigue fuera del filtro (es el embudo genérico, no una ciudad) y cuenta en
+  "Todos", como antes. Dirección General, Dirección Comercial y Analítica no filtran por ciudad:
+  suman todas las llaves del canal, así que una ciudad nueva ya cuenta ahí.
+- **Sin cambios de formato**: la llave `seminarios:rec:...` y `dimVals` son los mismos; los
+  registros de Madrid/Houston/General se leen igual. Los demás canales no cambian.
+
 ## Desempeño de Ventas (Anexo 1 del proceso comercial)
 
 Pestaña **Desempeño de Ventas** en la barra principal (antes "SLA y Seguimiento", y
