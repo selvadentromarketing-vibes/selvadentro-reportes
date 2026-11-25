@@ -1258,12 +1258,69 @@ const PORT = process.env.PORT || 8765;
     r.fueraLinea = /Fuera del equipo de ventas \(Olimpia Sulvaran\) 1/.test(txt);
     ADVISOR_LIST = advPrev; slaState.agg = aggPrev; slaState.asesor = selPrev; slaState.camp = campPrev;
     r.ok = r.ids === 'a1,dm1,o1,as1' && r.recl === 1 && r.nv === '010' && r.asig === '3 min · cumple' && r.p80 === '101' && r.vel === '2 de 2'
-      && r.nota === 'No cuentan en este reporte: 1 lead de dueños fuera de la lista de Asesores (Olimpia Sulvaran 1) y 1 de reclutamiento (candidatos a asesor, etiqueta "reclutamiento…"). Solo se mide lo que ya está en manos de un asesor activo.'
+      && r.nota === 'No cuentan en este reporte: 1 lead de dueños fuera de la lista de Asesores (Olimpia Sulvaran 1) y 1 de reclutamiento (candidatos a asesor, etiqueta "reclutamiento…" o "candidato-asesor"). Solo se mide lo que ya está en manos de un asesor activo.'
       && r.leadsKpi === '3' && r.sinOlimpia && r.fueraLinea;
     return r;
   });
   console.log('\n[desempeño] solo leads de asesores', JSON.stringify(solo));
   if (!solo.ok) hallazgos.push({ vista: 'desempeno:soloAsesores', solo });
+  // Candidatos a asesor (landing de reclutamiento → webhook de GHL, nov-2026): la etiqueta
+  // "candidato-asesor" (con cualquier mayúscula) saca al contacto de los leads de Calidad de Leads
+  // (y de todo lo que lee su agregado), de Desempeño y de Primer contacto; un lead sin ella sigue
+  // contando. Las oportunidades las quita el servidor: scripts/test-candidato-asesor.js.
+  VISTA = 'candidato-asesor';
+  const cand = await page.evaluate(({ lq, pc }) => {
+    const r = {};
+    // Calidad de Leads: dos candidatos (dos grafías) y un lead normal en la W40 del fixture
+    const base = JSON.parse(JSON.stringify(lq)), fx = JSON.parse(JSON.stringify(lq));
+    const T = '2026-10-01T16:00:00Z';
+    const L = (id, n, tags) => ({ id, n, em: id + '@x.com', ph: '', c: T, src: 'fb', u: 'u1', tags, cf: {}, attr: { src: 'fb' } });
+    fx.rawLeads = fx.rawLeads.concat([L('cand1', 'Candidata Uno', ['candidato-asesor']), L('cand2', 'Candidato Dos', [' Candidato-Asesor ', 'landing-reclutamiento']),
+      L('lead1', 'Lead Normal', ['facebook-lead'])]);
+    const aggB = buildLqAgg(base.boot, base.rawLeads, base.spendRows, base.weeks, base.opps, base.adRows, base.adExtra);
+    const agg = buildLqAgg(fx.boot, fx.rawLeads, fx.spendRows, fx.weeks, fx.opps, fx.adRows, fx.adExtra);
+    const de = (id) => agg.leads.find(l => l.id === id);
+    r.lqCand = ['cand1', 'cand2'].filter(de).length;
+    r.lqLead = !!de('lead1');
+    r.lqN = agg.leads.length - aggB.leads.length;
+    r.lqExcl = agg.excl.candidato + ' · ' + (agg.exclWk.candidato['2026-W40'] || 0);
+    const prev = { agg: lqState.agg, sub: lqState.sub, plat: lqState.plat, level: lqState.level, qual: lqState.qual, q: lqState.q, exp: lqState.exp };
+    agg.fallos = []; agg.monedas = ['MXN'];
+    Object.assign(lqState, { agg, exp: {}, q: '', plat: 'all', level: 'camp', qual: 'auto', sub: 'calidad' });
+    document.getElementById('lq-sem-ini').value = '2026-W37'; document.getElementById('lq-sem-fin').value = '2026-W40';
+    lqRender();
+    const t = document.getElementById('lq-content').textContent.replace(/\s+/g, ' ');
+    r.lqNota = /Excluidos de todos los cálculos en este rango: [^.]*2 candidatos a asesor \(etiqueta "candidato-asesor"/.test(t);
+    r.lqSinNombre = !/Candidata Uno|Candidato Dos/.test(t);
+    Object.assign(lqState, prev); if (prev.agg) lqRender();
+    // Desempeño: los candidatos salen del reporte como reclutamiento; el lead sin etiqueta cuenta
+    const Z = (local) => Date.parse(local + '-05:00'), M = 60e3, iso = (x) => new Date(x).toISOString();
+    const c0 = Z('2026-10-06T10:00:00');
+    const ct = (id, i, tags) => ({ id, n: 'Lead ' + id, c: iso(c0 + i * M), src: 'web', u: 'u1', tags, attr: {}, cf: {} });
+    const sw = (i) => ({ foM: c0 + i * M + 2 * M, fi: null, fe: null, days: ['2026-10-06'], calls: 0, chans: [], deliv: { sent: 0, delivered: 0, read: 0, failed: 0, linea: 0 }, ap: { tot: 0, sh: 0, ns: 0, fut: 0 }, tk: { prog: 0, enFecha: 0, venc: 0 },
+      tel: { tot: 0, dExp: 0, d0: 0, dNo: 0, c90: 0, noSt: {}, llaves: [] } });
+    const sa = buildSlaAgg(['2026-W41'], [ct('a1', 1, []), ct('cA', 2, ['candidato-asesor']), ct('cB', 3, ['Candidato-Asesor'])], { a1: sw(1), cA: sw(2), cB: sw(3) }, [],
+      { u1: 'Daniela Arana' }, [], [], { now: Z('2026-10-12T12:00:00') });
+    r.sla = sa.leads.map(l => l.id).join(',') + ' · reclutamiento ' + sa.reclExcl;
+    // Primer contacto: el universo del fixture no cambia con dos candidatos (con una llamada larga
+    // del ejecutivo, que sin la regla los haría contacto efectivo); un lead normal sí entra.
+    const F = JSON.parse(JSON.stringify(pc)), E = F.esperado;
+    const tP = Date.parse('2026-10-27T16:00:00Z');
+    F.D.leads.push({ id: 'candPc01', n: 'Candidata PC', c: iso(tP), src: '', u: 'epc1', tags: ['candidato-asesor'], attr: {}, cf: {} },
+      { id: 'candPc02', n: 'Candidato PC', c: iso(tP + M), src: '', u: 'epc1', tags: ['CANDIDATO-ASESOR'], attr: {}, cf: {} },
+      { id: 'leadPc99', n: 'Lead PC Normal', c: iso(tP + 2 * M), src: '', u: 'epc1', tags: [], attr: {}, cf: {} });
+    F.D.ev.candPc01 = [[tP + M, 'call', 'm', 'epc1', 'ok', 300]];
+    F.D.ev.candPc02 = [[tP + 2 * M, 'call', 'm', 'epc1', 'ok', 300]];
+    const A = pcBuild(F.D, pcCfgDe(F.cfg), F.now);
+    const enLista = (arr) => (arr || []).some(x => /^candPc/.test(x.id));
+    r.pc = (A.nU - E.nU) + ' · candidatos ' + A.excl.candidatos + ' · fuera ' + (A.excl.fuera - E.excl.fuera);
+    r.pcListas = !enLista(A.vel) && !enLista(A.coh) && !enLista(A.cad) && A.vel.some(v => v.id === 'leadPc99');
+    r.ok = r.lqCand === 0 && r.lqLead && r.lqN === 1 && r.lqExcl === '2 · 2' && r.lqNota && r.lqSinNombre
+      && r.sla === 'a1 · reclutamiento 2' && r.pc === '1 · candidatos 2 · fuera 0' && r.pcListas;
+    return r;
+  }, { lq: fixture(), pc: pcFixture() });
+  console.log('\n[candidato-asesor] fuera de Calidad de Leads, Desempeño y Primer contacto', JSON.stringify(cand));
+  if (!cand.ok) hallazgos.push({ vista: 'candidato-asesor', cand });
   if (!lqx.ok) hallazgos.push({ vista: 'lq:rediseño', lqx });
   // Brokers por CUALQUIER etiqueta que empiece con "broker" (Dirección, 14-oct-2026): los seis
   // contactos de W42 que salían en "Otra fuente · (sin campaña atribuida)", dados de alta a mano.

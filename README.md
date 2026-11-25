@@ -511,6 +511,24 @@ y son esperados. Correrla antes de cada `push` a `main`.
 evidencia de las etiquetas "sin llamada", el contacto efectivo por llamada de ≥90 s y la
 lectura de campos de oportunidad (spec v1.1).
 
+## Candidatos a asesor (etiqueta `candidato-asesor`)
+
+La landing de reclutamiento manda a GoHighLevel (webhook entrante → workflow) a quienes piden
+trabajo de asesor inmobiliario, con la etiqueta `candidato-asesor`. Son solicitantes de
+empleo, no clientes: **no cuentan como lead en ningún reporte**. La etiqueta se compara sin
+mayúsculas y recortada (`Candidato-Asesor` es la misma).
+
+- Regla única en `netlify/functions/lib/shared.js` (`TAG_CANDIDATO_ASESOR`,
+  `esCandidatoAsesor`, `oppDeCandidatoAsesor`) y su copia en `index.html` (mismo nombre).
+- Servidor: `ghl-report` (CRM en vivo), `sla-report`, `lead-quality` y `pc-report` no devuelven
+  las oportunidades cuyo contacto trae la etiqueta.
+- Navegador: Calidad de Leads (y todo lo que lee su agregado) los saca en el paso 0 y los
+  declara en "Excluidos de todos los cálculos"; Desempeño los trata como reclutamiento (fuera
+  de todo, declarados en "No cuentan en este reporte"); Primer contacto, fuera del universo
+  de lead nuevo y de la actividad del puesto.
+- Pruebas: `node scripts/test-candidato-asesor.js` (servidor, y que las dos copias de la regla
+  coincidan) y el bloque `[candidato-asesor]` de `scripts/smoke-ui.js`.
+
 ## CRM en vivo (GoHighLevel)
 
 Pestaña **CRM en vivo** en la barra principal:

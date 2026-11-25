@@ -596,7 +596,9 @@ async function opps({ startAfter, startAfterId, since }) {
       data = await ghl(`/opportunities/search?${q2}`);
     }
     const batch = data.opportunities || [];
-    batch.forEach((o) => out.push({
+    // Candidatos a asesor (etiqueta "candidato-asesor", lib/shared.js): no son leads; sus
+    // oportunidades no cuentan en los registros por asesor ni en ninguna otra cifra.
+    batch.filter((o) => !S.oppDeCandidatoAsesor(o)).forEach((o) => out.push({
       id: o.id || "",
       ct: o.contactId || (o.contact && o.contact.id) || "",   // para fijar el traspaso a ventas
       u: o.assignedTo || "",

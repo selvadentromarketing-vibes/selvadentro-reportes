@@ -8,7 +8,9 @@
 //   { action: "bootstrap" }
 //     → { pipelines:[...], users:{ id: nombre } }
 //   { action: "crawl", startAfter?, startAfterId?, pages? }
-//     → { opps:[{p,s,st,src,c,u,v,stc}], cursor:{startAfter,startAfterId}|null, total, fetched }
+//     → { opps:[{p,s,st,src,c,u,v,stc}], cursor:{startAfter,startAfterId}|null, total, fetched, candidatos }
+//     Sin las oportunidades de candidatos a asesor (etiqueta "candidato-asesor" en el contacto,
+//     ver lib/shared.js): no son leads. `candidatos` dice cuántas se quitaron en este bloque.
 //     Pagina /opportunities/search en bloques (default 6 páginas × 100) para no
 //     exceder el timeout de la función; el frontend repite con el cursor hasta terminar.
 
@@ -62,7 +64,7 @@ async function crawl({ startAfter, startAfterId, pages, since }) {
   const maxPages = Math.min(Number(pages) || PAGES_PER_CALL, 8);
   const opps = [];
   let cursor = startAfter && startAfterId ? { startAfter, startAfterId } : null;
-  let total = 0;
+  let total = 0, candidatos = 0;
   let usarFiltro = !!since;
 
   for (let i = 0; i < maxPages; i++) {
@@ -80,13 +82,13 @@ async function crawl({ startAfter, startAfterId, pages, since }) {
       data = await ghl(`/opportunities/search?${q2}`);
     }
     const batch = data.opportunities || [];
-    batch.forEach((o) => opps.push(slim(o)));
+    batch.forEach((o) => { if (S.oppDeCandidatoAsesor(o)) candidatos++; else opps.push(slim(o)); });
     total = (data.meta && data.meta.total) || total;
     const meta = data.meta || {};
     if (batch.length < 100 || !meta.startAfterId) { cursor = null; break; }
     cursor = { startAfter: meta.startAfter, startAfterId: meta.startAfterId };
   }
-  return { opps, cursor, total, fetched: opps.length };
+  return { opps, cursor, total, fetched: opps.length, candidatos };
 }
 
 exports.handler = async (event) => {

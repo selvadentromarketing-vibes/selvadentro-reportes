@@ -257,7 +257,7 @@ async function oppsDeContactos(ids) {
     await Promise.all(lista.slice(i, i + 6).map(async (id) => {
       try {
         const data = await ghl(`/opportunities/search?location_id=${LOCATION_ID}&contact_id=${encodeURIComponent(id)}&limit=100&getCalendarEvents=true`);
-        (data.opportunities || []).forEach((o) => out.push(slimOpp(o)));
+        (data.opportunities || []).filter((o) => !S.oppDeCandidatoAsesor(o)).forEach((o) => out.push(slimOpp(o)));
       } catch (e) { fallidos.push(id); }
     }));
   }
@@ -285,7 +285,8 @@ async function opps({ startAfter, startAfterId, since, contactIds }) {
       data = await ghl(`/opportunities/search?${q2}`);
     }
     const batch = data.opportunities || [];
-    batch.forEach((o) => out.push(slimOpp(o)));
+    // Sin las de candidatos a asesor (etiqueta "candidato-asesor", lib/shared.js): no son leads.
+    batch.filter((o) => !S.oppDeCandidatoAsesor(o)).forEach((o) => out.push(slimOpp(o)));
     total = (data.meta && data.meta.total) || total;
     const meta = data.meta || {};
     if (batch.length < 100 || !meta.startAfterId) { cursor = null; break; }

@@ -162,6 +162,19 @@ async function ghlFetch(path, opts) {
   return resp.json();
 }
 
+// --- Candidatos a asesor (reclutamiento) ------------------------------------------------
+// La landing de reclutamiento manda a GoHighLevel, por webhook, a quienes piden trabajo de
+// asesor inmobiliario, con la etiqueta "candidato-asesor". Son solicitantes de empleo, no
+// clientes: NO cuentan como lead en ningún reporte. GHL compara etiquetas sin mayúsculas en la
+// práctica ("Candidato-Asesor" es la misma), así que aquí también: sin mayúsculas y recortada.
+// La misma regla vive en index.html (TAG_CANDIDATO_ASESOR / esCandidatoAsesor), que filtra los
+// contactos en el navegador; scripts/test-candidato-asesor.js verifica que las dos coincidan.
+const TAG_CANDIDATO_ASESOR = "candidato-asesor";
+const tagsDe = (tags) => (Array.isArray(tags) ? tags : String(tags || "").split(","));
+const esCandidatoAsesor = (tags) => tagsDe(tags).some((t) => String(t == null ? "" : t).trim().toLowerCase() === TAG_CANDIDATO_ASESOR);
+// Oportunidad de un candidato: /opportunities/search trae el contacto embebido con sus tags.
+const oppDeCandidatoAsesor = (o) => !!(o && o.contact && esCandidatoAsesor(o.contact.tags));
+
 const getUsers = async () => (await kvGetJSON(USERS_KEY)) || [];
 const findUser = (users, email) => users.find((u) => u.email.toLowerCase() === String(email || "").trim().toLowerCase());
 
@@ -172,4 +185,5 @@ module.exports = {
   sha256Hex, randomHex, signToken, verifyToken, authFromEvent,
   signInvite, verifyInvite, INVITE_TTL_MS,
   getUsers, findUser,
+  TAG_CANDIDATO_ASESOR, esCandidatoAsesor, oppDeCandidatoAsesor,
 };
