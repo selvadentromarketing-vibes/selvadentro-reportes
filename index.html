@@ -1646,7 +1646,12 @@ const allFields = () => (sections()||[]).flatMap(s=>s.fields);
 const isConfigured = () => !!sections();
 // `values` de la ciudad es un getter: se calcula solo cuando alguien pinta la lista (el filtro
 // del Reporte), no en cada recKey/parseRecKey, que llaman a dimsList muchas veces por render.
-function dimsList(chKey){ const c=CHANNELS[chKey]; const d=[]; if(c.advisors) d.push({id:"asesor",label:"Asesor",values:advisorNames()}); if(c.cities) d.push({id:"ciudad",label:"Ciudad",get values(){ return ciudadesDe(chKey); }}); return d; }
+// Un usuario sin ningún canal de ventas (solo Marketing, solo Desempeño…) se queda con
+// CHANNELS vacío y CH en "brokers", que applyChannelFilter ya borró: el arranque llama a
+// refreshAdvisorDropdowns() de todos modos y aquí tronaba al leer .advisors de undefined,
+// así que salía la franja roja de "no se pudieron cargar los datos" en cada carga (27-nov-2026).
+// Canal inexistente = sin dimensiones.
+function dimsList(chKey){ const c=CHANNELS[chKey]; const d=[]; if(!c) return d; if(c.advisors) d.push({id:"asesor",label:"Asesor",values:advisorNames()}); if(c.cities) d.push({id:"ciudad",label:"Ciudad",get values(){ return ciudadesDe(chKey); }}); return d; }
 const dimsOf=()=>dimsList(CH);
 const hasDims=()=>dimsOf().length>0;
 const recKey=(w,dimVals)=> hasDims()? `${CH}:rec:${w}__${(dimVals||[]).join("__")}` : `${CH}:week:${w}`;
