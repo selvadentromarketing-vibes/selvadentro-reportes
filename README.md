@@ -511,6 +511,25 @@ y son esperados. Correrla antes de cada `push` a `main`.
 evidencia de las etiquetas "sin llamada", el contacto efectivo por llamada de ≥90 s y la
 lectura de campos de oportunidad (spec v1.1).
 
+## Cachés compartidos comprimidos (nov-2026)
+
+El kv acepta hasta **512KB por valor** (`MAX_VAL` en `netlify/functions/kv.js`). El agregado de
+Calidad de Leads (`lq:agg:*`) pasó de ese tamaño y desde `v36` (17-nov-2026) ya no se guardaba:
+cada persona que abría el reporte volvía a sincronizar todo desde GoHighLevel y Windsor.
+
+- Los cachés grandes (`lq:agg`, `sla:agg`) se guardan con `sSetCabe(k, v, max)`: comprimidos con
+  gzip (`CompressionStream` del navegador) dentro de un JSON válido `{"__gz":1,"d":"<base64>"}`.
+  Un agregado de ~1.4MB queda en ~80KB.
+- `sGet` / `sGetRetry` descomprimen solos: quien lee no cambia, y los valores viejos sin
+  comprimir se leen igual. No hace falta subir la versión de las claves.
+- Si el navegador no tiene `CompressionStream`, se guarda sin comprimir (si cabe), como antes.
+  Un comprimido ilegible se trata como caché ausente (se vuelve a sincronizar), no como fallo
+  de lectura (no levanta la franja roja).
+- Las versiones reducidas del agregado (sin tags, sin la decisión de hoy) quedan solo de respaldo
+  por si un día no cabe ni comprimido.
+- Prueba: `NODE_PATH=$(npm root -g) CHROME_PATH=/usr/bin/google-chrome node scripts/test-cache-comprimido.js`
+  (kv simulado con el mismo límite de 512KB).
+
 ## Candidatos a asesor y reclutamiento
 
 La landing de reclutamiento manda a GoHighLevel (webhook entrante → workflow) a quienes piden

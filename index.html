@@ -1782,8 +1782,43 @@ function avisarLecturaFallida(){
   document.getElementById("app")?.prepend(d);
   document.getElementById("aviso-lectura-retry").onclick = ()=>location.reload();
 }
+/* ----- Cachés comprimidos (nov-2026) -----------------------------------------------------
+   El kv acepta hasta 512KB por valor y el agregado de Calidad de Leads ya no cabía: desde
+   v36 (17-nov-2026) no se guardaba y cada persona volvía a sincronizar todo desde GHL/Windsor.
+   Los cachés grandes se guardan comprimidos con gzip (CompressionStream del navegador) dentro
+   de un JSON válido: { "__gz": 1, "d": "<base64>" }. Un JSON con nombres de campo repetidos
+   baja 5-10x. La lectura (sGet/sGetRetry) lo descomprime sola, así que quien lee no cambia, y
+   los valores sin comprimir se siguen leyendo igual. Si el navegador no tiene
+   CompressionStream se guarda sin comprimir, como antes; si no puede descomprimir uno
+   comprimido, se trata como caché ausente (se vuelve a sincronizar), no como fallo de lectura. */
+const KV_GZ = 1;
+const kvGzDisponible = ()=> typeof CompressionStream === "function" && typeof DecompressionStream === "function";
+const esKvGz = (v)=> !!(v && typeof v === "object" && v.__gz === KV_GZ && typeof v.d === "string");
+function bytesABase64(u8){ let s = ""; for(let i=0;i<u8.length;i+=0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i+0x8000)); return btoa(s); }
+function base64ABytes(b64){ const s = atob(b64), u8 = new Uint8Array(s.length); for(let i=0;i<s.length;i++) u8[i] = s.charCodeAt(i); return u8; }
+async function kvComprimir(obj){
+  if(!kvGzDisponible()) return null;
+  const flujo = new Blob([JSON.stringify(obj)]).stream().pipeThrough(new CompressionStream("gzip"));
+  return { __gz: KV_GZ, d: bytesABase64(new Uint8Array(await new Response(flujo).arrayBuffer())) };
+}
+async function kvDescomprimir(v){
+  if(!esKvGz(v)) return v;
+  if(!kvGzDisponible()) return null;
+  try{
+    const flujo = new Blob([base64ABytes(v.d)]).stream().pipeThrough(new DecompressionStream("gzip"));
+    return JSON.parse(await new Response(flujo).text());
+  }catch(e){ console.warn("Caché comprimido ilegible; se vuelve a sincronizar", e); return null; }
+}
+// Guarda `v` comprimido si así cabe en `max` caracteres (o si no se puede comprimir, sin
+// comprimir y si cabe). Devuelve true si se guardó, false si no cabe ni comprimido.
+async function sSetCabe(k, v, max){
+  const gz = await kvComprimir(v).catch(()=>null);
+  if(gz && JSON.stringify(gz).length <= max){ await sSet(k, gz); mem[k] = v; return true; }
+  if(JSON.stringify(v).length <= max){ await sSet(k, v); return true; }
+  return false;
+}
 async function sGet(k){
-  try{ if(hasStore){ const r=await STORE.get(k); return r?JSON.parse(r.value):null; } }
+  try{ if(hasStore){ const r=await STORE.get(k); return r ? await kvDescomprimir(JSON.parse(r.value)) : null; } }
   catch(e){ LECTURA_FALLIDA = true; return mem[k]??null; }
   return mem[k]??null;
 }
@@ -1796,7 +1831,7 @@ function recSet(k,v){ RECCACHE[k]=v; }
 function recDel(k){ delete RECCACHE[k]; }
 async function sGetRetry(k, tries=4){
   for(let t=0;t<tries;t++){
-    try{ if(hasStore){ const r=await STORE.get(k); return r?JSON.parse(r.value):null; } return (k in mem)?mem[k]:null; }
+    try{ if(hasStore){ const r=await STORE.get(k); return r ? await kvDescomprimir(JSON.parse(r.value)) : null; } return (k in mem)?mem[k]:null; }
     catch(e){ if(t<tries-1) await new Promise(r=>setTimeout(r, 90*(t+1))); }
   }
   return null;
@@ -7237,16 +7272,15 @@ function lqAdsSection(agg, leads, rangoSet, rango){
 async function lqPersist(agg){
   const MAX = 500*1024;
   try{
-    if(JSON.stringify(agg).length <= MAX) return await sSet(LQ_AGG_KEY, agg);
+    // Comprimido (sSetCabe) cabe completo; las versiones reducidas quedan solo de respaldo.
+    if(await sSetCabe(LQ_AGG_KEY, agg, MAX)) return;
     const slim = { ...agg, leads: agg.leads.map(l=>({ ...l, tags:"", pres:"", hor:"" })) };
-    if(JSON.stringify(slim).length <= MAX){
-      await sSet(LQ_AGG_KEY, slim);
+    if(await sSetCabe(LQ_AGG_KEY, slim, MAX)){
       toast("Cache guardado sin el detalle de tags (volumen alto)");
       return;
     }
     const slim2 = { ...slim, dec:null };
-    if(JSON.stringify(slim2).length <= MAX){
-      await sSet(LQ_AGG_KEY, slim2);
+    if(await sSetCabe(LQ_AGG_KEY, slim2, MAX)){
       toast("Cache guardado sin tags ni el detalle de la decisión de hoy (volumen alto): quien lo abra verá Conclusiones sin detalle por anuncio hasta sincronizar");
       return;
     }
@@ -9515,7 +9549,10 @@ async function slaSync(){
     slaState.agg = buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr, pipesArr,
       { oppFields, oppFieldsOk, ncState, tagged, taggedOk, taggedTruncado, now: ahora, citas: citasArr, citasOk, citasErr, pc: pcX });
     slaState.agg.fallos = fallos;
-    sSet(SLA_AGG_KEY, slaState.agg).catch(e=>toast("Cache del reporte no guardado: "+(e.message||e)));
+    // Comprimido como Calidad de Leads (sSetCabe): el kv acepta hasta 512KB por valor.
+    sSetCabe(SLA_AGG_KEY, slaState.agg, 500*1024)
+      .then(ok=>{ if(!ok) toast("Cache del reporte demasiado grande para guardarlo; cada usuario sincronizará por su cuenta"); })
+      .catch(e=>toast("Cache del reporte no guardado: "+(e.message||e)));
     slaPopulateWeeks(); slaRender();
     toast(fallos.length
       ? `Reporte SLA generado con huecos ⚠ ${contactsArr.length} leads`
