@@ -3,7 +3,8 @@
 //
 // La landing de reclutamiento manda a GHL (webhook) a quienes piden trabajo de asesor, con la
 // etiqueta "candidato-asesor". No son clientes: no cuentan como lead en ningún reporte. Cubre:
-//   · el helper compartido (lib/shared.js): sin mayúsculas y recortada, arreglo o lista "a, b";
+//   · el helper compartido (lib/shared.js): etiqueta sin mayúsculas y recortada (arreglo o lista
+//     "a, b"), fuente "reclutamiento-asesores" (contacto o atribución) y campaña de reclutamiento;
 //   · que index.html use la MISMA etiqueta y la misma comparación (el navegador filtra los
 //     contactos de Calidad de Leads, Desempeño y Primer contacto con su copia);
 //   · que las oportunidades de un candidato no salgan de ninguna function que las recorra:
@@ -35,6 +36,7 @@ const OPPS = [
   opp("opCandMay", "ctCandMay", ["landing-reclutamiento", " Candidato-Asesor "]),   // otra grafía: fuera
   opp("opLead", "ctLead", ["facebook-lead", "candidato-asesoria"]),   // lead (etiqueta parecida, no igual): cuenta
   opp("opSinCt", "ctSinCt", null),                               // sin contacto embebido: cuenta (no hay cómo saber)
+  Object.assign(opp("opFte", "ctFte", []), { source: "reclutamiento-asesores" }),   // solo la fuente: fuera
 ];
 S.ghlFetch = async (p) => {
   if (p.startsWith("/opportunities/search")) {
@@ -63,22 +65,39 @@ const call = async (h, body) => { const r = await h({ httpMethod: "POST", header
   ok(S.oppDeCandidatoAsesor(OPPS[0]) && S.oppDeCandidatoAsesor(OPPS[1]) && !S.oppDeCandidatoAsesor(OPPS[2]) && !S.oppDeCandidatoAsesor(OPPS[3]) && !S.oppDeCandidatoAsesor(null),
     "oportunidad de candidato: por las etiquetas de su contacto embebido");
 
-  // 2) index.html usa la misma etiqueta y la misma comparación
+  // 1b) Fuente "reclutamiento-asesores" y campaña de reclutamiento, sin la etiqueta
+  ok(E({ src: "reclutamiento-asesores", tags: [] }) && E({ src: " Reclutamiento-Asesores " }) && E({ source: "RECLUTAMIENTO ASESORES" }),
+    "contacto solo con fuente reclutamiento-asesores (adelgazado: src; crudo de GHL: source), con cualquier grafía");
+  ok(E({ attr: { src: "reclutamiento-asesores" } }) && E({ attributionSource: { utmSource: "reclutamiento-asesores" } }) && E({ lastAttributionSource: { utm_source: "Reclutamiento-Asesores" } }),
+    "fuente de la atribución (utm_source) también");
+  ok(E({ attr: { camp: "RECLUTAMIENTO_ASESORES_TUL-PDC_LP-VSL_NOV26" } }) && E({ attributionSource: { campaign: "reclutamiento_asesores_cun" } }),
+    "campaña de reclutamiento de asesores en la atribución (utm_campaign)");
+  ok(E({ tags: ["reclutamiento-asesores-nov26"] }) && !E({ tags: ["reclutamiento-brokers"] }),
+    "etiqueta que empieza con reclutamiento-asesores (DM) sí; reclutamiento de brokers no");
+  ok(!E({ src: "facebook", attr: { src: "fb", camp: "INVESTORS_MX_DYNAMIC" }, tags: ["lead"] }) && !E({ src: "reclutamiento" }) && !E({}) && !E({ attr: null, tags: null }),
+    "un lead normal (o una fuente que no es la de reclutamiento de asesores) no es candidato");
+  ok(S.oppDeCandidatoAsesor({ source: "reclutamiento-asesores", contact: { tags: [] } }) && S.oppDeCandidatoAsesor({ contact: { source: "Reclutamiento-Asesores" } }) && !S.oppDeCandidatoAsesor({ source: "landing", contact: { tags: ["x"] } }),
+    "oportunidad de candidato también por su fuente o la de su contacto embebido");
+
+  // 2) index.html usa la MISMA regla: el bloque <regla-candidato-asesor> es idéntico y da lo mismo
   const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
-  const mTag = html.match(/const TAG_CANDIDATO_ASESOR = "([^"]+)";/);
-  const mFn = html.match(/const esCandidatoAsesor = (\(tags\)=>[\s\S]*?;)\n/);
-  ok(mTag && mTag[1] === S.TAG_CANDIDATO_ASESOR, "index.html declara la misma etiqueta que lib/shared.js", mTag && mTag[1]);
-  let Ehtml = null;
-  try { Ehtml = mFn && new Function("TAG_CANDIDATO_ASESOR", "return " + mFn[1])(mTag[1]); } catch (e) { Ehtml = null; }
-  const casos = [["candidato-asesor"], ["Candidato-Asesor"], [" CANDIDATO-ASESOR "], "a, Candidato-Asesor", ["candidato-asesoria"], [], null, "broker", ["x", "candidato-asesor"]];
-  ok(Ehtml && casos.every((c) => Ehtml(c) === E(c)), "esCandidatoAsesor de index.html da lo mismo que la del servidor en todos los casos",
-    Ehtml ? casos.map((c) => [Ehtml(c), E(c)]) : "no se encontró la función en index.html");
+  const shared = fs.readFileSync(path.join(__dirname, "..", "netlify", "functions", "lib", "shared.js"), "utf8");
+  const bloque = (t) => { const m = t.match(/\/\/ <regla-candidato-asesor>[\s\S]*?\/\/ <\/regla-candidato-asesor>/); return m ? m[0] : null; };
+  const bH = bloque(html), bS = bloque(shared);
+  ok(bH && bS && bH === bS, "index.html y lib/shared.js tienen el mismo bloque de la regla, letra por letra", bH && bS ? undefined : "falta el bloque");
+  let H2 = null;
+  try { H2 = bH && new Function(bH + "\nreturn { esCandidatoAsesor, oppDeCandidatoAsesor, TAG_CANDIDATO_ASESOR };")(); } catch (e) { H2 = null; }
+  const casos = [["candidato-asesor"], ["Candidato-Asesor"], [" CANDIDATO-ASESOR "], "a, Candidato-Asesor", ["candidato-asesoria"], [], null, "broker", ["x", "candidato-asesor"],
+    { tags: ["Candidato-Asesor"] }, { src: "reclutamiento-asesores" }, { source: "Reclutamiento Asesores" }, { attr: { camp: "RECLUTAMIENTO_ASESORES_TUL-PDC_LP-VSL_NOV26" } },
+    { attr: { src: "reclutamiento-asesores" } }, { tags: ["reclutamiento-asesores-nov26"] }, { src: "facebook", attr: { camp: "INVESTORS" }, tags: ["lead"] }, {}];
+  ok(H2 && H2.TAG_CANDIDATO_ASESOR === S.TAG_CANDIDATO_ASESOR && casos.every((c) => H2.esCandidatoAsesor(c) === E(c)),
+    "esCandidatoAsesor de index.html da lo mismo que la del servidor (etiqueta, fuente y campaña)", H2 ? casos.map((c) => [H2.esCandidatoAsesor(c), E(c)]) : "no se pudo evaluar el bloque");
 
   // 3) Oportunidades: ninguna function devuelve las de un candidato; la de un lead sí.
   const ids = (arr, k) => (arr || []).map((o) => o[k]).sort().join();
   const g = await call(H.ghl, { action: "crawl" });
-  ok(g.status === 200 && g.d.opps.length === 2 && g.d.candidatos === 2 && g.d.fetched === 2,
-    "CRM en vivo (ghl-report crawl): fuera las 2 de candidatos (las dos grafías); cuentan el lead y la que no trae contacto", { n: g.d.opps && g.d.opps.length, candidatos: g.d.candidatos });
+  ok(g.status === 200 && g.d.opps.length === 2 && g.d.candidatos === 3 && g.d.fetched === 2,
+    "CRM en vivo (ghl-report crawl): fuera las 3 de candidatos (dos grafías de la etiqueta y una solo por fuente); cuentan el lead y la que no trae contacto", { n: g.d.opps && g.d.opps.length, candidatos: g.d.candidatos });
   const s = await call(H.sla, { action: "opps" });
   ok(s.status === 200 && ids(s.d.opps, "id") === "opLead,opSinCt", "Desempeño (sla-report opps): sin las de candidatos", ids(s.d.opps, "id"));
   const l = await call(H.lq, { action: "opps" });

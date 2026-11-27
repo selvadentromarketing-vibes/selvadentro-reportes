@@ -9,8 +9,8 @@
 //     → { pipelines:[...], users:{ id: nombre } }
 //   { action: "crawl", startAfter?, startAfterId?, pages? }
 //     → { opps:[{p,s,st,src,c,u,v,stc}], cursor:{startAfter,startAfterId}|null, total, fetched, candidatos }
-//     Sin las oportunidades de candidatos a asesor (etiqueta "candidato-asesor" en el contacto,
-//     ver lib/shared.js): no son leads. `candidatos` dice cuántas se quitaron en este bloque.
+//     Sin las oportunidades de candidatos a asesor (etiqueta "candidato-asesor" en el contacto o
+//     fuente "reclutamiento-asesores" de la oportunidad o del contacto, lib/shared.js): no son leads. `candidatos` dice cuántas se quitaron en este bloque.
 //     Pagina /opportunities/search en bloques (default 6 páginas × 100) para no
 //     exceder el timeout de la función; el frontend repite con el cursor hasta terminar.
 

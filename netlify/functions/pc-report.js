@@ -263,7 +263,7 @@ async function opps({ contactIds }) {
     await Promise.all(lista.slice(i, i + 6).map(async (id) => {
       try {
         const data = await ghl(`/opportunities/search?location_id=${LOCATION_ID}&contact_id=${encodeURIComponent(id)}&limit=100`);
-        // Sin las de candidatos a asesor (etiqueta "candidato-asesor", lib/shared.js): no son leads.
+        // Sin las de candidatos a asesor (etiqueta "candidato-asesor" o fuente "reclutamiento-asesores", lib/shared.js): no son leads.
         (data.opportunities || []).filter((o) => !S.oppDeCandidatoAsesor(o)).forEach((o) => out.push({
           id: o.id || "", ct: o.contactId || (o.contact && o.contact.id) || id, u: o.assignedTo || "", st: o.status || "open",
           p: o.pipelineId || "", s: o.pipelineStageId || "",

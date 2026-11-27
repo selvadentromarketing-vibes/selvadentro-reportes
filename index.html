@@ -3261,7 +3261,7 @@ async function showCRM(){
 // clasificados por el campo "Calificación del lead" + tags, agrupados por
 // fuente → campaña, con comparativa por semana ISO (hora Tulum) e inversión
 // de Meta/Google vía Windsor.ai cuando WINDSOR_API_KEY está configurada.
-const LQ_AGG_KEY = "lq:agg:v37";  // v37: fuera los candidatos a asesor (etiqueta "candidato-asesor": reclutamiento, no leads)  // v36: presupuesto y plazo del registro a eventos ("Just exploring" fuera de perfil, "Presupuesto aproximado para inversión", CAD y EUR a USD, miles con punto) y reclutamiento fuera de la inversión  // v35: Lead to Watch = Sí sube al lead a SQL como mínimo (antes solo informativo)  // v34: DM de redes registrado a mano (lead-dm-redes) a Social orgánico · Instagram (DM) y llamada entrante sin origen ("couldn't find caller name") a su propia fuente  // v33: presupuesto y horizonte de respaldo ("Presupuesto / Budget", "Horizonte de inversión / Investment timeline") del formulario de la landing de Google  // v32: el contacto de WhatsApp con Session source "Social media" sí se lee (antes se tomaba como origen) y fuera los correos @selvadentrotulum.com  // v31: igual que v30; el agregado v30 pudo guardarse con el avance del duplicado por WhatsApp pasado al formulario (publicado unos minutos por error el 17-oct)  // v30: Social orgánico · Instagram/Facebook, campaña del "(ref: …)" de WhatsApp, duplicados por WhatsApp (dupWa) y pruebas por primer mensaje  // v29: sin respuesta → CQL solo con escalera completa (si no, MQL); nota del asesor como respuesta  // v28: respuesta real del lead (mensaje entrante, llamada > 30 s o etapa de contacto) y el formulario ya no sube a SQL en Nurturing/Largo plazo/Rescate/Sin respuesta  // v27: nivel de la OPP caída según dónde cayó (Largo plazo → SQL, Rescate → SQL Selvadentro, Descalificado por causa)  // v26: OPP generada = SQL Selvadentro (salvo causa inválida) y cuenta como contactado y trabajado (no como Zoom)  // v25: OPP generadas (etiqueta opp-generada del CRM) y verificado por ventas (Lead to Watch)  // v24: broker = cualquier etiqueta que empiece con "broker" (no solo broker-client)  // v23: re-envíos de formulario (agg.reenvios)  // v22: datos de la decisión de hoy (rango fijo 30 días y 7 contra 7) en `dec`  // v21: el v20 guardado el 9-oct pudo quedar sin detalle por anuncio (la consulta con campos extra se volvía lenta)  // v20: URL de destino por anuncio, gasto por keyword de Google y presupuesto diario (recomendaciones concretas)  // v19: trabajado (tr) y contactado (ct) por etapa, separados  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
+const LQ_AGG_KEY = "lq:agg:v38";  // v38: candidatos también por fuente "reclutamiento-asesores" o campaña de reclutamiento, y su conteo por semana (reclut: registros y calificados) para la sección Reclutamiento  // v37: fuera los candidatos a asesor (etiqueta "candidato-asesor": reclutamiento, no leads)  // v36: presupuesto y plazo del registro a eventos ("Just exploring" fuera de perfil, "Presupuesto aproximado para inversión", CAD y EUR a USD, miles con punto) y reclutamiento fuera de la inversión  // v35: Lead to Watch = Sí sube al lead a SQL como mínimo (antes solo informativo)  // v34: DM de redes registrado a mano (lead-dm-redes) a Social orgánico · Instagram (DM) y llamada entrante sin origen ("couldn't find caller name") a su propia fuente  // v33: presupuesto y horizonte de respaldo ("Presupuesto / Budget", "Horizonte de inversión / Investment timeline") del formulario de la landing de Google  // v32: el contacto de WhatsApp con Session source "Social media" sí se lee (antes se tomaba como origen) y fuera los correos @selvadentrotulum.com  // v31: igual que v30; el agregado v30 pudo guardarse con el avance del duplicado por WhatsApp pasado al formulario (publicado unos minutos por error el 17-oct)  // v30: Social orgánico · Instagram/Facebook, campaña del "(ref: …)" de WhatsApp, duplicados por WhatsApp (dupWa) y pruebas por primer mensaje  // v29: sin respuesta → CQL solo con escalera completa (si no, MQL); nota del asesor como respuesta  // v28: respuesta real del lead (mensaje entrante, llamada > 30 s o etapa de contacto) y el formulario ya no sube a SQL en Nurturing/Largo plazo/Rescate/Sin respuesta  // v27: nivel de la OPP caída según dónde cayó (Largo plazo → SQL, Rescate → SQL Selvadentro, Descalificado por causa)  // v26: OPP generada = SQL Selvadentro (salvo causa inválida) y cuenta como contactado y trabajado (no como Zoom)  // v25: OPP generadas (etiqueta opp-generada del CRM) y verificado por ventas (Lead to Watch)  // v24: broker = cualquier etiqueta que empiece con "broker" (no solo broker-client)  // v23: re-envíos de formulario (agg.reenvios)  // v22: datos de la decisión de hoy (rango fijo 30 días y 7 contra 7) en `dec`  // v21: el v20 guardado el 9-oct pudo quedar sin detalle por anuncio (la consulta con campos extra se volvía lenta)  // v20: URL de destino por anuncio, gasto por keyword de Google y presupuesto diario (recomendaciones concretas)  // v19: trabajado (tr) y contactado (ct) por etapa, separados  // v18: leads de brokers marcados (bk) y excluidos por semana (exclWk)  // v17: IDs de campaña también desde la inversión diaria (/all campaign_id) y cruce de leads por ID en la tabla  // v16: cruce por ID de campaña, atribución inferida (landing-seguridad), Zoom realizado y contactado por lead  // v15: causa de descalificación (leads inválidos por fuente y campaña, spec v1.1)  // v14: la etapa del pipeline (OPP/WON) manda sobre el formulario en la calificación  // v13: campos de presupuesto/horizonte elegidos, y "o más" excede  // v12: fuera registros de prueba y leads sin email ni teléfono  // v11: Budget Range en MXN→USD y campos canónicos   // v10: ids de campaña/grupo para traducir los UTM numéricos de Google   // v9: resultados de Meta con actions_lead y cruce por conjunto   // v7: el agregado guarda campos, atribución y etapas para el Diagnóstico
 const LQ_STALE_MIN = 30;
 const LQ_SYNC_WEEKS = 12;               // ventana de sincronización: últimas N semanas ISO
 // (LQ_TZ y LQ_TZ_MS ahora viven junto al resto de helpers de fecha, arriba)
@@ -3804,15 +3804,40 @@ const LQ_BROKER = { pipeline: /brokers?\s*[-–—:]?\s*producci[oó]n/i, tag: /
 const lqTagBroker = (t)=> LQ_BROKER.tag.test(String(t).trim());
 const lqEsBroker = (tags, op)=> !!(op && op.bk) || (tags||[]).some(lqTagBroker);
 // CANDIDATOS A ASESOR (reclutamiento, nov-2026): la landing de reclutamiento manda a GoHighLevel,
-// por webhook, a quienes piden trabajo de asesor inmobiliario, con la etiqueta "candidato-asesor".
-// Son solicitantes de empleo, no clientes: NO son lead en ningún reporte (Calidad de Leads y lo
-// que lee su agregado, Desempeño, Primer contacto; CRM en vivo los quita en el servidor). Sin
-// mayúsculas y recortada, como GHL. Misma regla en netlify/functions/lib/shared.js
-// (TAG_CANDIDATO_ASESOR / esCandidatoAsesor); scripts/test-candidato-asesor.js verifica que coincidan.
-// `tags` puede ser el arreglo del CRM o la lista "a, b" que guardan los agregados.
+// por webhook, a quienes piden trabajo de asesor inmobiliario. Son solicitantes de empleo, no
+// clientes: NO son lead en ningún reporte (Calidad de Leads y lo que lee su agregado, embudo y
+// alertas; Desempeño; Primer contacto; CRM en vivo los quita en el servidor). Solo cuentan en la
+// sección "Reclutamiento" de Calidad de Leads (lqReclutamientoSection).
+// <regla-candidato-asesor> — bloque IDÉNTICO en netlify/functions/lib/shared.js e index.html
+// (scripts/test-candidato-asesor.js compara el texto y el resultado). Candidato a asesor =
+//   · etiqueta "candidato-asesor" (sin mayúsculas, recortada), o
+//   · fuente "reclutamiento-asesores": el `source` del contacto (src en los contactos adelgazados),
+//     la fuente de su atribución (utm_source / source) o una etiqueta que empiece así
+//     ("reclutamiento-asesores-nov26" de los DM); se compara compacta (sin mayúsculas, espacios
+//     ni guiones) y por prefijo, o
+//   · campaña de reclutamiento de asesores en su atribución (utm_campaign con
+//     "reclutamiento asesor…", p. ej. RECLUTAMIENTO_ASESORES_TUL-PDC_LP-VSL_NOV26).
+// Acepta el contacto (crudo de GHL o adelgazado) o, por compatibilidad, solo su lista de etiquetas.
 const TAG_CANDIDATO_ASESOR = "candidato-asesor";
-const esCandidatoAsesor = (tags)=> (Array.isArray(tags) ? tags : String(tags||"").split(","))
-  .some(t=>String(t==null?"":t).trim().toLowerCase()===TAG_CANDIDATO_ASESOR);
+const FUENTE_CANDIDATO_ASESOR = "reclutamiento-asesores";
+const RX_CAMP_CANDIDATO_ASESOR = /reclutamiento[\s_-]*asesor/i;
+const candTexto = (v) => String(v == null ? "" : v);
+const candCompacto = (v) => candTexto(v).trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+const candLista = (v) => (Array.isArray(v) ? v : candTexto(v).split(","));
+const tagCandidatoAsesor = (tags) => candLista(tags).some((t) => candTexto(t).trim().toLowerCase() === TAG_CANDIDATO_ASESOR);
+const fuenteCandidatoAsesor = (v) => { const k = candCompacto(v); return !!k && k.startsWith(candCompacto(FUENTE_CANDIDATO_ASESOR)); };
+function esCandidatoAsesor(c) {
+  if (!c || typeof c !== "object" || Array.isArray(c)) return tagCandidatoAsesor(c);
+  const at = [c.attr, c.attributionSource, c.lastAttributionSource].filter((a) => a && typeof a === "object");
+  const fuentes = [c.src, c.source].concat(...at.map((a) => [a.src, a.utmSource, a.utm_source, a.source]));
+  const camps = [].concat(...at.map((a) => [a.camp, a.campaign, a.utmCampaign, a.utm_campaign]));
+  return tagCandidatoAsesor(c.tags) || candLista(c.tags).some(fuenteCandidatoAsesor)
+    || fuentes.some(fuenteCandidatoAsesor) || camps.some((v) => RX_CAMP_CANDIDATO_ASESOR.test(candTexto(v)));
+}
+// Oportunidad de un candidato: /opportunities/search trae el contacto embebido (con sus tags) y
+// la fuente de la oportunidad.
+const oppDeCandidatoAsesor = (o) => !!o && (esCandidatoAsesor(o.contact || {}) || fuenteCandidatoAsesor(o.source));
+// </regla-candidato-asesor>
 
 const LQ_SIN_CAMP = "(sin campaña atribuida)";
 const LQ_SIN_GRP  = "(sin conjunto atribuido)";
@@ -4414,19 +4439,57 @@ function lqInicioCampanias(spendRows, dec, primerDia){
   return ini;
 }
 
+// Calificado de un candidato a asesor (sección Reclutamiento, nov-2026). La landing manda
+// `calificado` = "si"/"no" al webhook de GHL y el workflow lo copia al campo de contacto
+// "Candidato calificado" (texto). Ese campo manda (nombre sin mayúsculas, acentos ni espacios);
+// si no existe, cualquier campo con "calificad…" en el nombre (no "descalificad…"). Respaldo:
+// etiqueta "asesor-calificado" o "candidato-calificado". → 1 calificado · 0 no · null sin dato.
+const LQ_CAMPO_CAND_CALIF = "Candidato calificado";
+const LQ_RX_CAMPO_CALIF = /(?<!des)calificad/i;
+const LQ_TAGS_CAND_CALIF = ["asesor-calificado", "candidato-calificado"];
+const lqClaveCampo = (s)=> String(s==null?"":s).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]/g,"");
+function lqCamposCalifCand(fields){
+  const exacto = (fields||[]).filter(f=>lqClaveCampo(f.name) === lqClaveCampo(LQ_CAMPO_CAND_CALIF));
+  return exacto.length ? exacto : (fields||[]).filter(f=>LQ_RX_CAMPO_CALIF.test(String(f.name||"")));
+}
+function lqCandidatoCalificado(l, campos){
+  for(const f of campos||[]){
+    const v = String((l.cf||{})[f.id] ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().toLowerCase();
+    if(/^(si|yes|true|1)(?![a-z0-9])/.test(v)) return 1;
+    if(/^(no|false|0)(?![a-z0-9])/.test(v)) return 0;
+  }
+  if(candLista(l.tags).some(t=>LQ_TAGS_CAND_CALIF.includes(candTexto(t).trim().toLowerCase()))) return 1;
+  return null;
+}
+// Candidato en Calidad de Leads: la regla compartida (esCandidatoAsesor) y, además, la campaña o
+// la fuente de reclutamiento escritas por el formulario en los campos utm_campaign / utm_source.
+function lqEsCandidato(l, A){
+  if(esCandidatoAsesor(l)) return true;
+  const cf = (f)=> f && l.cf ? l.cf[f.id] : "";
+  return [A.camp, A.campAlt].some(f=>RX_CAMP_CANDIDATO_ASESOR.test(candTexto(cf(f))))
+    || [A.src, A.srcAlt].some(f=>fuenteCandidatoAsesor(cf(f)));
+}
+
 function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adExtra, rawRe, rspMap, waMap){
   // Paso 0 del manual de limpieza (jul-2026), aplicado ANTES de cualquier cálculo:
   // fuera los registros de prueba y los leads sin email NI teléfono (no hay a quién
   // contactar ni forma de detectar duplicados). Se cuentan y se muestran; no desaparecen.
   // Por semana, para que la nota de excluidos diga cuántos hay en el rango que se lee.
   // Prueba = el nombre o el email, o el primer mensaje de un contacto de WhatsApp (waMap).
-  // Candidatos a asesor (etiqueta "candidato-asesor"): solicitantes de empleo, no leads.
+  // Candidatos a asesor (lqEsCandidato): solicitantes de empleo, no leads. Salen de todo y solo
+  // quedan, por semana, en `reclut` (registros, calificados y cuántos traen el dato) para la
+  // sección Reclutamiento.
   const excl = { prueba:0, candidato:0, sinContacto:0 }, exclWk = { prueba:{}, candidato:{}, sinContacto:{} };
   const fuera = (k, l)=>{ excl[k]++; const w = lqWeekOf(l.c); if(w) exclWk[k][w] = (exclWk[k][w]||0) + 1; return false; };
   const WA = waMap || {};
+  const A0 = lqDetectAtrib(boot.fields), camposCal = lqCamposCalifCand(boot.fields), reclut = {};
   rawLeads = (rawLeads||[]).filter(l=>{
     if(esRegistroPrueba(l) || lqMensajePrueba(WA[l.id])) return fuera("prueba", l);
-    if(esCandidatoAsesor(l.tags)) return fuera("candidato", l);
+    if(lqEsCandidato(l, A0)){
+      const w = lqWeekOf(l.c), q = lqCandidatoCalificado(l, camposCal);
+      if(w){ const R = reclut[w] = reclut[w] || { reg:0, cal:0, dato:0 }; R.reg++; if(q !== null){ R.dato++; R.cal += q; } }
+      return fuera("candidato", l);
+    }
     if(!l.em && !l.ph) return fuera("sinContacto", l);
     return true;
   });
@@ -4448,7 +4511,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
   };
   const reRaw = [];
   (rawRe||[]).forEach(r=>{
-    if(esRegistroPrueba(r) || esCandidatoAsesor(r.tags) || (!r.em && !r.ph)) return;
+    if(esRegistroPrueba(r) || lqEsCandidato(r, A0) || (!r.em && !r.ph)) return;
     const exacto = FU ? lqFechaIso(cfDe(r, FU)) : "";
     const f = exacto || lqFechaIso(r.up);
     if(f) comoReenvio(r, f, !exacto);
@@ -4668,6 +4731,7 @@ function buildLqAgg(boot, rawLeads, spendRows, weeks, oppsByContact, adRows, adE
     return !!ini && ini >= primerDia && diaT(l.alta) < ini && diaT(l.c) >= ini;
   });
   return { ts:Date.now(), users:boot.users||{}, califField:F.calif, fuenteField:F.fuente, presField:F.pres, horField:F.hor, verifField:F.verif, windsor:!!boot.windsor, excl, exclWk, dupWa,
+           reclut, reclutCampos: camposCal.map(f=>f.name||""),
            oppStages: lqOppStageNames(boot.stages, lqOppThresholds(boot.stages)),
            zoomStages: [...new Set(Object.values(boot.stages||{}).filter(st=>LQ_RX_ZOOM_OK.test(st.s||"")).map(st=>(st.p?st.p+" › ":"")+st.s))].sort(),
            stages: boot.stages||{},
@@ -4719,24 +4783,65 @@ function lqNotaBrokers(agg, rangoSet){
 // por SQL (4,991 MXN del 1 al 17-nov). Sale de la inversión, de las tablas, de los anuncios y
 // de la decisión de hoy; se declara en la nota de excluidos con su monto.
 const LQ_RX_CAMP_RECLUT = /reclutamiento/i;
+// RECLUTAMIENTO_ASESORES_TUL-PDC_LP-VSL_NOV26 (landing + VSL) optimiza con el evento personalizado
+// AplicacionAsesor, no con Lead: sus "resultados" de Meta nunca se comparan contra leads. La campaña
+// se reconoce por el NOMBRE (campo `campaign` de Windsor) y, para filas que lleguen sin nombre, por
+// su ID de campaña (campaign_id) visto con nombre en cualquier otra fuente (inversión diaria,
+// anuncios o la decisión de hoy). Su gasto queda en `fuera` para la sección Reclutamiento.
 function lqSinReclutamiento(spendRows, adRows, adExtra){
   const es = (n)=> LQ_RX_CAMP_RECLUT.test(String(n||""));
-  const fuera = (spendRows||[]).filter(r=>es(r.camp)).map(r=>({ d:r.d, camp:r.camp, spend:r.spend||0, cur:r.cur }));
+  const cids = new Set();
+  (spendRows||[]).concat(adRows||[]).forEach(r=>{ if(r && r.cid && es(r.camp)) cids.add(String(r.cid)); });
+  for(const plat of ["meta","google"]){
+    const D = adExtra && adExtra[plat];
+    if(D && D.camps) Object.keys(D.camps).forEach(cid=>{ if(es(D.camps[cid] && D.camps[cid].name)) cids.add(String(cid)); });
+  }
+  const esR = (r)=> !!r && (es(r.camp) || (!!r.cid && cids.has(String(r.cid))));
+  const fuera = (spendRows||[]).filter(esR).map(r=>({ d:r.d, camp:r.camp || "(campaña "+r.cid+")", cid:r.cid||"", spend:r.spend||0, cur:r.cur }));
   for(const plat of ["meta","google"]){
     const D = adExtra && adExtra[plat]; if(!D || !D.camps) continue;
-    const ids = new Set(Object.keys(D.camps).filter(cid=>es(D.camps[cid] && D.camps[cid].name)));
+    const ids = new Set(Object.keys(D.camps).filter(cid=>cids.has(String(cid))));
     if(!ids.size) continue;
     ids.forEach(cid=>{ delete D.camps[cid]; if(D.dias) delete D.dias[cid]; });
     if(D.grps) Object.keys(D.grps).forEach(g=>{ if(ids.has(D.grps[g].cid)) delete D.grps[g]; });
     ["ads","an","kw"].forEach(k=>{ if(Array.isArray(D[k])) D[k] = D[k].filter(x=>!ids.has(x.cid)); });
   }
-  return { spendRows:(spendRows||[]).filter(r=>!es(r.camp)), adRows:(adRows||[]).filter(r=>!es(r.camp)), fuera };
+  return { spendRows:(spendRows||[]).filter(r=>!esR(r)), adRows:(adRows||[]).filter(r=>!esR(r)), fuera };
+}
+// Sección Reclutamiento (nov-2026): lo de reclutamiento de asesores, APARTE de los leads y de la
+// inversión de compradores. Gasto = campañas de reclutamiento (Windsor, lqSinReclutamiento);
+// Registros = candidatos a asesor creados en el rango (lqEsCandidato); Calificados = los que traen
+// "si" en "Candidato calificado" o la etiqueta (lqCandidatoCalificado). Sin ningún candidato con el
+// dato, Calificados es "—" (no 0). Solo se pinta si hay gasto o candidatos en el rango.
+function lqReclutamientoSection(agg, rangoSet){
+  if(!agg) return "";
+  const recl = (agg.reclSpend || []).filter(r=>{ const w = r.d ? lqWeekOf(r.d+"T12:00:00"+LQ_TZ) : null; return w && rangoSet.has(w); });
+  const gasto = recl.reduce((a,r)=>a+(r.spend||0), 0);
+  let reg = 0, cal = 0, dato = 0;
+  Object.entries(agg.reclut || {}).forEach(([wk, R])=>{ if(rangoSet.has(wk)){ reg += R.reg||0; cal += R.cal||0; dato += R.dato||0; } });
+  if(!(gasto > 0) && !reg) return "";
+  const hayCal = dato > 0;
+  const camps = [...new Set(recl.filter(r=>r.spend > 0).map(r=>r.camp))];
+  const kpi = (v,l,sub)=>`<div class="crm-kpi"><div class="k-val">${v}</div><div class="k-lbl">${l}</div>${sub?`<div class="k-sub">${sub}</div>`:""}</div>`;
+  const cpr = gasto > 0 && reg ? gasto/reg : null, cpc = gasto > 0 && hayCal && cal ? gasto/cal : null;
+  const campo = (agg.reclutCampos||[])[0] || LQ_CAMPO_CAND_CALIF;
+  return `<div class="rep-section mb-sec lq-reclut"><h3>Reclutamiento de asesores</h3>
+    <p class="hint" style="margin-top:0">Candidatos a asesor (etiqueta "candidato-asesor", fuente "reclutamiento-asesores" o campaña de reclutamiento) y el gasto de las campañas de reclutamiento${camps.length ? ` (${escAttr(camps.join(", "))})` : ""}. No son leads de compra: no cuentan en ninguna otra cifra de este reporte, y sus resultados de Meta (evento AplicacionAsesor, no Lead) no se comparan contra leads.</p>
+    <div class="crm-kpis">
+      ${kpi(lqMXN(gasto),"Gasto","campañas de reclutamiento en el rango")}
+      ${kpi(reg.toLocaleString(),"Registros","candidatos creados en el rango")}
+      ${kpi(hayCal ? cal.toLocaleString() : "—","Calificados", hayCal ? `${cal} de ${dato} con el dato` : "sin dato en el CRM")}
+      ${kpi(cpr!=null ? lqMXN(cpr) : "—","Costo por registro")}
+      ${kpi(cpc!=null ? lqMXN(cpc) : "—","Costo por calificado")}
+    </div>
+    ${!hayCal && reg ? `<p class="hint pegada lq-reclut-sin-dato">Calificados sale "—" porque ningún candidato del rango trae el dato: el workflow de GoHighLevel debe copiar <b>calificado</b> ("si"/"no") del webhook al campo de contacto <b>"${escAttr(campo)}"</b>, o poner la etiqueta "asesor-calificado" a los calificados.</p>` : ""}
+  </div>`;
 }
 function lqNotaExcluidos(agg, rangoSet){
   const e = lqExcluidosRango(agg, rangoSet), partes = [];
   if(e.broker) partes.push(`<span${lqNotaBrokers(agg, rangoSet)}><b>${e.broker}</b> lead${e.broker!==1?"s":""} de brokers</span> <span class="lq-sub">(pipeline Brokers - Producción (B2B2C) o una etiqueta que empieza con "broker": los sube el equipo comercial, no vienen de marketing)</span>`);
   if(e.prueba) partes.push(`<b>${e.prueba}</b> registro${e.prueba!==1?"s":""} de prueba o interno${e.prueba!==1?"s":""} <span class="lq-sub">("prueba"/"test" en el nombre, el email o el primer mensaje, o correo @selvadentrotulum.com)</span>`);
-  if(e.candidato) partes.push(`<b>${e.candidato}</b> candidato${e.candidato!==1?"s":""} a asesor <span class="lq-sub">(etiqueta "candidato-asesor": piden trabajo, no son clientes)</span>`);
+  if(e.candidato) partes.push(`<b>${e.candidato}</b> candidato${e.candidato!==1?"s":""} a asesor <span class="lq-sub">(etiqueta "candidato-asesor", fuente "reclutamiento-asesores" o campaña de reclutamiento: piden trabajo, no son clientes; se cuentan en la sección Reclutamiento)</span>`);
   if(e.sinContacto) partes.push(`<b>${e.sinContacto}</b> sin email ni teléfono`);
   const recl = ((agg && agg.reclSpend) || []).filter(r=>{ const w=r.d?lqWeekOf(r.d+"T12:00:00"+LQ_TZ):null; return w && rangoSet.has(w); });
   const reclSp = recl.reduce((a,r)=>a+(r.spend||0), 0);
@@ -5757,7 +5862,8 @@ function lqBitacora(){
   const ids = new Set(guardadas.map(e=>e.id));
   // Lo que la foto diaria detectó en Meta y Google (presupuestos, pausas, anuncios rechazados, URLs).
   // cuenta:false (keywords que empiezan o dejan de gastar) se anota pero no reinicia la espera.
-  const auto = (Array.isArray(lqState.cambiosAuto) ? lqState.cambiosAuto : []).map(c=>({ id:c.id, fecha:c.fecha, desde:c.desde, camp:c.camp, cambio:c.que, motivo:"",
+  // (sin los cambios de las campañas de reclutamiento: no son campañas de leads)
+  const auto = (Array.isArray(lqState.cambiosAuto) ? lqState.cambiosAuto : []).filter(c=>!LQ_RX_CAMP_RECLUT.test(String(c && c.camp || ""))).map(c=>({ id:c.id, fecha:c.fecha, desde:c.desde, camp:c.camp, cambio:c.que, motivo:"",
     por:`Detectado en ${c.plat} (foto diaria)`, fuente:`${c.plat} · foto diaria`, cuenta:c.cuenta !== false, auto:true }));
   return LQ_BITACORA_BASE.filter(e=>!ids.has(e.id)).concat(guardadas, auto)
     .sort((a,b)=>String(b.fecha||"").localeCompare(String(a.fecha||"")) || (b.ts||0)-(a.ts||0));
@@ -7038,11 +7144,13 @@ function lqRender(){
       <input type="text" id="lq-q" class="lq-search" placeholder="Buscar campaña o anuncio…" value="${escAttr(lqState.q||"")}">
       <button class="lt-btn" id="lq-expand-all">Expandir / colapsar todo</button>
       ${LQ_PLATS_UI.filter(o=>o.id!=="otras").map(o=>`<button class="lt-btn${(lqState.plat||"all")===o.id?" active":""}" data-lq-plat="${o.id}">${o.name}</button>`).join("")}
-    </div>` + (lqAdsSection(agg, leads, rangoSet, rango) || `<div class="empty-rep">Sin datos de anuncios en el rango. Requiere WINDSOR_API_KEY configurada.</div>`);
+    </div>` + (lqAdsSection(agg, leads, rangoSet, rango) || `<div class="empty-rep">Sin datos de anuncios en el rango. Requiere WINDSOR_API_KEY configurada.</div>`)
+      + lqReclutamientoSection(lqState.agg, rangoSet);
   } else if(SUB==="calidad"){
     out += calidadHtml;
   } else if(SUB==="combinado"){
-    out += lqComboSection(agg, agg.leads.filter(l=>rangoSet.has(l.wk)).map(swap), rango, rangoSet);
+    out += lqComboSection(agg, agg.leads.filter(l=>rangoSet.has(l.wk)).map(swap), rango, rangoSet)
+      + lqReclutamientoSection(lqState.agg, rangoSet);
   } else {
     out += lqConclusionesSection();    // rango fijo: no depende del selector
   }
@@ -7329,7 +7437,7 @@ async function showLQ(){
 // Reporte de disciplina comercial directo del CRM: SLA de primera respuesta por
 // asesor y canal, leads >7 días sin toque, trabajados vs contactados efectivos,
 // citas y show rate, y OPPs/WONs por asesor. Con nombres, acumulable por semanas.
-const SLA_AGG_KEY = "sla:agg:v24";   // v24: fuera también los candidatos a asesor (etiqueta "candidato-asesor")   // v23: presupuesto y plazo del registro a eventos (CAD y EUR a USD)   // v22: fuera los leads de reclutamiento; DM orgánicos sin Velocidad; reloj desde la "Fecha asignación asesor" si existe   // v21: Lead to Watch = Sí sube al lead a SQL como mínimo   // v20: presupuesto y horizonte de respaldo del formulario de la landing de Google   // v19: calificación con respuesta real y escalera (MQL sin escalera completa por asesor)   // v18: llamadas exitosas del asesor (≥90 s) en telefonía   // v17: broker = cualquier etiqueta que empiece con "broker" (R-03)   // v16: el reloj arranca siempre en el alta del lead (sin traspaso a ventas)   // v15: si el asesor tocó al lead antes del traspaso a ventas, su reloj arranca en el alta   // v14: citas agendadas en el periodo por fecha de agendado; base de agendamiento con quien agendó sin escribir   // v13: citas del periodo por fecha de la cita y su asistencia (show rate)   // v12: telefonía por lead (canal del 1er toque, intentos, desenlace, duración conocida)   // v11: spec v1.1 (filtros de medición: inválidos, brokers, revertidas, horario, sin llamada, contacto efectivo)   // v10: calificación por reglas (la etapa manda), no el campo manual vacío   // v9: razón de descarte por lead   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
+const SLA_AGG_KEY = "sla:agg:v25";   // v25: candidatos también por fuente "reclutamiento-asesores"   // v24: fuera también los candidatos a asesor (etiqueta "candidato-asesor")   // v23: presupuesto y plazo del registro a eventos (CAD y EUR a USD)   // v22: fuera los leads de reclutamiento; DM orgánicos sin Velocidad; reloj desde la "Fecha asignación asesor" si existe   // v21: Lead to Watch = Sí sube al lead a SQL como mínimo   // v20: presupuesto y horizonte de respaldo del formulario de la landing de Google   // v19: calificación con respuesta real y escalera (MQL sin escalera completa por asesor)   // v18: llamadas exitosas del asesor (≥90 s) en telefonía   // v17: broker = cualquier etiqueta que empiece con "broker" (R-03)   // v16: el reloj arranca siempre en el alta del lead (sin traspaso a ventas)   // v15: si el asesor tocó al lead antes del traspaso a ventas, su reloj arranca en el alta   // v14: citas agendadas en el periodo por fecha de agendado; base de agendamiento con quien agendó sin escribir   // v13: citas del periodo por fecha de la cita y su asistencia (show rate)   // v12: telefonía por lead (canal del 1er toque, intentos, desenlace, duración conocida)   // v11: spec v1.1 (filtros de medición: inválidos, brokers, revertidas, horario, sin llamada, contacto efectivo)   // v10: calificación por reglas (la etapa manda), no el campo manual vacío   // v9: razón de descarte por lead   // v8: tareas abiertas con fecha y confirmación de citas por contacto   // v7: OPP por asesor = 4 etapas, no todo registro creado   // v6: spec v1.0 (roster, 5 min, tareas, telefonía) + toque manual y llamada conectada
 const SLA_STALE_MS = 7*86400e3; // "sin toque" = 7 días sin mensaje
 const slaState = { built:false, agg:null, syncing:false, asesor:"", camp:"", abierto:{} };   // asesor/camp "" = sin filtro · abierto = plegables abiertos
 
@@ -7523,9 +7631,10 @@ const SLA_V11_TAGS = { nci:"sin llamada - numero invalido", ncm:"sin llamada - s
 const SLA_RX_RECLUT = /^reclutamiento/i;
 const SLA_RX_DM_ORG = /^(organico-rrss|dm-.+)$/i;
 const slaTagRe = (tags, rx)=> (tags||[]).some(t=>rx.test(String(t).trim()));
-// Reclutamiento = etiqueta "reclutamiento…" (DM de la campaña) o "candidato-asesor" (landing de
-// reclutamiento, nov-2026; esCandidatoAsesor): los dos son candidatos a asesor y salen de todo Desempeño.
-const slaEsReclut = (tags)=> slaTagRe(tags, SLA_RX_RECLUT) || esCandidatoAsesor(tags);
+// Reclutamiento = etiqueta "reclutamiento…" (DM de la campaña) o candidato a asesor (landing de
+// reclutamiento, nov-2026; esCandidatoAsesor: etiqueta "candidato-asesor", fuente
+// "reclutamiento-asesores" o campaña de reclutamiento): salen de todo Desempeño.
+const slaEsReclut = (c)=> !!c && (slaTagRe(c.tags, SLA_RX_RECLUT) || esCandidatoAsesor(c));
 const SLA_V11_CAMPOS = { causa:"Causa de descalificación", evid:"Evidencia de descalificación", asesor:"Asesor que descalificó", fecha:"Fecha de entrada a Descalificado", ncDesde:"Sin llamada - fecha de inicio" };
 // R-01: dos grupos. Inválido = sale de todo; real descartado = se mide hasta su descalificación.
 const SLA_CAUSAS_INVALIDO = ["Dejó datos por error","Pruebas de marketing","Sin datos válidos","Número equivocado","Contacto inapropiado / broma"];
@@ -8232,7 +8341,7 @@ function buildSlaAgg(rango, contactsArr, sweepMap, oppsArr, usersMap, fieldsArr,
   // Reclutamiento fuera de TODO (slaEsReclut: "reclutamiento…" o "candidato-asesor"): leads, citas y
   // resumen v1.1. Se cuentan y se declaran. Las oportunidades de "candidato-asesor" ya llegan sin
   // ellas desde sla-report (no entran en los registros por asesor).
-  const esReclut = (c)=> slaEsReclut(c.tags);
+  const esReclut = (c)=> slaEsReclut(c);
   const reclIds = new Set(contactsArr.filter(esReclut).map(c=>c.id));
   const reclExcl = contactsArr.filter(c=>{ const wk = lqWeekOf(c.c); return wk && rangoSet.has(wk) && esReclut(c) && !esTest(c); }).length;
   // Ejecutivo de Primer Contacto (desde que arranca el puesto, 26-oct-2026; Dirección General,
@@ -8768,7 +8877,7 @@ function slaRender(){
   // efectivo, tasa de agendamiento sobre contactados y sobre todos los leads, show). La meta de velocidad es 5 min: la de 60 s se retiró. Llamada
   // conectada, ≤15/≤60 min, mediana de efectivo y P80 de 1a llamada siguen en la tabla por asesor.
   if(fueraEq.length || agg.reclExcl) res += `<p class="hint pegada sla-fuera-eq">No cuentan en este reporte: ${[fueraEq.length ? slaFueraEqTxt(fueraEq, name) : "",
-      agg.reclExcl ? `${agg.reclExcl} de reclutamiento (candidatos a asesor, etiqueta "reclutamiento…" o "candidato-asesor")` : ""].filter(Boolean).join(" y ")}. Solo se mide lo que ya está en manos de un asesor activo.</p>`;
+      agg.reclExcl ? `${agg.reclExcl} de reclutamiento (candidatos a asesor, etiqueta "reclutamiento…" o "candidato-asesor", o fuente "reclutamiento-asesores")` : ""].filter(Boolean).join(" y ")}. Solo se mide lo que ya está en manos de un asesor activo.</p>`;
   res += `<div class="kpi-grupo">Leads y velocidad · meta 5 min</div><div class="crm-kpis k4">
     ${kpi(leads.length.toLocaleString(),"Leads en el rango", lqNota(
       `<b>Leads creados en las semanas del rango</b> (hora Tulum), estén en el pipeline que estén: el universo lo define el dueño, no el pipeline.${fCamp ? " Solo la campaña de origen elegida." : ""}`,
@@ -9374,7 +9483,7 @@ async function slaSync(){
     catch(e){ fallos.push("la configuración del Ejecutivo de Primer Contacto (sus toques pueden contarse como del asesor)"); }
     // Barrido de conversaciones y citas, en lotes de 8 (sin los de reclutamiento: salen del reporte)
     const sweepMap={};
-    const aBarrer = contactsArr.filter(c=>!slaEsReclut(c.tags));
+    const aBarrer = contactsArr.filter(c=>!slaEsReclut(c));
     for(let i=0;i<aBarrer.length;i+=8){
       if(syncCancelado("sla")){ toast("Reporte cancelado"); return; }
       const ids = aBarrer.slice(i,i+8).map(c=>c.id);
@@ -9689,8 +9798,9 @@ function pcBuild(D, cfg, now){
   });
   // Broker = cualquier etiqueta que empiece con "broker" (R-03, misma regla que Calidad de Leads y Desempeño).
   const esBroker = (ct)=> ((info[ct]||{}).tags||[]).some(lqTagBroker);
-  // Candidato a asesor (etiqueta "candidato-asesor", esCandidatoAsesor): pide trabajo, no es lead.
-  const esCandidato = (ct)=> esCandidatoAsesor((info[ct]||{}).tags);
+  // Candidato a asesor (esCandidatoAsesor: etiqueta "candidato-asesor", fuente "reclutamiento-asesores"
+  // o campaña de reclutamiento): pide trabajo, no es lead.
+  const esCandidato = (ct)=> esCandidatoAsesor(info[ct] || {});
   const fueraDe = (ct)=> !!(oppDe[ct] && oppDe[ct].fuera) || esBroker(ct) || esCandidato(ct);   // fuera del universo de lead nuevo
   const ajenoDe = (ct)=> !!(oppDe[ct] && oppDe[ct].ajeno) || esBroker(ct) || esCandidato(ct);   // no es trabajo de este puesto
   const esPrueba = (ct)=> RX_REGISTRO_PRUEBA.test(String((info[ct]||{}).n||""));
@@ -10133,7 +10243,7 @@ function pcRender(){
     const R = A.reInfo;
     p.push(R && R.campo ? `<b>Leads que regresan (10.4)</b> por "${escAttr(R.campo)}": ${R.n} cuentan como lead nuevo${R.dentro90 ? ` · ${R.dentro90} volvieron dentro de ${PC_REENVIO_DIAS} días (candado de duplicidad: no son lead nuevo)` : ""}${R.sinHora ? ` · <b style="color:var(--rojo)">${R.sinHora} sin hora exacta en el campo</b>: no se pueden medir` : ""}`
       : `<b>Leads que regresan (10.4)</b>: no se miden todavía — falta el campo "Fecha último formulario" en el CRM (lo llena el workflow del formulario con la fecha y hora del envío)`);
-    if(A.excl.prueba || A.excl.fuera || A.excl.ajenos || A.excl.candidatos) p.push(`Fuera del universo de lead nuevo: ${A.excl.fuera} de brokers, referidos u otros canales (prospección directa, alianzas, legal), ${A.excl.prueba} de prueba${A.excl.candidatos ? `, ${A.excl.candidatos} candidato${A.excl.candidatos!==1?"s":""} a asesor (etiqueta "candidato-asesor")` : ""}${A.ensayo ? `, ${A.excl.ajenos} de otros usuarios (ensayo)` : ""}`);
+    if(A.excl.prueba || A.excl.fuera || A.excl.ajenos || A.excl.candidatos) p.push(`Fuera del universo de lead nuevo: ${A.excl.fuera} de brokers, referidos u otros canales (prospección directa, alianzas, legal), ${A.excl.prueba} de prueba${A.excl.candidatos ? `, ${A.excl.candidatos} candidato${A.excl.candidatos!==1?"s":""} a asesor (etiqueta "candidato-asesor" o fuente "reclutamiento-asesores")` : ""}${A.ensayo ? `, ${A.excl.ajenos} de otros usuarios (ensayo)` : ""}`);
     if(p.length) html += `<div class="lq-meth">🔎 <b>Diagnóstico de datos</b> — ${p.join(" · ")}.</div>`;
   }
   html += pcCfgHtml();

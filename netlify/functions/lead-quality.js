@@ -285,7 +285,7 @@ async function opps({ startAfter, startAfterId, since, contactIds }) {
       data = await ghl(`/opportunities/search?${q2}`);
     }
     const batch = data.opportunities || [];
-    // Sin las de candidatos a asesor (etiqueta "candidato-asesor", lib/shared.js): no son leads.
+    // Sin las de candidatos a asesor (etiqueta "candidato-asesor" o fuente "reclutamiento-asesores", lib/shared.js): no son leads.
     batch.filter((o) => !S.oppDeCandidatoAsesor(o)).forEach((o) => out.push(slimOpp(o)));
     total = (data.meta && data.meta.total) || total;
     const meta = data.meta || {};

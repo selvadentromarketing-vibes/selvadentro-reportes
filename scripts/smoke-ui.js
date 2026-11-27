@@ -1258,7 +1258,7 @@ const PORT = process.env.PORT || 8765;
     r.fueraLinea = /Fuera del equipo de ventas \(Olimpia Sulvaran\) 1/.test(txt);
     ADVISOR_LIST = advPrev; slaState.agg = aggPrev; slaState.asesor = selPrev; slaState.camp = campPrev;
     r.ok = r.ids === 'a1,dm1,o1,as1' && r.recl === 1 && r.nv === '010' && r.asig === '3 min · cumple' && r.p80 === '101' && r.vel === '2 de 2'
-      && r.nota === 'No cuentan en este reporte: 1 lead de dueños fuera de la lista de Asesores (Olimpia Sulvaran 1) y 1 de reclutamiento (candidatos a asesor, etiqueta "reclutamiento…" o "candidato-asesor"). Solo se mide lo que ya está en manos de un asesor activo.'
+      && r.nota === 'No cuentan en este reporte: 1 lead de dueños fuera de la lista de Asesores (Olimpia Sulvaran 1) y 1 de reclutamiento (candidatos a asesor, etiqueta "reclutamiento…" o "candidato-asesor", o fuente "reclutamiento-asesores"). Solo se mide lo que ya está en manos de un asesor activo.'
       && r.leadsKpi === '3' && r.sinOlimpia && r.fueraLinea;
     return r;
   });
@@ -1271,27 +1271,72 @@ const PORT = process.env.PORT || 8765;
   VISTA = 'candidato-asesor';
   const cand = await page.evaluate(({ lq, pc }) => {
     const r = {};
-    // Calidad de Leads: dos candidatos (dos grafías) y un lead normal en la W40 del fixture
+    // Calidad de Leads, W40 del fixture: cinco candidatos —por etiqueta (dos grafías), solo por fuente
+    // "reclutamiento-asesores", por utm_campaign en el campo del formulario y por la campaña de su
+    // atribución— con "Candidato calificado" = 1 "Sí" y 4 "no", y un lead normal. Más la campaña
+    // RECLUTAMIENTO_ASESORES_TUL-PDC_LP-VSL_NOV26 en Windsor (1,000 MXN con nombre + 500 MXN de una fila
+    // sin nombre con el mismo ID; 30 "resultados" de Meta que son AplicacionAsesor, no Lead).
+    const RC = 'RECLUTAMIENTO_ASESORES_TUL-PDC_LP-VSL_NOV26', RCID = '990001';
     const base = JSON.parse(JSON.stringify(lq)), fx = JSON.parse(JSON.stringify(lq));
     const T = '2026-10-01T16:00:00Z';
-    const L = (id, n, tags) => ({ id, n, em: id + '@x.com', ph: '', c: T, src: 'fb', u: 'u1', tags, cf: {}, attr: { src: 'fb' } });
-    fx.rawLeads = fx.rawLeads.concat([L('cand1', 'Candidata Uno', ['candidato-asesor']), L('cand2', 'Candidato Dos', [' Candidato-Asesor ', 'landing-reclutamiento']),
+    const L = (id, n, tags, o) => Object.assign({ id, n, em: id + '@x.com', ph: '', c: T, src: 'fb', u: 'u1', tags, cf: {}, attr: { src: 'fb' } }, o || {});
+    fx.boot.fields = fx.boot.fields.concat([{ id: 'f_cc', name: 'Candidato calificado' }]);
+    fx.rawLeads = fx.rawLeads.concat([L('cand1', 'Candidata Uno', ['candidato-asesor'], { cf: { f_cc: 'Sí' } }),
+      L('cand2', 'Candidato Dos', [' Candidato-Asesor ', 'landing-reclutamiento'], { cf: { f_cc: 'no' } }),
+      L('cand3', 'Candidata Fuente', [], { src: 'reclutamiento-asesores', cf: { f_cc: 'NO' } }),
+      L('cand4', 'Candidato Formulario', [], { cf: { f_camp: RC, f_cc: 'no' } }),
+      L('cand5', 'Candidata Atribución', [], { attr: { src: 'facebook', camp: RC }, cf: { f_cc: 'no' } }),
       L('lead1', 'Lead Normal', ['facebook-lead'])]);
+    fx.spendRows = fx.spendRows.concat([{ d: '2026-10-01', src: 'facebook', camp: RC, cid: RCID, spend: 1000, clicks: 5, impr: 50, cur: 'MXN' },
+      { d: '2026-10-02', src: 'facebook', camp: '', cid: RCID, spend: 500, clicks: 2, impr: 20, cur: 'MXN' }]);
+    fx.adRows = fx.adRows.concat([{ d: '2026-10-01', plat: 'Meta', camp: RC, grp: 'VSL', id: 'ad_rc', cid: RCID, gid: 'g_rc', name: 'VSL asesores', pp: 'facebook', status: 'ACTIVE', link: '', tags: '', spend: 1500, impr: 70, clicks: 7, results: 30 }]);
+    if (fx.adExtra && fx.adExtra.meta && fx.adExtra.meta.camps) fx.adExtra.meta.camps[RCID] = { name: RC, estado: 'ACTIVE', inicio: '', cb: 300, lb: null, cambio: null };
+    const sr = lqSinReclutamiento(fx.spendRows, fx.adRows, fx.adExtra);
     const aggB = buildLqAgg(base.boot, base.rawLeads, base.spendRows, base.weeks, base.opps, base.adRows, base.adExtra);
-    const agg = buildLqAgg(fx.boot, fx.rawLeads, fx.spendRows, fx.weeks, fx.opps, fx.adRows, fx.adExtra);
+    const agg = buildLqAgg(fx.boot, fx.rawLeads, sr.spendRows, fx.weeks, fx.opps, sr.adRows, fx.adExtra);
+    agg.reclSpend = sr.fuera;
     const de = (id) => agg.leads.find(l => l.id === id);
-    r.lqCand = ['cand1', 'cand2'].filter(de).length;
+    r.lqCand = ['cand1', 'cand2', 'cand3', 'cand4', 'cand5'].filter(de).length;
     r.lqLead = !!de('lead1');
     r.lqN = agg.leads.length - aggB.leads.length;
     r.lqExcl = agg.excl.candidato + ' · ' + (agg.exclWk.candidato['2026-W40'] || 0);
+    r.reclut = JSON.stringify(agg.reclut['2026-W40'] || null);
+    // Meta / CPL: ni el gasto ni los "resultados" de la campaña de reclutamiento entran en nada
+    const sum = (a, k) => (a || []).reduce((x, y) => x + (y[k] || 0), 0);
+    r.sinGasto = sum(agg.spend, 'spend') === sum(aggB.spend, 'spend') && sum(sr.fuera, 'spend') === 1500 && sr.fuera.length === 2;
+    r.sinResultados = sum(agg.adw, 'results') === sum(aggB.adw, 'results') && !(agg.adw || []).some(a => /RECLUTAMIENTO/i.test(a.camp || ''))
+      && !(agg.dec && agg.dec.meta && agg.dec.meta.camps && agg.dec.meta.camps[RCID]);
     const prev = { agg: lqState.agg, sub: lqState.sub, plat: lqState.plat, level: lqState.level, qual: lqState.qual, q: lqState.q, exp: lqState.exp };
-    agg.fallos = []; agg.monedas = ['MXN'];
-    Object.assign(lqState, { agg, exp: {}, q: '', plat: 'all', level: 'camp', qual: 'auto', sub: 'calidad' });
-    document.getElementById('lq-sem-ini').value = '2026-W37'; document.getElementById('lq-sem-fin').value = '2026-W40';
-    lqRender();
-    const t = document.getElementById('lq-content').textContent.replace(/\s+/g, ' ');
-    r.lqNota = /Excluidos de todos los cálculos en este rango: [^.]*2 candidatos a asesor \(etiqueta "candidato-asesor"/.test(t);
-    r.lqSinNombre = !/Candidata Uno|Candidato Dos/.test(t);
+    const pinta = (A, sub) => { A.fallos = []; A.monedas = ['MXN'];
+      Object.assign(lqState, { agg: A, exp: {}, q: '', plat: 'all', level: 'camp', qual: 'auto', sub });
+      document.getElementById('lq-sem-ini').value = '2026-W37'; document.getElementById('lq-sem-fin').value = '2026-W40';
+      lqRender(); const el = document.getElementById('lq-content'), sec = el.querySelector('.lq-reclut'), k = {};
+      if (sec) sec.querySelectorAll('.crm-kpi').forEach(x => { k[x.querySelector('.k-lbl').textContent.trim()] = x.querySelector('.k-val').textContent.trim(); });
+      const resto = el.cloneNode(true); resto.querySelectorAll('.lq-reclut, .lq-excluidos').forEach(x => x.remove());
+      return { t: el.textContent.replace(/\s+/g, ' '), resto: resto.textContent, rec: sec ? sec.textContent.replace(/\s+/g, ' ').trim() : '', k }; };
+    const C = pinta(agg, 'calidad');
+    r.lqNota = /Excluidos de todos los cálculos en este rango: [^.]*5 candidatos a asesor \(etiqueta "candidato-asesor", fuente "reclutamiento-asesores"/.test(C.t);
+    r.lqSinNombre = !/Candidata Uno|Candidato Dos|Candidata Fuente|Candidato Formulario|Candidata Atribución/.test(C.t);
+    const K = pinta(agg, 'combinado');
+    r.comboSinRc = !/RECLUTAMIENTO/i.test(K.resto);   // ni en tablas, KPIs, semáforos ni gráficas: solo en su sección y en la nota de excluidos
+    const kv = (P, lbl) => P.k[lbl] || '';
+    r.seccion = [kv(K, 'Gasto'), kv(K, 'Registros'), kv(K, 'Calificados'), kv(K, 'Costo por registro'), kv(K, 'Costo por calificado')].join(' | ');
+    const D = pinta(agg, 'datos');
+    r.datosSeccion = /Reclutamiento de asesores/.test(D.rec) && !/RECLUTAMIENTO|VSL asesores/i.test(D.resto);
+    // Calificado por etiqueta (sin el campo) y "—" sin ningún dato
+    const fxT = JSON.parse(JSON.stringify(fx)); fxT.boot.fields = fxT.boot.fields.filter(f => f.id !== 'f_cc');
+    fxT.rawLeads.forEach(l => { if (/^cand/.test(l.id)) { l.cf = { ...l.cf }; delete l.cf.f_cc; } });
+    const fxN = JSON.parse(JSON.stringify(fxT));
+    fxT.rawLeads.find(l => l.id === 'cand2').tags.push('Asesor-Calificado');
+    fxT.rawLeads.find(l => l.id === 'cand3').tags.push('candidato-calificado');
+    const aT = buildLqAgg(fxT.boot, fxT.rawLeads, sr.spendRows, fxT.weeks, fxT.opps, sr.adRows, fxT.adExtra); aT.reclSpend = sr.fuera;
+    const aN = buildLqAgg(fxN.boot, fxN.rawLeads, sr.spendRows, fxN.weeks, fxN.opps, sr.adRows, fxN.adExtra); aN.reclSpend = sr.fuera;
+    const ST = pinta(aT, 'combinado'), SN = pinta(aN, 'combinado');
+    r.porEtiqueta = kv(ST, 'Registros') + ' | ' + kv(ST, 'Calificados');
+    r.sinDato = kv(SN, 'Calificados') + ' | ' + kv(SN, 'Costo por calificado') + ' | ' + /"Candidato calificado"/.test(SN.rec);
+    // Sin gasto ni candidatos en el rango: no hay sección
+    const SB = pinta(aggB, 'combinado').rec;
+    r.sinSeccion = SB === '';
     Object.assign(lqState, prev); if (prev.agg) lqRender();
     // Desempeño: los candidatos salen del reporte como reclutamiento; el lead sin etiqueta cuenta
     const Z = (local) => Date.parse(local + '-05:00'), M = 60e3, iso = (x) => new Date(x).toISOString();
@@ -1299,7 +1344,8 @@ const PORT = process.env.PORT || 8765;
     const ct = (id, i, tags) => ({ id, n: 'Lead ' + id, c: iso(c0 + i * M), src: 'web', u: 'u1', tags, attr: {}, cf: {} });
     const sw = (i) => ({ foM: c0 + i * M + 2 * M, fi: null, fe: null, days: ['2026-10-06'], calls: 0, chans: [], deliv: { sent: 0, delivered: 0, read: 0, failed: 0, linea: 0 }, ap: { tot: 0, sh: 0, ns: 0, fut: 0 }, tk: { prog: 0, enFecha: 0, venc: 0 },
       tel: { tot: 0, dExp: 0, d0: 0, dNo: 0, c90: 0, noSt: {}, llaves: [] } });
-    const sa = buildSlaAgg(['2026-W41'], [ct('a1', 1, []), ct('cA', 2, ['candidato-asesor']), ct('cB', 3, ['Candidato-Asesor'])], { a1: sw(1), cA: sw(2), cB: sw(3) }, [],
+    const cS = Object.assign(ct('cS', 4, []), { src: 'Reclutamiento-Asesores' });
+    const sa = buildSlaAgg(['2026-W41'], [ct('a1', 1, []), ct('cA', 2, ['candidato-asesor']), ct('cB', 3, ['Candidato-Asesor']), cS], { a1: sw(1), cA: sw(2), cB: sw(3), cS: sw(4) }, [],
       { u1: 'Daniela Arana' }, [], [], { now: Z('2026-10-12T12:00:00') });
     r.sla = sa.leads.map(l => l.id).join(',') + ' · reclutamiento ' + sa.reclExcl;
     // Primer contacto: el universo del fixture no cambia con dos candidatos (con una llamada larga
@@ -1308,6 +1354,7 @@ const PORT = process.env.PORT || 8765;
     const tP = Date.parse('2026-10-27T16:00:00Z');
     F.D.leads.push({ id: 'candPc01', n: 'Candidata PC', c: iso(tP), src: '', u: 'epc1', tags: ['candidato-asesor'], attr: {}, cf: {} },
       { id: 'candPc02', n: 'Candidato PC', c: iso(tP + M), src: '', u: 'epc1', tags: ['CANDIDATO-ASESOR'], attr: {}, cf: {} },
+      { id: 'candPc03', n: 'Candidata PC Fuente', c: iso(tP + 3 * M), src: 'reclutamiento-asesores', u: 'epc1', tags: [], attr: {}, cf: {} },
       { id: 'leadPc99', n: 'Lead PC Normal', c: iso(tP + 2 * M), src: '', u: 'epc1', tags: [], attr: {}, cf: {} });
     F.D.ev.candPc01 = [[tP + M, 'call', 'm', 'epc1', 'ok', 300]];
     F.D.ev.candPc02 = [[tP + 2 * M, 'call', 'm', 'epc1', 'ok', 300]];
@@ -1315,11 +1362,13 @@ const PORT = process.env.PORT || 8765;
     const enLista = (arr) => (arr || []).some(x => /^candPc/.test(x.id));
     r.pc = (A.nU - E.nU) + ' · candidatos ' + A.excl.candidatos + ' · fuera ' + (A.excl.fuera - E.excl.fuera);
     r.pcListas = !enLista(A.vel) && !enLista(A.coh) && !enLista(A.cad) && A.vel.some(v => v.id === 'leadPc99');
-    r.ok = r.lqCand === 0 && r.lqLead && r.lqN === 1 && r.lqExcl === '2 · 2' && r.lqNota && r.lqSinNombre
-      && r.sla === 'a1 · reclutamiento 2' && r.pc === '1 · candidatos 2 · fuera 0' && r.pcListas;
+    r.ok = r.lqCand === 0 && r.lqLead && r.lqN === 1 && r.lqExcl === '5 · 5' && r.reclut === '{"reg":5,"cal":1,"dato":5}'
+      && r.sinGasto && r.sinResultados && r.lqNota && r.lqSinNombre && r.comboSinRc && r.datosSeccion
+      && r.seccion === '1,500 MXN | 5 | 1 | 300 MXN | 1,500 MXN' && r.porEtiqueta === '5 | 2' && r.sinDato === '— | — | true' && r.sinSeccion
+      && r.sla === 'a1 · reclutamiento 3' && r.pc === '1 · candidatos 3 · fuera 0' && r.pcListas;
     return r;
   }, { lq: fixture(), pc: pcFixture() });
-  console.log('\n[candidato-asesor] fuera de Calidad de Leads, Desempeño y Primer contacto', JSON.stringify(cand));
+  console.log('\n[candidato-asesor] fuera de Calidad de Leads, Desempeño y Primer contacto; sección Reclutamiento', JSON.stringify(cand));
   if (!cand.ok) hallazgos.push({ vista: 'candidato-asesor', cand });
   if (!lqx.ok) hallazgos.push({ vista: 'lq:rediseño', lqx });
   // Brokers por CUALQUIER etiqueta que empiece con "broker" (Dirección, 14-oct-2026): los seis

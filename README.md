@@ -511,22 +511,42 @@ y son esperados. Correrla antes de cada `push` a `main`.
 evidencia de las etiquetas "sin llamada", el contacto efectivo por llamada de ≥90 s y la
 lectura de campos de oportunidad (spec v1.1).
 
-## Candidatos a asesor (etiqueta `candidato-asesor`)
+## Candidatos a asesor y reclutamiento
 
 La landing de reclutamiento manda a GoHighLevel (webhook entrante → workflow) a quienes piden
-trabajo de asesor inmobiliario, con la etiqueta `candidato-asesor`. Son solicitantes de
-empleo, no clientes: **no cuentan como lead en ningún reporte**. La etiqueta se compara sin
-mayúsculas y recortada (`Candidato-Asesor` es la misma).
+trabajo de asesor inmobiliario. Son solicitantes de empleo, no clientes: **no cuentan como lead,
+ni en embudos ni en alertas, en ningún reporte**. Es candidato el contacto con:
 
-- Regla única en `netlify/functions/lib/shared.js` (`TAG_CANDIDATO_ASESOR`,
-  `esCandidatoAsesor`, `oppDeCandidatoAsesor`) y su copia en `index.html` (mismo nombre).
+- la etiqueta `candidato-asesor` (sin mayúsculas, recortada: `Candidato-Asesor` es la misma), o
+- fuente `reclutamiento-asesores`: el `source` del contacto, la fuente de su atribución
+  (utm_source) o una etiqueta que empiece así (`reclutamiento-asesores-nov26` de los DM). Se
+  compara compacta (sin mayúsculas, espacios ni guiones) y por prefijo, o
+- una campaña de reclutamiento de asesores en su atribución o en el campo `utm_campaign`
+  (`/reclutamiento[\s_-]*asesor/i`, p. ej. `RECLUTAMIENTO_ASESORES_TUL-PDC_LP-VSL_NOV26`).
+
+Dónde vive y qué hace:
+
+- Regla única: el bloque `<regla-candidato-asesor>` (`esCandidatoAsesor`, `oppDeCandidatoAsesor`…)
+  es idéntico, letra por letra, en `netlify/functions/lib/shared.js` y en `index.html`.
 - Servidor: `ghl-report` (CRM en vivo), `sla-report`, `lead-quality` y `pc-report` no devuelven
-  las oportunidades cuyo contacto trae la etiqueta.
+  las oportunidades de candidatos (por las etiquetas o la fuente del contacto embebido, o por la
+  fuente de la oportunidad).
 - Navegador: Calidad de Leads (y todo lo que lee su agregado) los saca en el paso 0 y los
-  declara en "Excluidos de todos los cálculos"; Desempeño los trata como reclutamiento (fuera
-  de todo, declarados en "No cuentan en este reporte"); Primer contacto, fuera del universo
-  de lead nuevo y de la actividad del puesto.
-- Pruebas: `node scripts/test-candidato-asesor.js` (servidor, y que las dos copias de la regla
+  declara en "Excluidos de todos los cálculos"; Desempeño los trata como reclutamiento;
+  Primer contacto, fuera del universo de lead nuevo y de la actividad del puesto.
+- Campañas de reclutamiento en Windsor (nombre con "reclutamiento", y las filas sin nombre con
+  el mismo `campaign_id`): fuera de la inversión, CPL, costo por SQL, "leads de Meta", tablas,
+  semáforos, recomendaciones, alertas, decisión de hoy, IA y bitácora detectada. La de la
+  landing (`…_LP-VSL_NOV26`) optimiza con el evento personalizado **AplicacionAsesor**, no con
+  Lead: sus "resultados" nunca se comparan contra leads.
+- Sección **Reclutamiento de asesores** (Calidad de Leads → Datos de Campañas y Reporte
+  Combinado; solo si hay gasto o candidatos en el rango): Gasto, Registros (candidatos creados
+  en el rango), Calificados, costo por registro y por calificado. **Calificado**: el campo de
+  contacto "Candidato calificado" (texto, `si`/`sí` = calificado, `no` = no, vacío = sin dato;
+  el nombre se compara sin mayúsculas ni acentos); si no existe, otro campo con "calificad…"
+  (no "descalificad…"); respaldo: etiqueta `asesor-calificado` o `candidato-calificado`. Si
+  ningún candidato del rango trae el dato, Calificados sale "—" con una nota, no 0.
+- Pruebas: `node scripts/test-candidato-asesor.js` (servidor y que las dos copias de la regla
   coincidan) y el bloque `[candidato-asesor]` de `scripts/smoke-ui.js`.
 
 ## CRM en vivo (GoHighLevel)

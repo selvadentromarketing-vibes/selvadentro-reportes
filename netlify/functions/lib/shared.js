@@ -167,13 +167,36 @@ async function ghlFetch(path, opts) {
 // asesor inmobiliario, con la etiqueta "candidato-asesor". Son solicitantes de empleo, no
 // clientes: NO cuentan como lead en ningún reporte. GHL compara etiquetas sin mayúsculas en la
 // práctica ("Candidato-Asesor" es la misma), así que aquí también: sin mayúsculas y recortada.
-// La misma regla vive en index.html (TAG_CANDIDATO_ASESOR / esCandidatoAsesor), que filtra los
-// contactos en el navegador; scripts/test-candidato-asesor.js verifica que las dos coincidan.
+// <regla-candidato-asesor> — bloque IDÉNTICO en netlify/functions/lib/shared.js e index.html
+// (scripts/test-candidato-asesor.js compara el texto y el resultado). Candidato a asesor =
+//   · etiqueta "candidato-asesor" (sin mayúsculas, recortada), o
+//   · fuente "reclutamiento-asesores": el `source` del contacto (src en los contactos adelgazados),
+//     la fuente de su atribución (utm_source / source) o una etiqueta que empiece así
+//     ("reclutamiento-asesores-nov26" de los DM); se compara compacta (sin mayúsculas, espacios
+//     ni guiones) y por prefijo, o
+//   · campaña de reclutamiento de asesores en su atribución (utm_campaign con
+//     "reclutamiento asesor…", p. ej. RECLUTAMIENTO_ASESORES_TUL-PDC_LP-VSL_NOV26).
+// Acepta el contacto (crudo de GHL o adelgazado) o, por compatibilidad, solo su lista de etiquetas.
 const TAG_CANDIDATO_ASESOR = "candidato-asesor";
-const tagsDe = (tags) => (Array.isArray(tags) ? tags : String(tags || "").split(","));
-const esCandidatoAsesor = (tags) => tagsDe(tags).some((t) => String(t == null ? "" : t).trim().toLowerCase() === TAG_CANDIDATO_ASESOR);
-// Oportunidad de un candidato: /opportunities/search trae el contacto embebido con sus tags.
-const oppDeCandidatoAsesor = (o) => !!(o && o.contact && esCandidatoAsesor(o.contact.tags));
+const FUENTE_CANDIDATO_ASESOR = "reclutamiento-asesores";
+const RX_CAMP_CANDIDATO_ASESOR = /reclutamiento[\s_-]*asesor/i;
+const candTexto = (v) => String(v == null ? "" : v);
+const candCompacto = (v) => candTexto(v).trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+const candLista = (v) => (Array.isArray(v) ? v : candTexto(v).split(","));
+const tagCandidatoAsesor = (tags) => candLista(tags).some((t) => candTexto(t).trim().toLowerCase() === TAG_CANDIDATO_ASESOR);
+const fuenteCandidatoAsesor = (v) => { const k = candCompacto(v); return !!k && k.startsWith(candCompacto(FUENTE_CANDIDATO_ASESOR)); };
+function esCandidatoAsesor(c) {
+  if (!c || typeof c !== "object" || Array.isArray(c)) return tagCandidatoAsesor(c);
+  const at = [c.attr, c.attributionSource, c.lastAttributionSource].filter((a) => a && typeof a === "object");
+  const fuentes = [c.src, c.source].concat(...at.map((a) => [a.src, a.utmSource, a.utm_source, a.source]));
+  const camps = [].concat(...at.map((a) => [a.camp, a.campaign, a.utmCampaign, a.utm_campaign]));
+  return tagCandidatoAsesor(c.tags) || candLista(c.tags).some(fuenteCandidatoAsesor)
+    || fuentes.some(fuenteCandidatoAsesor) || camps.some((v) => RX_CAMP_CANDIDATO_ASESOR.test(candTexto(v)));
+}
+// Oportunidad de un candidato: /opportunities/search trae el contacto embebido (con sus tags) y
+// la fuente de la oportunidad.
+const oppDeCandidatoAsesor = (o) => !!o && (esCandidatoAsesor(o.contact || {}) || fuenteCandidatoAsesor(o.source));
+// </regla-candidato-asesor>
 
 const getUsers = async () => (await kvGetJSON(USERS_KEY)) || [];
 const findUser = (users, email) => users.find((u) => u.email.toLowerCase() === String(email || "").trim().toLowerCase());
@@ -185,5 +208,6 @@ module.exports = {
   sha256Hex, randomHex, signToken, verifyToken, authFromEvent,
   signInvite, verifyInvite, INVITE_TTL_MS,
   getUsers, findUser,
-  TAG_CANDIDATO_ASESOR, esCandidatoAsesor, oppDeCandidatoAsesor,
+  TAG_CANDIDATO_ASESOR, FUENTE_CANDIDATO_ASESOR, RX_CAMP_CANDIDATO_ASESOR,
+  tagCandidatoAsesor, fuenteCandidatoAsesor, esCandidatoAsesor, oppDeCandidatoAsesor,
 };
